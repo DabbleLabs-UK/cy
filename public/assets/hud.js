@@ -2,7 +2,7 @@
 //
 // The host panel reads the `host` event (cpu %, memory % and MB) and renders it
 // like a machine readout. The mail column renders delivered inbound letters,
-// CAPTIVE's outbound replies, delivered images and news items as a shared feed
+// CY's outbound replies, delivered images and news items as a shared feed
 // so every viewer sees what the others sent and how 7734 answered.
 
 const esc = (s) =>

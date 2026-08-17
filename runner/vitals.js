@@ -3,7 +3,7 @@
 // A single mutable state object is ticked every 5s and persisted to
 // state/vitals.json. Physical and mental scalars are all 0..1. Everything
 // derived (heart rate, brain-region activations) is computed on demand from
-// that state so persistence stays small and the model of what CAPTIVE "is"
+// that state so persistence stays small and the model of what CY "is"
 // stays in one place.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';

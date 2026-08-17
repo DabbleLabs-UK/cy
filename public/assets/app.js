@@ -1,17 +1,17 @@
-// app.js - the CAPTIVE viewer client.
+// app.js - the CY viewer client.
 //
 // Polls GET api/stream.php?since=<seq>&limit=500 every 1000ms, tracks the
 // highest seq seen, and dispatches events to the pen renderer, the brain HUD
 // and the telemetry/mail HUD. Also wires the public letter + image forms.
 //
-// Endpoints come from window.CAPTIVE (injected by index.php) so the same code
+// Endpoints come from window.CY (injected by index.php) so the same code
 // runs against the fake test feed.
 
 import { Pen } from './pen.js';
 import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 
-const CFG = window.CAPTIVE || {};
+const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
 const POST_LETTER = CFG.postLetter || 'api/post-letter.php';
 const POST_IMAGE = CFG.postImage || 'api/post-image.php';

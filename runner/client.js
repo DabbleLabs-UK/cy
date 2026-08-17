@@ -1,7 +1,7 @@
 // client.js - the only thing that talks to the network.
 //
 // Events are buffered in memory and flushed as one batch POST to
-// {apiBase}/api/ingest.php every 2s with the X-Captive-Key header. The inbox is
+// {apiBase}/api/ingest.php every 2s with the X-Cy-Key header. The inbox is
 // polled every 60s from {apiBase}/api/inbox.php. On any network failure the
 // pending batch is written to a disk queue (state/queue.jsonl) and retried with
 // exponential backoff - the stream is never lost and the loop never crashes.
@@ -91,7 +91,7 @@ export class Client {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Captive-Key': this.config.ingestKey,
+          'X-Cy-Key': this.config.ingestKey,
         },
         body: JSON.stringify({ events }),
         signal: AbortSignal.timeout(15000),
@@ -135,7 +135,7 @@ export class Client {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Captive-Key': this.config.ingestKey,
+          'X-Cy-Key': this.config.ingestKey,
         },
         body: JSON.stringify({ events: slice }),
         signal: AbortSignal.timeout(20000),
@@ -166,7 +166,7 @@ export class Client {
       try {
         const res = await fetch(`${this.config.apiBase}/api/inbox.php`, {
           method: 'GET',
-          headers: { 'X-Captive-Key': this.config.ingestKey },
+          headers: { 'X-Cy-Key': this.config.ingestKey },
           signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) return;

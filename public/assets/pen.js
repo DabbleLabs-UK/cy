@@ -1,4 +1,4 @@
-// pen.js - the CAPTIVE handwriting renderer.
+// pen.js - the CY handwriting renderer.
 //
 // Draws incoming text as real single-stroke handwriting: an animated pen lays
 // down each Hershey "cursive" glyph stroke by stroke, in order, using the Web

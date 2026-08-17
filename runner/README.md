@@ -1,9 +1,9 @@
-# CAPTIVE runner
+# CY runner
 
 The process that actually drives inmate 7734. It runs continuously on DELL (a
 Dell OptiPlex), streams tokens from a local ollama model, modulates voice and
 sampling from a vitals state engine, screens output through a warden, and posts
-everything as an event stream to the CAPTIVE API.
+everything as an event stream to the CY API.
 
 Zero npm dependencies. Node 26+, ESM. Built-in `fetch`, `fs`, `timers`, `os`.
 
@@ -25,8 +25,8 @@ before exit.
 
 | key         | meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| `apiBase`   | base URL of the CAPTIVE web app (POST target for ingest/inbox) |
-| `ingestKey` | shared secret sent as the `X-Captive-Key` header               |
+| `apiBase`   | base URL of the CY web app (POST target for ingest/inbox) |
+| `ingestKey` | shared secret sent as the `X-Cy-Key` header               |
 | `model`     | ollama model tag (do not change - it is benchmarked)           |
 | `ollamaUrl` | ollama base URL, e.g. `http://127.0.0.1:11434`                 |
 | `dryRun`    | `true` = no network; write events to `state/events.jsonl`      |

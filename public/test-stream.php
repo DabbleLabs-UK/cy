@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// test-stream.php - a fake CAPTIVE feed for exercising the viewer with no
+// test-stream.php - a fake CY feed for exercising the viewer with no
 // database. It mimics api/stream.php's contract exactly:
 //   GET test-stream.php?since=<seq>&limit=500  ->  { now, events:[{seq,ts,kind,payload}] }
 //

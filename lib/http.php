@@ -21,7 +21,7 @@ function captive_client_ip(): string
 
 function captive_require_ingest_key(): void
 {
-    $key = $_SERVER['HTTP_X_CAPTIVE_KEY'] ?? '';
+    $key = $_SERVER['HTTP_X_CY_KEY'] ?? '';
     if (!hash_equals(captive_ingest_key(), $key)) {
         captive_error_response('unauthorized', 401);
     }

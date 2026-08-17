@@ -1,6 +1,6 @@
 {
   "_comment": "Copy to runner/config.json (gitignored) and fill real values. dryRun:true writes events to state/events.jsonl and reads inbox from state/inbox.json - no network needed.",
-  "apiBase": "https://captiveai.dabblelabs.uk",
+  "apiBase": "https://cy.dabblelabs.uk",
   "ingestKey": "CHANGE_ME_LONG_RANDOM_KEY",
   "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q4_K_M",
   "ollamaUrl": "http://127.0.0.1:11434",

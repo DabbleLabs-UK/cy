@@ -11,11 +11,11 @@ $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CAPTIVE &middot; inmate 7734, HMP ThinkPad</title>
+<title>CY &middot; inmate 7734, HMP ThinkPad</title>
 <meta name="description" content="Watch inmate 7734 of HMP ThinkPad write, in real time, by hand.">
 <link rel="stylesheet" href="assets/style.css">
 <script>
-window.CAPTIVE = {
+window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
   postLetter: 'api/post-letter.php',
   postImage: 'api/post-image.php'
@@ -26,7 +26,7 @@ window.CAPTIVE = {
 
 <header id="topbar">
   <div class="brand">
-    <span class="brand-mark">CAPTIVE</span>
+    <span class="brand-mark">CY</span>
     <span class="brand-sub">inmate 7734 &middot; HMP ThinkPad</span>
   </div>
   <div class="topmeta">

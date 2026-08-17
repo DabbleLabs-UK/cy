@@ -5,8 +5,8 @@ require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/schedule.php';
 
-const CAPTIVE_MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
-const CAPTIVE_MAX_DIMENSION = 1200;
+const CY_MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const CY_MAX_DIMENSION = 1200;
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -18,7 +18,7 @@ try {
     }
 
     $file = $_FILES['image'];
-    if ($file['size'] > CAPTIVE_MAX_UPLOAD_BYTES) {
+    if ($file['size'] > CY_MAX_UPLOAD_BYTES) {
         captive_error_response('image too large (max 3MB)', 422);
     }
 
@@ -59,8 +59,8 @@ try {
     $origW = imagesx($source);
     $origH = imagesy($source);
     $longest = max($origW, $origH);
-    if ($longest > CAPTIVE_MAX_DIMENSION) {
-        $scale = CAPTIVE_MAX_DIMENSION / $longest;
+    if ($longest > CY_MAX_DIMENSION) {
+        $scale = CY_MAX_DIMENSION / $longest;
         $newW = (int)round($origW * $scale);
         $newH = (int)round($origH * $scale);
     } else {

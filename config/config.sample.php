@@ -7,13 +7,13 @@ declare(strict_types=1);
 return [
     'db' => [
         'host' => '127.0.0.1',
-        'name' => 'captiveai',
-        'user' => 'captiveai',
+        'name' => 'cy',
+        'user' => 'cy',
         'pass' => 'CHANGE_ME',
         'charset' => 'utf8mb4',
     ],
 
-    // Shared secret DELL sends as the X-Captive-Key header on ingest.php / inbox.php.
+    // Shared secret DELL sends as the X-Cy-Key header on ingest.php / inbox.php.
     // Generate a long random value, e.g. bin2hex(random_bytes(32)).
     'ingest_key' => 'CHANGE_ME_LONG_RANDOM_KEY',
 ];

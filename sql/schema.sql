@@ -1,4 +1,4 @@
--- CAPTIVE schema (MariaDB 11.8)
+-- CY schema (MariaDB 11.8)
 -- Note: MariaDB does not support CAST(x AS JSON) -- payload is always bound
 -- as a JSON-encoded string param from PHP, never cast in SQL.
 

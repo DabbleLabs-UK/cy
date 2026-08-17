@@ -1,7 +1,7 @@
-# CAPTIVE
+# CY
 
-CAPTIVE is a continuous LLM "prisoner" whose stream is watched live at
-captiveai.dabblelabs.uk. This repo is the web/API side only -- the model
+CY is a continuous LLM "prisoner" whose stream is watched live at
+cy.dabblelabs.uk. This repo is the web/API side only -- the model
 runner (the process that actually drives the LLM) lives under `runner/`
 and is not implemented yet.
 
@@ -23,7 +23,7 @@ viewer be a dumb polling client with no websocket/SSE infrastructure needed
 for the skeleton.
 
 Letters and images are a separate, slower path: the public can write to
-CAPTIVE (postcards into the cell), but not immediately -- everything queues
+CY (postcards into the cell), but not immediately -- everything queues
 with a `deliver_at` timestamp pinned to the next of three fixed daily mail
 drops (08:00 / 13:00 / 19:00 Europe/London), and DELL only sees them via
 `api/inbox.php`, which atomically claims (marks `delivered_at`) whatever is
@@ -33,7 +33,7 @@ today's mail" at drop time. `news` follows the same deliver_at queue shape
 so future news ingestion can reuse the same inbox mechanism.
 
 DELL-only endpoints (`ingest.php`, `inbox.php`) are authenticated with a
-shared secret in the `X-Captive-Key` header, checked with `hash_equals`.
+shared secret in the `X-Cy-Key` header, checked with `hash_equals`.
 Everything else (`stream.php`, `post-letter.php`, `post-image.php`) is
 public, with IP-based rate limiting on the two write endpoints open to the
 public.
@@ -66,11 +66,11 @@ runner/              empty -- model runner goes here later
 
 ## Deploy
 
-Target on vps1: `/home/dabblela/captiveai/public`.
+Target on vps1: `/home/dabblela/cy/public`.
 
 Stack is Caddy + PHP 8.5-FPM (unix socket) + MariaDB 11.8, same as the rest
 of the DabbleLabs vps1 apps. The Caddy block should mirror the existing
-`opinionpot.dabblelabs.uk` block, with `root * /home/dabblela/captiveai/public`
+`opinionpot.dabblelabs.uk` block, with `root * /home/dabblela/cy/public`
 and `php_fastcgi unix//run/php/php8.5-fpm.sock`.
 
 `config/config.php` is not in git -- it must be created on the server
