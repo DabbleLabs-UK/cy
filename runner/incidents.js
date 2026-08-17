@@ -85,6 +85,13 @@ const BUILDERS = {
     return { actor: who, verb: 'shouted through the door', object: 'at ' + pick(NIGHT_TIMES, ctx.rnd), detail };
   },
 
+  // wing noise: a specific thing that went off on the wing (run.js supplies the
+  // line). Pure texture - it lands in the ledger as a real, dated thing but moves
+  // no numbers on its own.
+  wing(ctx) {
+    return { actor: '', verb: '', object: '', detail: ctx.line || 'a noise on the wing' };
+  },
+
   // something half-heard down the wing.
   overheard(ctx) {
     const detail = pick(['could not make it out', 'your number in it maybe', 'then it stopped', 'low, so you would not hear'], ctx.rnd);

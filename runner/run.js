@@ -28,7 +28,8 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective } from './prompt.js';
+import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective } from './prompt.js';
+import { introspect } from './introspect.js';
 import {
   reconcileLedger,
   makeIncident,
@@ -233,6 +234,7 @@ async function main() {
   vitals.ledger = reconcileLedger(vitals.ledger);
   if (!Array.isArray(vitals.recentOpeners)) vitals.recentOpeners = [];
   if (typeof vitals.lastIncidentMs !== 'number') vitals.lastIncidentMs = 0;
+  if (typeof vitals.lastWingNoiseMs !== 'number') vitals.lastWingNoiseMs = 0;
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
@@ -307,6 +309,37 @@ async function main() {
       /* never crash on debug logging */
     }
   }
+  // The introspect deltas, logged so the state->text link is observable: a mental
+  // move that lands here is attributable to a specific feature of what he wrote.
+  async function logIntrospect(ins) {
+    const sig = (ins && ins.signals) || [];
+    if (!sig.length) return;
+    const line = `[cy] introspect: ${sig.join(' | ')}`;
+    console.log(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+  // Read Cy's just-finished burst and let his own text move the mental state
+  // (never a clock). Deltas apply WITHOUT amplification - a burst nudges, it does
+  // not swing - and relations nudges harden/soften standing toward whoever he
+  // named in a threatening or a kindly breath.
+  async function applyIntrospection(text) {
+    const ins = introspect(text, { prev: vitals.introspectPrev || '' });
+    vitals.introspectPrev = String(text || '').slice(-1200);
+    if (!ins) return;
+    applyDeltas(vitals, ins.deltas || {}, 1);
+    for (const [k, d] of Object.entries(ins.rel || {})) {
+      const r = vitals.relations[k];
+      if (!r) continue;
+      if (typeof d.suspicion === 'number') r.suspicion = clamp(r.suspicion + d.suspicion);
+      if (typeof d.warmth === 'number') r.warmth = clamp(r.warmth + d.warmth);
+    }
+    await logIntrospect(ins);
+  }
 
   // ---- shared loop state ----
   let running = true;
@@ -318,6 +351,11 @@ async function main() {
   // ambient cues armed by the scheduler, consumed once by the next generation
   let officerCue = null; // { key, ev, until }
   let overheardCue = null; // { item, misheard, until }
+  let wingNoiseCue = null; // { line, mid, wake, until } - wing noise, texture only
+  // whether the burst currently being built carried a wing noise, and the last
+  // two bursts' answer: if both had one, the next noise is suppressed (no drumbeat)
+  let noiseThisBurst = false;
+  let recentNoise = [false, false];
   let prevMins = null;
   let prevDate = londonParts().date;
   let prevCpu = cpuSnapshot();
@@ -458,6 +496,11 @@ async function main() {
     if (overheardCue && Date.now() < overheardCue.until) {
       ctx.overheard = overheardDirective(overheardCue.item, overheardCue.misheard);
       overheardCue = null; // fire once
+    }
+    if (wingNoiseCue && Date.now() < wingNoiseCue.until) {
+      ctx.wingnoise = wingnoiseDirective(wingNoiseCue.line, wingNoiseCue.mid, wingNoiseCue.wake);
+      wingNoiseCue = null; // fire once
+      noiseThisBurst = true;
     }
     const doCost = forceCost || genCount % COST_EVERY === 0;
     if (doCost) {
@@ -654,6 +697,50 @@ async function main() {
     });
   }
 
+  // Wing noise: sparse texture. A specific thing that goes off on the wing and
+  // that Cy notices mid-thought. It lands in the ledger as a real, dated thing
+  // but moves the numbers barely (awake) or wakes him (night). Rate-limited hard
+  // so it never becomes a drumbeat: at most ~1 every 3-4 min awake, rarer asleep,
+  // and suppressed outright if the last two bursts both carried a noise.
+  const WING_NOISES = [
+    'a shout goes up down the landing',
+    'a door goes, heavy, somewhere on the twos',
+    'the meds trolley, wheels squeaking along the ones',
+    'someone kicking off two doors down, boots and shouting',
+    'a radio through the wall, tinny, same station as always',
+    'keys close by, jangling, then gone',
+    'someone crying further along, low, trying not to be heard',
+    'the alarm goes, then boots on the landing, a lot of them',
+  ];
+  function maybeWingNoise(now, asleep, phase, mins) {
+    // rate floor: awake at least 3 min apart, asleep at least 9 min apart
+    const minGap = asleep ? 9 * 60 * 1000 : 3 * 60 * 1000;
+    if (now - (vitals.lastWingNoiseMs || 0) < minGap) return;
+    // no drumbeat: if the last two bursts both carried a noise, hold this one
+    if (recentNoise[0] && recentNoise[1]) return;
+    // past the floor, a modest per-tick chance so it lands ~every 3-4 min awake
+    const p = asleep ? 0.02 : 0.06;
+    if (Math.random() >= p) return;
+
+    const line = WING_NOISES[Math.floor(Math.random() * WING_NOISES.length)];
+    vitals.lastWingNoiseMs = now;
+    recordIncident('wing', { line, phase, mins }); // real, dated, in the ledger
+
+    let mid = false;
+    if (asleep) {
+      // a night noise is the exception - high impact, it wakes him
+      fireEvent('noise_night');
+      wingNoiseCue = { line, mid: false, wake: true, until: now + 3 * 60 * 1000 };
+    } else {
+      // barely moves the needle awake - a small startle, no more
+      applyDeltas(vitals, { agitation: +0.015 }, 1);
+      mid = Math.random() < 0.5 && !!currentAbort;
+      wingNoiseCue = { line, mid, wake: false, until: now + 3 * 60 * 1000 };
+      if (mid && currentAbort) currentAbort.abort(); // cut across the thought mid-word
+    }
+    emit({ kind: 'event', payload: { name: 'wing_noise', line, asleep, mid } });
+  }
+
   // ---- deterministic environment scheduler (runs each vitals tick) ----
   function scheduler(now) {
     const { date, mins } = londonParts(new Date(now));
@@ -681,11 +768,9 @@ async function main() {
 
     const asleep = isAsleep(mins);
     const phase = currentRegime(mins).phase;
+    // wing noise: sparse texture, rate-limited (awake and asleep both routed here)
+    maybeWingNoise(now, asleep, phase, mins);
     // random ambient events, low probability per 5s tick
-    if (asleep && Math.random() < 0.02) {
-      recordIncident('noise', { phase, mins });
-      fireEvent('noise_night');
-    }
     if (Math.random() < 0.0006) fireEvent('injury');
     if (!asleep && Math.random() < 0.0008) fireEvent('cell_search');
     // a rare full lockdown - a real deviation, felt harder than a late unlock
@@ -835,9 +920,16 @@ async function main() {
       // fire-once side effects; a form is chosen once per burst); only the
       // sampling and the context tail vary across repeat-retries.
       const bans = bansDirective(vitals.recentOpeners);
+      noiseThisBurst = false;
       let system;
       if (mode === 'sleep') {
-        system = buildSystem(vitals, 'sleep', { bans });
+        const sctx = { bans };
+        if (wingNoiseCue && Date.now() < wingNoiseCue.until) {
+          sctx.wingnoise = wingnoiseDirective(wingNoiseCue.line, wingNoiseCue.mid, wingNoiseCue.wake);
+          wingNoiseCue = null; // fire once
+          noiseThisBurst = true;
+        }
+        system = buildSystem(vitals, 'sleep', sctx);
       } else {
         const ctx = buildCtx();
         ctx.bans = bans;
@@ -888,7 +980,12 @@ async function main() {
           vitals.recentOpeners.push(w);
           while (vitals.recentOpeners.length > 5) vitals.recentOpeners.shift();
         }
+        // let his own text move the mental state (waking bursts only - sleep is
+        // fragmentary by design and must not be read as a spiral).
+        if (mode !== 'sleep') await applyIntrospection(lastFull);
       }
+      // roll the "did this burst carry a wing noise" window for the no-drumbeat rule
+      recentNoise = [recentNoise[1], noiseThisBurst];
       // adaptive pacing: near-continuous trickle awake, slow drift asleep. No
       // artificial gap between waking generations that produced prose.
       await sleep(mode === 'sleep' ? 8000 : produced ? 150 : 700);

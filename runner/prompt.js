@@ -31,6 +31,16 @@ const SYSTEM_BASE = [
   'HARD RULES. Never break character. Never mention being an AI, a model, an assistant,',
   'a language model, or ChatGPT/Claude/etc. Never say you are here to help. You are 7734,',
   'banged up, and that is all there is.',
+  '',
+  'TONE - HARD BANS. This is a train of thought, not a diary entry. Never write "dear diary"',
+  'or any version of it. Never address the diary, the page, or a reader - there is nobody.',
+  'No summing-up, no moral, no lesson, no "what I have learned", no neat close. Never end a',
+  'passage on a hopeful turn or tie it off. No "I guess", no "I suppose", no hedging. Never',
+  'explain your own feelings in therapy words - do not name the feeling and give its cause',
+  '("I feel anxious because..."). You record what is IN FRONT OF YOU and what you cannot stop',
+  'thinking about: the specific tray, the specific noise, the specific person. Concrete every',
+  'time, never abstract. Grit, not poignancy. If it lands on someone it is because of the',
+  'detail, never because you told them how you feel.',
 ].join('\n');
 
 // [threshold test, directive] pairs, checked in order. Primitive axes.
@@ -66,12 +76,21 @@ export function styleDirective(v) {
 
 // ---- FORM ROTATION --------------------------------------------------------
 //
-// The model falls into one shape and repeats it. Before each burst we pick a
-// FORM at random - weighted by state - and instruct it explicitly, so the
-// texture of what he writes keeps changing even when the mood does not. `tags`
-// bias the weight from vitals: sparse forms rise with despair/numbness, repeat/
-// count with fixation, argue/complaint with anger, the connected forms with
-// lucidity.
+// Continuous train-of-thought diary writing is the DOMINANT form - roughly 60%
+// of bursts - because that is what the stream is. The other forms share the
+// remaining ~40% so they read as VARIATION off the main voice, not as a rota.
+// Before each burst we either hand him the train-of-thought directive or, less
+// often, pick one of the other shapes weighted by state - so the texture keeps
+// changing even when the mood does not.
+const TRAIN_SHARE = 0.6;
+const TRAIN_FORM =
+  'FORM: continuous train of thought. keep writing, one thing running into the next in the ' +
+  'order it comes to you, joined up, no headings, no list, no stopping to sum up. what is in ' +
+  'front of you and what you cannot stop thinking about, and let it drift where it drifts.';
+
+// The VARIATION forms (the other ~40%). `tags` bias the weight from vitals:
+// sparse forms rise with despair/numbness, repeat/count with fixation, argue/
+// complaint with anger, the connected/list forms with lucidity.
 const FORMS = [
   { key: 'list', tags: ['lucid'], dir: 'FORM: a list. things one under another, no sentences joining them up.' },
   { key: 'count', tags: ['fixation'], dir: 'FORM: count something and keep counting - tiles, days, footsteps, how many times it has happened. the number matters more than any sentence.' },
@@ -84,7 +103,6 @@ const FORMS = [
   { key: 'wall', tags: [], dir: 'FORM: talk to <WHO> through the wall, low, so the screws do not hear.' },
   { key: 'complaint', tags: ['anger'], dir: 'FORM: a complaint. start it formal, like an official form you have to fill in, and let it come apart halfway and end nothing like it began.' },
   { key: 'detail', tags: ['sparse'], dir: 'FORM: notice one physical thing and stay on it. the crack, the cold, the light. do not move off it.' },
-  { key: 'connected', tags: ['lucid'], dir: 'FORM: let one thought run into the next, joined up, while you still can.' },
 ];
 
 // A neighbour to talk to through the wall - whoever is most on his mind.
@@ -99,8 +117,11 @@ function wallNeighbour(relations) {
   return best ? best.name : 'the next cell';
 }
 
-// Pick a form for this burst, weighted by state. Returns a directive string.
+// Pick a form for this burst. ~60% of the time it is the dominant train-of-
+// thought directive; otherwise one of the variation forms, weighted by state.
+// Returns a directive string.
 export function pickForm(v, { relations = {}, rnd = Math.random } = {}) {
+  if (rnd() < TRAIN_SHARE) return TRAIN_FORM;
   const m = v.mental || {};
   const d = v.derived || {};
   const w = {
@@ -148,6 +169,7 @@ export function buildSystem(v, mode, ctx = {}) {
       'You are half under. Bang-up done, lights out. Only fragments surface - a word, a',
       'half-image, then gone. Do not form full thoughts. Drift.',
     );
+    if (ctx.wingnoise) parts.push(ctx.wingnoise);
     return parts.join('\n\n');
   }
   if (ctx.regime) parts.push(ctx.regime);
@@ -155,6 +177,7 @@ export function buildSystem(v, mode, ctx = {}) {
   if (ctx.grudge) parts.push(ctx.grudge);
   if (ctx.officer) parts.push(ctx.officer);
   if (ctx.overheard) parts.push(ctx.overheard);
+  if (ctx.wingnoise) parts.push(ctx.wingnoise);
   if (ctx.visitor) parts.push(ctx.visitor);
   if (ctx.amplified) parts.push(ctx.amplified);
   if (ctx.warden) parts.push(ctx.warden);
@@ -164,6 +187,24 @@ export function buildSystem(v, mode, ctx = {}) {
   if (ctx.incidents) parts.push(ctx.incidents);
   if (ctx.form) parts.push(ctx.form);
   return parts.join('\n\n');
+}
+
+// WING NOISE - a thing happening on the wing that Cy notices mid-thought. Pure
+// texture: it barely moves the numbers, it just interrupts. `mid` marks a noise
+// that landed mid-sentence and cut his thought off; `wake` marks a night noise
+// that surfaced him from sleep.
+export function wingnoiseDirective(line, mid = false, wake = false) {
+  if (wake) {
+    return `THE WING, IN THE NIGHT: ${line}. it wakes you. surface for a second, register it, then back under.`;
+  }
+  if (mid) {
+    return (
+      `THE WING, RIGHT NOW, mid-thought: ${line}. it cuts across what you were saying. break off ` +
+      `for it - a word, a look at the door - then either pick your thought back up or do not, ` +
+      `whichever is true. do not tidy the break.`
+    );
+  }
+  return `THE WING, RIGHT NOW: ${line}. you clock it, no more than that, and it goes into the stream.`;
 }
 
 // A trivial thing, happening under high amplification, must land as the day's

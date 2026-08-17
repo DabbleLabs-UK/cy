@@ -31,7 +31,8 @@ import {
   mergeVisitorNotes,
   updateVisitorStanding,
 } from './cast.js';
-import { buildSystem, amplifiedDirective, pickForm, bansDirective } from './prompt.js';
+import { buildSystem, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective } from './prompt.js';
+import { introspect } from './introspect.js';
 import {
   reconcileLedger,
   makeIncident,
@@ -238,8 +239,12 @@ const vDespair = initialVitals(); vDespair.mental.despair = 0.9; vDespair.mental
 const vAnger = initialVitals(); vAnger.mental.anger = 0.9; vAnger.derived = computeDerived(vAnger);
 const cD = tally(vDespair);
 const cA = tally(vAnger);
+const TRAIN = 'FORM: continuous train of thought';
+line('train-of-thought is the dominant form (~60%): despair ' + (cD[TRAIN] || 0) + '/200, anger ' + (cA[TRAIN] || 0) + '/200');
+line('train share is ~60% in both moods: ' +
+  ((cD[TRAIN] || 0) > 100 && (cD[TRAIN] || 0) < 140 && (cA[TRAIN] || 0) > 100 && (cA[TRAIN] || 0) < 140));
 const sparse = (c) => (c['FORM: one short line'] || 0) + (c['FORM: mark the time'] || 0) + (c['FORM: notice one physical thing and stay on it'] || 0) + (c['FORM: a question asked to nobody'] || 0);
-line('high despair favours sparse forms: ' + sparse(cD) + ' of 200');
+line('high despair favours sparse forms (of the ~40% variation): ' + sparse(cD) + ' of 200');
 line('high anger produces the argue/complaint forms: ' +
   ((cA['FORM: an argument with someone who is not in the room'] || 0) + (cA['FORM: a complaint'] || 0)) + ' of 200');
 line('despair sparse-share > anger sparse-share: ' + (sparse(cD) > sparse(cA)));
@@ -249,5 +254,56 @@ hr('13. OPENER BANS');
 const bans = bansDirective(['the', 'same', 'nothing', 'and', 'cold']);
 line('bans forbid Dear/greeting/sign-off: ' + /never begin with "Dear"/.test(bans) + ' / ' + /no greeting/.test(bans));
 line('bans list the last openers explicitly: ' + /"the", "same", "nothing", "and", "cold"/.test(bans));
+
+// ---- 14. honest vitals: mental HOLDS over empty ticks (no clock drift) ----
+hr('14. HONEST VITALS (mental holds when nothing happens)');
+const vHold = initialVitals();
+vHold.relations = initialRelations();
+const before14 = { ...vHold.mental };
+const beforeHunger14 = vHold.physical.hunger;
+for (let i = 0; i < 24; i++) tick(vHold, { now: Date.now() }); // ~2 min of empty ticks
+const maxMove = Math.max(
+  ...['anxiety', 'stress', 'despair', 'hope', 'agitation', 'dissociation', 'anger', 'longing'].map(
+    (k) => Math.abs(vHold.mental[k] - before14[k]),
+  ),
+);
+line('after 24 empty ticks (~2 min) the biggest mental move was ' + maxMove.toFixed(4));
+line('mental effectively held (max move < 0.02): ' + (maxMove < 0.02));
+line('physical is STILL honestly time-based (hunger rose over the same ticks): ' +
+  (vHold.physical.hunger > beforeHunger14));
+
+// ---- 15. introspect: his own text moves the state, attributably ----
+hr('15. INTROSPECT (state follows the text)');
+const spiral = introspect(
+  "never getting out. no one writes. nobody. always the same. Bill had a blade on association, watch your back he said. fuck him. fuck all of them.",
+  { prev: '' },
+);
+line('deltas: ' + JSON.stringify(spiral.deltas));
+line('rel:    ' + JSON.stringify(spiral.rel));
+line('signals:');
+for (const s of spiral.signals) line('  - ' + s);
+line('despair rose on absolutes/negation: ' + ((spiral.deltas.despair || 0) > 0));
+line('anxiety rose on threat vocab: ' + ((spiral.deltas.anxiety || 0) > 0));
+line('anger rose on profanity: ' + ((spiral.deltas.anger || 0) > 0));
+line('suspicion toward Bill (named in a threat): ' + ((spiral.rel.bill && spiral.rel.bill.suspicion) > 0));
+const warm = introspect('nick sorted me a burn on the quiet, sound lad, decent of him.', { prev: '' });
+line('warmth toward Nick (named warmly): ' + ((warm.rel.nick && warm.rel.nick.warmth) > 0));
+const calm = introspect('the light in the corridor is on again and the paint on the door is chipped where the hatch swings back.', { prev: '' });
+line('a plain, fluent line moves almost nothing: deltas=' + JSON.stringify(calm.deltas) + ' (empty or tiny expected)');
+
+// ---- 16. wing noise: texture directives, and injection into the prompt ----
+hr('16. WING NOISE (texture, interrupts, injected)');
+const wLine = 'a door goes, heavy, somewhere on the twos';
+line('plain notice ->  ' + wingnoiseDirective(wLine, false, false));
+line('mid-sentence  ->  ' + wingnoiseDirective(wLine, true, false));
+line('night wake    ->  ' + wingnoiseDirective(wLine, true, true));
+const vw = initialVitals();
+vw.relations = initialRelations();
+vw.derived = computeDerived(vw);
+const wakeSys = buildSystem(vw, 'journal', { wingnoise: wingnoiseDirective(wLine, true, false) });
+const sleepSys = buildSystem(vw, 'sleep', { wingnoise: wingnoiseDirective(wLine, false, true) });
+line('wing noise reaches the WAKING prompt: ' + wakeSys.includes('THE WING, RIGHT NOW, mid-thought'));
+line('wing noise reaches the SLEEP prompt: ' + sleepSys.includes('THE WING, IN THE NIGHT'));
+line('mid-sentence directive tells him not to tidy the break: ' + /do not tidy the break/.test(wingnoiseDirective(wLine, true, false)));
 
 line('\n(selftest complete)');

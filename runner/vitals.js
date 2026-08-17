@@ -15,19 +15,25 @@ export const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
 const toward = (cur, target, step) =>
   cur < target ? Math.min(target, cur + step) : Math.max(target, cur - step);
 
-// Per-5s-tick drift toward baselines (baseline is 0 unless noted). fatigue and
-// lucidity are special-cased in tick().
+// Per-5s-tick drift. PHYSICAL states are honestly time-based: pain eases, hunger
+// rises between meals, fatigue accumulates across the day - keep those. MENTAL
+// states must NOT move on a clock: they change only in response to something real
+// (an incident, or a deterministic read of Cy's own output - see introspect.js).
+// The only per-tick mental movement allowed is a very slow SETTLING back toward
+// baseline - an order of magnitude smaller than the old timer drift - so a spike
+// subsides over tens of minutes, not seconds, and otherwise a value just holds.
 const DRIFT = {
   pain: -0.004,
   hunger: +0.0008,
-  anxiety: -0.002,
-  stress: -0.0015,
-  despair: -0.0004,
-  hope: -0.001,
-  agitation: -0.005,
-  dissociation: -0.002,
-  anger: -0.004,
-  longing: -0.001,
+  // mental settling only (~10x smaller than before):
+  anxiety: -0.0002,
+  stress: -0.00015,
+  despair: -0.00004,
+  hope: -0.0001,
+  agitation: -0.0005,
+  dissociation: -0.0002,
+  anger: -0.0004,
+  longing: -0.0001,
 };
 
 // applyEvent deltas. Keys are routed to whichever bucket owns them. Base
@@ -138,7 +144,9 @@ export function tick(v, { asleep = false, now = 0 } = {}) {
   m.dissociation = clamp(m.dissociation + DRIFT.dissociation);
   m.anger = clamp((m.anger || 0) + DRIFT.anger);
   m.longing = clamp((m.longing || 0) + DRIFT.longing);
-  m.lucidity = toward(m.lucidity, 0.7, 0.003);
+  // lucidity settles back toward baseline just as slowly; introspect knocks it
+  // down on fragmented output and it eases back over tens of minutes, not seconds.
+  m.lucidity = toward(m.lucidity, 0.7, 0.0003);
 
   // monotony creeps up every empty tick; applyEvent knocks it back down on any
   // input, so the net effect is "nothing happening makes small things enormous".
