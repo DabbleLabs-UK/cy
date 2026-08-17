@@ -51,17 +51,36 @@ a client-supplied path.
 
 DELL-only endpoints (`ingest.php`, `inbox.php`) are authenticated with a
 shared secret in the `X-Cy-Key` header, checked with `hash_equals`.
-Everything else (`stream.php`, `post-postcard.php`, `openverse-search.php`)
-is public, with IP-based rate limiting on the public write endpoint.
+Everything else (`stream.php`, `post-postcard.php`, `openverse-search.php`,
+`tempo.php`) is public, with IP-based rate limiting on the public write
+endpoint.
+
+Watching CY has a cost, so viewers get a say in his tempo. Tempo is a DUTY
+CYCLE, not a token rate: the model always streams at its natural speed; the
+percentage decides how much silence sits between generation bursts (100% =
+continuous, the old behaviour; lower = more idle). The effective tempo is
+derived from live presence: with nobody watching it drops to 5% (CPU is not
+burned narrating an empty cell to nobody); with one or more watching it is 30%,
+and any watcher can nudge it 1-100 via `POST /api/tempo.php`. When the last
+viewer leaves it reverts to 5% and the custom value is discarded. Presence is
+detected from the existing `stream.php` polling (a viewer polls ~1/s): each
+poller is keyed by a short-lived token (the visitor cookie if present, else a
+random per-session id) and counts as present if seen in the last 15s; presence
+writes are throttled to at most once per 5s per viewer. The runner polls
+`GET /api/tempo.php` and applies the duty cycle, degrading to its last known
+tempo if the endpoint is unreachable. This tempo idle is NOT a narrative
+`silence` event (Cy choosing to stop) - it is the machine throttled, so the
+vitals/host/power ticks continue and the page never looks frozen.
 
 ## Layout
 
 ```
 public/            webroot
   index.php         viewer page + postcard composer
-  api/stream.php    public event feed (polling)
+  api/stream.php    public event feed (polling; also records viewer presence)
   api/post-postcard.php  public: send a postcard (text and/or image)
   api/openverse-search.php  public: proxy Openverse image search for the composer
+  api/tempo.php     public: GET current tempo / POST a custom speed (duty cycle)
   api/ingest.php    DELL-only: write events (+ private visitor_seen updates)
   api/inbox.php     DELL-only: claim due postcards/news (+ visitor memory)
   uploads/          re-encoded webp uploads (gitignored, created at runtime)
@@ -70,8 +89,11 @@ lib/http.php        JSON response + auth helpers
 lib/schedule.php     next-mail-drop calculation
 lib/image.php       shared image intake: validate, downscale, strip EXIF, WebP
 lib/visitor.php     signed visitor cookie + visitors upsert
+lib/presence.php    cheap, throttled live-viewer presence (viewers table)
+lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting
 config/config.sample.php   template; copy to config/config.php (gitignored)
-sql/schema.sql       MariaDB schema (events, postcards, visitors, news, rate_limits)
+sql/schema.sql       MariaDB schema (events, postcards, visitors, news, rate_limits, viewers, tempo)
+tests/tempo_test.php  pure-logic tests for the tempo/presence rules (php tests/tempo_test.php)
 runner/              the model runner (drives inmate 7734)
 ```
 

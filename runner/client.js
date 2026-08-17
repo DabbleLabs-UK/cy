@@ -13,8 +13,11 @@
 import { appendFile, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
+import { clampSpeed } from './tempo.js';
+
 const FLUSH_MS = 2000;
 const INBOX_MS = 60000;
+const TEMPO_MS = 12000; // poll the viewer-driven tempo every ~12s
 const MAX_BACKOFF_MS = 60000;
 
 // MariaDB DATETIME(3) string, e.g. "2026-08-17 19:30:00.123".
@@ -33,11 +36,18 @@ export class Client {
     this.eventsPath = join(stateDir, 'events.jsonl');
     this.queuePath = join(stateDir, 'queue.jsonl');
     this.inboxPath = join(stateDir, 'inbox.json');
+    this.tempoPath = join(stateDir, 'tempo.json');
     this.batch = [];
     this.backoff = 0;
     this.onInbox = null;
+    this.onTempo = null;
+    // last known tempo. Defaults to 100 (continuous, the old behaviour) so an
+    // endpoint that is unreachable at startup never stalls or throttles blindly;
+    // the first successful poll replaces it.
+    this.tempo = { speed: 100, viewers: 0, custom: false };
     this._flushTimer = null;
     this._inboxTimer = null;
+    this._tempoTimer = null;
     this._flushing = false;
     this._stopped = false;
   }
@@ -51,14 +61,18 @@ export class Client {
   start() {
     this._flushTimer = setInterval(() => this.flush().catch(() => {}), FLUSH_MS);
     this._inboxTimer = setInterval(() => this.pollInbox().catch(() => {}), INBOX_MS);
+    this._tempoTimer = setInterval(() => this.pollTempo().catch(() => {}), TEMPO_MS);
     // one immediate inbox read so a dry-run inbox.json is seen promptly
     this.pollInbox().catch(() => {});
+    // one immediate tempo read so the duty cycle is right from the first burst
+    this.pollTempo().catch(() => {});
   }
 
   async stop() {
     this._stopped = true;
     clearInterval(this._flushTimer);
     clearInterval(this._inboxTimer);
+    clearInterval(this._tempoTimer);
     await this.flush().catch(() => {});
   }
 
@@ -180,6 +194,45 @@ export class Client {
       (data.news && data.news.length) ||
       (data.warden && data.warden.length);
     if (has && this.onInbox) this.onInbox(data);
+  }
+
+  // Poll the viewer-driven tempo. Degrades safely: on ANY failure (network,
+  // non-200, bad body) it returns without touching this.tempo, so the last known
+  // value keeps driving the duty cycle rather than stalling or running flat out.
+  // dryRun reads an optional state/tempo.json (NOT consumed - it is live state).
+  async pollTempo() {
+    let data;
+    if (this.config.dryRun) {
+      try {
+        data = JSON.parse(await readFile(this.tempoPath, 'utf8'));
+      } catch {
+        return; // no dry-run tempo file - keep last known
+      }
+    } else {
+      try {
+        const res = await fetch(`${this.config.apiBase}/api/tempo.php`, {
+          method: 'GET',
+          headers: { 'X-Cy-Key': this.config.ingestKey },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!res.ok) return; // keep last known
+        data = await res.json();
+      } catch {
+        return; // transient; keep last known
+      }
+    }
+    if (!data || data.speed == null) return;
+    const next = {
+      speed: clampSpeed(data.speed),
+      viewers: Number(data.viewers) || 0,
+      custom: !!data.custom,
+    };
+    const changed =
+      next.speed !== this.tempo.speed ||
+      next.viewers !== this.tempo.viewers ||
+      next.custom !== this.tempo.custom;
+    this.tempo = next;
+    if (changed && this.onTempo) this.onTempo(next);
   }
 
   async _appendEvents(path, events) {

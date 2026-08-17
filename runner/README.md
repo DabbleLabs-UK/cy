@@ -88,6 +88,7 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `postcard_out` | `{ id, reply_to, body }` - CY's reply to a postcard              |
 | `visitor_seen` | `{ visitor_id, notes, warmth, suspicion, grudge }` - PRIVATE: a memory/standing write-back consumed by `ingest.php`, never inserted into the event log or streamed |
 | `day`    | `{ n, date }` - day rollover (Europe/London)                      |
+| `tempo`  | `{ speed, viewers, custom, pph_idle, pph_load }` - emitted when the viewer-driven tempo changes; the pence/hour anchors let the viewer show the cost of watching |
 
 `brain` is a map of ten region activations (0..1). `derived` is the seven
 composite states (confusion, overwhelm, numbness, paranoia, fixation,
@@ -122,6 +123,14 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 - **The meter** (`power.js`) - estimates Dell OptiPlex draw from CPU load,
   integrates to kWh and cost at the tariff, persists cumulatively to
   `state/power.json`, and periodically tells CY what he costs (Warden pays).
+- **Tempo** (`tempo.js`) - a viewer-driven DUTY CYCLE. The client polls
+  `GET /api/tempo.php` (~12s) for the current speed (5% nobody watching, 30%
+  someone watching, or a viewer's custom 1-100); after each waking burst the loop
+  idles `burst * (100/speed - 1)` ms (clamped to 2 min) so lower speeds insert
+  proportional silence. It is the machine throttled, NOT a narrative `silence`,
+  so no silence event is emitted and the vitals/host/power ticks keep going. If
+  the endpoint is unreachable the last known tempo is kept (never stalls or runs
+  flat out). In dryRun the tempo is read from an optional `state/tempo.json`.
 
 ## Pieces
 
@@ -131,7 +140,8 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
 - `prompt.js` - system prompt, style directive, sampling, contextual injections.
 - `warden.js` - sentence buffering + outbound/inbound content screen.
-- `client.js` - batched POST to `api/ingest.php`, inbox poll, disk-queue retry.
+- `client.js` - batched POST to `api/ingest.php`, inbox poll, tempo poll, disk-queue retry.
+- `tempo.js` - duty-cycle timing: `tempoIdleMs(burstMs, speed)` and speed clamping.
 - `run.js` - the loop: generation, ticks, scheduler, postcard/notice interrupts.
 - `selftest.js` - deterministic checks for the above (no ollama needed).
 - `livesample.js` - drives two real generations to sample CY's prose.

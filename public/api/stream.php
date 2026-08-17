@@ -3,11 +3,21 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
+require __DIR__ . '/../../lib/presence.php';
 
 header('Cache-Control: no-store');
 
 try {
     $db = captive_db();
+
+    // record that this poller is a live viewer (throttled, best-effort) so the
+    // tempo control knows how many people are watching. Never let a presence
+    // hiccup break the feed itself.
+    try {
+        captive_touch_presence($db);
+    } catch (Throwable $e) {
+        /* presence is best-effort */
+    }
 
     $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 500;

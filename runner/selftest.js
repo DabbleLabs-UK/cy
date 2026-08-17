@@ -32,6 +32,7 @@ import {
   updateVisitorStanding,
 } from './cast.js';
 import { buildSystem, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective } from './prompt.js';
+import { tempoIdleMs, clampSpeed, MAX_TEMPO_IDLE_MS } from './tempo.js';
 import { introspect } from './introspect.js';
 import {
   reconcileLedger,
@@ -305,5 +306,19 @@ const sleepSys = buildSystem(vw, 'sleep', { wingnoise: wingnoiseDirective(wLine,
 line('wing noise reaches the WAKING prompt: ' + wakeSys.includes('THE WING, RIGHT NOW, mid-thought'));
 line('wing noise reaches the SLEEP prompt: ' + sleepSys.includes('THE WING, IN THE NIGHT'));
 line('mid-sentence directive tells him not to tidy the break: ' + /do not tidy the break/.test(wingnoiseDirective(wLine, true, false)));
+
+// ---- 17. tempo duty cycle: idle = burst * (100/speed - 1), clamped ----
+hr('17. TEMPO DUTY CYCLE (idle between bursts)');
+line('speed=100 -> continuous (no idle): ' + tempoIdleMs(1000, 100) + ' ms (expect 0)');
+line('speed=50, burst 1000ms -> ' + tempoIdleMs(1000, 50) + ' ms (expect 1000, 50% duty)');
+line('speed=25, burst 1000ms -> ' + tempoIdleMs(1000, 25) + ' ms (expect 3000, 25% duty)');
+line('speed=30, burst 2000ms -> ' + tempoIdleMs(2000, 30) + ' ms (expect ' + Math.round(2000 * (100 / 30 - 1)) + ')');
+line('duty maths holds (100->0, 50->burst, 25->3x): ' +
+  (tempoIdleMs(1000, 100) === 0 && tempoIdleMs(1000, 50) === 1000 && tempoIdleMs(1000, 25) === 3000));
+line('nobody watching (speed=5), burst 1000ms -> ' + tempoIdleMs(1000, 5) + ' ms (19x, unclamped = 19000)');
+line('clamp caps an absurd gap: speed=5, burst 60000ms -> ' + tempoIdleMs(60000, 5) + ' ms (raw ' + 60000 * 19 + ', capped at ' + MAX_TEMPO_IDLE_MS + ')');
+line('clamp respected: ' + (tempoIdleMs(60000, 5) === MAX_TEMPO_IDLE_MS));
+line('speed coerced into 1..100: clampSpeed(0)=' + clampSpeed(0) + ' clampSpeed(999)=' + clampSpeed(999) + ' clampSpeed("30")=' + clampSpeed('30') + ' clampSpeed(NaN)=' + clampSpeed(NaN));
+line('out-of-range speed never negative idle: ' + (tempoIdleMs(1000, 0) >= 0 && tempoIdleMs(1000, 150) === 0));
 
 line('\n(selftest complete)');

@@ -18,7 +18,8 @@ $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
   postPostcard: 'api/post-postcard.php',
-  openverseSearch: 'api/openverse-search.php'
+  openverseSearch: 'api/openverse-search.php',
+  tempo: 'api/tempo.php'
 };
 </script>
 </head>
@@ -59,6 +60,11 @@ window.CY = {
     <div class="panel">
       <div class="panel-title">THE METER &middot; ELECTRICITY</div>
       <div id="power"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">TEMPO &middot; DUTY CYCLE</div>
+      <div id="tempo"></div>
     </div>
 
     <div class="panel">

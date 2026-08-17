@@ -71,9 +71,11 @@ CREATE TABLE news (
     INDEX idx_delivered_deliver (delivered_at, deliver_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Generic per-IP action log for rate limiting the public write endpoint.
--- Postcards rate-limit off this table (action='postcard'), keeping the
--- rate-limit window independent of the postcards row lifecycle.
+-- Generic keyed action log for rate limiting. The `ip` column holds whatever
+-- 16-byte key an action rate-limits on: the client IP for public writes
+-- (action='postcard'), or a 16-byte md5 of the viewer token for tempo changes
+-- (action='tempo'). Keeping the window here decouples it from the row lifecycle
+-- of whatever it is guarding.
 CREATE TABLE rate_limits (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY,
     ip          VARBINARY(16) NOT NULL,
@@ -81,3 +83,29 @@ CREATE TABLE rate_limits (
     created_at  DATETIME NOT NULL,
     INDEX idx_ip_action_created (ip, action, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Live-viewer presence for the tempo (duty-cycle) control. A viewer is anyone
+-- polling stream.php; each is keyed by a short-lived token (the signed visitor
+-- cookie if they have one, else a random per-session id). last_seen is bumped at
+-- most once every 5s per viewer (throttled in lib/presence.php), and a viewer
+-- counts as present if seen within the last 15s. Nothing identifying is stored -
+-- just an opaque token and a timestamp; stale rows are swept on write.
+CREATE TABLE viewers (
+    token       VARCHAR(64) PRIMARY KEY,
+    last_seen   DATETIME NOT NULL,
+    INDEX idx_last_seen (last_seen)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Single-row store for the viewer-set tempo. custom_speed is the value a watching
+-- viewer chose via POST /api/tempo.php (1..100), or NULL when there is no custom
+-- value in force. It is DISCARDED (set back to NULL) the moment the last viewer
+-- leaves, so a returning viewer starts from the 30% "someone watching" default,
+-- never a stale custom value. The effective tempo is derived (see lib/tempo.php):
+-- nobody watching -> 5%, someone watching + no custom -> 30%, custom -> that value.
+CREATE TABLE tempo (
+    id            TINYINT UNSIGNED PRIMARY KEY,
+    custom_speed  TINYINT UNSIGNED NULL,
+    updated_at    DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO tempo (id, custom_speed, updated_at) VALUES (1, NULL, NOW());

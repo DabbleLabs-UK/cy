@@ -59,6 +59,7 @@ import {
 import { PowerMeter, costInjection } from './power.js';
 import { createWarden, sanitize, stripScaffold, isRepeat } from './warden.js';
 import { Client, tsNow } from './client.js';
+import { tempoIdleMs } from './tempo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -243,6 +244,27 @@ async function main() {
   // ---- electricity meter ----
   const powerMeter = new PowerMeter(config, join(STATE_DIR, 'power.json'));
   await powerMeter.load();
+
+  // ---- viewer-driven tempo ----
+  // When the polled tempo changes, mirror it into the public stream as a `tempo`
+  // event so the viewer can display speed, viewer count and the cost of watching
+  // live. The pence/hour anchors are derived from the power model here (the web
+  // side does not know the watts model): with the duty cycle, average draw is
+  // idle + (speed/100)*(load-idle), so pence/hour is linear in speed between
+  // pph_idle (speed->0) and pph_load (speed=100). The viewer interpolates.
+  client.onTempo = (t) => {
+    const pph = (w) => (w / 1000) * powerMeter.tariff * 100;
+    emit({
+      kind: 'tempo',
+      payload: {
+        speed: t.speed,
+        viewers: t.viewers,
+        custom: t.custom,
+        pph_idle: Number(pph(powerMeter.idleWatts).toFixed(3)),
+        pph_load: Number(pph(powerMeter.loadWatts).toFixed(3)),
+      },
+    });
+  };
   let lastPound = Math.floor(powerMeter.costTotal); // for whole-pound crossings
   let forceCost = false; // set true on a pound crossing, consumed by next gen
   let genCount = 0;
@@ -943,6 +965,7 @@ async function main() {
       }
       const baseOpts = options(vitals, config.threads, mode);
 
+      const burstStart = Date.now();
       let discards = 0;
       let tempBump = 0;
       let penBump = 0;
@@ -972,6 +995,7 @@ async function main() {
         trimContext(discards >= 2 ? 0.5 : 0.25);
         if (discards >= 2) break; // dropped oldest half - move on to a fresh gen
       }
+      const burstMs = Date.now() - burstStart;
       // remember this burst's opening word so the next prompt can forbid it -
       // the last-5-openers ban that keeps him off the same starting word.
       if (produced) {
@@ -988,7 +1012,20 @@ async function main() {
       recentNoise = [recentNoise[1], noiseThisBurst];
       // adaptive pacing: near-continuous trickle awake, slow drift asleep. No
       // artificial gap between waking generations that produced prose.
-      await sleep(mode === 'sleep' ? 8000 : produced ? 150 : 700);
+      //
+      // TEMPO (duty cycle): after a waking burst, sit idle in proportion to the
+      // viewer-driven speed - lower speed, more silence between bursts. This is
+      // the machine being throttled, NOT Cy choosing to stop, so no `silence`
+      // event is emitted; the vitals/host/power timers keep ticking on their own
+      // so the page stays alive and never looks broken. idleSilently breaks early
+      // for an inbound postcard/notice so an interrupt is never swallowed.
+      if (mode !== 'sleep' && produced) {
+        await sleep(150); // the small breather between bursts, as before
+        const idleMs = tempoIdleMs(burstMs, client.tempo.speed);
+        if (idleMs > 0) await idleSilently(idleMs);
+      } else {
+        await sleep(mode === 'sleep' ? 8000 : produced ? 150 : 700);
+      }
     }
   }
 

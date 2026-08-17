@@ -12,11 +12,13 @@ import { Pen } from './pen.js';
 import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
+import { Tempo } from './tempo.js';
 
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
 const POST_POSTCARD = CFG.postPostcard || 'api/post-postcard.php';
 const OPENVERSE_SEARCH = CFG.openverseSearch || 'api/openverse-search.php';
+const TEMPO_ENDPOINT = CFG.tempo || 'api/tempo.php';
 const POLL_MS = 1000;
 const LETTER_MAX = 900;
 const FROM_MAX = 40;
@@ -24,7 +26,7 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 const $ = (sel) => document.querySelector(sel);
 
-let pen, brain, hud, power;
+let pen, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
 
@@ -36,6 +38,8 @@ async function boot() {
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
   if (powerEl) power = new Power(powerEl);
+  const tempoEl = $('#tempo');
+  if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT);
 
   wireForms();
 
@@ -182,6 +186,10 @@ function dispatch(ev, bootstrap) {
 
     case 'power':
       if (power) power.push(p, ev.ts ? Date.parse(String(ev.ts).replace(' ', 'T')) : Date.now());
+      break;
+
+    case 'tempo':
+      if (tempo) tempo.update(p);
       break;
 
     case 'day':
