@@ -49,11 +49,15 @@ const EVENTS = {
   no_eggs: { despair: +0.04, anger: +0.05, longing: +0.03 },
   cold_tea: { despair: +0.03, anger: +0.04, stress: +0.02 },
   delayed_unlock: { anxiety: +0.05, anger: +0.05, agitation: +0.06 },
+  // regime deviations - a cancelled association is trivial-but-amplifiable, a
+  // lockdown is a real event that lands with more weight.
+  assoc_cancelled: { despair: +0.06, anger: +0.06, longing: +0.05, agitation: +0.04 },
+  lockdown: { anxiety: +0.15, agitation: +0.15, despair: +0.08, longing: +0.06 },
 };
 
 // events that reset monotony HARD (real novelty) vs softly (ambient stuff)
-const NOVEL_EVENTS = new Set(['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives', 'warden']);
-export const TRIVIAL_EVENTS = new Set(['no_eggs', 'cold_tea', 'delayed_unlock']);
+const NOVEL_EVENTS = new Set(['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives', 'warden', 'lockdown']);
+export const TRIVIAL_EVENTS = new Set(['no_eggs', 'cold_tea', 'delayed_unlock', 'assoc_cancelled']);
 
 const PHYSICAL = new Set(['pain', 'hunger', 'fatigue']);
 

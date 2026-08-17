@@ -201,8 +201,34 @@ export class Pen {
     // tag the instant flag onto the job so a mid-drain setInstant(false) does
     // not accidentally animate the tail of the backlog.
     const instant = this.instant;
+    // resuming after a long silence: lay down the time marker on its own fresh
+    // line first, in the same hand, so the gap reads as "then, at HH:MM...".
+    if (this._resumeMarker) {
+      const mk = this._resumeMarker;
+      this._resumeMarker = null;
+      for (const ch of mk) this._enqueue({ type: 'char', ch, instant });
+      this._enqueue({ type: 'newline' });
+    }
     for (const ch of str) this._enqueue({ type: 'char', ch, instant });
     this._pump();
+  }
+
+  // ---- silence: a real gap, left blank -----------------------------------
+  //
+  // He stopped. Leave visible empty space proportional to the duration - no ink,
+  // no animation, the stillness is the point. For a long silence, arm a time
+  // marker so writing resumes on a fresh dated line (see write()).
+  silence(seconds, marker) {
+    // close off the current line so the gap starts clean
+    if (this.midWord || this.x > this.marginX) this._newline();
+    const secs = Math.max(0, Number(seconds) || 0);
+    // ~0.8 lines at 20s up to a capped ~6 lines for the long (asleep) gaps
+    const gapLines = Math.max(0.8, Math.min(6, secs / 40));
+    this.y += this.size * this.lineGap * gapLines;
+    this.x = this.marginX;
+    this.midWord = false;
+    this._scroll();
+    if (secs >= 90 && marker) this._resumeMarker = String(marker);
   }
 
   // Backlog fill: lay down ink fully drawn (no per-stroke animation) so the

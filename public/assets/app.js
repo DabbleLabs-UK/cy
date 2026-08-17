@@ -147,6 +147,20 @@ function dispatch(ev, bootstrap) {
       flashAbort(p.reason || p.cause);
       break;
 
+    case 'silence': {
+      // he stopped writing: leave a real blank gap on the page, no ink. For a
+      // longer silence, resume on a fresh line stamped with the time.
+      const secs = Number(p.seconds) || 0;
+      let marker = '';
+      if (secs >= 90 && ev.ts) {
+        const m = String(ev.ts).match(/(\d{2}):(\d{2})/);
+        if (m) marker = m[1] + ':' + m[2];
+      }
+      pen.silence(secs, marker);
+      if (!bootstrap && secs >= 60) pushTicker(p.reason === 'under' ? 'asleep, gone still' : 'gone quiet');
+      break;
+    }
+
     case 'vitals':
       pen.setVitals(p);
       brain.setBrain(p.brain);
@@ -227,6 +241,8 @@ function handleAmbient(p) {
     no_eggs: 'no eggs on the tray',
     cold_tea: 'the tea came cold',
     delayed_unlock: 'unlock came late',
+    assoc_cancelled: 'association cancelled',
+    lockdown: 'the wing on lockdown',
   };
   if (nice[name]) pushTicker(nice[name]);
 }

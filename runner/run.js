@@ -28,7 +28,14 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective } from './prompt.js';
+import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective } from './prompt.js';
+import {
+  reconcileLedger,
+  makeIncident,
+  pushIncident,
+  incidentsDirective,
+  resolveThreads,
+} from './incidents.js';
 import {
   reconcileRelations,
   pickSocial,
@@ -98,11 +105,50 @@ const isAsleep = (mins) => mins >= 22 * 60 + 30 || mins < 6 * 60 + 30;
 
 const SCHEDULE = [
   { name: 'lights_on', mins: 6 * 60 + 30 },
-  { name: 'meal', mins: 7 * 60 + 30 },
-  { name: 'meal', mins: 12 * 60 },
-  { name: 'meal', mins: 17 * 60 + 30 },
+  { name: 'meal', mins: 7 * 60 + 30 }, // slop
+  { name: 'meal', mins: 11 * 60 + 45 }, // lunch
+  { name: 'meal', mins: 16 * 60 + 45 }, // tea
   { name: 'lights_out', mins: 22 * 60 + 30 },
 ];
+
+// THE REGIME - the shape of a British prison day. The current phase is put in
+// every waking prompt so the day has structure; some transitions can DEVIATE
+// (late unlock, cancelled association, a lockdown), and a deviation is itself an
+// incident, amplified by the monotony multiplier so a 20-minute late unlock in a
+// dead week becomes the event of the day.
+const REGIME = [
+  { mins: 6 * 60 + 30, phase: 'lights_on', label: 'lights on. the strip light. awake whether you want to be or not.' },
+  { mins: 7 * 60 + 30, phase: 'unlock_slop', label: 'unlock and slop. doors off, breakfast such as it is.' },
+  { mins: 8 * 60 + 30, phase: 'work_assoc', label: 'work or association. out of the cell, among them.' },
+  { mins: 11 * 60 + 45, phase: 'lunch_bangup', label: 'lunch and bang-up. fed and locked back in.' },
+  { mins: 13 * 60 + 30, phase: 'exercise_yard', label: 'unlock again, exercise or the yard.' },
+  { mins: 16 * 60 + 45, phase: 'tea', label: 'tea. the last hot thing of the day.' },
+  { mins: 17 * 60 + 30, phase: 'bangup_night', label: 'banged up for the night. that is you til morning.' },
+  { mins: 22 * 60 + 30, phase: 'lights_out', label: 'lights out.' },
+];
+
+// The regime block in force at minutes-of-day `mins` (wraps: before 06:30 it is
+// still last night's lights_out).
+function currentRegime(mins) {
+  let cur = REGIME[REGIME.length - 1];
+  for (const r of REGIME) if (mins >= r.mins) cur = r;
+  return cur;
+}
+
+function regimeDirective(mins) {
+  const r = currentRegime(mins);
+  const hh = String(Math.floor(mins / 60)).padStart(2, '0');
+  const mm = String(mins % 60).padStart(2, '0');
+  return `THE REGIME right now (${hh}:${mm}): ${r.label} this is the shape of the day; little else moves.`;
+}
+
+// Regime transitions that can go wrong, and the deviation each throws. Checked
+// when the day crosses that boundary.
+const DEVIATIONS = {
+  unlock_slop: { chance: 0.22, sub: 'late_unlock', event: 'delayed_unlock' },
+  exercise_yard: { chance: 0.22, sub: 'late_unlock', event: 'delayed_unlock' },
+  work_assoc: { chance: 0.15, sub: 'assoc_cancelled', event: 'assoc_cancelled' },
+};
 
 // did we cross `target` going from prev -> cur minutes-of-day (handles midnight)?
 function crossed(target, cur, prev) {
@@ -131,6 +177,44 @@ const isHostile = (body) => HOSTILE.test(body || '');
 const WARM = /\b(love|miss you|thinking of you|proud|hope you|stay strong|here for you|care|dear|hang in|take care|god bless|xx)\b/i;
 const isWarm = (body) => WARM.test(body || '');
 
+// ---- silence: real gaps where nothing is written --------------------------
+//
+// Probability of stopping rises with despair, numbness, resignation and sleep,
+// and falls with agitation and just after a fresh incident (something concrete
+// pulls him back to the page). Awake silences run ~20s to ~4min; asleep, much
+// longer. Returns { silent, seconds, reason }.
+function silenceDecision(v, asleep, sinceIncidentMs, rnd = Math.random) {
+  const m = v.mental || {};
+  const p = v.physical || {};
+  const d = v.derived || {};
+  let prob = 0.05 + 0.32 * (m.despair || 0) + 0.28 * (d.numbness || 0) + 0.22 * (d.resignation || 0);
+  if (asleep) prob += 0.42;
+  prob -= 0.4 * (m.agitation || 0);
+  if (sinceIncidentMs < 30000) prob -= 0.5; // a fresh incident pulls him back
+  prob = clamp(prob, asleep ? 0.05 : 0.02, asleep ? 0.9 : 0.55);
+  if (rnd() >= prob) return { silent: false };
+  const heavy = clamp(0.4 + 0.6 * (((m.despair || 0) + (d.resignation || 0)) / 2));
+  const seconds = asleep
+    ? 60 + Math.floor(rnd() * 300) + Math.floor(heavy * 180) // 60..~540s
+    : 20 + Math.floor(rnd() * 90) + Math.floor(heavy * 120); // 20..~230s
+  const reason = asleep
+    ? 'under'
+    : (d.numbness || 0) > 0.55
+      ? 'numb'
+      : (m.despair || 0) > 0.6
+        ? 'nothing to write'
+        : (p.fatigue || 0) > 0.7
+          ? 'too tired'
+          : 'staring at the wall';
+  return { silent: true, seconds, reason };
+}
+
+// First word of a generation, lowercased, for the opener ban ring.
+function firstWord(text) {
+  const m = String(text || '').trim().match(/[A-Za-z0-9']+/);
+  return m ? m[0].toLowerCase() : '';
+}
+
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -144,6 +228,11 @@ async function main() {
   if (typeof vitals.monotony !== 'number') vitals.monotony = 0;
   // the cast + grudge map lives on the vitals object so it persists with state
   vitals.relations = reconcileRelations(vitals.relations);
+  // the incident ledger, last-openers ring and last-incident clock ride on the
+  // vitals object too, so they persist with state.
+  vitals.ledger = reconcileLedger(vitals.ledger);
+  if (!Array.isArray(vitals.recentOpeners)) vitals.recentOpeners = [];
+  if (typeof vitals.lastIncidentMs !== 'number') vitals.lastIncidentMs = 0;
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
@@ -175,7 +264,18 @@ async function main() {
     no_eggs: 'no eggs on the tray this morning',
     cold_tea: 'the tea came cold',
     delayed_unlock: 'unlock came late, no reason given',
+    assoc_cancelled: 'association cancelled, banged up through it',
   };
+
+  // Build one incident and file it: stamp the time, push onto the rolling
+  // ledger, and reset the "fresh incident" clock the silence engine reads.
+  function recordIncident(kind, ctx = {}) {
+    const inc = makeIncident(kind, { relations: vitals.relations, ...ctx });
+    inc.ts = tsNow();
+    pushIncident(vitals.ledger, inc);
+    vitals.lastIncidentMs = Date.now();
+    return inc;
+  }
 
   // rolling ~800 tokens (~3200 chars) of the model's own CLEANED output, fed
   // back in. Only scaffold-free prose ever lands here (see onChunk), so the
@@ -380,6 +480,8 @@ async function main() {
     fireEvent(evName, { from: pc.from_name || null });
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
+    // a reply arriving clears the mail-wait / awaiting-reply threads in the ledger
+    resolveThreads(vitals.ledger, ['reply', 'message', 'mail']);
 
     // the public, streamed record of the incoming postcard (no private memory)
     emit({
@@ -494,6 +596,8 @@ async function main() {
     const a = ampOf(vitals);
     applySocialEvent(vitals.relations, castKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
+    const { mins } = londonParts();
+    recordIncident('social', { actorKey: castKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins });
     const r = vitals.relations[castKey];
     emit({
       kind: 'event',
@@ -515,6 +619,8 @@ async function main() {
     const a = ampOf(vitals);
     applyOfficerEvent(vitals.relations, officerKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.25);
+    const { mins } = londonParts();
+    recordIncident('officer', { actorKey: officerKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins });
     officerCue = { key: officerKey, ev, until: Date.now() + 3 * 60 * 1000 };
     const r = vitals.relations[officerKey];
     emit({
@@ -539,6 +645,8 @@ async function main() {
     const p = mishearChance({ lucidity: vitals.mental.lucidity, paranoia });
     const misheard = Math.random() < p;
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
+    const { mins } = londonParts();
+    recordIncident('overheard', { phase: currentRegime(mins).phase, mins });
     overheardCue = { item, misheard, until: Date.now() + 3 * 60 * 1000 };
     emit({
       kind: 'event',
@@ -559,18 +667,39 @@ async function main() {
     for (const s of SCHEDULE) {
       if (crossed(s.mins, mins, prevMins)) fireEvent(s.name);
     }
+    // regime boundary crossings that can DEVIATE (late unlock, cancelled
+    // association). A deviation is an amplifiable event AND a concrete incident.
+    for (const r of REGIME) {
+      if (!crossed(r.mins, mins, prevMins)) continue;
+      const dev = DEVIATIONS[r.phase];
+      if (dev && Math.random() < dev.chance) {
+        recordIncident('regime', { sub: dev.sub, phase: r.phase, mins });
+        fireEvent(dev.event);
+      }
+    }
     prevMins = mins;
 
     const asleep = isAsleep(mins);
+    const phase = currentRegime(mins).phase;
     // random ambient events, low probability per 5s tick
-    if (asleep && Math.random() < 0.02) fireEvent('noise_night');
+    if (asleep && Math.random() < 0.02) {
+      recordIncident('noise', { phase, mins });
+      fireEvent('noise_night');
+    }
     if (Math.random() < 0.0006) fireEvent('injury');
     if (!asleep && Math.random() < 0.0008) fireEvent('cell_search');
+    // a rare full lockdown - a real deviation, felt harder than a late unlock
+    if (!asleep && Math.random() < 0.0005) {
+      recordIncident('regime', { sub: 'lockdown', phase, mins });
+      fireEvent('lockdown');
+    }
 
     // trivial daily irritations (awake) - tiny normally, huge under high amp
     if (!asleep && Math.random() < 0.004) {
-      const trivial = ['no_eggs', 'cold_tea', 'delayed_unlock'];
-      fireEvent(trivial[Math.floor(Math.random() * trivial.length)]);
+      const trivial = ['no_eggs', 'cold_tea'];
+      const sub = trivial[Math.floor(Math.random() * trivial.length)];
+      recordIncident('trivial', { sub, phase, mins });
+      fireEvent(sub);
     }
     // social frictions between inmates (awake) - build warmth/suspicion/grudge
     if (!asleep && Math.random() < 0.006) fireSocial();
@@ -578,6 +707,10 @@ async function main() {
     if (!asleep && Math.random() < 0.004) fireOfficer();
     // half-heard remarks down the wing (awake) - may be misheard under paranoia
     if (!asleep && Math.random() < 0.005) fireOverheard();
+    // pure texture - the grain of the day that moves no numbers, only the ledger.
+    // A little more often than the number-moving events, so the ledger stays full
+    // of specifics. Rarely while asleep (the cell at night still creaks).
+    if (Math.random() < (asleep ? 0.006 : 0.012)) recordIncident('texture', { phase, mins });
 
     // no mail in 24h - fire at most once per 24h
     if (now - (vitals.lastMailMs || now) > 24 * 3600 * 1000 && now - (vitals.noMailFiredMs || 0) > 24 * 3600 * 1000) {
@@ -660,6 +793,16 @@ async function main() {
     });
   }, 10000);
 
+  // Interruptible idle: sit still for `ms`, but break early if a postcard or
+  // notice lands (so a silence never swallows an interrupt) or on shutdown.
+  async function idleSilently(ms) {
+    const end = Date.now() + ms;
+    while (running && Date.now() < end) {
+      if (pendingPostcards.length || pendingWarden.length) break;
+      await sleep(Math.min(500, Math.max(0, end - Date.now())));
+    }
+  }
+
   // ---- main generation loop ----
   async function genLoop() {
     while (running) {
@@ -675,17 +818,44 @@ async function main() {
       const asleep = isAsleep(mins);
       const mode = asleep ? 'sleep' : 'journal';
       currentMode = mode;
-      // sleep mode gets no cast/cost injections - he is half under. Build the
-      // system + ctx ONCE (buildCtx has fire-once side effects); only the
+
+      // REAL SILENCE: sometimes he just stops. Emit a silence event (no text),
+      // sit still for its duration - vitals keep ticking on their own timer, so
+      // the graphs stay alive while the page goes quiet - then loop.
+      const sinceIncident = Date.now() - (vitals.lastIncidentMs || 0);
+      const sil = silenceDecision(vitals, asleep, sinceIncident);
+      if (sil.silent) {
+        emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
+        await idleSilently(sil.seconds * 1000);
+        continue;
+      }
+
+      // sleep mode gets no cast/cost/incident injections - he is half under -
+      // but still the opener bans. Build the system + ctx ONCE (buildCtx has
+      // fire-once side effects; a form is chosen once per burst); only the
       // sampling and the context tail vary across repeat-retries.
-      const ctx = mode === 'sleep' ? null : buildCtx();
-      const system = mode === 'sleep' ? buildSystem(vitals, 'sleep') : buildSystem(vitals, 'journal', ctx);
+      const bans = bansDirective(vitals.recentOpeners);
+      let system;
+      if (mode === 'sleep') {
+        system = buildSystem(vitals, 'sleep', { bans });
+      } else {
+        const ctx = buildCtx();
+        ctx.bans = bans;
+        ctx.regime = regimeDirective(mins);
+        ctx.form = pickForm(vitals, { relations: vitals.relations });
+        ctx.incidents = incidentsDirective(vitals.ledger, {
+          relations: vitals.relations,
+          mailWaitMs: Date.now() - (vitals.lastMailMs || Date.now()),
+        });
+        system = buildSystem(vitals, 'journal', ctx);
+      }
       const baseOpts = options(vitals, config.threads, mode);
 
       let discards = 0;
       let tempBump = 0;
       let penBump = 0;
       let produced = false;
+      let lastFull = '';
       for (;;) {
         const tail = contextText();
         const prompt = buildPrompt(tail, mode);
@@ -699,6 +869,7 @@ async function main() {
         if (r.error) break; // ollama already backed off; move on
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
+          lastFull = r.full || '';
           break;
         }
         // near-repeat: discard, bump randomness + repeat penalty, trim context
@@ -708,6 +879,15 @@ async function main() {
         penBump += 0.12;
         trimContext(discards >= 2 ? 0.5 : 0.25);
         if (discards >= 2) break; // dropped oldest half - move on to a fresh gen
+      }
+      // remember this burst's opening word so the next prompt can forbid it -
+      // the last-5-openers ban that keeps him off the same starting word.
+      if (produced) {
+        const w = firstWord(lastFull);
+        if (w) {
+          vitals.recentOpeners.push(w);
+          while (vitals.recentOpeners.length > 5) vitals.recentOpeners.shift();
+        }
       }
       // adaptive pacing: near-continuous trickle awake, slow drift asleep. No
       // artificial gap between waking generations that produced prose.

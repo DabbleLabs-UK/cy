@@ -7,6 +7,8 @@
 // Sampling (temperature/top_p/repeat_penalty/num_predict) is likewise derived
 // from vitals so the model's own randomness rises with dissociation/agitation.
 
+import { BY_KEY } from './cast.js';
+
 export const NUM_CTX = 3072;
 
 const SYSTEM_BASE = [
@@ -62,6 +64,77 @@ export function styleDirective(v) {
   return 'RIGHT NOW: ' + on.join('; ') + '.';
 }
 
+// ---- FORM ROTATION --------------------------------------------------------
+//
+// The model falls into one shape and repeats it. Before each burst we pick a
+// FORM at random - weighted by state - and instruct it explicitly, so the
+// texture of what he writes keeps changing even when the mood does not. `tags`
+// bias the weight from vitals: sparse forms rise with despair/numbness, repeat/
+// count with fixation, argue/complaint with anger, the connected forms with
+// lucidity.
+const FORMS = [
+  { key: 'list', tags: ['lucid'], dir: 'FORM: a list. things one under another, no sentences joining them up.' },
+  { key: 'count', tags: ['fixation'], dir: 'FORM: count something and keep counting - tiles, days, footsteps, how many times it has happened. the number matters more than any sentence.' },
+  { key: 'oneline', tags: ['sparse'], dir: 'FORM: one short line. then stop. nothing else.' },
+  { key: 'argue', tags: ['anger'], dir: 'FORM: an argument with someone who is not in the room. answer back to what they said to you.' },
+  { key: 'inventory', tags: ['lucid'], dir: 'FORM: an inventory of what you have in here. name the things, that is all.' },
+  { key: 'marktime', tags: ['sparse'], dir: 'FORM: mark the time. a time, then three words. that is the whole entry.' },
+  { key: 'repeat', tags: ['fixation'], dir: 'FORM: one phrase you cannot get past. say it. say it again. you cannot leave it alone.' },
+  { key: 'question', tags: ['sparse'], dir: 'FORM: a question asked to nobody. do not answer it.' },
+  { key: 'wall', tags: [], dir: 'FORM: talk to <WHO> through the wall, low, so the screws do not hear.' },
+  { key: 'complaint', tags: ['anger'], dir: 'FORM: a complaint. start it formal, like an official form you have to fill in, and let it come apart halfway and end nothing like it began.' },
+  { key: 'detail', tags: ['sparse'], dir: 'FORM: notice one physical thing and stay on it. the crack, the cold, the light. do not move off it.' },
+  { key: 'connected', tags: ['lucid'], dir: 'FORM: let one thought run into the next, joined up, while you still can.' },
+];
+
+// A neighbour to talk to through the wall - whoever is most on his mind.
+function wallNeighbour(relations) {
+  let best = null;
+  for (const k in relations || {}) {
+    const r = relations[k];
+    if (!r) continue;
+    const s = (r.grudge || 0) * 1.2 + (r.warmth || 0) * 0.5;
+    if (!best || s > best.s) best = { name: (BY_KEY[k] || {}).name || k, s };
+  }
+  return best ? best.name : 'the next cell';
+}
+
+// Pick a form for this burst, weighted by state. Returns a directive string.
+export function pickForm(v, { relations = {}, rnd = Math.random } = {}) {
+  const m = v.mental || {};
+  const d = v.derived || {};
+  const w = {
+    sparse: 1 + 3.2 * (m.despair || 0) + 2.5 * (d.numbness || 0) + 1.6 * (d.resignation || 0),
+    fixation: 1 + 3.0 * (d.fixation || 0),
+    anger: 1 + 3.0 * (m.anger || 0) + 1.4 * (d.brittleness || 0),
+    lucid: 0.4 + 2.6 * (m.lucidity || 0),
+  };
+  const weightOf = (f) => (f.tags.length ? f.tags.reduce((s, t) => s + (w[t] || 0), 0) : 1.2);
+  const total = FORMS.reduce((s, f) => s + weightOf(f), 0);
+  let r = rnd() * total;
+  let chosen = FORMS[FORMS.length - 1];
+  for (const f of FORMS) {
+    r -= weightOf(f);
+    if (r <= 0) { chosen = f; break; }
+  }
+  return chosen.dir.replace('<WHO>', wallNeighbour(relations));
+}
+
+// The HARD BANS block. He is not writing to anyone - no greeting, no sign-off,
+// no salutation. And he may not open with a word he has just opened with:
+// `recentOpeners` are the last few first-words, forbidden explicitly here.
+export function bansDirective(recentOpeners = []) {
+  const words = (recentOpeners || []).filter(Boolean).slice(-5);
+  const lines = [
+    'BANS. you are not writing to anyone - there is no reader, no correspondent. never begin with "Dear". ' +
+      'no greeting, no address to a reader, no sign-off. never open two entries with the same word.',
+  ];
+  if (words.length) {
+    lines.push('do NOT open this with any of these words: ' + words.map((x) => '"' + x + '"').join(', ') + '.');
+  }
+  return lines.join('\n');
+}
+
 // ctx carries the contextual injections assembled by the loop:
 //   { cast, grudge, officer, overheard, visitor, amplified, warden, cost }
 // - any may be omitted/empty.
@@ -69,6 +142,7 @@ export function buildSystem(v, mode, ctx = {}) {
   const parts = [SYSTEM_BASE];
   const style = styleDirective(v);
   if (style) parts.push(style);
+  if (ctx.bans) parts.push(ctx.bans);
   if (mode === 'sleep') {
     parts.push(
       'You are half under. Bang-up done, lights out. Only fragments surface - a word, a',
@@ -76,6 +150,7 @@ export function buildSystem(v, mode, ctx = {}) {
     );
     return parts.join('\n\n');
   }
+  if (ctx.regime) parts.push(ctx.regime);
   if (ctx.cast) parts.push(ctx.cast);
   if (ctx.grudge) parts.push(ctx.grudge);
   if (ctx.officer) parts.push(ctx.officer);
@@ -84,6 +159,10 @@ export function buildSystem(v, mode, ctx = {}) {
   if (ctx.amplified) parts.push(ctx.amplified);
   if (ctx.warden) parts.push(ctx.warden);
   if (ctx.cost) parts.push(ctx.cost);
+  // The incidents are the substance - the concrete material to write FROM - and
+  // the form is the shape to write it in; both go last so they read freshest.
+  if (ctx.incidents) parts.push(ctx.incidents);
+  if (ctx.form) parts.push(ctx.form);
   return parts.join('\n\n');
 }
 

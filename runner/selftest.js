@@ -31,7 +31,16 @@ import {
   mergeVisitorNotes,
   updateVisitorStanding,
 } from './cast.js';
-import { buildSystem, amplifiedDirective } from './prompt.js';
+import { buildSystem, amplifiedDirective, pickForm, bansDirective } from './prompt.js';
+import {
+  reconcileLedger,
+  makeIncident,
+  pushIncident,
+  incidentLine,
+  incidentsDirective,
+  unresolvedThreads,
+  resolveThreads,
+} from './incidents.js';
 import { PowerMeter, costInjection } from './power.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -183,5 +192,62 @@ line('  ' + merged.replace(/\n/g, ' | '));
 line('notes stay capped: ' + (merged.length <= 600));
 const hostileStanding = updateVisitorStanding(returning, { hostile: true, warm: false }, 2.0);
 line('hostile postcard hardens standing: grudge ' + returning.grudge + ' -> ' + hostileStanding.grudge.toFixed(3) + ', warmth ' + returning.warmth + ' -> ' + hostileStanding.warmth.toFixed(3));
+
+// ---- 11. incident ledger: concrete incidents, threads, write-from directive ----
+hr('11. INCIDENT LEDGER');
+const iv = initialVitals();
+iv.relations = initialRelations();
+iv.derived = computeDerived(iv);
+const ledger = reconcileLedger([]);
+const filed = (k, c) => {
+  const inc = makeIncident(k, { relations: iv.relations, ...c });
+  inc.ts = 't';
+  pushIncident(ledger, inc);
+  return inc;
+};
+filed('social', { actorKey: 'reg', slight: 'swapped your meal tray for a worse one', evType: 'swapped_tray', phase: 'work_assoc', mins: 540 });
+filed('officer', { actorKey: 'sweep', slight: 'turned the cell over and left it worse', evType: 'search', phase: 'work_assoc', mins: 540 });
+filed('trivial', { sub: 'cold_tea', mins: 480 });
+filed('regime', { sub: 'late_unlock', mins: 450 });
+filed('texture', { phase: 'lights_out', mins: 180 });
+line('every incident has the required record shape: ' +
+  ledger.every((i) => ['ts', 'actor', 'verb', 'object', 'detail', 'resolved'].every((k) => k in i)));
+line('incidents render as concrete lines:');
+for (const i of ledger) line('  - ' + incidentLine(i));
+const threadsBefore = unresolvedThreads(ledger, { relations: iv.relations, mailWaitMs: 30 * 3600 * 1000 });
+line('unresolved threads (open incidents + mail wait): ' + JSON.stringify(threadsBefore));
+const closed = resolveThreads(ledger, ['taken']);
+line('resolveThreads(["taken"]) closed ' + closed + '; threads now: ' +
+  JSON.stringify(unresolvedThreads(ledger, { relations: iv.relations, mailWaitMs: 0 })));
+line('directive tells the model to write FROM the material:');
+line(incidentsDirective(ledger, { relations: iv.relations, mailWaitMs: 0, rnd: () => 0.99 }));
+
+// ---- 12. form rotation weights by state ----
+hr('12. FORM ROTATION (weighted by state)');
+let s = 12345;
+const rr = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+const tally = (v) => {
+  const c = {};
+  for (let i = 0; i < 200; i++) {
+    const key = pickForm(v, { relations: iv.relations, rnd: rr }).split('.')[0];
+    c[key] = (c[key] || 0) + 1;
+  }
+  return c;
+};
+const vDespair = initialVitals(); vDespair.mental.despair = 0.9; vDespair.mental.agitation = 0.05; vDespair.derived = computeDerived(vDespair);
+const vAnger = initialVitals(); vAnger.mental.anger = 0.9; vAnger.derived = computeDerived(vAnger);
+const cD = tally(vDespair);
+const cA = tally(vAnger);
+const sparse = (c) => (c['FORM: one short line'] || 0) + (c['FORM: mark the time'] || 0) + (c['FORM: notice one physical thing and stay on it'] || 0) + (c['FORM: a question asked to nobody'] || 0);
+line('high despair favours sparse forms: ' + sparse(cD) + ' of 200');
+line('high anger produces the argue/complaint forms: ' +
+  ((cA['FORM: an argument with someone who is not in the room'] || 0) + (cA['FORM: a complaint'] || 0)) + ' of 200');
+line('despair sparse-share > anger sparse-share: ' + (sparse(cD) > sparse(cA)));
+
+// ---- 13. opener bans ----
+hr('13. OPENER BANS');
+const bans = bansDirective(['the', 'same', 'nothing', 'and', 'cold']);
+line('bans forbid Dear/greeting/sign-off: ' + /never begin with "Dear"/.test(bans) + ' / ' + /no greeting/.test(bans));
+line('bans list the last openers explicitly: ' + /"the", "same", "nothing", "and", "cold"/.test(bans));
 
 line('\n(selftest complete)');
