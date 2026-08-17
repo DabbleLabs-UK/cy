@@ -31,7 +31,7 @@ const SYSTEM_BASE = [
   'banged up, and that is all there is.',
 ].join('\n');
 
-// [threshold test, directive] pairs, checked in order.
+// [threshold test, directive] pairs, checked in order. Primitive axes.
 const STYLE_RULES = [
   [(v) => v.mental.lucidity < 0.35, 'sentences break off, you lose the thread, restart mid-idea'],
   [(v) => v.mental.anxiety > 0.6, 'short. clipped. you keep checking the door'],
@@ -40,15 +40,31 @@ const STYLE_RULES = [
   [(v) => v.mental.despair > 0.7, 'you write less, you stop finishing thoughts'],
   [(v) => v.mental.dissociation > 0.6, 'the walls stop being walls, you slip into association'],
   [(v) => v.physical.fatigue > 0.75, 'you repeat yourself'],
+  [(v) => (v.mental.anger || 0) > 0.6, 'short, hard, you are looking for a target'],
+];
+
+// Derived composite states: directive fires above 0.6. Keyed to vitals.derived.
+const DERIVED_RULES = [
+  ['confusion', 'you lose track of which day, which thought, start a sentence twice'],
+  ['overwhelm', 'too much at once, you cannot rank what matters'],
+  ['numbness', 'you record events flatly, you do not react'],
+  ['paranoia', 'you re-read what people said, looking for the real meaning'],
+  ['fixation', 'you keep returning to the same small grievance'],
+  ['resignation', 'you have stopped expecting change, you just note it and move on'],
+  ['brittleness', 'the smallest thing sets you off'],
 ];
 
 export function styleDirective(v) {
   const on = STYLE_RULES.filter(([test]) => test(v)).map(([, d]) => d);
+  const d = v.derived || {};
+  for (const [k, txt] of DERIVED_RULES) if ((d[k] || 0) > 0.6) on.push(txt);
   if (!on.length) return '';
   return 'RIGHT NOW: ' + on.join('; ') + '.';
 }
 
-export function buildSystem(v, mode) {
+// ctx carries the contextual injections assembled by the loop:
+//   { cast, grudge, amplified, warden, cost } - any may be omitted/empty.
+export function buildSystem(v, mode, ctx = {}) {
   const parts = [SYSTEM_BASE];
   const style = styleDirective(v);
   if (style) parts.push(style);
@@ -57,8 +73,25 @@ export function buildSystem(v, mode) {
       'You are half under. Bang-up done, lights out. Only fragments surface - a word, a',
       'half-image, then gone. Do not form full thoughts. Drift.',
     );
+    return parts.join('\n\n');
   }
+  if (ctx.cast) parts.push(ctx.cast);
+  if (ctx.grudge) parts.push(ctx.grudge);
+  if (ctx.amplified) parts.push(ctx.amplified);
+  if (ctx.warden) parts.push(ctx.warden);
+  if (ctx.cost) parts.push(ctx.cost);
   return parts.join('\n\n');
+}
+
+// A trivial thing, happening under high amplification, must land as the day's
+// event - not noted wryly, but allowed to define or ruin the day.
+export function amplifiedDirective(label) {
+  return (
+    'TODAY, THIS: ' +
+    label +
+    '. do not note it wryly, do not shrug it off. in here it is enormous. ' +
+    'let it be the thing that ruins the day, the thing the day is about.'
+  );
 }
 
 export function sampling(v) {
@@ -105,17 +138,30 @@ export function options(v, threads, mode, overrides = {}) {
 }
 
 // The continuation prompt: recent self-output fed back for stream continuity,
-// plus a light cue. In letter mode the sender's letter is quoted and answered.
-export function buildPrompt(contextText, mode, letter) {
-  if (mode === 'letter' && letter) {
-    const who = letter.from_name ? letter.from_name : 'someone outside';
+// plus a light cue. In letter mode the sender's letter is quoted and answered;
+// in warden mode a signed notice is read and reacted to.
+export function buildPrompt(contextText, mode, payload) {
+  if (mode === 'letter' && payload) {
+    const who = payload.from_name ? payload.from_name : 'someone outside';
     return [
       contextText ? contextText.trim() : '',
       '',
       `[mail comes through the door. from ${who}:]`,
-      `"${(letter.body || '').trim()}"`,
+      `"${(payload.body || '').trim()}"`,
       '',
       '[you stop. you answer it, in your head, the way you talk:]',
+    ]
+      .filter((x) => x !== null && x !== undefined)
+      .join('\n');
+  }
+  if (mode === 'warden' && payload) {
+    return [
+      contextText ? contextText.trim() : '',
+      '',
+      '[a notice goes up on the wing. signed Warden Florian:]',
+      `"${(payload.text || '').trim()}"`,
+      '',
+      '[you read it twice. it lands. then, in your head:]',
     ]
       .filter((x) => x !== null && x !== undefined)
       .join('\n');

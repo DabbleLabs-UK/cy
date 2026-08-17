@@ -21,11 +21,23 @@ import {
   saveVitals,
   tick,
   applyEvent,
+  applyDeltas,
+  ampOf,
   heartRate,
   brainRegions,
   clamp,
+  TRIVIAL_EVENTS,
 } from './vitals.js';
-import { buildSystem, buildPrompt, options, letterPredict } from './prompt.js';
+import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective } from './prompt.js';
+import {
+  reconcileRelations,
+  pickSocial,
+  applySocialEvent,
+  castForPrompt,
+  grudgeDirective,
+  BY_KEY,
+} from './cast.js';
+import { PowerMeter, costInjection } from './power.js';
 import { createWarden, sanitize } from './warden.js';
 import { Client, tsNow } from './client.js';
 
@@ -115,10 +127,41 @@ async function main() {
 
   const vitals = await loadVitals(vitalsPath);
   if (!vitals.lastMailMs) vitals.lastMailMs = Date.now();
+  if (typeof vitals.monotony !== 'number') vitals.monotony = 0;
+  // the cast + grudge map lives on the vitals object so it persists with state
+  vitals.relations = reconcileRelations(vitals.relations);
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
+
+  // ---- electricity meter ----
+  const powerMeter = new PowerMeter(config, join(STATE_DIR, 'power.json'));
+  await powerMeter.load();
+  let lastPound = Math.floor(powerMeter.costTotal); // for whole-pound crossings
+  let forceCost = false; // set true on a pound crossing, consumed by next gen
+  let genCount = 0;
+  const COST_EVERY = config.costInjectEvery || 40; // inject roughly every Nth gen
+  // optional debug: mirror each built system prompt to state/prompts.log
+  const logPrompts = !!config.logPrompts;
+  async function logPrompt(mode, system) {
+    if (!logPrompts) return;
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'prompts.log'), `\n===== ${mode} @ ${tsNow()} =====\n${system}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+
+  // A trivial event that fired under high amp becomes the day's defining thing.
+  // Consumed by the next generation, then cleared.
+  let amplifiedCue = null; // { label, until }
+  const TRIVIAL_LABELS = {
+    no_eggs: 'no eggs on the tray this morning',
+    cold_tea: 'the tea came cold',
+    delayed_unlock: 'unlock came late, no reason given',
+  };
 
   // rolling ~800 tokens (~3200 chars) of the model's own output, fed back in.
   const CONTEXT_MAX_CHARS = 3200;
@@ -135,6 +178,7 @@ async function main() {
   let currentAbort = null; // AbortController for the in-flight generation
   let tokenCount = 0; // tokens this vitals-tick window (broca)
   const pendingLetters = [];
+  const pendingWarden = [];
   let prevMins = null;
   let prevDate = londonParts().date;
   let prevCpu = cpuSnapshot();
@@ -217,6 +261,27 @@ async function main() {
     return { full, aborted: false };
   }
 
+  // Assemble the contextual prompt injections for a waking generation: the cast
+  // standing, any hot grudge, an amplified trivial event, and - on a cadence or a
+  // whole-pound crossing - the running electricity cost.
+  function buildCtx() {
+    genCount++;
+    const ctx = {
+      cast: castForPrompt(vitals.relations),
+      grudge: grudgeDirective(vitals.relations),
+    };
+    if (amplifiedCue && Date.now() < amplifiedCue.until) {
+      ctx.amplified = amplifiedDirective(amplifiedCue.label);
+      amplifiedCue = null; // fire once
+    }
+    const doCost = forceCost || genCount % COST_EVERY === 0;
+    if (doCost) {
+      ctx.cost = costInjection(powerMeter.snapshot());
+      forceCost = false;
+    }
+    return ctx;
+  }
+
   // ---- letter mode: interrupt, transition, reply, transition back ----
   async function doLetter(letter) {
     emit({ kind: 'abort', payload: { cause: 'letter' } });
@@ -226,17 +291,40 @@ async function main() {
 
     const hostile = isHostile(letter.body);
     const evName = hostile ? 'letter_hostile' : 'letter_arrives';
-    applyEvent(vitals, evName, { now: Date.now() });
+    fireEvent(evName, { from: letter.from_name || null });
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
-    emit({ kind: 'event', payload: { name: evName, from: letter.from_name || null } });
 
-    const system = buildSystem(vitals, 'letter');
+    const system = buildSystem(vitals, 'letter', buildCtx());
     const prompt = buildPrompt(contextText(), 'letter', letter);
     const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(letter.body) });
+    await logPrompt('letter', system);
     await streamGenerate({ system, prompt, opts, mode: 'letter' });
 
     emit({ kind: 'mode', payload: { from: 'letter', to: 'journal' } });
+    currentMode = 'journal';
+  }
+
+  // ---- warden notice: a signed announcement lands with weight and CY reacts ----
+  async function doWarden(notice) {
+    emit({ kind: 'abort', payload: { cause: 'notice' } });
+    const from = currentMode;
+    currentMode = 'warden';
+    emit({ kind: 'mode', payload: { from, to: 'warden', cause: 'Warden Florian' } });
+
+    // {anxiety+0.2, anger+0.15, lucidity+0.1} times amp, then reset monotony hard
+    const a = ampOf(vitals);
+    applyDeltas(vitals, { anxiety: +0.2, anger: +0.15, lucidity: +0.1 }, a);
+    vitals.monotony = clamp((vitals.monotony || 0) - 0.5);
+    emit({ kind: 'event', payload: { name: 'warden', amp: Number(a.toFixed(3)), text: notice.text } });
+
+    const system = buildSystem(vitals, 'journal', buildCtx());
+    const prompt = buildPrompt(contextText(), 'warden', notice);
+    const opts = options(vitals, config.threads, 'journal', { num_predict: letterPredict(notice.text) });
+    await logPrompt('warden', system);
+    await streamGenerate({ system, prompt, opts, mode: 'warden' });
+
+    emit({ kind: 'mode', payload: { from: 'warden', to: 'journal' } });
     currentMode = 'journal';
   }
 
@@ -249,16 +337,54 @@ async function main() {
       interrupt = true;
     }
     for (const img of data.images || []) {
-      applyEvent(vitals, 'image_arrives', { now: Date.now() });
+      fireEvent('image_arrives', { caption: img.caption || null });
       vitals.lastMailMs = Date.now();
-      emit({ kind: 'event', payload: { name: 'image_arrives', caption: img.caption || null } });
     }
     for (const n of data.news || []) {
-      applyEvent(vitals, 'news_arrives', { now: Date.now() });
-      emit({ kind: 'event', payload: { name: 'news_arrives', headline: n.headline || null } });
+      fireEvent('news_arrives', { headline: n.headline || null });
+    }
+    for (const w of data.warden || []) {
+      if (!w || !w.text) continue;
+      pendingWarden.push(w);
+      interrupt = true;
     }
     if (interrupt && currentAbort) currentAbort.abort(); // cut the current thought mid-word
   };
+
+  // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
+  // it was a trivial thing landing under high amplification, arm the "this is the
+  // day" cue. Returns the amp that was applied.
+  function fireEvent(name, extra = {}) {
+    const a = ampOf(vitals);
+    applyEvent(vitals, name, { now: Date.now() });
+    if (TRIVIAL_EVENTS.has(name) && a > 2.0) {
+      amplifiedCue = { label: TRIVIAL_LABELS[name] || name, until: Date.now() + 3 * 60 * 1000 };
+    }
+    emit({ kind: 'event', payload: { name, amp: Number(a.toFixed(3)), ...extra } });
+    return a;
+  }
+
+  // Fire a social event: nudge one inmate's standing, scaled by amp, and knock
+  // monotony down (a slight is still an event). Emits the standing so viewers can
+  // watch a feud build.
+  function fireSocial() {
+    const { castKey, ev } = pickSocial();
+    const a = ampOf(vitals);
+    applySocialEvent(vitals.relations, castKey, ev, a);
+    vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
+    const r = vitals.relations[castKey];
+    emit({
+      kind: 'event',
+      payload: {
+        name: 'social',
+        cast: castKey,
+        who: (BY_KEY[castKey] || {}).name || castKey,
+        type: ev.type,
+        amp: Number(a.toFixed(3)),
+        standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
+      },
+    });
+  }
 
   // ---- deterministic environment scheduler (runs each vitals tick) ----
   function scheduler(now) {
@@ -271,39 +397,33 @@ async function main() {
     }
 
     for (const s of SCHEDULE) {
-      if (crossed(s.mins, mins, prevMins)) {
-        applyEvent(vitals, s.name, { now });
-        emit({ kind: 'event', payload: { name: s.name } });
-      }
+      if (crossed(s.mins, mins, prevMins)) fireEvent(s.name);
     }
     prevMins = mins;
 
     const asleep = isAsleep(mins);
     // random ambient events, low probability per 5s tick
-    if (asleep && Math.random() < 0.02) {
-      applyEvent(vitals, 'noise_night', { now });
-      emit({ kind: 'event', payload: { name: 'noise_night' } });
+    if (asleep && Math.random() < 0.02) fireEvent('noise_night');
+    if (Math.random() < 0.0006) fireEvent('injury');
+    if (!asleep && Math.random() < 0.0008) fireEvent('cell_search');
+
+    // trivial daily irritations (awake) - tiny normally, huge under high amp
+    if (!asleep && Math.random() < 0.004) {
+      const trivial = ['no_eggs', 'cold_tea', 'delayed_unlock'];
+      fireEvent(trivial[Math.floor(Math.random() * trivial.length)]);
     }
-    if (Math.random() < 0.0006) {
-      applyEvent(vitals, 'injury', { now });
-      emit({ kind: 'event', payload: { name: 'injury' } });
-    }
-    if (!asleep && Math.random() < 0.0008) {
-      vitals.mental.anxiety = clamp(vitals.mental.anxiety + 0.2);
-      vitals.mental.agitation = clamp(vitals.mental.agitation + 0.25);
-      vitals.mental.stress = clamp(vitals.mental.stress + 0.15);
-      emit({ kind: 'event', payload: { name: 'cell_search' } });
-    }
+    // social frictions between inmates (awake) - build warmth/suspicion/grudge
+    if (!asleep && Math.random() < 0.006) fireSocial();
 
     // no mail in 24h - fire at most once per 24h
     if (now - (vitals.lastMailMs || now) > 24 * 3600 * 1000 && now - (vitals.noMailFiredMs || 0) > 24 * 3600 * 1000) {
-      applyEvent(vitals, 'no_mail_24h', { now });
+      fireEvent('no_mail_24h');
       vitals.noMailFiredMs = now;
-      emit({ kind: 'event', payload: { name: 'no_mail_24h' } });
     }
   }
 
   // ---- vitals tick every tickMs ----
+  let powerTickN = 0;
   const tickTimer = setInterval(async () => {
     const now = Date.now();
     const { mins } = londonParts(new Date(now));
@@ -323,13 +443,31 @@ async function main() {
       payload: {
         physical: vitals.physical,
         mental: vitals.mental,
+        derived: vitals.derived,
         hr,
         brain,
         mode: currentMode,
         asleep,
         day: vitals.day,
+        monotony: Number((vitals.monotony || 0).toFixed(3)),
+        amp: Number(ampOf(vitals).toFixed(3)),
+        relations: vitals.relations,
       },
     });
+
+    // integrate the electricity meter every tick; emit + persist every ~30s
+    powerMeter.integrate(now);
+    if (++powerTickN % 6 === 0) {
+      const snap = powerMeter.snapshot(now);
+      emit({ kind: 'power', payload: snap });
+      const pound = Math.floor(snap.cost_total);
+      if (pound > lastPound) {
+        lastPound = pound;
+        forceCost = true; // crossing a whole pound forces the next cost injection
+      }
+      powerMeter.save().catch(() => {});
+    }
+
     try {
       await saveVitals(vitalsPath, vitals);
     } catch {
@@ -361,6 +499,10 @@ async function main() {
   // ---- main generation loop ----
   async function genLoop() {
     while (running) {
+      if (pendingWarden.length) {
+        await doWarden(pendingWarden.shift());
+        continue;
+      }
       if (pendingLetters.length) {
         await doLetter(pendingLetters.shift());
         continue;
@@ -369,9 +511,11 @@ async function main() {
       const asleep = isAsleep(mins);
       const mode = asleep ? 'sleep' : 'journal';
       currentMode = mode;
-      const system = buildSystem(vitals, mode);
+      // sleep mode gets no cast/cost injections - he is half under
+      const system = mode === 'sleep' ? buildSystem(vitals, 'sleep') : buildSystem(vitals, 'journal', buildCtx());
       const prompt = buildPrompt(contextText(), mode);
       const opts = options(vitals, config.threads, mode);
+      await logPrompt(mode, system);
       await streamGenerate({ system, prompt, opts, mode });
       await sleep(mode === 'sleep' ? 8000 : 600); // pace; sleep mode is slow
     }
@@ -387,6 +531,12 @@ async function main() {
     if (currentAbort) currentAbort.abort();
     clearInterval(tickTimer);
     clearInterval(hostTimer);
+    try {
+      powerMeter.integrate();
+      await powerMeter.save();
+    } catch {
+      /* ignore */
+    }
     try {
       await saveVitals(vitalsPath, vitals);
     } catch {

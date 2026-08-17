@@ -10,6 +10,7 @@
 import { Pen } from './pen.js';
 import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
+import { Power } from './power.js';
 
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
@@ -21,7 +22,7 @@ const FROM_MAX = 40;
 
 const $ = (sel) => document.querySelector(sel);
 
-let pen, brain, hud;
+let pen, brain, hud, power;
 let lastSeq = 0;
 let polling = false;
 
@@ -31,6 +32,8 @@ async function boot() {
   pen = new Pen($('#paper'), font);
   brain = new BrainHud($('#brain'));
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
+  const powerEl = $('#power');
+  if (powerEl) power = new Power(powerEl);
 
   wireForms();
 
@@ -147,6 +150,9 @@ function dispatch(ev, bootstrap) {
       brain.setBrain(p.brain);
       brain.setHeart(p.hr);
       brain.setMental(p.mental);
+      brain.setDerived(p.derived);
+      brain.setAmp(p.monotony, p.amp);
+      brain.setCast(p.relations);
       if (p.mode) {
         latestMode = p.mode;
         setMode(p.mode);
@@ -156,6 +162,10 @@ function dispatch(ev, bootstrap) {
 
     case 'host':
       hud.setHost(p);
+      break;
+
+    case 'power':
+      if (power) power.push(p, ev.ts ? Date.parse(String(ev.ts).replace(' ', 'T')) : Date.now());
       break;
 
     case 'day':
@@ -187,11 +197,18 @@ function dispatch(ev, bootstrap) {
 
 function handleAmbient(p) {
   const name = p.name || '';
+  if (name === 'social') {
+    const who = p.who || 'someone';
+    const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
+    pushTicker(g > 0.7 ? `bad blood with ${who}` : `${who} on the spur`);
+    return;
+  }
   const nice = {
     letter_arrives: p.from ? `mail from ${p.from}` : 'mail arrives',
     letter_hostile: 'hostile mail',
     image_arrives: p.caption ? `image: ${p.caption}` : 'an image arrives',
     news_arrives: p.headline ? `news: ${p.headline}` : 'news arrives',
+    warden: 'a notice from Warden Florian',
     meal: 'meal',
     lights_out: 'lights out',
     lights_on: 'lights on',
@@ -199,6 +216,9 @@ function handleAmbient(p) {
     injury: 'injury',
     cell_search: 'cell search',
     no_mail_24h: 'no mail in 24h',
+    no_eggs: 'no eggs on the tray',
+    cold_tea: 'the tea came cold',
+    delayed_unlock: 'unlock came late',
   };
   if (nice[name]) pushTicker(nice[name]);
 }
@@ -220,8 +240,9 @@ function setDay(n) {
 function setMode(mode, cause) {
   const el = $('#mode');
   if (!el) return;
-  const label = mode === 'letter' ? 'WRITING A LETTER' : mode === 'sleep' ? 'ASLEEP' : 'JOURNAL';
-  el.textContent = label + (cause && mode === 'letter' ? ' - ' + cause : '');
+  const label =
+    mode === 'letter' ? 'WRITING A LETTER' : mode === 'warden' ? 'READING A NOTICE' : mode === 'sleep' ? 'ASLEEP' : 'JOURNAL';
+  el.textContent = label + (cause && (mode === 'letter' || mode === 'warden') ? ' - ' + cause : '');
   el.dataset.mode = mode;
 }
 

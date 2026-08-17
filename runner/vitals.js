@@ -26,22 +26,39 @@ const DRIFT = {
   hope: -0.001,
   agitation: -0.005,
   dissociation: -0.002,
+  anger: -0.004,
+  longing: -0.001,
 };
 
-// applyEvent deltas. Keys are routed to whichever bucket owns them.
+// applyEvent deltas. Keys are routed to whichever bucket owns them. Base
+// magnitudes are small on purpose: the amplification mechanic (amp) scales them
+// up when monotony is high, so a trivial slight after an empty week hits hard.
 const EVENTS = {
-  letter_arrives: { hope: +0.28, agitation: +0.35, despair: -0.10, dissociation: -0.25 },
-  letter_hostile: { anxiety: +0.30, hope: -0.15, stress: +0.20 },
-  image_arrives: { hope: +0.15, dissociation: -0.30, lucidity: +0.10 },
+  letter_arrives: { hope: +0.28, agitation: +0.35, despair: -0.10, dissociation: -0.25, longing: -0.20 },
+  letter_hostile: { anxiety: +0.30, hope: -0.15, stress: +0.20, anger: +0.15 },
+  image_arrives: { hope: +0.15, dissociation: -0.30, lucidity: +0.10, longing: -0.10 },
   news_arrives: { lucidity: +0.08, dissociation: -0.15 },
-  no_mail_24h: { despair: +0.06, hope: -0.10 },
+  no_mail_24h: { despair: +0.06, hope: -0.10, longing: +0.12 },
   noise_night: { fatigue: +0.15, agitation: +0.20 },
   injury: { pain: +0.45, stress: +0.25 },
   meal: { hunger: -0.85, stress: -0.05 },
   lights_out: { fatigue: -0.30, dissociation: +0.10 },
+  lights_on: { dissociation: -0.05, lucidity: +0.05 },
+  cell_search: { anxiety: +0.20, agitation: +0.25, stress: +0.15, anger: +0.10 },
+  // trivial ambient irritations - tiny on their own, brutal under high amp
+  no_eggs: { despair: +0.04, anger: +0.05, longing: +0.03 },
+  cold_tea: { despair: +0.03, anger: +0.04, stress: +0.02 },
+  delayed_unlock: { anxiety: +0.05, anger: +0.05, agitation: +0.06 },
 };
 
+// events that reset monotony HARD (real novelty) vs softly (ambient stuff)
+const NOVEL_EVENTS = new Set(['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives', 'warden']);
+export const TRIVIAL_EVENTS = new Set(['no_eggs', 'cold_tea', 'delayed_unlock']);
+
 const PHYSICAL = new Set(['pain', 'hunger', 'fatigue']);
+
+// The amplification factor. Rises with monotony; multiplies every event delta.
+export const ampOf = (v) => 1 + 2.5 * (v.monotony || 0);
 
 export function initialVitals() {
   return {
@@ -54,13 +71,45 @@ export function initialVitals() {
       lucidity: 0.65,
       agitation: 0.25,
       dissociation: 0.35,
+      anger: 0.20,
+      longing: 0.35,
     },
     // imageRecall feeds hippocampus; pulses on image_arrives then decays.
     imageRecall: 0,
     // hopeComedownUntil: while now < this, hope decays at 3x (post-letter crash).
     hopeComedownUntil: 0,
+    // monotony (0..1): rises when nothing happens, drops on any input. Drives amp.
+    monotony: 0,
+    // derived composite states, recomputed each tick from the primitives above.
+    derived: {},
     day: 1,
   };
+}
+
+// Derived composite mental states - not stored primitives, recomputed each tick
+// from the axes plus monotony and the relations map. Exported so callers/tests
+// can compute on demand.
+export function computeDerived(v) {
+  const m = v.mental;
+  const p = v.physical;
+  const rel = v.relations || {};
+  let suspicionPeak = 0;
+  for (const k in rel) {
+    const s = rel[k] && rel[k].suspicion;
+    if (typeof s === 'number' && s > suspicionPeak) suspicionPeak = s;
+  }
+  const mean = (a, b) => (a + b) / 2;
+  const d = {
+    confusion: clamp(mean(1 - m.lucidity, m.dissociation)),
+    overwhelm: clamp(0.5 * m.stress + 0.3 * m.agitation + 0.2 * (p.pain + p.hunger) / 2),
+    numbness: clamp(m.despair * (1 - m.agitation)),
+    paranoia: clamp(0.6 * m.anxiety + 0.4 * suspicionPeak),
+    fixation: clamp(0.5 * m.stress + 0.5 * (v.monotony || 0)),
+    resignation: clamp(m.despair * m.lucidity),
+    brittleness: clamp(0.4 * p.fatigue + 0.3 * p.hunger + 0.3 * m.anger),
+  };
+  for (const k in d) d[k] = Number(d[k].toFixed(3));
+  return d;
 }
 
 // Advance one tick. opts: { asleep:boolean, now:ms }.
@@ -83,23 +132,42 @@ export function tick(v, { asleep = false, now = 0 } = {}) {
 
   m.agitation = clamp(m.agitation + DRIFT.agitation);
   m.dissociation = clamp(m.dissociation + DRIFT.dissociation);
+  m.anger = clamp((m.anger || 0) + DRIFT.anger);
+  m.longing = clamp((m.longing || 0) + DRIFT.longing);
   m.lucidity = toward(m.lucidity, 0.7, 0.003);
 
+  // monotony creeps up every empty tick; applyEvent knocks it back down on any
+  // input, so the net effect is "nothing happening makes small things enormous".
+  v.monotony = clamp((v.monotony || 0) + 0.0015);
+
   v.imageRecall = clamp((v.imageRecall || 0) - 0.01);
+  v.derived = computeDerived(v);
   return v;
 }
 
-// Apply a named environment/inbox event. opts.now used to arm the comedown.
-export function applyEvent(v, name, { now = 0 } = {}) {
-  const deltas = EVENTS[name];
-  if (!deltas) return v;
+// Apply a bag of {axis: delta} to a vitals object, multiplied by `amp` and
+// clamped. Shared by applyEvent and the warden announcement path.
+export function applyDeltas(v, deltas, amp = 1) {
   for (const [k, d] of Object.entries(deltas)) {
     const bucket = PHYSICAL.has(k) ? v.physical : v.mental;
-    if (typeof bucket[k] === 'number') bucket[k] = clamp(bucket[k] + d);
+    if (typeof bucket[k] === 'number') bucket[k] = clamp(bucket[k] + d * amp);
   }
+}
+
+// Apply a named environment/inbox event. Deltas are scaled by the current amp
+// (read BEFORE this event resets monotony), then monotony is knocked down.
+// Returns the amp that was applied, which callers use to decide significance.
+export function applyEvent(v, name, { now = 0 } = {}) {
+  const amp = ampOf(v);
+  // reset monotony: real novelty resets hard, ambient events soften it
+  const drop = NOVEL_EVENTS.has(name) ? 0.5 : 0.2;
+  v.monotony = clamp((v.monotony || 0) - drop);
+
+  const deltas = EVENTS[name];
+  if (deltas) applyDeltas(v, deltas, amp);
   if (name === 'letter_arrives') v.hopeComedownUntil = now + 30 * 60 * 1000;
   if (name === 'image_arrives') v.imageRecall = 1;
-  return v;
+  return amp;
 }
 
 // Derived heart rate. asleep is coerced 0/1.

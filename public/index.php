@@ -57,6 +57,11 @@ window.CY = {
     </div>
 
     <div class="panel">
+      <div class="panel-title">THE METER &middot; ELECTRICITY</div>
+      <div id="power"></div>
+    </div>
+
+    <div class="panel">
       <div class="panel-title">SEND A POSTCARD</div>
       <form id="letter-form" class="cell-form" autocomplete="off">
         <input id="letter-from" name="from" type="text" maxlength="40" placeholder="your name" required>

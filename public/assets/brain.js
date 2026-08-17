@@ -55,6 +55,15 @@ const ORDER = [
   'broca', 'v1', 'locusCoeruleus', 'dmn', 'thalamus',
 ];
 
+// derived composite states, in display order
+const DERIVED = ['confusion', 'overwhelm', 'numbness', 'paranoia', 'fixation', 'resignation', 'brittleness'];
+
+// the cast, in display order, with the name CY uses (viewer mirror of cast.js)
+const CAST_LABELS = [
+  ['root', 'ROOT'], ['reg', 'REG'], ['bill', 'BILL'], ['mark', 'MARK'],
+  ['nick', 'NICK'], ['fisher', 'FISHER'], ['ping', 'PING'], ['daemon', 'DAEMON'],
+];
+
 export class BrainHud {
   constructor(root) {
     this.root = root;
@@ -144,7 +153,7 @@ export class BrainHud {
     this.hrBpm = bio.querySelector('#hr-bpm');
     this.mentalEl = bio.querySelector('#mental');
 
-    const MENTAL = ['anxiety', 'stress', 'despair', 'hope', 'lucidity', 'agitation', 'dissociation'];
+    const MENTAL = ['anxiety', 'stress', 'despair', 'hope', 'lucidity', 'agitation', 'dissociation', 'anger', 'longing'];
     this.mentalBars = {};
     for (const k of MENTAL) {
       const row = document.createElement('div');
@@ -154,6 +163,111 @@ export class BrainHud {
         `<span class="mbar"><i style="width:0%"></i></span>`;
       this.mentalEl.appendChild(row);
       this.mentalBars[k] = row.querySelector('i');
+    }
+
+    // ---- amplification meter ----
+    const amp = document.createElement('div');
+    amp.className = 'ampmeter';
+    amp.innerHTML = `
+      <div class="amp-top">
+        <span class="amp-k">MONOTONY</span>
+        <span class="amp-bar"><i id="amp-mono" style="width:0%"></i></span>
+        <span class="amp-x" id="amp-x">x1.0</span>
+      </div>
+      <div class="amp-hint">small things scale by the amp factor</div>`;
+    this.root.appendChild(amp);
+    this.monoBar = amp.querySelector('#amp-mono');
+    this.ampX = amp.querySelector('#amp-x');
+
+    // ---- derived composite states ----
+    const dwrap = document.createElement('div');
+    dwrap.className = 'derived';
+    dwrap.innerHTML = `<div class="sec-title">COMPOSITE STATES</div>`;
+    this.derivedEl = document.createElement('div');
+    this.derivedEl.className = 'dbars';
+    dwrap.appendChild(this.derivedEl);
+    this.root.appendChild(dwrap);
+    this.derivedBars = {};
+    for (const k of DERIVED) {
+      const row = document.createElement('div');
+      row.className = 'drow';
+      row.innerHTML =
+        `<span class="dname">${k.toUpperCase()}</span>` +
+        `<span class="dbar"><i style="width:0%"></i></span>` +
+        `<span class="dpct">--</span>`;
+      this.derivedEl.appendChild(row);
+      this.derivedBars[k] = { bar: row.querySelector('i'), pct: row.querySelector('.dpct'), row };
+    }
+
+    // ---- the cast + standing ----
+    const cwrap = document.createElement('div');
+    cwrap.className = 'castbox';
+    cwrap.innerHTML = `<div class="sec-title">ON THE SPUR</div>`;
+    this.castEl = document.createElement('div');
+    this.castEl.className = 'castlist';
+    cwrap.appendChild(this.castEl);
+    this.root.appendChild(cwrap);
+    this.castRows = {};
+    for (const [key, label] of CAST_LABELS) {
+      const row = document.createElement('div');
+      row.className = 'crow';
+      row.innerHTML =
+        `<span class="cname">${label}</span>` +
+        `<span class="cstd">` +
+        `<span class="cmini w"><i style="width:0%"></i></span>` +
+        `<span class="cmini s"><i style="width:0%"></i></span>` +
+        `<span class="cmini g"><i style="width:0%"></i></span>` +
+        `</span>`;
+      this.castEl.appendChild(row);
+      this.castRows[key] = {
+        row,
+        w: row.querySelector('.cmini.w i'),
+        s: row.querySelector('.cmini.s i'),
+        g: row.querySelector('.cmini.g i'),
+      };
+    }
+  }
+
+  // ---- amplification -----------------------------------------------------
+
+  setAmp(monotony, amp) {
+    const mono = clampNum(monotony);
+    if (mono != null && this.monoBar) this.monoBar.style.width = Math.round(mono * 100) + '%';
+    if (typeof amp === 'number' && Number.isFinite(amp) && this.ampX) {
+      this.ampX.textContent = 'x' + amp.toFixed(1);
+      this.ampX.classList.toggle('hot', amp > 2.0);
+    }
+  }
+
+  // ---- derived composite states -----------------------------------------
+
+  setDerived(derived) {
+    if (!derived) return;
+    for (const k of DERIVED) {
+      const v = clampNum(derived[k]);
+      const node = this.derivedBars[k];
+      if (v == null || !node) continue;
+      node.bar.style.width = Math.round(v * 100) + '%';
+      node.pct.textContent = Math.round(v * 100);
+      node.row.classList.toggle('active', v > 0.6); // directive is live above 0.6
+    }
+  }
+
+  // ---- cast standing ----------------------------------------------------
+
+  setCast(relations) {
+    if (!relations) return;
+    for (const [key] of CAST_LABELS) {
+      const r = relations[key];
+      const row = this.castRows[key];
+      if (!r || !row) continue;
+      const w = clampNum(r.warmth) || 0;
+      const s = clampNum(r.suspicion) || 0;
+      const g = clampNum(r.grudge) || 0;
+      row.w.style.width = Math.round(w * 100) + '%';
+      row.s.style.width = Math.round(s * 100) + '%';
+      row.g.style.width = Math.round(g * 100) + '%';
+      row.row.classList.toggle('feud', g > 0.7); // grudge directive is live
     }
   }
 
