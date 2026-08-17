@@ -1,3 +1,7 @@
 /config/config.php
 /public/uploads/
 *.log
+
+# runner
+/runner/state/
+/runner/config.json
