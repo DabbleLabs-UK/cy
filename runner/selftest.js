@@ -18,6 +18,18 @@ import {
   SOCIAL_EVENTS,
   grudgeDirective,
   castForPrompt,
+  OFFICERS,
+  OFFICER_EVENTS,
+  applyOfficerEvent,
+  officerDirective,
+  isOfficer,
+  pickOverheard,
+  overheardDirective,
+  mishearChance,
+  visitorForPrompt,
+  visitorNoteLine,
+  mergeVisitorNotes,
+  updateVisitorStanding,
 } from './cast.js';
 import { buildSystem, amplifiedDirective } from './prompt.js';
 import { PowerMeter, costInjection } from './power.js';
@@ -117,5 +129,59 @@ const ctx = {
 };
 line('');
 line(buildSystem(vp, 'journal', ctx));
+
+// ---- 8. officers: separate group, class marker, standing nudges ----
+hr('8. OFFICERS');
+line('officer count: ' + OFFICERS.length + '  keys: ' + OFFICERS.map((o) => o.key).join(', '));
+line('all officers titled+surnamed (not bare first names): ' + OFFICERS.every((o) => /^(Mr|Miss|Mrs|Ms|Dr)\s+\S+/.test(o.name)));
+line('officers are a distinct group from inmates: ' + OFFICERS.every((o) => isOfficer(o.key)));
+const orel = initialRelations();
+line('relations map includes officers: ' + OFFICERS.every((o) => !!orel[o.key]));
+const writeup = OFFICER_EVENTS.find((e) => e.type === 'writeup');
+for (let i = 0; i < 10; i++) applyOfficerEvent(orel, 'proctor', writeup, 1.4);
+line('after 10 write-ups under amp, Mr Proctor grudge = ' + orel.proctor.grudge.toFixed(3));
+line('lastSlight names it: "' + orel.proctor.lastSlight + '"');
+line('officerDirective ->');
+line('  ' + officerDirective('proctor', writeup));
+line('grudge directive now names the officer: ' + grudgeDirective(orel));
+
+// ---- 9. overheard: half-heard, misheard more under low lucidity / paranoia ----
+hr('9. OVERHEARD (mishearing scales with lucidity/paranoia)');
+const item = pickOverheard(() => 0.7); // deterministic pick
+line('picked source: ' + item.source);
+line('heard : ' + item.heard);
+line('mis   : ' + item.mis);
+const lucidCalm = mishearChance({ lucidity: 0.9, paranoia: 0.05 });
+const foggedParanoid = mishearChance({ lucidity: 0.2, paranoia: 0.8 });
+line('mishear chance lucid+calm  = ' + lucidCalm.toFixed(3));
+line('mishear chance fogged+paranoid = ' + foggedParanoid.toFixed(3));
+line('mishearing more likely when fogged/paranoid: ' + (foggedParanoid > lucidCalm));
+line('directive (misheard) -> ' + overheardDirective(item, true));
+
+// ---- 10. visitor recognition + cheap memory update (no model call) ----
+hr('10. VISITOR MEMORY');
+const stranger = { from_name: 'Mara', postcard_count: 1, notes: null };
+line('first-timer produces no recognition block: ' + (visitorForPrompt(stranger) === ''));
+const returning = {
+  handle: 'Mara',
+  from_name: 'Mara',
+  postcard_count: 5,
+  visit_count: 3,
+  warmth: 0.68,
+  suspicion: 0.2,
+  grudge: 0.05,
+  notes: 'sea photo. asked if you sleep. told you about her dog rufus.',
+  prev_posted_at: '2026-08-10 13:00:00',
+};
+line('returning visitor recognition block ->');
+line(visitorForPrompt(returning, { now: Date.parse('2026-08-17T12:00:00Z') }));
+const noteLine = visitorNoteLine('is the dog rufus still keeping you company at night?', false, false);
+line('\ncheap note line (keyword/truncation, NO model call): "' + noteLine + '"');
+const merged = mergeVisitorNotes(returning.notes, noteLine);
+line('merged notes (<=600 chars, newest last):');
+line('  ' + merged.replace(/\n/g, ' | '));
+line('notes stay capped: ' + (merged.length <= 600));
+const hostileStanding = updateVisitorStanding(returning, { hostile: true, warm: false }, 2.0);
+line('hostile postcard hardens standing: grudge ' + returning.grudge + ' -> ' + hostileStanding.grudge.toFixed(3) + ', warmth ' + returning.warmth + ' -> ' + hostileStanding.warmth.toFixed(3));
 
 line('\n(selftest complete)');

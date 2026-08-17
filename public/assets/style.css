@@ -306,8 +306,129 @@ html, body {
 .mail-body { font-size: 12.5px; color: #cdd7df; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
 .mail-cap { font-size: 11px; color: var(--tel-dim); margin-top: 4px; }
 .mail-img { max-width: 100%; border-radius: 3px; display: block; margin-top: 4px; }
-.mail.letter-in { border-left: 2px solid #3a6d94; }
+.mail.postcard-in { border-left: 2px solid #3a6d94; }
 .mail.letter-out { border-left: 2px solid #b08636; background: #12100b; }
+
+/* ================= POSTCARD COMPOSER ================= */
+.postcard-form { display: flex; flex-direction: column; gap: 10px; }
+
+/* the card itself - a warm cream postcard, message side + picture side */
+.postcard {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 0;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.36  0 0 0 0 0.30  0 0 0 0 0.18  0 0 0 0.05 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>"),
+    linear-gradient(180deg, #fbf5e6, #efe4c8);
+  border: 1px solid #cbbd97;
+  border-radius: 5px;
+  padding: 4px;
+  box-shadow: 0 10px 26px -14px rgba(0,0,0,0.6), inset 0 0 40px rgba(120,90,40,0.05);
+  min-height: 190px;
+}
+.pc-side { display: flex; flex-direction: column; padding: 10px; min-width: 0; }
+.pc-divide {
+  background: repeating-linear-gradient(180deg, #b9a97e 0 4px, transparent 4px 8px);
+  width: 1px;
+}
+
+/* message side */
+.pc-msg { gap: 8px; }
+.pc-msg textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  resize: none;
+  color: #223;
+  font-family: "Bradley Hand", "Segoe Script", "Comic Sans MS", var(--mono);
+  font-size: 15px;
+  line-height: 1.5;
+  padding: 0;
+  min-height: 96px;
+}
+.pc-msg textarea::placeholder { color: #9a8c68; }
+.pc-msg textarea:focus { outline: none; }
+.pc-stamp-line { border-top: 1px dashed #c3b488; padding-top: 8px; }
+.pc-msg input[type=text] {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: #2a3550;
+  font-family: "Bradley Hand", "Segoe Script", var(--mono);
+  font-size: 15px;
+  padding: 2px 0;
+}
+.pc-msg input[type=text]::placeholder { color: #a0916c; }
+.pc-msg input[type=text]:focus { outline: none; border-bottom-color: #9a7d3f; }
+
+/* picture side */
+.pc-pic { position: relative; align-items: center; justify-content: center; border-radius: 3px; }
+.pc-pic.dragover { outline: 2px dashed #9a7d3f; outline-offset: -6px; background: rgba(154,125,63,0.10); }
+.pc-pic-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; color: #8a7a54; }
+.pc-pic-hint { font-size: 12px; letter-spacing: 0.04em; }
+.pc-pic-or { font-size: 10px; color: #a89870; letter-spacing: 0.08em; }
+.pc-browse {
+  background: #efe2c2; border: 1px solid #b39a5f; color: #4a3b16;
+  font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-radius: 4px; cursor: pointer;
+}
+.pc-browse:hover { background: #f6ecd2; }
+.pc-pic-preview { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.pc-pic-preview img { max-width: 100%; max-height: 150px; border-radius: 2px; box-shadow: 0 4px 12px -4px rgba(0,0,0,0.5); }
+.pc-pic-src { font-size: 9px; color: #7a6c48; margin-top: 6px; text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-pic-clear {
+  position: absolute; top: -4px; right: -4px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #3a2a2a; color: #f4ecd8; border: 1px solid #6a4a4a;
+  cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.pc-pic-clear:hover { background: #5a3a3a; }
+
+/* openverse search */
+.pc-ov { display: flex; flex-direction: column; gap: 6px; }
+.pc-ov-row { display: flex; gap: 6px; }
+.pc-ov-row input {
+  flex: 1; background: #0b0e13; border: 1px solid var(--line); border-radius: 4px;
+  color: #dfe7ee; font-family: var(--mono); font-size: 12px; padding: 7px 8px;
+}
+.pc-ov-row input:focus { outline: none; border-color: #3a6d94; }
+.pc-ov-row button {
+  background: linear-gradient(180deg, #24405a, #172c40); border: 1px solid #3a6d94;
+  color: #dbeaf5; font-family: var(--mono); font-size: 12px; padding: 0 12px; border-radius: 4px; cursor: pointer;
+}
+.pc-ov-row button:hover { background: linear-gradient(180deg, #2c4e6d, #1c3348); }
+.pc-ov-row button:disabled { opacity: 0.5; cursor: default; }
+.pc-ov-status { font-size: 10px; color: var(--tel-dim); letter-spacing: 0.04em; min-height: 1em; }
+.pc-ov-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; max-height: 220px; overflow-y: auto; }
+.pc-ov-grid:empty { display: none; }
+.pc-ov-item {
+  padding: 0; border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+  cursor: pointer; background: #0c0f14; aspect-ratio: 1; position: relative;
+}
+.pc-ov-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pc-ov-item:hover { border-color: #6fa0bf; }
+.pc-ov-item.sel { border-color: #e6b45e; box-shadow: 0 0 0 2px rgba(230,180,94,0.5); }
+.pc-send {
+  min-width: 90px;
+  background: linear-gradient(180deg, #24405a, #172c40);
+  border: 1px solid #3a6d94;
+  color: #dbeaf5;
+  font-family: var(--mono);
+  letter-spacing: 0.1em;
+  font-size: 12px;
+  padding: 7px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.pc-send:hover { background: linear-gradient(180deg, #2c4e6d, #1c3348); }
+.pc-send:disabled { opacity: 0.5; cursor: default; }
+.postcard-form.busy { opacity: 0.7; pointer-events: none; }
+
+@media (max-width: 520px) {
+  .postcard { grid-template-columns: 1fr; }
+  .pc-divide { width: auto; height: 1px; background: repeating-linear-gradient(90deg, #b9a97e 0 4px, transparent 4px 8px); }
+  .pc-ov-grid { grid-template-columns: repeat(3, 1fr); }
+}
 
 /* ---- amplification meter (in the brain HUD) ---- */
 .ampmeter { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
@@ -355,6 +476,10 @@ html, body {
 .cmini.g i { background: #b8683a; }        /* grudge - amber */
 .crow.feud .cname { color: var(--tel-hot); text-shadow: 0 0 8px rgba(255,91,46,0.4); }
 .crow.feud .cmini.g i { background: var(--tel-hot); }
+.cast-subhead {
+  font-size: 8.5px; letter-spacing: 0.22em; color: var(--tel-dim);
+  margin: 6px 0 2px; padding-top: 5px; border-top: 1px dashed var(--line);
+}
 
 /* ================= POWER PANEL ================= */
 .powerpanel { display: flex; flex-direction: column; gap: 8px; }

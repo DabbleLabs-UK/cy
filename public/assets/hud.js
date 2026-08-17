@@ -74,37 +74,31 @@ export class Hud {
     while (this.mailEl.children.length > 60) this.mailEl.lastChild.remove();
   }
 
-  addLetterIn(p) {
-    if (!this._once('letter_in', p.id)) return;
+  // An incoming postcard: text on one side, an image on the other (either may
+  // be absent). image is a webroot-relative path; attrib is any credit line.
+  addPostcardIn(p) {
+    if (!this._once('postcard_in', p.id)) return;
     const el = document.createElement('div');
-    el.className = 'mail letter-in';
+    el.className = 'mail postcard-in';
+    const img = p.image
+      ? `<img class="mail-img" loading="lazy" alt="a postcard picture" src="${esc(p.image)}">`
+      : '';
+    const attrib = p.image && p.attrib ? `<div class="mail-cap">${esc(p.attrib)}</div>` : '';
+    const body = p.body ? `<div class="mail-body">${esc(p.body)}</div>` : '';
     el.innerHTML =
-      `<div class="mail-h"><span class="mail-tag">LETTER</span>` +
+      `<div class="mail-h"><span class="mail-tag">POSTCARD</span>` +
       `<span class="mail-from">from ${esc(p.from || 'anonymous')}</span></div>` +
-      `<div class="mail-body">${esc(p.body)}</div>`;
+      img + attrib + body;
     this._push(el);
   }
 
-  addLetterOut(p) {
-    if (!this._once('letter_out', p.id)) return;
+  addPostcardOut(p) {
+    if (!this._once('postcard_out', p.id)) return;
     const el = document.createElement('div');
     el.className = 'mail letter-out';
     el.innerHTML =
       `<div class="mail-h"><span class="mail-tag out">7734 REPLIES</span></div>` +
       `<div class="mail-body">${esc(p.body)}</div>`;
-    this._push(el);
-  }
-
-  addImageIn(p) {
-    if (!this._once('image_in', p.id)) return;
-    const el = document.createElement('div');
-    el.className = 'mail image-in';
-    const cap = p.caption ? `<div class="mail-cap">${esc(p.caption)}</div>` : '';
-    const src = p.url ? esc(p.url) : '';
-    el.innerHTML =
-      `<div class="mail-h"><span class="mail-tag">IMAGE</span></div>` +
-      (src ? `<img class="mail-img" loading="lazy" alt="delivered image" src="${src}">` : '') +
-      cap;
     this._push(el);
   }
 

@@ -38,3 +38,11 @@ function captive_ingest_key(): string
 {
     return captive_config()['ingest_key'];
 }
+
+function captive_cookie_secret(): string
+{
+    $cfg = captive_config();
+    // Fall back to the ingest key if a dedicated cookie secret is not set, so an
+    // older config.php still boots (cookies just share the secret).
+    return $cfg['cookie_secret'] ?? $cfg['ingest_key'];
+}

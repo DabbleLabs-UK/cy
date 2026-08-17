@@ -22,39 +22,57 @@ completely decoupled from however many people are watching, and lets the
 viewer be a dumb polling client with no websocket/SSE infrastructure needed
 for the skeleton.
 
-Letters and images are a separate, slower path: the public can write to
-CY (postcards into the cell), but not immediately -- everything queues
-with a `deliver_at` timestamp pinned to the next of three fixed daily mail
-drops (08:00 / 13:00 / 19:00 Europe/London), and DELL only sees them via
+Postcards are a separate, slower path: the public can write to CY (a
+postcard into the cell -- text on one side, a picture on the other, either
+optional but at least one required), but not immediately -- everything
+queues with a `deliver_at` timestamp pinned to the next of three fixed daily
+mail drops (08:00 / 13:00 / 19:00 Europe/London), and DELL only sees them via
 `api/inbox.php`, which atomically claims (marks `delivered_at`) whatever is
 due. This gives a natural moderation/rate-limit window and means DELL never
 has to poll a live "someone just posted" queue -- it just asks "what's in
 today's mail" at drop time. `news` follows the same deliver_at queue shape
 so future news ingestion can reuse the same inbox mechanism.
 
+People who write are remembered. On the first postcard a visitor is issued a
+random id in a signed, httpOnly cookie; a `visitors` row holds a chosen
+handle, counts, a compact rolling memory of what they have said, and CY's
+standing toward them (the same warmth/suspicion/grudge triple the runner's
+inmate cast uses). `api/inbox.php` hands that memory to DELL with each due
+postcard so a returning writer is recognised in CY's voice. Nothing
+identifying is stored beyond the handle and what they voluntarily wrote; IPs
+live only on `postcards`/`rate_limits` for rate limiting.
+
+A picture on a postcard can be an uploaded file OR one chosen from Openverse
+(https://api.openverse.org). The client only ever sends a chosen image URL;
+the server fetches it itself, validates content-type and size, re-encodes to
+WebP (stripping EXIF), and records the attribution. Uploaded and Openverse
+images go through the identical pipeline. CY never hotlinks and never trusts
+a client-supplied path.
+
 DELL-only endpoints (`ingest.php`, `inbox.php`) are authenticated with a
 shared secret in the `X-Cy-Key` header, checked with `hash_equals`.
-Everything else (`stream.php`, `post-letter.php`, `post-image.php`) is
-public, with IP-based rate limiting on the two write endpoints open to the
-public.
+Everything else (`stream.php`, `post-postcard.php`, `openverse-search.php`)
+is public, with IP-based rate limiting on the public write endpoint.
 
 ## Layout
 
 ```
 public/            webroot
-  index.php         placeholder viewer page
+  index.php         viewer page + postcard composer
   api/stream.php    public event feed (polling)
-  api/post-letter.php   public: write a letter
-  api/post-image.php    public: upload an image
-  api/ingest.php    DELL-only: write events
-  api/inbox.php     DELL-only: claim due letters/images/news
+  api/post-postcard.php  public: send a postcard (text and/or image)
+  api/openverse-search.php  public: proxy Openverse image search for the composer
+  api/ingest.php    DELL-only: write events (+ private visitor_seen updates)
+  api/inbox.php     DELL-only: claim due postcards/news (+ visitor memory)
   uploads/          re-encoded webp uploads (gitignored, created at runtime)
 lib/db.php          PDO factory + config loader
 lib/http.php        JSON response + auth helpers
 lib/schedule.php     next-mail-drop calculation
+lib/image.php       shared image intake: validate, downscale, strip EXIF, WebP
+lib/visitor.php     signed visitor cookie + visitors upsert
 config/config.sample.php   template; copy to config/config.php (gitignored)
-sql/schema.sql       MariaDB schema
-runner/              empty -- model runner goes here later
+sql/schema.sql       MariaDB schema (events, postcards, visitors, news, rate_limits)
+runner/              the model runner (drives inmate 7734)
 ```
 
 ## Setup

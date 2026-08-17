@@ -81,23 +81,26 @@ function event_for_seq(int $seq): ?array
         return ['host', fake_host($seq)];
     }
 
-    // a letter cycle: interrupt -> mode:letter -> letter_in -> ... -> mode:journal
+    // a postcard cycle: interrupt -> mode:letter -> postcard_in -> reply -> back
     $inCycle = $seq % 120;
     if ($inCycle === 40) {
-        return ['abort', ['cause' => 'letter']];
+        return ['abort', ['cause' => 'postcard']];
     }
     if ($inCycle === 41) {
         return ['mode', ['from' => 'journal', 'to' => 'letter', 'cause' => 'Mum']];
     }
     if ($inCycle === 42) {
-        return ['letter_in', [
+        return ['postcard_in', [
             'id' => 1000 + intdiv($seq, 120),
             'from' => 'Mum',
             'body' => "Dear 7734, the garden is coming up nicely. We think of you every day. Eat something. Love, Mum.",
+            'image' => null,
+            'attrib' => null,
+            'visit_count' => 3,
         ]];
     }
     if ($inCycle === 60) {
-        return ['letter_out', [
+        return ['postcard_out', [
             'id' => 2000 + intdiv($seq, 120),
             'reply_to' => 1000 + intdiv($seq, 120),
             'body' => "Mum - I read it four times. Tell the garden I said hello. I am still here. 7734.",
@@ -112,12 +115,15 @@ function event_for_seq(int $seq): ?array
         return ['abort', ['cause' => 'warden', 'reason' => 'drifted off-limits']];
     }
 
-    // an occasional inbound image / news to colour the mailbag
+    // an occasional picture-postcard / news to colour the mailbag
     if ($seq % 210 === 0) {
-        return ['image_in', [
+        return ['postcard_in', [
             'id' => 3000 + intdiv($seq, 210),
-            'url' => '',
-            'caption' => 'a photograph of the sea, over-exposed',
+            'from' => 'a stranger',
+            'body' => null,
+            'image' => '',
+            'attrib' => 'a photograph of the sea, over-exposed',
+            'visit_count' => 1,
         ]];
     }
     if ($seq % 260 === 0) {

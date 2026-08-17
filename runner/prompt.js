@@ -63,7 +63,8 @@ export function styleDirective(v) {
 }
 
 // ctx carries the contextual injections assembled by the loop:
-//   { cast, grudge, amplified, warden, cost } - any may be omitted/empty.
+//   { cast, grudge, officer, overheard, visitor, amplified, warden, cost }
+// - any may be omitted/empty.
 export function buildSystem(v, mode, ctx = {}) {
   const parts = [SYSTEM_BASE];
   const style = styleDirective(v);
@@ -77,6 +78,9 @@ export function buildSystem(v, mode, ctx = {}) {
   }
   if (ctx.cast) parts.push(ctx.cast);
   if (ctx.grudge) parts.push(ctx.grudge);
+  if (ctx.officer) parts.push(ctx.officer);
+  if (ctx.overheard) parts.push(ctx.overheard);
+  if (ctx.visitor) parts.push(ctx.visitor);
   if (ctx.amplified) parts.push(ctx.amplified);
   if (ctx.warden) parts.push(ctx.warden);
   if (ctx.cost) parts.push(ctx.cost);
@@ -138,21 +142,28 @@ export function options(v, threads, mode, overrides = {}) {
 }
 
 // The continuation prompt: recent self-output fed back for stream continuity,
-// plus a light cue. In letter mode the sender's letter is quoted and answered;
-// in warden mode a signed notice is read and reacted to.
+// plus a light cue. In postcard mode the sender's postcard (text and/or image)
+// is presented and answered; in warden mode a signed notice is read and reacted
+// to.
 export function buildPrompt(contextText, mode, payload) {
-  if (mode === 'letter' && payload) {
+  if (mode === 'postcard' && payload) {
     const who = payload.from_name ? payload.from_name : 'someone outside';
-    return [
-      contextText ? contextText.trim() : '',
-      '',
-      `[mail comes through the door. from ${who}:]`,
-      `"${(payload.body || '').trim()}"`,
-      '',
-      '[you stop. you answer it, in your head, the way you talk:]',
-    ]
-      .filter((x) => x !== null && x !== undefined)
-      .join('\n');
+    const hasBody = payload.body && payload.body.trim();
+    const hasImage = !!payload.image_path;
+    const lines = [contextText ? contextText.trim() : '', '', '[a postcard comes through the door. from ' + who + ':]'];
+    if (hasImage) {
+      // Cy cannot literally see files; the image is presented as a picture on the
+      // card he is looking at, with any caption/attribution as the only words on it.
+      const desc = payload.caption
+        ? `a picture: ${payload.caption.trim()}`
+        : payload.image_attrib
+          ? `a picture - ${payload.image_attrib.trim()}`
+          : 'a picture, no words with it';
+      lines.push(`[on one side, ${desc}]`);
+    }
+    if (hasBody) lines.push(`[on the other side, in their hand:] "${payload.body.trim()}"`);
+    lines.push('', '[you stop. you take it in. then, in your head, the way you talk:]');
+    return lines.filter((x) => x !== null && x !== undefined).join('\n');
   }
   if (mode === 'warden' && payload) {
     return [

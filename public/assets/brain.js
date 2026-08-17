@@ -64,6 +64,12 @@ const CAST_LABELS = [
   ['nick', 'NICK'], ['fisher', 'FISHER'], ['ping', 'PING'], ['daemon', 'DAEMON'],
 ];
 
+// the officers - a separate group, surnames + titles (mirror of cast.js OFFICERS)
+const OFFICER_LABELS = [
+  ['locke', 'MR LOCKE'], ['keyes', 'MR KEYES'], ['bailey', 'MISS BAILEY'],
+  ['proctor', 'MR PROCTOR'], ['sweep', 'MR SWEEP'], ['trace', 'MISS TRACE'],
+];
+
 export class BrainHud {
   constructor(root) {
     this.root = root;
@@ -208,7 +214,7 @@ export class BrainHud {
     cwrap.appendChild(this.castEl);
     this.root.appendChild(cwrap);
     this.castRows = {};
-    for (const [key, label] of CAST_LABELS) {
+    const addRow = (key, label) => {
       const row = document.createElement('div');
       row.className = 'crow';
       row.innerHTML =
@@ -225,7 +231,14 @@ export class BrainHud {
         s: row.querySelector('.cmini.s i'),
         g: row.querySelector('.cmini.g i'),
       };
-    }
+    };
+    for (const [key, label] of CAST_LABELS) addRow(key, label);
+    // officers - a separate labelled group under the same standing bars
+    const ohd = document.createElement('div');
+    ohd.className = 'cast-subhead';
+    ohd.textContent = 'THE OFFICERS';
+    this.castEl.appendChild(ohd);
+    for (const [key, label] of OFFICER_LABELS) addRow(key, label);
   }
 
   // ---- amplification -----------------------------------------------------
@@ -257,7 +270,7 @@ export class BrainHud {
 
   setCast(relations) {
     if (!relations) return;
-    for (const [key] of CAST_LABELS) {
+    for (const [key] of [...CAST_LABELS, ...OFFICER_LABELS]) {
       const r = relations[key];
       const row = this.castRows[key];
       if (!r || !row) continue;

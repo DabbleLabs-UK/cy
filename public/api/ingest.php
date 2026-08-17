@@ -20,6 +20,13 @@ try {
     $db->beginTransaction();
 
     $insert = $db->prepare('INSERT INTO events (ts, kind, payload) VALUES (:ts, :kind, :payload)');
+    // Persist Cy's updated standing/memory toward a visitor after he replies.
+    // This is private and never enters the public event log or stream.
+    $visitorUpd = $db->prepare(
+        'UPDATE visitors
+         SET warmth = :warmth, suspicion = :suspicion, grudge = :grudge, notes = :notes
+         WHERE visitor_id = :id'
+    );
     $inserted = 0;
 
     foreach ($input['events'] as $event) {
@@ -30,6 +37,23 @@ try {
         if ($kind === '' || strlen($kind) > 24) {
             throw new InvalidArgumentException('invalid kind');
         }
+
+        // visitor_seen is a side-channel memory update, not a streamed event.
+        if ($kind === 'visitor_seen') {
+            $p = $event['payload'];
+            if (is_array($p) && !empty($p['visitor_id'])) {
+                $clamp = static fn($x) => max(0.0, min(1.0, (float)$x));
+                $notes = isset($p['notes']) ? mb_substr((string)$p['notes'], 0, 600) : null;
+                $visitorUpd->bindValue(':warmth', $clamp($p['warmth'] ?? 0.3));
+                $visitorUpd->bindValue(':suspicion', $clamp($p['suspicion'] ?? 0.35));
+                $visitorUpd->bindValue(':grudge', $clamp($p['grudge'] ?? 0.05));
+                $visitorUpd->bindValue(':notes', $notes, $notes !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $visitorUpd->bindValue(':id', (string)$p['visitor_id'], PDO::PARAM_STR);
+                $visitorUpd->execute();
+            }
+            continue;
+        }
+
         $payloadJson = json_encode($event['payload']);
         if ($payloadJson === false) {
             throw new InvalidArgumentException('invalid payload');

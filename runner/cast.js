@@ -67,16 +67,68 @@ export const CAST = [
   },
 ];
 
-const BY_KEY = Object.fromEntries(CAST.map((c) => [c.key, c]));
+// OFFICERS - a separate group from the inmates. The class marker is deliberate
+// and strict: officers get SURNAMES AND TITLES, inmates get bare first names.
+// Their aptronyms are about control, access and surveillance, complementary to
+// the inmates' crime-flavoured names. Same {warmth, suspicion, grudge} standing.
+export const OFFICERS = [
+  {
+    key: 'locke',
+    name: 'Mr Locke',
+    blurb: 'locks up, exactly on time. no cruelty, no mercy. the bolt goes at the same second every night.',
+    start: { warmth: 0.10, suspicion: 0.40, grudge: 0.05 },
+  },
+  {
+    key: 'keyes',
+    name: 'Mr Keyes',
+    blurb: 'holds access. every door is his. enjoys being asked, makes you ask twice.',
+    start: { warmth: 0.15, suspicion: 0.35, grudge: 0.05 },
+  },
+  {
+    key: 'bailey',
+    name: 'Miss Bailey',
+    blurb: 'the outer wall, between you and everything else. oddly kind, which you do not trust.',
+    start: { warmth: 0.45, suspicion: 0.25, grudge: 0.03 },
+  },
+  {
+    key: 'proctor',
+    name: 'Mr Proctor',
+    blurb: 'supervises, monitors, writes you up. a clipboard is always out. nothing goes unlogged.',
+    start: { warmth: 0.10, suspicion: 0.55, grudge: 0.10 },
+  },
+  {
+    key: 'sweep',
+    name: 'Mr Sweep',
+    blurb: 'clears cells and clears memory. after he has been, things go missing and you cannot say what.',
+    start: { warmth: 0.08, suspicion: 0.60, grudge: 0.12 },
+  },
+  {
+    key: 'trace',
+    name: 'Miss Trace',
+    blurb: 'reviews the logs. knows what you did, when, and for how long. never asks, already knows.',
+    start: { warmth: 0.12, suspicion: 0.58, grudge: 0.08 },
+  },
+];
+
+const OFFICER_KEYS = new Set(OFFICERS.map((o) => o.key));
+export function isOfficer(key) {
+  return OFFICER_KEYS.has(key);
+}
+
+// Every persistent entity Cy holds a standing toward: inmates + officers. A
+// visitor is the same shape but transient (persisted in the DB, not here), so it
+// is not in this list - it is folded into the relations map per postcard.
+const ENTITIES = [...CAST, ...OFFICERS];
+const BY_KEY = Object.fromEntries(ENTITIES.map((c) => [c.key, c]));
 
 export function initialRelations() {
   const r = {};
-  for (const c of CAST) r[c.key] = { ...c.start, lastSlight: null };
+  for (const c of ENTITIES) r[c.key] = { ...c.start, lastSlight: null };
   return r;
 }
 
 // Reconcile a persisted relations map against the current cast: fill in any
-// missing inmate with defaults, keep persisted values for the rest.
+// missing entity with defaults, keep persisted values for the rest.
 export function reconcileRelations(saved) {
   const base = initialRelations();
   if (!saved || typeof saved !== 'object') return base;
@@ -118,10 +170,119 @@ export function applySocialEvent(relations, castKey, ev, amp = 1) {
   return r;
 }
 
-// The inmate CY holds the biggest grudge against (or null).
+// Officer ambient events. Officers do not slight you on association like the
+// inmates - they act on you through the machinery of the place: an order, a
+// refusal, a write-up, an unexpected kindness. Each nudges that officer's
+// standing (scaled by amp in run.js). `slight` is a name-LESS verb phrase so the
+// grudge directive can read "<Name> <slight>" without doubling the name.
+export const OFFICER_EVENTS = [
+  { type: 'order', slight: 'gave an order and stood there til it was done', d: { suspicion: +0.05, warmth: -0.03, grudge: +0.03 } },
+  { type: 'writeup', slight: 'wrote you up for something small', d: { grudge: +0.10, suspicion: +0.06, warmth: -0.05 } },
+  { type: 'refusal', slight: 'refused you a thing you are owed, no reason given', d: { grudge: +0.09, warmth: -0.06, suspicion: +0.04 } },
+  { type: 'search', slight: 'turned the cell over and left it worse', d: { suspicion: +0.08, grudge: +0.07, warmth: -0.04 } },
+  { type: 'lockup', slight: 'banged you up dead on time, not a second either way', d: { suspicion: +0.03, warmth: -0.02 } },
+  { type: 'kindness', slight: 'did you a quiet kindness, off the record', d: { warmth: +0.14, suspicion: -0.05, grudge: -0.06 } },
+];
+
+// The concrete line for an officer event, naming the officer.
+function officerLine(name, ev) {
+  return `${name} ${ev.slight}`;
+}
+
+// Pick a random officer + officer event. rnd kept as an arg for tests.
+export function pickOfficer(rnd = Math.random) {
+  const o = OFFICERS[Math.floor(rnd() * OFFICERS.length)];
+  const ev = OFFICER_EVENTS[Math.floor(rnd() * OFFICER_EVENTS.length)];
+  return { officerKey: o.key, ev };
+}
+
+// Apply an officer event to a relations map. Reuses the social-event shape
+// (deltas scaled by amp) and records the name-less slight so a hardening grudge
+// can name exactly what the officer did without doubling the name.
+export function applyOfficerEvent(relations, officerKey, ev, amp = 1) {
+  const r = relations[officerKey];
+  if (!r) return null;
+  for (const [k, d] of Object.entries(ev.d)) {
+    if (typeof r[k] === 'number') r[k] = clamp(r[k] + d * amp);
+  }
+  if ((ev.d.grudge || 0) > 0 || (ev.d.suspicion || 0) > 0) r.lastSlight = ev.slight;
+  return r;
+}
+
+// A prompt block for an officer event just fired. Officers land as authority,
+// not spur-mates, so they read differently from the inmate cast block.
+export function officerDirective(officerKey, ev) {
+  const o = BY_KEY[officerKey];
+  if (!o) return '';
+  return `ON THE WING: ${officerLine(o.name, ev)}. ${o.blurb} let it colour the mood, in your voice, not as a report.`;
+}
+
+// OVERHEARD - things Cy only half hears through the door or down the wing: an
+// inmate shouting, or two officers talking low. `heard` is roughly what was
+// said; `mis` is the paranoid mishearing that twists it into something about
+// HIM. run.js decides which to feed based on lucidity/paranoia.
+export const OVERHEARD = [
+  {
+    source: 'inmate',
+    heard: 'someone down the ones is screaming the same word over and over, cannot make it out',
+    mis: 'someone down the ones is screaming your number. over and over. your number.',
+  },
+  {
+    source: 'inmate',
+    heard: 'a voice two cells along, half a sentence about a transfer, then nothing',
+    mis: 'a voice two cells along says they are moving you tonight. moving YOU.',
+  },
+  {
+    source: 'inmate',
+    heard: 'laughter down the twos, then it stops all at once',
+    mis: 'laughter down the twos, and it is about you, and then it stops when you listen',
+  },
+  {
+    source: 'officers',
+    who: ['proctor', 'trace'],
+    heard: 'Mr Proctor and Miss Trace at the desk, low, something about a backlog of write-ups',
+    mis: 'Mr Proctor says your number to Miss Trace. a write-up. she nods. tonight, they said.',
+  },
+  {
+    source: 'officers',
+    who: ['bailey', 'keyes'],
+    heard: 'Miss Bailey and Mr Keyes by the gate, a word about keys not signed back in',
+    mis: 'Miss Bailey and Mr Keyes by the gate, and your name in it, and a key, and a door left open for you or against you',
+  },
+  {
+    source: 'officers',
+    who: ['sweep', 'locke'],
+    heard: 'Mr Sweep telling Mr Locke which cells get cleared this week, you catch a couple of numbers',
+    mis: 'Mr Sweep tells Mr Locke your cell gets cleared this week. cleared. and everything in it gone.',
+  },
+];
+
+// Pick a random overheard item. rnd kept as an arg for tests.
+export function pickOverheard(rnd = Math.random) {
+  return OVERHEARD[Math.floor(rnd() * OVERHEARD.length)];
+}
+
+// Probability that Cy mishears an overheard remark, rising with low lucidity and
+// high paranoia. Clamped to a sane band so it is neither never nor always.
+export function mishearChance({ lucidity = 0.65, paranoia = 0 } = {}) {
+  return clamp(0.12 + 0.55 * (1 - lucidity) + 0.5 * paranoia, 0.05, 0.9);
+}
+
+// A prompt block for an overheard remark. `misheard` selects the paranoid twist.
+export function overheardDirective(item, misheard) {
+  if (!item) return '';
+  const line = misheard ? item.mis : item.heard;
+  const lead = misheard
+    ? 'YOU HALF HEAR IT and you are sure it is about you (it may not be):'
+    : 'YOU HALF HEAR IT through the door (you cannot be certain what was said):';
+  return `${lead} ${line}. you cannot check. it sits with you.`;
+}
+
+// The person CY holds the biggest grudge against (or null) - inmate OR officer,
+// since both carry standing through the same mechanism.
 export function topGrudge(relations) {
   let best = null;
-  for (const c of CAST) {
+  for (const c of ENTITIES) {
     const r = relations[c.key];
     if (!r) continue;
     if (!best || r.grudge > best.r.grudge) best = { c, r };
@@ -168,5 +329,134 @@ export function castForPrompt(relations, count = 3) {
   });
   return ['ON THE SPUR with you (keep them real and consistent):', ...lines].join('\n');
 }
+
+// ---- VISITORS -------------------------------------------------------------
+//
+// A visitor is just another entity Cy holds a standing toward - the SAME
+// {warmth, suspicion, grudge} triple as the cast - but persisted in the DB and
+// folded in per postcard rather than living in the relations map. These helpers
+// turn an inbox visitor object into a relation, a recognition prompt block, and
+// (after the reply) an updated memory line + standing to write back.
+
+const VISITOR_DEFAULT = { warmth: 0.3, suspicion: 0.35, grudge: 0.05 };
+
+// A relations-style entry from a DB visitor row (or defaults for a stranger).
+export function visitorRelation(visitor) {
+  if (!visitor) return { ...VISITOR_DEFAULT, lastSlight: null };
+  const n = (x, d) => (typeof x === 'number' ? clamp(x) : d);
+  return {
+    warmth: n(visitor.warmth, VISITOR_DEFAULT.warmth),
+    suspicion: n(visitor.suspicion, VISITOR_DEFAULT.suspicion),
+    grudge: n(visitor.grudge, VISITOR_DEFAULT.grudge),
+    lastSlight: null,
+  };
+}
+
+// Coarse, human phrasing for the gap since a visitor last wrote. prevIso is a
+// UTC "Y-m-d H:i:s" string (or null for the first time).
+export function sincePhrase(prevIso, now = Date.now()) {
+  if (!prevIso) return null;
+  const t = Date.parse(String(prevIso).replace(' ', 'T') + 'Z');
+  if (Number.isNaN(t)) return null;
+  const h = (now - t) / 3600000;
+  if (h < 6) return 'earlier today';
+  if (h < 20) return 'first thing / yesterday';
+  if (h < 48) return 'yesterday';
+  if (h < 24 * 7) return 'a few days back';
+  if (h < 24 * 21) return 'a couple of weeks back';
+  if (h < 24 * 60) return 'over a month ago';
+  return 'a long time ago';
+}
+
+// Qualitative standing toward a visitor, phrased for Cy's head.
+function describeVisitor(r) {
+  const w = r.warmth >= 0.6 ? 'you are glad it is them' : r.warmth >= 0.4 ? 'you do not mind them' : r.warmth >= 0.2 ? 'you keep them at arm length' : 'you have gone cold on them';
+  const g = r.grudge >= 0.7 ? 'and there is bad blood' : r.grudge >= 0.45 ? 'and a grudge is building' : r.grudge >= 0.25 ? 'and there is a mark against them' : '';
+  const s = r.suspicion >= 0.6 ? 'you read their words twice for the real meaning' : '';
+  return [w, g, s].filter(Boolean).join(', ');
+}
+
+// The recognition block: who they are, how often they write, roughly how long
+// since last time, a condensed memory of what they said, and Cy's standing. He
+// should recognise them in his own voice, never as a database readout. Returns
+// '' for a genuine first-timer (nothing to recognise yet).
+export function visitorForPrompt(visitor, { now = Date.now() } = {}) {
+  if (!visitor) return '';
+  const count = Number(visitor.postcard_count || 0);
+  const isReturning = count > 1 || !!(visitor.notes && String(visitor.notes).trim());
+  if (!isReturning) return '';
+  const handle = (visitor.handle && String(visitor.handle).trim()) || visitor.from_name || 'them';
+  const since = sincePhrase(visitor.prev_posted_at, now);
+  const times = count > 1 ? `${count} postcards now` : 'written before';
+  const std = describeVisitor(visitorRelation(visitor));
+  const memory = visitor.notes && String(visitor.notes).trim() ? String(visitor.notes).trim() : null;
+  const lines = [
+    `YOU KNOW THIS ONE. ${handle} - ${times}${since ? ', last ' + since : ''}.`,
+  ];
+  if (memory) lines.push(`what they have sent before: ${memory}`);
+  if (std) lines.push(`toward them: ${std}.`);
+  lines.push('recognise them the way you would in here - a name you know, a thread picked back up - not as a record. do not list facts; just let it be someone you know writing again.');
+  return lines.join('\n');
+}
+
+// After a reply, a SHORT compressed memory line about what was exchanged.
+// Deliberately cheap - keyword/truncation, NO extra model call. Rolls into the
+// visitor's existing notes (capped ~600 chars) by the caller.
+export function visitorNoteLine(theirBody, hadImage, hostile) {
+  const words = String(theirBody || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s']/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOPWORDS.has(w));
+  const seen = [];
+  for (const w of words) {
+    if (!seen.includes(w)) seen.push(w);
+    if (seen.length >= 6) break;
+  }
+  const tag = hostile ? '[hostile]' : '';
+  const gist = seen.length ? seen.join(' ') : (hadImage ? '(image, no words)' : '(brief)');
+  const img = hadImage ? ' +img' : '';
+  return `${tag}${gist}${img}`.trim();
+}
+
+// Merge a new note line into existing notes, newest last, capped to ~600 chars
+// by dropping the oldest lines. Returns the new notes string.
+export function mergeVisitorNotes(existing, line) {
+  const lines = String(existing || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  lines.push(line);
+  let joined = lines.join('\n');
+  while (joined.length > 600 && lines.length > 1) {
+    lines.shift();
+    joined = lines.join('\n');
+  }
+  return joined.slice(-600);
+}
+
+// Nudge a visitor's standing from the tone of their postcard, scaled by amp.
+// Hostile mail hardens grudge/suspicion and cools warmth; warm mail does the
+// reverse. Returns the new {warmth, suspicion, grudge}. Same mechanism as the
+// cast's social events.
+export function updateVisitorStanding(visitor, { hostile, warm }, amp = 1) {
+  const r = visitorRelation(visitor);
+  const ev = hostile
+    ? { d: { grudge: +0.14, suspicion: +0.10, warmth: -0.10 } }
+    : warm
+      ? { d: { warmth: +0.10, grudge: -0.05, suspicion: -0.03 } }
+      : { d: { warmth: +0.03 } }; // any contact at all warms a little
+  for (const [k, d] of Object.entries(ev.d)) {
+    if (typeof r[k] === 'number') r[k] = clamp(r[k] + d * amp);
+  }
+  return { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge };
+}
+
+const STOPWORDS = new Set([
+  'this', 'that', 'with', 'have', 'from', 'your', 'youre', 'been', 'they', 'them',
+  'were', 'what', 'when', 'will', 'just', 'like', 'about', 'here', 'there', 'still',
+  'dont', 'cant', 'wont', 'said', 'some', 'know', 'much', 'very', 'into', 'then',
+  'than', 'over', 'back', 'good', 'well', 'gonna', 'really', 'thing', 'think',
+]);
 
 export { BY_KEY };

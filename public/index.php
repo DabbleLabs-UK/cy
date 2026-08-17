@@ -17,8 +17,8 @@ $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
 <script>
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
-  postLetter: 'api/post-letter.php',
-  postImage: 'api/post-image.php'
+  postPostcard: 'api/post-postcard.php',
+  openverseSearch: 'api/openverse-search.php'
 };
 </script>
 </head>
@@ -62,28 +62,54 @@ window.CY = {
     </div>
 
     <div class="panel">
-      <div class="panel-title">SEND A POSTCARD</div>
-      <form id="letter-form" class="cell-form" autocomplete="off">
-        <input id="letter-from" name="from" type="text" maxlength="40" placeholder="your name" required>
-        <textarea id="letter-body" name="body" maxlength="900" rows="4" placeholder="write to 7734..." required></textarea>
-        <div class="form-row">
-          <span id="letter-count" class="counter">0 / 900</span>
-          <button type="submit">Post letter</button>
-        </div>
-        <p class="form-hint">Mail is only delivered at 08:00, 13:00 and 19:00 UK time.</p>
-        <p id="letter-note" class="form-note"></p>
-      </form>
-    </div>
+      <div class="panel-title">SEND CY A POSTCARD</div>
+      <form id="postcard-form" class="postcard-form" autocomplete="off">
 
-    <div class="panel">
-      <div class="panel-title">SEND AN IMAGE</div>
-      <form id="image-form" class="cell-form" autocomplete="off">
-        <input id="image-file" name="image" type="file" accept="image/jpeg,image/png,image/webp" required>
-        <div class="form-row">
-          <span class="form-hint">JPG / PNG / WEBP, max 3MB</span>
-          <button type="submit">Send image</button>
+        <div class="postcard">
+          <!-- message side -->
+          <div class="pc-side pc-msg">
+            <textarea id="pc-body" name="body" maxlength="900" rows="6" placeholder="write to 7734... (or send just a picture)"></textarea>
+            <div class="pc-stamp-line">
+              <input id="pc-from" name="from" type="text" maxlength="40" placeholder="your name" required>
+            </div>
+          </div>
+
+          <!-- divide -->
+          <div class="pc-divide" aria-hidden="true"></div>
+
+          <!-- picture side -->
+          <div class="pc-side pc-pic" id="pc-drop">
+            <div class="pc-pic-empty" id="pc-pic-empty">
+              <div class="pc-pic-hint">drag a picture here</div>
+              <div class="pc-pic-or">or</div>
+              <button type="button" class="pc-browse" id="pc-browse">Browse&hellip;</button>
+              <div class="pc-pic-or">or search below</div>
+            </div>
+            <div class="pc-pic-preview" id="pc-pic-preview" hidden>
+              <img id="pc-pic-img" alt="chosen picture">
+              <button type="button" class="pc-pic-clear" id="pc-pic-clear" title="remove picture">&times;</button>
+              <div class="pc-pic-src" id="pc-pic-src"></div>
+            </div>
+            <input id="pc-file" name="image" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          </div>
         </div>
-        <p id="image-note" class="form-note"></p>
+
+        <!-- openverse search -->
+        <div class="pc-ov">
+          <div class="pc-ov-row">
+            <input id="pc-ov-q" type="text" maxlength="100" placeholder="search Openverse for a picture...">
+            <button type="button" id="pc-ov-go">Search</button>
+          </div>
+          <div id="pc-ov-status" class="pc-ov-status"></div>
+          <div id="pc-ov-grid" class="pc-ov-grid"></div>
+        </div>
+
+        <div class="form-row">
+          <span id="pc-count" class="counter">0 / 900</span>
+          <button type="submit" class="pc-send">Post it</button>
+        </div>
+        <p class="form-hint">Delivered only at 08:00, 13:00 and 19:00 UK time. Text, a picture, or both.</p>
+        <p id="pc-note" class="form-note"></p>
       </form>
     </div>
 

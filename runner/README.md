@@ -51,21 +51,24 @@ With `dryRun: true` the runner never touches the network:
 - events are appended to `runner/state/events.jsonl` instead of being POSTed;
 - the inbox is read from `runner/state/inbox.json` (if present) and consumed.
 
-To feed a test letter in dryRun, drop a file like this at
-`runner/state/inbox.json`:
+To feed a test postcard in dryRun, drop a file like this at
+`runner/state/inbox.json`. A postcard has text and/or an image, and may carry a
+`visitor` memory block so a returning writer is recognised:
 
 ```json
-{ "letters": [ { "id": 1, "from_name": "mum", "body": "thinking of you son. stay strong. wrote you a proper letter, coming soon." } ], "images": [], "news": [], "warden": [] }
+{ "postcards": [ { "id": 1, "from_name": "mum", "body": "thinking of you son. stay strong.", "image_path": null, "image_attrib": null, "visitor_id": "abc123", "visitor": { "visitor_id": "abc123", "handle": "mum", "visit_count": 4, "postcard_count": 7, "warmth": 0.72, "suspicion": 0.2, "grudge": 0.05, "notes": "garden coming up. told you to eat. asked about visits.", "prev_posted_at": "2026-08-10 13:00:00" } } ], "news": [], "warden": [] }
 ```
 
 Within 60s the runner picks it up, aborts the current thought mid-word, and
-writes a reply in letter mode. (It still needs a live ollama to generate.)
+writes a reply in postcard/letter mode. An image-only postcard sets `body` null
+and `image_path` to the delivered picture's webroot-relative path. (It still
+needs a live ollama to generate.)
 
 A `warden` item is an authored announcement from Warden Florian; it interrupts
-like a letter and CY reacts to it in the stream:
+like a postcard and CY reacts to it in the stream:
 
 ```json
-{ "letters": [], "images": [], "news": [], "warden": [ { "id": 1, "text": "NOTICE. Association is suspended until further review. By order, Warden Florian." } ] }
+{ "postcards": [], "news": [], "warden": [ { "id": 1, "text": "NOTICE. Association is suspended until further review. By order, Warden Florian." } ] }
 ```
 
 ## What it emits
@@ -80,7 +83,10 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `power`  | `{ watts, kwh_total, cost_total, cost_per_hour, uptime_s }` every 30s |
 | `abort`  | `{ cause }` - a thought cut off (letter/notice interrupt or warden block) |
 | `mode`   | `{ from, to, cause }` - a mode transition                          |
-| `event`  | `{ name, amp, ... }` - an ambient event (meal, cold_tea, social, warden, ...) |
+| `event`  | `{ name, amp, ... }` - an ambient event (meal, cold_tea, social, officer, overheard, warden, ...) |
+| `postcard_in`  | `{ id, from, body, image, attrib, visitor_id, visit_count }` - a delivered postcard (public subset; visitor memory stays private) |
+| `postcard_out` | `{ id, reply_to, body }` - CY's reply to a postcard              |
+| `visitor_seen` | `{ visitor_id, notes, warmth, suspicion, grudge }` - PRIVATE: a memory/standing write-back consumed by `ingest.php`, never inserted into the event log or streamed |
 | `day`    | `{ n, date }` - day rollover (Europe/London)                      |
 
 `brain` is a map of ten region activations (0..1). `derived` is the seven
@@ -98,6 +104,19 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
   Fisher, Ping, Daemon) as deterministic state + prompt text, not separate LLMs.
   A relations map (warmth/suspicion/grudge) is nudged by ambient social events
   (scaled by amp); a grudge over 0.7 puts a named directive in the prompt.
+- **The officers** (`cast.js`) - a separate group (Mr Locke, Mr Keyes, Miss
+  Bailey, Mr Proctor, Mr Sweep, Miss Trace) with SURNAMES AND TITLES - a
+  deliberate class marker against the inmates' bare first names. Same standing
+  triple; nudged by officer events (order, write-up, refusal, search, lock-up,
+  kindness) that act through the machinery of the place.
+- **Overheard** (`cast.js`) - things CY only half hears through the door: an
+  inmate shouting, two officers talking. He may MISHEAR them into something about
+  himself; the mishear chance rises with low lucidity and high paranoia.
+- **Visitors** (`cast.js`) - people who write are remembered (DB-backed) using
+  the SAME relations mechanism. A returning writer's handle, count, time-since,
+  a condensed memory and CY's standing are woven into the reply prompt; after the
+  reply a cheap compressed note + standing nudge are written back via a private
+  `visitor_seen` event (no second model call).
 - **Warden Florian** - authored `warden` inbox items are read and reacted to in
   the stream; they land `{anxiety+0.2, anger+0.15, lucidity+0.1}` times amp.
 - **The meter** (`power.js`) - estimates Dell OptiPlex draw from CPU load,
@@ -107,12 +126,13 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 ## Pieces
 
 - `vitals.js` - state engine: drift, derived states, amplification, event deltas.
-- `cast.js` - the other inmates: relations map, social events, grudge directive.
+- `cast.js` - inmates + officers + visitor memory: relations map, social/officer
+  events, overheard remarks, grudge directive, visitor recognition.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
 - `prompt.js` - system prompt, style directive, sampling, contextual injections.
 - `warden.js` - sentence buffering + outbound/inbound content screen.
 - `client.js` - batched POST to `api/ingest.php`, inbox poll, disk-queue retry.
-- `run.js` - the loop: generation, ticks, scheduler, letter/notice interrupts.
+- `run.js` - the loop: generation, ticks, scheduler, postcard/notice interrupts.
 - `selftest.js` - deterministic checks for the above (no ollama needed).
 - `livesample.js` - drives two real generations to sample CY's prose.
 

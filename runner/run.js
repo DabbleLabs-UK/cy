@@ -35,6 +35,17 @@ import {
   applySocialEvent,
   castForPrompt,
   grudgeDirective,
+  pickOfficer,
+  applyOfficerEvent,
+  officerDirective,
+  pickOverheard,
+  overheardDirective,
+  mishearChance,
+  visitorForPrompt,
+  visitorNoteLine,
+  mergeVisitorNotes,
+  updateVisitorStanding,
+  isOfficer,
   BY_KEY,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
@@ -117,6 +128,9 @@ function cpuSnapshot() {
 const HOSTILE = /\b(rot|die|deserve|scum|hate you|worthless|nonce|freak|monster|disgusting|filth|burn|evil|scumbag|waste of)\b/i;
 const isHostile = (body) => HOSTILE.test(body || '');
 
+const WARM = /\b(love|miss you|thinking of you|proud|hope you|stay strong|here for you|care|dear|hang in|take care|god bless|xx)\b/i;
+const isWarm = (body) => WARM.test(body || '');
+
 // ---------------------------------------------------------------------------
 
 async function main() {
@@ -177,8 +191,11 @@ async function main() {
   let currentMode = 'journal';
   let currentAbort = null; // AbortController for the in-flight generation
   let tokenCount = 0; // tokens this vitals-tick window (broca)
-  const pendingLetters = [];
+  const pendingPostcards = [];
   const pendingWarden = [];
+  // ambient cues armed by the scheduler, consumed once by the next generation
+  let officerCue = null; // { key, ev, until }
+  let overheardCue = null; // { item, misheard, until }
   let prevMins = null;
   let prevDate = londonParts().date;
   let prevCpu = cpuSnapshot();
@@ -274,6 +291,14 @@ async function main() {
       ctx.amplified = amplifiedDirective(amplifiedCue.label);
       amplifiedCue = null; // fire once
     }
+    if (officerCue && Date.now() < officerCue.until) {
+      ctx.officer = officerDirective(officerCue.key, officerCue.ev);
+      officerCue = null; // fire once
+    }
+    if (overheardCue && Date.now() < overheardCue.until) {
+      ctx.overheard = overheardDirective(overheardCue.item, overheardCue.misheard);
+      overheardCue = null; // fire once
+    }
     const doCost = forceCost || genCount % COST_EVERY === 0;
     if (doCost) {
       ctx.cost = costInjection(powerMeter.snapshot());
@@ -282,24 +307,64 @@ async function main() {
     return ctx;
   }
 
-  // ---- letter mode: interrupt, transition, reply, transition back ----
-  async function doLetter(letter) {
-    emit({ kind: 'abort', payload: { cause: 'letter' } });
+  // ---- postcard mode: interrupt, transition, recognise, reply, remember ----
+  async function doPostcard(pc) {
+    emit({ kind: 'abort', payload: { cause: 'postcard' } });
     const from = currentMode;
-    currentMode = 'letter';
-    emit({ kind: 'mode', payload: { from, to: 'letter', cause: letter.from_name || 'mail' } });
+    currentMode = 'letter'; // 'letter' remains the viewer mode label for a reply
+    emit({ kind: 'mode', payload: { from, to: 'letter', cause: pc.from_name || 'mail' } });
 
-    const hostile = isHostile(letter.body);
+    const hostile = isHostile(pc.body);
+    const warm = isWarm(pc.body);
     const evName = hostile ? 'letter_hostile' : 'letter_arrives';
-    fireEvent(evName, { from: letter.from_name || null });
+    fireEvent(evName, { from: pc.from_name || null });
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
 
-    const system = buildSystem(vitals, 'letter', buildCtx());
-    const prompt = buildPrompt(contextText(), 'letter', letter);
-    const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(letter.body) });
-    await logPrompt('letter', system);
-    await streamGenerate({ system, prompt, opts, mode: 'letter' });
+    // the public, streamed record of the incoming postcard (no private memory)
+    emit({
+      kind: 'postcard_in',
+      payload: {
+        id: pc.id,
+        from: pc.from_name || null,
+        body: pc.body || null,
+        image: pc.image_path || null,
+        attrib: pc.image_attrib || null,
+        visitor_id: pc.visitor_id || null,
+        visit_count: pc.visitor ? pc.visitor.visit_count : null,
+      },
+    });
+
+    // recognition: fold the visitor into the relations mechanism for this reply
+    const visitor = pc.visitor ? { ...pc.visitor, from_name: pc.from_name } : null;
+    const ctx = buildCtx();
+    const recog = visitorForPrompt(visitor, { now: Date.now() });
+    if (recog) ctx.visitor = recog;
+
+    const system = buildSystem(vitals, 'letter', ctx);
+    const prompt = buildPrompt(contextText(), 'postcard', pc);
+    const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(pc.body) });
+    await logPrompt('postcard', system);
+    const { full } = await streamGenerate({ system, prompt, opts, mode: 'letter' });
+
+    // the public, streamed record of Cy's reply (kept as postcard_out)
+    const reply = (full || '').trim();
+    if (reply) {
+      emit({ kind: 'postcard_out', payload: { id: pc.id, reply_to: pc.id, body: reply } });
+    }
+
+    // remember them: a cheap compressed note + a standing nudge, written back to
+    // the DB via a private visitor_seen event (never enters the public stream).
+    if (visitor && visitor.visitor_id) {
+      const a = ampOf(vitals);
+      const line = visitorNoteLine(pc.body, !!pc.image_path, hostile);
+      const notes = mergeVisitorNotes(visitor.notes, line);
+      const standing = updateVisitorStanding(visitor, { hostile, warm }, a);
+      emit({
+        kind: 'visitor_seen',
+        payload: { visitor_id: visitor.visitor_id, notes, ...standing },
+      });
+    }
 
     emit({ kind: 'mode', payload: { from: 'letter', to: 'journal' } });
     currentMode = 'journal';
@@ -328,17 +393,14 @@ async function main() {
     currentMode = 'journal';
   }
 
-  // ---- inbox: letters interrupt; images/news just colour the state ----
+  // ---- inbox: postcards interrupt; news just colours the state ----
   client.onInbox = (data) => {
     let interrupt = false;
-    for (const L of data.letters || []) {
-      if (!warden.screenIn(L.body || '').ok) continue; // silent reject
-      pendingLetters.push(L);
+    for (const pc of data.postcards || []) {
+      // screen any text; an image-only postcard (no body) is always allowed
+      if (pc.body && !warden.screenIn(pc.body).ok) continue; // silent reject
+      pendingPostcards.push(pc);
       interrupt = true;
-    }
-    for (const img of data.images || []) {
-      fireEvent('image_arrives', { caption: img.caption || null });
-      vitals.lastMailMs = Date.now();
     }
     for (const n of data.news || []) {
       fireEvent('news_arrives', { headline: n.headline || null });
@@ -386,6 +448,44 @@ async function main() {
     });
   }
 
+  // Fire an officer event: nudge one officer's standing scaled by amp, soften
+  // monotony, arm a prompt cue, and emit the standing so viewers see it build.
+  function fireOfficer() {
+    const { officerKey, ev } = pickOfficer();
+    const a = ampOf(vitals);
+    applyOfficerEvent(vitals.relations, officerKey, ev, a);
+    vitals.monotony = clamp((vitals.monotony || 0) - 0.25);
+    officerCue = { key: officerKey, ev, until: Date.now() + 3 * 60 * 1000 };
+    const r = vitals.relations[officerKey];
+    emit({
+      kind: 'event',
+      payload: {
+        name: 'officer',
+        cast: officerKey,
+        who: (BY_KEY[officerKey] || {}).name || officerKey,
+        type: ev.type,
+        amp: Number(a.toFixed(3)),
+        standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
+      },
+    });
+  }
+
+  // Fire an overheard event: Cy half-hears something and may misinterpret it -
+  // more likely at low lucidity or high paranoia. Arms a prompt cue and emits
+  // the fact (but not the paranoid content) for the ticker.
+  function fireOverheard() {
+    const item = pickOverheard();
+    const paranoia = (vitals.derived && vitals.derived.paranoia) || 0;
+    const p = mishearChance({ lucidity: vitals.mental.lucidity, paranoia });
+    const misheard = Math.random() < p;
+    vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
+    overheardCue = { item, misheard, until: Date.now() + 3 * 60 * 1000 };
+    emit({
+      kind: 'event',
+      payload: { name: 'overheard', source: item.source, misheard },
+    });
+  }
+
   // ---- deterministic environment scheduler (runs each vitals tick) ----
   function scheduler(now) {
     const { date, mins } = londonParts(new Date(now));
@@ -414,6 +514,10 @@ async function main() {
     }
     // social frictions between inmates (awake) - build warmth/suspicion/grudge
     if (!asleep && Math.random() < 0.006) fireSocial();
+    // officers acting through the machinery of the place (awake)
+    if (!asleep && Math.random() < 0.004) fireOfficer();
+    // half-heard remarks down the wing (awake) - may be misheard under paranoia
+    if (!asleep && Math.random() < 0.005) fireOverheard();
 
     // no mail in 24h - fire at most once per 24h
     if (now - (vitals.lastMailMs || now) > 24 * 3600 * 1000 && now - (vitals.noMailFiredMs || 0) > 24 * 3600 * 1000) {
@@ -503,8 +607,8 @@ async function main() {
         await doWarden(pendingWarden.shift());
         continue;
       }
-      if (pendingLetters.length) {
-        await doLetter(pendingLetters.shift());
+      if (pendingPostcards.length) {
+        await doPostcard(pendingPostcards.shift());
         continue;
       }
       const { mins } = londonParts();

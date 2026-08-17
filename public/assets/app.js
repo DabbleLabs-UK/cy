@@ -2,7 +2,8 @@
 //
 // Polls GET api/stream.php?since=<seq>&limit=500 every 1000ms, tracks the
 // highest seq seen, and dispatches events to the pen renderer, the brain HUD
-// and the telemetry/mail HUD. Also wires the public letter + image forms.
+// and the telemetry/mail HUD. Also wires the public postcard composer
+// (text + image: file drop, browse, or Openverse search).
 //
 // Endpoints come from window.CY (injected by index.php) so the same code
 // runs against the fake test feed.
@@ -14,11 +15,12 @@ import { Power } from './power.js';
 
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
-const POST_LETTER = CFG.postLetter || 'api/post-letter.php';
-const POST_IMAGE = CFG.postImage || 'api/post-image.php';
+const POST_POSTCARD = CFG.postPostcard || 'api/post-postcard.php';
+const OPENVERSE_SEARCH = CFG.openverseSearch || 'api/openverse-search.php';
 const POLL_MS = 1000;
 const LETTER_MAX = 900;
 const FROM_MAX = 40;
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -172,16 +174,12 @@ function dispatch(ev, bootstrap) {
       if (typeof p.n === 'number') setDay(p.n);
       break;
 
-    case 'letter_in':
-      hud.addLetterIn(p);
-      pushTicker(`letter from ${p.from || 'someone'}`);
+    case 'postcard_in':
+      hud.addPostcardIn(p);
+      pushTicker(`postcard from ${p.from || 'someone'}${p.image ? ' (with a picture)' : ''}`);
       break;
-    case 'letter_out':
-      hud.addLetterOut(p);
-      break;
-    case 'image_in':
-      hud.addImageIn(p);
-      pushTicker('an image arrives');
+    case 'postcard_out':
+      hud.addPostcardOut(p);
       break;
     case 'news_in':
       hud.addNewsIn(p);
@@ -201,6 +199,16 @@ function handleAmbient(p) {
     const who = p.who || 'someone';
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
     pushTicker(g > 0.7 ? `bad blood with ${who}` : `${who} on the spur`);
+    return;
+  }
+  if (name === 'officer') {
+    const who = p.who || 'an officer';
+    const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
+    pushTicker(g > 0.7 ? `bad blood with ${who}` : `${who} on the wing`);
+    return;
+  }
+  if (name === 'overheard') {
+    pushTicker(p.misheard ? 'something half-heard, and it is about him' : 'something half-heard down the wing');
     return;
   }
   const nice = {
@@ -268,13 +276,33 @@ function pushTicker(msg) {
 
 // ---- forms --------------------------------------------------------------
 
+// The postcard composer: one card, a message side and a picture side. A picture
+// can come from a dropped/browsed file OR a chosen Openverse result - never both
+// at once. At least one of {text, picture} must be present on submit.
 function wireForms() {
-  // letter form
-  const lf = $('#letter-form');
-  const body = $('#letter-body');
-  const from = $('#letter-from');
-  const count = $('#letter-count');
-  const note = $('#letter-note');
+  const form = $('#postcard-form');
+  const from = $('#pc-from');
+  const body = $('#pc-body');
+  const count = $('#pc-count');
+  const note = $('#pc-note');
+
+  const drop = $('#pc-drop');
+  const fileInput = $('#pc-file');
+  const browse = $('#pc-browse');
+  const emptyEl = $('#pc-pic-empty');
+  const previewEl = $('#pc-pic-preview');
+  const previewImg = $('#pc-pic-img');
+  const previewSrc = $('#pc-pic-src');
+  const clearBtn = $('#pc-pic-clear');
+
+  const ovQ = $('#pc-ov-q');
+  const ovGo = $('#pc-ov-go');
+  const ovGrid = $('#pc-ov-grid');
+  const ovStatus = $('#pc-ov-status');
+
+  // chosen picture: exactly one of these is non-null at a time
+  let chosenFile = null;
+  let chosenOpenverse = null; // { url, attrib, thumb }
 
   const updateCount = () => {
     const n = body.value.length;
@@ -284,7 +312,117 @@ function wireForms() {
   body.addEventListener('input', updateCount);
   updateCount();
 
-  lf.addEventListener('submit', async (e) => {
+  function showPreview(src, label) {
+    previewImg.src = src;
+    previewSrc.textContent = label || '';
+    emptyEl.hidden = true;
+    previewEl.hidden = false;
+  }
+  function clearPicture() {
+    chosenFile = null;
+    chosenOpenverse = null;
+    fileInput.value = '';
+    previewImg.removeAttribute('src');
+    previewSrc.textContent = '';
+    previewEl.hidden = true;
+    emptyEl.hidden = false;
+    ovGrid.querySelectorAll('.pc-ov-item.sel').forEach((n) => n.classList.remove('sel'));
+  }
+  clearBtn.addEventListener('click', clearPicture);
+
+  function chooseFile(file) {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      return showNote(note, 'pictures must be JPG, PNG or WEBP', true);
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      return showNote(note, 'picture too large (max 3MB)', true);
+    }
+    chosenFile = file;
+    chosenOpenverse = null;
+    ovGrid.querySelectorAll('.pc-ov-item.sel').forEach((n) => n.classList.remove('sel'));
+    showPreview(URL.createObjectURL(file), file.name);
+    note.className = 'form-note';
+  }
+
+  browse.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => chooseFile(fileInput.files && fileInput.files[0]));
+
+  // drag + drop onto the picture side
+  ['dragenter', 'dragover'].forEach((ev) =>
+    drop.addEventListener(ev, (e) => {
+      e.preventDefault();
+      drop.classList.add('dragover');
+    }),
+  );
+  ['dragleave', 'dragend', 'drop'].forEach((ev) =>
+    drop.addEventListener(ev, (e) => {
+      e.preventDefault();
+      drop.classList.remove('dragover');
+    }),
+  );
+  drop.addEventListener('drop', (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) chooseFile(f);
+  });
+
+  // openverse search
+  async function runSearch() {
+    const q = ovQ.value.trim();
+    if (!q) return;
+    ovStatus.textContent = 'searching...';
+    ovGrid.innerHTML = '';
+    ovGo.disabled = true;
+    try {
+      const res = await fetch(OPENVERSE_SEARCH + '?q=' + encodeURIComponent(q), { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      const results = (data && data.results) || [];
+      if (!res.ok) {
+        ovStatus.textContent = (data && data.error) || 'search failed';
+        return;
+      }
+      if (!results.length) {
+        ovStatus.textContent = 'nothing found - try other words';
+        return;
+      }
+      ovStatus.textContent = results.length + ' results (Creative Commons)';
+      for (const r of results) renderOvResult(r);
+    } catch (err) {
+      ovStatus.textContent = 'network error, try again';
+    } finally {
+      ovGo.disabled = false;
+    }
+  }
+  function renderOvResult(r) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pc-ov-item';
+    btn.title = r.attrib || r.title || '';
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.src = r.thumb || r.url;
+    img.alt = r.title || 'image';
+    btn.appendChild(img);
+    btn.addEventListener('click', () => {
+      ovGrid.querySelectorAll('.pc-ov-item.sel').forEach((n) => n.classList.remove('sel'));
+      btn.classList.add('sel');
+      chosenOpenverse = { url: r.url, attrib: r.attrib || '', thumb: r.thumb || r.url };
+      chosenFile = null;
+      fileInput.value = '';
+      showPreview(r.thumb || r.url, r.attrib || r.title || 'Openverse');
+      note.className = 'form-note';
+    });
+    ovGrid.appendChild(btn);
+  }
+  ovGo.addEventListener('click', runSearch);
+  ovQ.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runSearch();
+    }
+  });
+
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     note.className = 'form-note';
     const f = from.value.trim();
@@ -292,58 +430,39 @@ function wireForms() {
     if (f.length < 1 || f.length > FROM_MAX) {
       return showNote(note, `name must be 1-${FROM_MAX} characters`, true);
     }
-    if (b.length < 1) return showNote(note, 'write something first', true);
-    if (b.length > LETTER_MAX) return showNote(note, `letter too long (max ${LETTER_MAX})`, true);
+    if (b.length > LETTER_MAX) return showNote(note, `message too long (max ${LETTER_MAX})`, true);
+    const hasPicture = !!(chosenFile || chosenOpenverse);
+    if (b.length < 1 && !hasPicture) {
+      return showNote(note, 'write something or add a picture first', true);
+    }
 
-    setBusy(lf, true);
+    const fd = new FormData();
+    fd.append('from', f);
+    if (b.length) fd.append('body', b);
+    if (chosenFile) {
+      fd.append('image', chosenFile);
+    } else if (chosenOpenverse) {
+      fd.append('openverse_url', chosenOpenverse.url);
+      if (chosenOpenverse.attrib) fd.append('openverse_attrib', chosenOpenverse.attrib);
+    }
+
+    setBusy(form, true);
     try {
-      const res = await fetch(POST_LETTER, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: f, body: b }),
-      });
+      const res = await fetch(POST_POSTCARD, { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) {
         showNote(note, data.error || 'could not send (' + res.status + ')', true);
       } else {
         body.value = '';
         updateCount();
-        showNote(note, 'posted. ' + deliverLine(data.deliver_at), false);
+        clearPicture();
+        const back = data.returning ? 'he knows you. ' : '';
+        showNote(note, 'posted. ' + back + deliverLine(data.deliver_at), false);
       }
     } catch (err) {
       showNote(note, 'network error, try again', true);
     } finally {
-      setBusy(lf, false);
-    }
-  });
-
-  // image form
-  const imgf = $('#image-form');
-  const inote = $('#image-note');
-  imgf.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    inote.className = 'form-note';
-    const input = $('#image-file');
-    if (!input.files || !input.files.length) return showNote(inote, 'choose an image', true);
-    const file = input.files[0];
-    if (file.size > 3 * 1024 * 1024) return showNote(inote, 'image too large (max 3MB)', true);
-
-    const fd = new FormData();
-    fd.append('image', file);
-    setBusy(imgf, true);
-    try {
-      const res = await fetch(POST_IMAGE, { method: 'POST', body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) {
-        showNote(inote, data.error || 'upload failed (' + res.status + ')', true);
-      } else {
-        imgf.reset();
-        showNote(inote, 'sent. ' + deliverLine(data.deliver_at), false);
-      }
-    } catch (err) {
-      showNote(inote, 'network error, try again', true);
-    } finally {
-      setBusy(imgf, false);
+      setBusy(form, false);
     }
   });
 }
