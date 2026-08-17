@@ -49,7 +49,7 @@ import {
   BY_KEY,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
-import { createWarden, sanitize } from './warden.js';
+import { createWarden, sanitize, stripScaffold, isRepeat } from './warden.js';
 import { Client, tsNow } from './client.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -64,7 +64,7 @@ async function loadConfig() {
       const raw = await readFile(join(HERE, name), 'utf8');
       const cfg = JSON.parse(raw);
       if (name === 'config.sample.json') {
-        console.warn('[captive] no config.json - running from config.sample.json');
+        console.warn('[cy] no config.json - running from config.sample.json');
       }
       return cfg;
     } catch {
@@ -177,13 +177,35 @@ async function main() {
     delayed_unlock: 'unlock came late, no reason given',
   };
 
-  // rolling ~800 tokens (~3200 chars) of the model's own output, fed back in.
+  // rolling ~800 tokens (~3200 chars) of the model's own CLEANED output, fed
+  // back in. Only scaffold-free prose ever lands here (see onChunk), so the
+  // model never re-reads its own instruction frames and echoes them.
   const CONTEXT_MAX_CHARS = 3200;
   let contextBuf = await loadContext(contextPath);
   const contextText = () => contextBuf.slice(-CONTEXT_MAX_CHARS);
   async function appendContext(chunk) {
     contextBuf = (contextBuf + chunk).slice(-CONTEXT_MAX_CHARS * 2);
     await saveContext(contextPath, contextBuf.slice(-CONTEXT_MAX_CHARS));
+  }
+  // Shrink the effective context tail (on a near-repeat, to jolt the model off
+  // the passage it keeps copying).
+  function trimContext(frac) {
+    const eff = Math.min(contextBuf.length, CONTEXT_MAX_CHARS);
+    const keep = Math.max(0, eff - Math.floor(eff * frac));
+    contextBuf = keep > 0 ? contextBuf.slice(-keep) : '';
+  }
+  // Discards go to state/run.out.log so the loop is observable in the detached
+  // process; console too, for a foreground run.
+  async function logDiscard(mode, text, n) {
+    const snippet = (text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const line = `[cy] discard#${n} (${mode}) near-repeat, retry: "${snippet}"`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
   }
 
   // ---- shared loop state ----
@@ -202,8 +224,8 @@ async function main() {
 
   // ---- one emitted chunk: screen, then text-event or in-world lost-thought ----
   async function onChunk(rawChunk, mode) {
-    const chunk = sanitize(rawChunk);
-    if (!chunk.trim()) return; // was nothing but control tokens
+    const chunk = stripScaffold(sanitize(rawChunk));
+    if (!chunk.trim()) return; // was nothing but control tokens / scaffold
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
@@ -215,11 +237,36 @@ async function main() {
   }
 
   // ---- stream one generation from ollama ----
-  async function streamGenerate({ system, prompt, opts, mode }) {
+  // When `contextTail` is given (journal/sleep continuation), the opening of the
+  // generation is held back until ~PRIME_CHARS have arrived and checked against
+  // the context tail: if it is a verbatim replay, the whole generation is
+  // discarded (nothing emitted) and { repeat:true } is returned for the caller
+  // to retry. Postcard/warden replies pass no contextTail and stream straight
+  // through. Either way every chunk is scaffold-stripped before it is emitted.
+  async function streamGenerate({ system, prompt, opts, mode, contextTail }) {
     const ac = new AbortController();
     currentAbort = ac;
     const buffer = warden.newBuffer();
+    const PRIME_CHARS = 100;
     let full = '';
+    let head = '';
+    let primed = contextTail === undefined; // only continuation mode primes
+    let repeat = false;
+    const cleanedFull = () => stripScaffold(sanitize(full));
+
+    // Decide the held opening: discard on replay, otherwise release it.
+    const commitHead = async () => {
+      primed = true;
+      const cleaned = stripScaffold(sanitize(head));
+      if (contextTail && cleaned.trim() && isRepeat(cleaned, contextTail)) {
+        repeat = true;
+        ac.abort();
+        return;
+      }
+      for (const chunk of buffer.push(head)) await onChunk(chunk, mode);
+      head = '';
+    };
+
     let res;
     try {
       res = await fetch(`${config.ollamaUrl}/api/generate`, {
@@ -229,13 +276,13 @@ async function main() {
         signal: ac.signal,
       });
     } catch (err) {
-      if (ac.signal.aborted) return { full, aborted: true };
-      console.warn('[captive] ollama unreachable:', err.message);
+      if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
+      console.warn('[cy] ollama unreachable:', err.message);
       await sleep(2000);
       return { full, error: true };
     }
     if (!res.ok || !res.body) {
-      console.warn('[captive] ollama HTTP', res.status);
+      console.warn('[cy] ollama HTTP', res.status);
       await sleep(1000);
       return { full, error: true };
     }
@@ -244,7 +291,7 @@ async function main() {
     const dec = new TextDecoder();
     let lineBuf = '';
     try {
-      for (;;) {
+      outer: for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         lineBuf += dec.decode(value, { stream: true });
@@ -262,20 +309,33 @@ async function main() {
           if (typeof obj.response === 'string' && obj.response.length) {
             full += obj.response;
             tokenCount++;
-            for (const chunk of buffer.push(obj.response)) await onChunk(chunk, mode);
+            if (!primed) {
+              head += obj.response;
+              if (head.length >= PRIME_CHARS) {
+                await commitHead();
+                if (repeat) break outer;
+              }
+            } else {
+              for (const chunk of buffer.push(obj.response)) await onChunk(chunk, mode);
+            }
           }
         }
       }
     } catch (err) {
-      if (ac.signal.aborted) return { full, aborted: true };
-      console.warn('[captive] stream error:', err.message);
+      if (repeat) return { full: cleanedFull(), repeat: true };
+      if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
+      console.warn('[cy] stream error:', err.message);
       return { full, error: true };
     } finally {
       if (currentAbort === ac) currentAbort = null;
     }
+    if (repeat) return { full: cleanedFull(), repeat: true };
+    // generation ended before priming completed (shorter than PRIME_CHARS)
+    if (!primed) await commitHead();
+    if (repeat) return { full: cleanedFull(), repeat: true };
     // natural end: flush trailing partial thought
     for (const chunk of buffer.flush()) await onChunk(chunk, mode);
-    return { full, aborted: false };
+    return { full: cleanedFull(), aborted: false };
   }
 
   // Assemble the contextual prompt injections for a waking generation: the cast
@@ -615,13 +675,43 @@ async function main() {
       const asleep = isAsleep(mins);
       const mode = asleep ? 'sleep' : 'journal';
       currentMode = mode;
-      // sleep mode gets no cast/cost injections - he is half under
-      const system = mode === 'sleep' ? buildSystem(vitals, 'sleep') : buildSystem(vitals, 'journal', buildCtx());
-      const prompt = buildPrompt(contextText(), mode);
-      const opts = options(vitals, config.threads, mode);
-      await logPrompt(mode, system);
-      await streamGenerate({ system, prompt, opts, mode });
-      await sleep(mode === 'sleep' ? 8000 : 600); // pace; sleep mode is slow
+      // sleep mode gets no cast/cost injections - he is half under. Build the
+      // system + ctx ONCE (buildCtx has fire-once side effects); only the
+      // sampling and the context tail vary across repeat-retries.
+      const ctx = mode === 'sleep' ? null : buildCtx();
+      const system = mode === 'sleep' ? buildSystem(vitals, 'sleep') : buildSystem(vitals, 'journal', ctx);
+      const baseOpts = options(vitals, config.threads, mode);
+
+      let discards = 0;
+      let tempBump = 0;
+      let penBump = 0;
+      let produced = false;
+      for (;;) {
+        const tail = contextText();
+        const prompt = buildPrompt(tail, mode);
+        const opts = {
+          ...baseOpts,
+          temperature: Number(Math.min(1.6, baseOpts.temperature + tempBump).toFixed(3)),
+          repeat_penalty: Number(Math.min(1.6, baseOpts.repeat_penalty + penBump).toFixed(3)),
+        };
+        await logPrompt(mode, system);
+        const r = await streamGenerate({ system, prompt, opts, mode, contextTail: tail });
+        if (r.error) break; // ollama already backed off; move on
+        if (!r.repeat) {
+          produced = !!(r.full && r.full.trim());
+          break;
+        }
+        // near-repeat: discard, bump randomness + repeat penalty, trim context
+        discards++;
+        await logDiscard(mode, r.full, discards);
+        tempBump += 0.2;
+        penBump += 0.12;
+        trimContext(discards >= 2 ? 0.5 : 0.25);
+        if (discards >= 2) break; // dropped oldest half - move on to a fresh gen
+      }
+      // adaptive pacing: near-continuous trickle awake, slow drift asleep. No
+      // artificial gap between waking generations that produced prose.
+      await sleep(mode === 'sleep' ? 8000 : produced ? 150 : 700);
     }
   }
 
@@ -631,7 +721,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     running = false;
-    console.log('\n[captive] shutting down - flushing...');
+    console.log('\n[cy] shutting down - flushing...');
     if (currentAbort) currentAbort.abort();
     clearInterval(tickTimer);
     clearInterval(hostTimer);
@@ -653,8 +743,8 @@ async function main() {
   process.on('SIGTERM', shutdown);
 
   client.start();
-  console.log(`[captive] runner up. dryRun=${config.dryRun} model=${config.model}`);
-  console.log(`[captive] state dir: ${STATE_DIR}`);
+  console.log(`[cy] runner up. dryRun=${config.dryRun} model=${config.model}`);
+  console.log(`[cy] state dir: ${STATE_DIR}`);
   await genLoop();
 }
 
@@ -663,8 +753,9 @@ async function main() {
 async function loadContext(path) {
   try {
     const raw = await readFile(path, 'utf8');
-    // stored as jsonl of {ts,s}; rebuild the text stream
-    return raw
+    // stored as jsonl of {ts,s}; rebuild the text stream, scrubbing any legacy
+    // scaffold so a polluted saved context does not re-seed the echo loop.
+    const text = raw
       .split('\n')
       .filter((l) => l.trim())
       .map((l) => {
@@ -675,6 +766,7 @@ async function loadContext(path) {
         }
       })
       .join('');
+    return stripScaffold(sanitize(text));
   } catch {
     return '';
   }
@@ -688,6 +780,6 @@ async function saveContext(path, text) {
 }
 
 main().catch((err) => {
-  console.error('[captive] fatal:', err);
+  console.error('[cy] fatal:', err);
   process.exit(1);
 });

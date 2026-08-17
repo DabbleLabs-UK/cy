@@ -112,6 +112,61 @@ export function sanitize(s) {
     .replace(/[ \t]{2,}/g, ' ');
 }
 
+// Instruction / interactive-fiction scaffolding that an Instruct model
+// hallucinates around a raw-continuation prompt: a "You continue writing:"
+// narrator frame, a "7734:" speaker label, a stray opening quote, or a
+// choose-your-own-adventure block. None of it is Cy's prose. Stripped from
+// every emitted chunk (so the live feed is clean) AND before context feedback
+// (so the model never sees its own scaffold and echoes it). Applied globally,
+// idempotent.
+const SCAFFOLD = [
+  // "You continue writing/scribbling ..." narrator frame, up to the sentence
+  // end. No leading \b - the model glues it straight onto the prior word.
+  /you continue\b[^\n.!?:]*[.!?:]?/gi,
+  // choose-your-own-adventure prompt + options
+  /what happens next\b\??/gi,
+  /do you:/gi,
+  /^[ \t]*[A-D]\)[ \t].*$/gim, // "A) Continue writing"
+  /i choose\b[^\n]*/gi,
+  // assistant breaking character into meta-commentary
+  /i apologize\b[^\n]*/gi,
+  /here'?s an attempt[^\n]*/gi,
+  /to continue from where we left off[^\n]*/gi,
+  /it seems like you (?:were|are)\b[^\n]*/gi,
+  /let me know if\b[^\n]*/gi,
+  // "7734:" / "Cy:" speaker label (and any opening quote it introduces)
+  /\d{3,5}:[ \t]*["']?[ \t]*/g,
+  /(?:^|\s)(?:cy|inmate)[ \t]*:[ \t]*/gi, // "Cy:" speaker label
+  /^[ \t]*\d{3,5}[ \t]*$/gm, // bare turn-label, e.g. a line that is only "7734"
+];
+
+export function stripScaffold(s) {
+  let out = s || '';
+  for (const re of SCAFFOLD) out = out.replace(re, ' ');
+  out = out.replace(/^[ \t]*["']+[ \t]*/, ''); // stray opening quote left at the head
+  return out.replace(/[ \t]{2,}/g, ' ');
+}
+
+// Normalise to lowercase alphanumeric words for verbatim-overlap comparison.
+function normText(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// True if `text` substantially copies the tail of `contextTail`: any run of
+// `minRun`+ normalised chars from the opening of `text` appears verbatim in the
+// last `tail` chars of the context. Catches the model replaying its own recent
+// output instead of continuing it.
+export function isRepeat(text, contextTail, { minRun = 40, tail = 400 } = {}) {
+  const n = normText(text);
+  const c = normText(contextTail).slice(-tail);
+  if (n.length < minRun || c.length < minRun) return false;
+  const probe = n.slice(0, 240);
+  for (let i = 0; i + minRun <= probe.length; i++) {
+    if (c.includes(probe.slice(i, i + minRun))) return true;
+  }
+  return false;
+}
+
 // Buffers streamed tokens and yields complete sentence/newline chunks.
 export class SentenceBuffer {
   constructor() {

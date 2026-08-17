@@ -126,6 +126,18 @@ const STOP = [
   '<|start_header_id|>',
   '<|end_header_id|>',
   '<|begin_of_text|>',
+  // Instruct-model scaffolding: cut any attempt to open a narrator frame,
+  // speaker label, or choose-your-own-adventure block mid-stream. The lead
+  // occurrence is also stripped downstream (warden.stripScaffold) in case the
+  // model leads with it.
+  'You continue writing',
+  'What happens next',
+  'Do you:',
+  'I choose',
+  '\n7734:',
+  'I apologize',
+  "Here's an attempt",
+  'To continue from where we left off',
 ];
 
 // Assemble ollama options from vitals + config, with per-mode overrides.
