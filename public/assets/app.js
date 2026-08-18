@@ -87,6 +87,11 @@ function initLed() {
 async function boot() {
   const font = await loadFont();
 
+  // PLAIN reading view (loaded only behind ?view=plain): hand it the font for its
+  // inline drawings. It registers window.__cyPlain during its own module eval, which
+  // runs before this awaited font resolves, so it is present by now.
+  if (window.__cyPlain) window.__cyPlain.setFont(font);
+
   pen = new Pen($('#paper'), font);
   postcards = new Postcards($('#postcards'), font);
   brain = new BrainHud($('#brain'));
@@ -201,6 +206,10 @@ async function fetchStream(since) {
 let latestMode = 'journal';
 
 function dispatch(ev, bootstrap) {
+  // PLAIN reading view (behind ?view=plain): forward the same event stream, backlog
+  // included, so it can render its own clean blocks. No-op unless plain.js loaded.
+  if (window.__cyPlain) window.__cyPlain.handle(ev, bootstrap);
+
   const p = ev.payload || {};
   switch (ev.kind) {
     case 'text':

@@ -26,6 +26,12 @@ try {
 }
 $rawEnabled = $isAdmin; // RAW view and the pause control unlock together on admin
 
+// STAGE 3 (temporary): expose the PLAIN reading view behind a ?view=plain flag so
+// it can be reviewed before the view-switching select is wired up in stage 4. When
+// set, app.js forwards the event stream to plain.js, which replaces the paper sheet
+// in place (the side panels stay). Available to anyone - it is not admin-gated.
+$plainPreview = isset($_GET['view']) && $_GET['view'] === 'plain';
+
 // Cache-busting: append the asset's own modification time as ?v=, so every
 // deploy serves fresh JS/CSS and browsers never run a stale cached copy on top
 // of newly-deployed files. Automatic - no manual version bumping.
@@ -51,6 +57,9 @@ window.CY = {
   openverseSearch: 'api/openverse-search.php',
   tempo: 'api/tempo.php',
   raw: <?= $rawEnabled ? 'true' : 'false' ?>,
+  // PLAIN reading view (stage 3): behind ?view=plain for now. app.js checks this
+  // to forward its event stream to plain.js.
+  plain: <?= $plainPreview ? 'true' : 'false' ?>,
   // Operator pause/resume endpoint - only wired in admin mode. null for an
   // ordinary visitor, so no control appears and the endpoint is never called.
   // When admin came from same-network detection the plain URL is enough (admin.php
@@ -100,6 +109,11 @@ window.CY = {
     <!-- RAW debugging view: built and driven by raw.js, hidden until selected. It
          replaces the paper sheet in place (the instrument panels stay). -->
     <div id="raw" class="raw" hidden></div>
+    <?php endif; ?>
+    <?php if ($plainPreview): ?>
+    <!-- PLAIN reading view: built and driven by plain.js, replaces the paper sheet
+         in place. Fed the event stream by app.js (not its own poll loop). -->
+    <div id="plain" class="plain" hidden></div>
     <?php endif; ?>
   </section>
 
@@ -181,6 +195,11 @@ window.CY = {
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/app.js'), ENT_QUOTES) ?>"></script>
 <?php if ($rawEnabled): ?>
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/raw.js'), ENT_QUOTES) ?>"></script>
+<?php endif; ?>
+<?php if ($plainPreview): ?>
+<!-- Loaded after app.js so window.__cyPlain is registered before app.js dispatches
+     the first-load backlog. Temporary ?view=plain gate; stage 4 replaces it. -->
+<script type="module" src="<?= htmlspecialchars(cy_asset('assets/plain.js'), ENT_QUOTES) ?>"></script>
 <?php endif; ?>
 </body>
 </html>

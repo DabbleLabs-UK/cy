@@ -935,6 +935,7 @@ body.cy-paused::after {
   .col-paper { position: relative; order: -1; }
   .paper { height: 58vh; min-height: 340px; }
   .raw { height: 70vh; }
+  .plain { height: 70vh; }
   .col-brain, .col-side { order: 1; }
 }
 
@@ -1193,3 +1194,142 @@ body.cy-paused::after {
   letter-spacing: 0.03em;
   background: var(--chrome-1);
 }
+
+/* ================= PLAIN READING VIEW (behind ?view=plain) =================
+   The plain one. How an ordinary, well-made LLM interface presents output:
+   a clean sans-serif face, a comfortable measure, generous line height, and
+   nothing styled for effect. No paper texture, no ink colour, no jitter, no
+   chrome around the text itself. If in doubt, take something away. */
+
+.plain {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #10141a;
+  overflow: hidden;
+  /* a plain, legible sans face - not the handwriting, not the mono terminal */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.pl-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+/* the reading column: a sensible measure, centred, comfortable gutters */
+.pl-col {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 20px 22px 40px;
+}
+
+/* one block per burst: rounded, softly bordered, newest at the bottom */
+.pl-block {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid #232a34;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.pl-block:first-child { margin-top: 0; }
+
+/* the quiet meta line: small, muted, understated - not a header bar */
+.pl-meta {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--tel-dim);
+}
+.pl-time { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.pl-mode { text-transform: lowercase; letter-spacing: 0.04em; }
+
+/* the content: ordinary, legible, selectable text. pre-wrap so lists and runs of
+   short fragments in Cy's output read as themselves; the angry capitalisation is
+   already in the text and simply shows - no pen-pressure effect applies. */
+.pl-text {
+  color: #e7ecf2;
+  font-size: 15px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* a reply reads clearly as a reply, without the franking and stamp theatre */
+.pl-block-reply {
+  border-color: #2c4a63;
+  border-left: 3px solid var(--tel-cool);
+  background: rgba(43, 95, 143, 0.07);
+}
+.pl-block-reply .pl-mode { color: var(--tel); }
+
+/* an abort: the fragment stays, with a discreet indication it was cut off */
+.pl-cut {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 91, 46, 0.12);
+  color: #d98a6f;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  vertical-align: baseline;
+}
+
+/* a silence: a small, quiet gap marker with the duration - readable, not decorative */
+.pl-gap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 4px;
+  color: var(--tel-dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.pl-gap::before,
+.pl-gap::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: #232a34;
+}
+
+/* a drawing: the finished sketch, inline, thin-lined and understated */
+.pl-sketch {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 2px;
+}
+.pl-sketch svg {
+  width: 220px;
+  max-width: 100%;
+  height: auto;
+  color: #c4cdd7;
+}
+
+/* jump-to-latest, shown only when the reader has scrolled up */
+.pl-jump {
+  position: absolute;
+  right: 22px;
+  bottom: 22px;
+  z-index: 5;
+  background: var(--tel-cool);
+  color: #eaf2f8;
+  border: 1px solid #0a0c10;
+  border-radius: 16px;
+  padding: 6px 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.7);
+}
+.pl-jump:hover { background: #366fa3; }
