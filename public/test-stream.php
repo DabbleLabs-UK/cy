@@ -78,6 +78,18 @@ echo json_encode(['now' => $head, 'events' => $events], JSON_UNESCAPED_SLASHES);
 
 function event_for_seq(int $seq): ?array
 {
+    // ---- INSTANT POSTCARD choreography (highest priority) ----
+    // A guaranteed, ordered sequence so the headless verifier always sees the whole
+    // thing in one first-load window: a postcard arrives INSTANTLY, he STOPS mid-word
+    // (abort), the mode flips to a letter, the reply STREAMS token by token onto the
+    // postcard, then the full postcard_out and the flip back to the journal. Placed
+    // FIRST so it is never shadowed by the telemetry cadences below. It recurs every
+    // 300 seqs at a fixed offset, so a 300-event first-load window always contains it.
+    $pc = $seq % 300;
+    if ($pc >= 100 && $pc <= 150) {
+        return instant_postcard_event($pc - 100, $seq);
+    }
+
     // periodic telemetry
     if ($seq % 6 === 0) {
         return ['vitals', fake_vitals($seq)];
@@ -145,36 +157,9 @@ function event_for_seq(int $seq): ?array
         ]];
     }
 
-    // a postcard cycle: interrupt -> mode:letter -> postcard_in -> reply -> back
-    $inCycle = $seq % 120;
-    if ($inCycle === 40) {
-        return ['abort', ['cause' => 'postcard']];
-    }
-    if ($inCycle === 41) {
-        return ['mode', ['from' => 'journal', 'to' => 'letter', 'cause' => 'Mum']];
-    }
-    if ($inCycle === 42) {
-        return ['postcard_in', [
-            'id' => 1000 + intdiv($seq, 120),
-            'from' => 'Mum',
-            'body' => "Dear 7734, the garden is coming up nicely. We think of you every day. Eat something. Love, Mum.",
-            'image' => null,
-            'attrib' => null,
-            'visit_count' => 3,
-        ]];
-    }
-    if ($inCycle === 60) {
-        return ['postcard_out', [
-            'id' => 2000 + intdiv($seq, 120),
-            'reply_to' => 1000 + intdiv($seq, 120),
-            'body' => "Mum - I read it four times. Tell the garden I said hello. I am still here. 7734.",
-        ]];
-    }
-    if ($inCycle === 70) {
-        return ['mode', ['from' => 'letter', 'to' => 'journal']];
-    }
-
-    // a lone abort mid-journal
+    // The full postcard-reply cycle now lives in the dedicated instant-postcard
+    // choreography at the top (a distinct card, written on live). Here we keep only
+    // a lone abort mid-journal for the plain interrupt-on-the-sheet case.
     if ($seq % 90 === 0) {
         return ['abort', ['cause' => 'warden', 'reason' => 'drifted off-limits']];
     }
@@ -198,9 +183,54 @@ function event_for_seq(int $seq): ?array
         ]];
     }
 
-    // default: a handwriting token
-    $mode = ($seq % 120 >= 42 && $seq % 120 < 70) ? 'letter' : 'journal';
-    return ['text', ['s' => next_token($seq), 'mode' => $mode]];
+    // default: a journal handwriting token (letter-mode text is emitted only by the
+    // instant-postcard choreography, which writes on the card, not the sheet).
+    return ['text', ['s' => next_token($seq), 'mode' => 'journal']];
+}
+
+// One event of the instant-postcard choreography, indexed by offset o within the
+// [100,150] window. The reply is chunked into word tokens so the pen animates it
+// on the card token by token, exactly as the runner streams a real reply.
+function instant_postcard_event(int $o, int $seq): ?array
+{
+    $id = 8000 + intdiv($seq, 300);
+    $reply =
+        "Mum - I read it four times. Tell the garden I said hello. " .
+        "I am still here, still counting the crack in the ceiling. " .
+        "Do not worry the way you worry. It is not so bad today. 7734.";
+    // word-ish tokens with trailing spaces kept, so the seam between them is clean
+    $tokens = array_values(array_filter(preg_split('/(?<= )/', $reply), static fn($t) => $t !== ''));
+
+    if ($o === 0) {
+        // the postcard arrives INSTANTLY (no waiting for a mail drop)
+        return ['postcard_in', [
+            'id' => $id,
+            'from' => 'Mum',
+            'body' => 'Dear 7734, the garden is coming up nicely. Eat something. Love, Mum.',
+            'image' => null,
+            'attrib' => null,
+            'visit_count' => 3,
+        ]];
+    }
+    if ($o === 1) {
+        return ['abort', ['cause' => 'postcard']]; // he stops mid-word at once
+    }
+    if ($o === 2) {
+        return ['mode', ['from' => 'journal', 'to' => 'letter', 'cause' => 'Mum']];
+    }
+    $textFrom = 3;
+    $count = count($tokens);
+    if ($o >= $textFrom && $o < $textFrom + $count) {
+        // the reply, streamed token by token onto the postcard's message area
+        return ['text', ['s' => $tokens[$o - $textFrom], 'mode' => 'letter']];
+    }
+    if ($o === $textFrom + $count) {
+        return ['postcard_out', ['id' => $id + 500, 'reply_to' => $id, 'body' => $reply]];
+    }
+    if ($o === $textFrom + $count + 1) {
+        return ['mode', ['from' => 'letter', 'to' => 'journal']]; // card settles, journal resumes
+    }
+    return null; // the tail of the window: nothing (a small gap before it repeats)
 }
 
 function next_token(int $seq): string

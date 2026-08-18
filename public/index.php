@@ -67,6 +67,9 @@ window.CY = {
 
   <section class="col col-paper">
     <div id="paper" class="paper"></div>
+    <!-- Postcard replies: distinct card objects that appear over the sheet, are
+         written on live, then settle into place while the journal resumes beneath. -->
+    <div id="postcards" class="postcards"></div>
     <?php if ($rawEnabled): ?>
     <!-- RAW debugging view: built and driven by raw.js, hidden until selected. It
          replaces the paper sheet in place (the instrument panels stay). -->
@@ -136,7 +139,7 @@ window.CY = {
           <span id="pc-count" class="counter">0 / 900</span>
           <button type="submit" class="pc-send">Post it</button>
         </div>
-        <p class="form-hint">Delivered only at 08:00, 13:00 and 19:00 UK time. Text, a picture, or both.</p>
+        <p class="form-hint">He gets it straight away. Text, a picture, or both.</p>
         <p id="pc-note" class="form-note"></p>
       </form>
     </div>

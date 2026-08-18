@@ -2,9 +2,12 @@
 //
 // Events are buffered in memory and flushed as one batch POST to
 // {apiBase}/api/ingest.php every 2s with the X-Cy-Key header. The inbox is
-// polled every 60s from {apiBase}/api/inbox.php. On any network failure the
-// pending batch is written to a disk queue (state/queue.jsonl) and retried with
-// exponential backoff - the stream is never lost and the loop never crashes.
+// polled every ~3s from {apiBase}/api/inbox.php on its OWN timer, independent of
+// the generation loop, so a posted postcard reaches Cy within seconds. The poll
+// is a tiny query; a failed poll is a no-op that keeps the last known state (it
+// never blocks or slows generation). On any network failure the pending batch is
+// written to a disk queue (state/queue.jsonl) and retried with exponential
+// backoff - the stream is never lost and the loop never crashes.
 //
 // dryRun mode does no network at all: events are appended to state/events.jsonl
 // and the inbox is read from state/inbox.json (if present), then consumed so the
@@ -16,7 +19,10 @@ import { dirname, join } from 'node:path';
 import { clampSpeed } from './tempo.js';
 
 const FLUSH_MS = 2000;
-const INBOX_MS = 60000;
+// Poll the inbox on its own fast timer so a posted postcard is delivered within
+// seconds (instant delivery). It is a tiny, cheap query and must never block or
+// slow the generation loop; a failed poll retains the last known state.
+const INBOX_MS = 3000;
 const TEMPO_MS = 12000; // poll the viewer-driven tempo every ~12s
 const MAX_BACKOFF_MS = 60000;
 

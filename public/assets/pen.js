@@ -209,6 +209,13 @@ export class Pen {
     this.mode = 'journal';
     this.ruled = true;
     this.instant = false; // true during backlog fill: place ink without animating
+    // card mode: the reply is written on a postcard, not the sheet. A card pen is
+    // constrained to the card's message area - a smaller hand, tighter leading, no
+    // ruled paper, no scrolling - and CRAMS (shrinks + keeps going) when it runs
+    // out of vertical room rather than clipping or scrolling the ink away.
+    this.card = false;
+    this.cram = false;
+    this.minSize = 6;
 
     // ---- layout state ----
     this.marginX = 34;
@@ -348,10 +355,45 @@ export class Pen {
     while (this.live.childElementCount > 24) this.live.firstChild.remove();
   }
 
+  // ---- card layout: constrain this pen to a postcard's message area ---------
+  //
+  // Called once, right after construction, on the pen that writes a reply onto a
+  // postcard. Small hand, tight leading, no ruled paper, no scrolling, and cram
+  // enabled so a long reply shrinks toward the bottom edge instead of clipping.
+  setCardLayout() {
+    this.card = true;
+    this.cram = true;
+    this.ruled = false;
+    this.mode = 'letter';
+    this.size = 11;
+    this.minSize = 6;
+    this.penSpeed = 78;
+    this.strokeWidth = 1.15;
+    this.inkOpacity = 0.9;
+    this.jitterRot = 1.2;
+    this.jitterBase = 0.55;
+    this.jitterScale = 0.03;
+    this.marginX = 12;
+    this.marginRight = 12;
+    this.marginTop = 10;
+    this.lineGap = 1.32;
+    this.x = this.marginX;
+    this.y = this.marginTop + this.size;
+    this.maxX = this.w - this.marginRight;
+  }
+
+  // Tear down observers so a pruned/removed card pen does not leak.
+  destroy() {
+    try { if (this._ro) this._ro.disconnect(); } catch { /* ignore */ }
+  }
+
   // ---- vitals modulation ------------------------------------------------
 
   setVitals(payload) {
     if (!payload) return;
+    // a card pen keeps its fixed small hand - vitals must not blow the size up
+    // past the card's message area.
+    if (this.card) return;
     const ph = payload.physical || {};
     const me = payload.mental || {};
     const fatigue = clamp01(ph.fatigue ?? 0.3);
@@ -574,14 +616,32 @@ export class Pen {
   _newline() {
     this._flushLine();
     this.x = this.marginX;
+    if (this.cram) this._cramShrink();
     this.y += this.size * this.lineGap;
     this.midWord = false;
     this._scroll();
   }
 
+  // Card cram: when the next line would run off the bottom of the card, shrink the
+  // hand a little and tighten the leading, then keep writing. A real person running
+  // out of room does exactly this - the letters get smaller and crowd toward the
+  // edge - rather than clipping a word or scrolling the earlier lines out of sight.
+  _cramShrink() {
+    const bottom = this.h - this.size * 0.6;
+    const nextBaseline = this.y + this.size * this.lineGap;
+    if (nextBaseline <= bottom) return; // still room on the card
+    if (this.size <= this.minSize) return; // already as small as the hand goes
+    this.size = Math.max(this.minSize, this.size * 0.86);
+    this.lineGap = Math.max(1.05, this.lineGap * 0.95);
+    this.maxX = this.w - this.marginRight;
+  }
+
   // keep the current writing line comfortably in view by translating the whole
-  // scroll group (ink + text together) up once we run past the bottom margin.
+  // scroll group (ink + text together) up once we run past the bottom margin. A
+  // card pen never scrolls: its ink must stay fixed inside the card's message area
+  // (the cram shrink keeps a long reply on the card instead).
   _scroll() {
+    if (this.card) return;
     const bottom = this.h - this.size * 1.4;
     const overflow = this.y - bottom;
     const dy = overflow > 0 ? -overflow : 0;

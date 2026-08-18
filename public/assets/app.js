@@ -9,6 +9,7 @@
 // runs against the fake test feed.
 
 import { Pen } from './pen.js';
+import { Postcards } from './postcard.js';
 import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
@@ -26,7 +27,7 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 const $ = (sel) => document.querySelector(sel);
 
-let pen, brain, hud, power, tempo;
+let pen, postcards, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
 
@@ -34,6 +35,7 @@ async function boot() {
   const font = await loadFont();
 
   pen = new Pen($('#paper'), font);
+  postcards = new Postcards($('#postcards'), font);
   brain = new BrainHud($('#brain'));
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
@@ -46,7 +48,7 @@ async function boot() {
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
   if (document.body.dataset.test === '1') {
-    window.__CY_TEST__ = { pen, dispatch, ticker: () => $('#ticker') };
+    window.__CY_TEST__ = { pen, postcards, dispatch, ticker: () => $('#ticker') };
   }
 
   // first load fills the page mid-stream, drawn instantly
@@ -71,10 +73,12 @@ async function firstLoad() {
     return;
   }
   pen.setInstant(true);
+  postcards.setInstant(true);
   // apply only the latest vitals/host from the backlog, but render all text
   const events = data.events || [];
   for (const ev of events) dispatch(ev, true);
   pen.setInstant(false);
+  postcards.setInstant(false);
   if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
   setStatus('live', false);
 }
@@ -110,16 +114,19 @@ function dispatchBatch(events) {
   const animateFrom = textTotal - ANIMATE_TAIL;
   let seenText = 0;
   pen.setInstant(true);
+  postcards.setInstant(true);
   let flat = true;
   for (const ev of events) {
     if (flat && ev.kind === 'text' && seenText >= animateFrom) {
       pen.setInstant(false);
+      postcards.setInstant(false);
       flat = false;
     }
     if (ev.kind === 'text') seenText++;
     dispatch(ev, false);
   }
   pen.setInstant(false);
+  postcards.setInstant(false);
 }
 
 async function fetchStream(since) {
@@ -142,9 +149,15 @@ function dispatch(ev, bootstrap) {
   const p = ev.payload || {};
   switch (ev.kind) {
     case 'text':
-      // p.mode 'dream' + p.lucid distinguishes a faint sleep-talk murmur from the
-      // rare, normal-weight lucid night-waking line.
-      pen.write(p.s, p.mode, p.lucid);
+      // A 'letter'-mode token is a REPLY: it is written live on the postcard, not
+      // on the journal sheet. Everything else (journal, warden, dream murmurs -
+      // p.mode 'dream' + p.lucid distinguishes a faint murmur from a lucid
+      // night-waking line) is handwritten on the paper.
+      if (p.mode === 'letter') {
+        postcards.write(p.s);
+      } else {
+        pen.write(p.s, p.mode, p.lucid);
+      }
       break;
 
     case 'draw':
@@ -160,18 +173,32 @@ function dispatch(ev, bootstrap) {
       }
       break;
 
-    case 'mode':
-      latestMode = p.to || latestMode;
-      pen.setMode(latestMode);
-      setMode(latestMode, p.cause);
+    case 'mode': {
+      const to = p.to || latestMode;
+      latestMode = to;
+      setMode(to, p.cause); // header pill
+      if (to === 'letter') {
+        // a reply is starting: build the postcard and write on IT, not the sheet.
+        // The journal pen is deliberately NOT switched to letter mode, so the
+        // paper keeps its place and the journal resumes on it once the card settles.
+        postcards.begin();
+      } else {
+        if (p.from === 'letter') postcards.settle(); // reply done: card settles into place
+        pen.setMode(to); // journal / dream / warden still drive the paper sheet
+      }
       break;
+    }
 
     case 'abort':
       // Trail off the current stroke and leave the fragment as a scar. No toast,
       // no flash: an abort is visible only as the ink trailing off and the
       // fragment staying on the page - announcing the mechanism breaks the
-      // fiction.
-      if (!bootstrap) pen.abort();
+      // fiction. During a reply the interrupt cuts the CARD's stroke; otherwise
+      // it cuts the journal thought on the sheet.
+      if (!bootstrap) {
+        if (latestMode === 'letter') postcards.abort();
+        else pen.abort();
+      }
       break;
 
     case 'silence': {
@@ -225,10 +252,16 @@ function dispatch(ev, bootstrap) {
 
     case 'postcard_in':
       hud.addPostcardIn(p);
+      // remember the sender + any picture so the reply card is addressed back to
+      // them (and can pin their photo) when the reply begins.
+      postcards.incoming(p);
       pushTicker(`postcard from ${p.from || 'someone'}${p.image ? ' (with a picture)' : ''}`);
       break;
     case 'postcard_out':
       hud.addPostcardOut(p);
+      // the authoritative full reply text, for the mailbag and as the backlog
+      // backfill if this card's per-token stream scrolled out of the window.
+      postcards.reply(p.body);
       break;
     case 'news_in':
       hud.addNewsIn(p);
@@ -504,7 +537,7 @@ function wireForms() {
         updateCount();
         clearPicture();
         const back = data.returning ? 'he knows you. ' : '';
-        showNote(note, 'posted. ' + back + deliverLine(data.deliver_at), false);
+        showNote(note, 'posted. ' + back + 'he gets it straight away.', false);
       }
     } catch (err) {
       showNote(note, 'network error, try again', true);
@@ -512,22 +545,6 @@ function wireForms() {
       setBusy(form, false);
     }
   });
-}
-
-function deliverLine(deliverAt) {
-  if (!deliverAt) return 'mail is delivered at 08:00, 13:00 and 19:00 UK time.';
-  // stored as a UTC "Y-m-d H:i:s" string
-  const d = new Date(deliverAt.replace(' ', 'T') + 'Z');
-  let when = deliverAt + ' UTC';
-  if (!isNaN(d.getTime())) {
-    when = d.toLocaleString('en-GB', {
-      timeZone: 'Europe/London',
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-  return 'delivered at the next mail drop: ' + when + '.';
 }
 
 function showNote(el, msg, bad) {

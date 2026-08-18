@@ -13,7 +13,7 @@
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
@@ -100,6 +100,48 @@ import { tempoIdleMs } from './tempo.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---- abortable ollama stream reader ---------------------------------------
+//
+// Reads an ollama NDJSON /api/generate stream from `reader`, line by line, and
+// calls onToken(text) for each response chunk and onDone(obj) for the final
+// counters line. Extracted from streamGenerate so the CANCELLATION path is unit-
+// testable without a live model: the moment `signal` aborts, the pending
+// reader.read() rejects and this returns { aborted: true } AT ONCE - it never
+// waits for the in-flight generation to finish. onToken may return a truthy value
+// to stop the read early (the near-repeat "break outer" case), which returns
+// { broke: true }. A non-abort read error is re-thrown for the caller to classify.
+export async function readNdjsonStream(reader, { signal, onToken, onDone } = {}) {
+  const dec = new TextDecoder();
+  let lineBuf = '';
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      lineBuf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = lineBuf.indexOf('\n')) >= 0) {
+        const line = lineBuf.slice(0, nl);
+        lineBuf = lineBuf.slice(nl + 1);
+        if (!line.trim()) continue;
+        let obj;
+        try {
+          obj = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (typeof obj.response === 'string' && obj.response.length) {
+          if (onToken && (await onToken(obj.response, obj))) return { broke: true };
+        }
+        if (obj.done && onDone) onDone(obj);
+      }
+    }
+  } catch (err) {
+    if (signal && signal.aborted) return { aborted: true };
+    throw err;
+  }
+  return { ended: true };
+}
 
 // ---- config ---------------------------------------------------------------
 
@@ -721,42 +763,35 @@ async function main() {
     }
 
     const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let lineBuf = '';
-    try {
-      outer: for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        lineBuf += dec.decode(value, { stream: true });
-        let nl;
-        while ((nl = lineBuf.indexOf('\n')) >= 0) {
-          const line = lineBuf.slice(0, nl);
-          lineBuf = lineBuf.slice(nl + 1);
-          if (!line.trim()) continue;
-          let obj;
-          try {
-            obj = JSON.parse(line);
-          } catch {
-            continue;
-          }
-          if (typeof obj.response === 'string' && obj.response.length) {
-            if (ttftMs === null) ttftMs = Date.now() - t0; // first token out
-            full += obj.response;
-            tokenCount++;
-            if (!primed) {
-              head += obj.response;
-              if (head.length >= PRIME_CHARS) {
-                await commitHead();
-                if (repeat) break outer;
-              }
-            } else {
-              for (const chunk of buffer.push(obj.response)) await onChunk(chunk, mode);
-            }
-          }
-          // the final streamed line carries the timing/counters for the burst
-          if (obj.done) stats = obj;
+    // Per response token: stamp ttft, accumulate, and either hold+check the primed
+    // opening or push straight through the warden buffer. Returns truthy to stop
+    // the read early on a detected verbatim replay (repeat), mirroring the old
+    // `break outer`. All the loop state (head/primed/full/repeat/stats) lives in
+    // this closure so the extracted reader stays a pure transport.
+    const onToken = async (text) => {
+      if (ttftMs === null) ttftMs = Date.now() - t0; // first token out
+      full += text;
+      tokenCount++;
+      if (!primed) {
+        head += text;
+        if (head.length >= PRIME_CHARS) {
+          await commitHead();
+          if (repeat) return true; // stop: opening was a verbatim replay
         }
+      } else {
+        for (const chunk of buffer.push(text)) await onChunk(chunk, mode);
       }
+      return false;
+    };
+
+    let streamRes;
+    try {
+      // the final streamed line carries the timing/counters for the burst
+      streamRes = await readNdjsonStream(reader, {
+        signal: ac.signal,
+        onToken,
+        onDone: (obj) => { stats = obj; },
+      });
     } catch (err) {
       if (repeat) return { full: cleanedFull(), repeat: true };
       if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
@@ -764,6 +799,11 @@ async function main() {
       return { full, error: true };
     } finally {
       if (currentAbort === ac) currentAbort = null;
+    }
+    // aborted mid-stream (an inbound postcard/notice cut the generation at once)
+    if (streamRes && streamRes.aborted) {
+      if (repeat) return { full: cleanedFull(), repeat: true };
+      return { full: cleanedFull(), aborted: true };
     }
     if (repeat) return { full: cleanedFull(), repeat: true };
     // generation ended before priming completed (shorter than PRIME_CHARS)
@@ -1752,7 +1792,12 @@ async function saveContext(path, text) {
   await writeFile(path, JSON.stringify({ ts: tsNow(), s: text }) + '\n');
 }
 
-main().catch((err) => {
-  console.error('[cy] fatal:', err);
-  process.exit(1);
-});
+// Only launch the runner when executed directly (node runner/run.js). When this
+// module is imported (e.g. by runner/abort.test.js to exercise readNdjsonStream),
+// main() must NOT run.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error('[cy] fatal:', err);
+    process.exit(1);
+  });
+}

@@ -16,7 +16,6 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
-require __DIR__ . '/../../lib/schedule.php';
 require __DIR__ . '/../../lib/image.php';
 require __DIR__ . '/../../lib/visitor.php';
 
@@ -88,7 +87,12 @@ try {
         $imageAttrib = $attrib !== '' ? mb_substr($attrib, 0, 300) : null;
     }
 
-    $deliverAt = captive_next_deliver_at();
+    // Instant delivery: a postcard is due the moment it is posted. deliver_at is
+    // kept (the runner still filters on deliver_at <= NOW()), but it is now "now"
+    // in the DB's UTC clock rather than the next fixed mail-drop slot, so the
+    // runner's ~3s inbox poll picks it up within seconds. Inbound warden screening
+    // still runs before it ever reaches the prompt.
+    $deliverAt = gmdate('Y-m-d H:i:s');
 
     $db->beginTransaction();
 
