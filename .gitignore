@@ -8,3 +8,7 @@
 
 # local front-end verification harness (puppeteer-core + Edge)
 /.verify/
+
+# API keys - never commit
+runner/deepseek.key
+*.key
