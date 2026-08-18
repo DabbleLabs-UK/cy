@@ -24,7 +24,7 @@
 // about how it is turned on. It stays hidden until the switch selects it and
 // exposes window.__cyPlain (event sink + font handoff + reveal) for app.js.
 
-import { sketchToPaths } from './pen.js';
+import { sketchToPaths, sketchBounds } from './pen.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
@@ -273,6 +273,28 @@ function addDraw(p) {
 
 function renderSketch(svg, strokes) {
   while (svg.firstChild) svg.removeChild(svg.firstChild);
+  // Fit the SVG to the drawing's own content, not a fixed 0-100 square: a small
+  // scrawl gets a small box, a full drawing gets the column width. viewBox crops to
+  // the padded bounds (keeping aspect), and the on-screen width tracks the grid
+  // extent so the drawing reads as a deliberate small object, never a big empty
+  // panel. Recomputed each pass as strokes accumulate.
+  const pad = 8;
+  const b = sketchBounds(strokes);
+  let vx = 0;
+  let vy = 0;
+  let vw = 100;
+  let vh = 100;
+  if (b) {
+    vx = Math.max(0, b.minX - pad);
+    vy = Math.max(0, b.minY - pad);
+    vw = Math.max(8, Math.min(100, b.maxX + pad) - vx);
+    vh = Math.max(8, Math.min(100, b.maxY + pad) - vy);
+  }
+  svg.setAttribute('viewBox', `${vx.toFixed(1)} ${vy.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
+  // width in px scales with the grid extent (2.1 px per grid unit), clamped so a
+  // dot is not invisible and a full drawing does not exceed the reading column.
+  const wPx = Math.max(70, Math.min(220, Math.round(vw * 2.1)));
+  svg.style.width = wPx + 'px';
   for (const seg of sketchToPaths(strokes, { font })) {
     if (!seg || !seg.d) continue;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');

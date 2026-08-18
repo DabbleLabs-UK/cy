@@ -31,6 +31,14 @@ export const GRID = 100;
 export const MAX_STROKES = 120;
 export const MAX_POLY_PTS = 64;
 export const MIN_STROKES = 3;
+// A drawing is a PICTURE, not a caption. At most this many scrawled labels (T)
+// may survive - a crude doodle needs no words - and if MORE than this fraction of
+// the commands are labels the whole thing has degenerated into transcription and
+// is rejected (see validateDrawing). MAX_SUBJECT_WORDS caps the stage-1 subject so
+// a line of journal prose can never masquerade as "the thing he is drawing".
+export const MAX_TEXT_STROKES = 1;
+export const MAX_TEXT_FRAC = 0.34;
+export const MAX_SUBJECT_WORDS = 6;
 
 const clampGrid = (n) => {
   const v = Number(n);
@@ -143,6 +151,80 @@ export function splitPasses(strokes) {
   if (detail.length) passes.push({ label: 'detail', strokes: detail });
   if (shade.length) passes.push({ label: 'shade', strokes: shade });
   return passes.length ? passes : [{ label: 'sketch', strokes }];
+}
+
+// Serialise parsed strokes BACK to the DSL text, so a later build-up pass can be
+// shown "the drawing so far" and add to it (and so a stroke has a stable signature
+// for de-duplication). Round to the coarse grid the model works in. The inverse of
+// parseStrokes for the command set; unknown shapes are skipped.
+const r0 = (n) => Math.round(Number(n) || 0);
+export function strokesToDsl(strokes) {
+  const out = [];
+  for (const s of strokes || []) {
+    if (!s || typeof s !== 'object') continue;
+    switch (s.t) {
+      case 'P':
+      case 'L':
+        if (s.pts && s.pts.length >= 2) out.push(s.t + ' ' + s.pts.map(([x, y]) => `${r0(x)},${r0(y)}`).join(' '));
+        break;
+      case 'D':
+        out.push(`D ${r0(s.x)},${r0(s.y)}`);
+        break;
+      case 'C':
+        out.push(`C ${r0(s.x)},${r0(s.y)} ${r0(s.r)}`);
+        break;
+      case 'A':
+        out.push(`A ${r0(s.x)},${r0(s.y)} ${r0(s.r)} ${r0(s.a1)} ${r0(s.a2)}`);
+        break;
+      case 'H':
+        if (s.pts && s.pts.length >= 2) out.push(`H ${r0(s.pts[0][0])},${r0(s.pts[0][1])} ${r0(s.pts[1][0])},${r0(s.pts[1][1])} ${s.n || 4}`);
+        break;
+      case 'T':
+        out.push(`T ${r0(s.x)},${r0(s.y)} ${s.text}`);
+        break;
+      default:
+        break;
+    }
+  }
+  return out.join('\n');
+}
+
+// The stable signature of a single stroke, for de-duping a build-up pass that
+// re-emits geometry already on the page.
+export function strokeSig(s) {
+  return strokesToDsl([s]);
+}
+
+// Reject a parsed drawing that has degenerated into transcription: too many of the
+// commands are scrawled labels (T), or there is not enough real geometry to be a
+// picture at all. On success the surviving strokes are returned with any labels
+// beyond `maxText` dropped, so a good drawing keeps at most one word. `min` is the
+// floor of GEOMETRIC (non-label) strokes required - MIN_STROKES for the base pass,
+// 1 for an additive detail/shade pass. Returns { ok, reason, strokes }.
+export function validateDrawing(strokes, { min = MIN_STROKES, maxText = MAX_TEXT_STROKES } = {}) {
+  const arr = Array.isArray(strokes) ? strokes : [];
+  const text = arr.filter((s) => s && s.t === 'T');
+  const geom = arr.filter((s) => s && s.t !== 'T');
+  // more than a small fraction of labels -> he transcribed the caption, not a drawing
+  if (arr.length && text.length / arr.length > MAX_TEXT_FRAC) {
+    return { ok: false, reason: 'word-heavy', strokes: [] };
+  }
+  if (geom.length < min) {
+    return { ok: false, reason: 'too-few', strokes: [] };
+  }
+  // keep the geometry in order, dropping labels past the cap (0 on a later pass)
+  let kept = 0;
+  const out = arr.filter((s) => (s && s.t === 'T' ? kept++ < maxText : true));
+  return { ok: true, reason: 'ok', strokes: out };
+}
+
+// A stage-1 subject must be a handful of words naming a concrete thing ('the yard',
+// 'bills face'), NOT a sentence of his journal prose. True when it reads as prose
+// (too many words) or is empty - the caller then skips the drawing quietly.
+export function subjectLooksProse(subject) {
+  const t = String(subject || '').trim();
+  if (!t) return true;
+  return t.split(/\s+/).filter(Boolean).length > MAX_SUBJECT_WORDS;
 }
 
 // A shallow snapshot of the vitals that shape the marks + get stored with the
@@ -260,9 +342,10 @@ export function subjectFromLine(line) {
 // draw in words here - just say what and why, then stop.
 export function drawIntentDirective(intent, { redrawSubject = null } = {}) {
   const one =
-    'in ONE short line, in your voice (lowercase, shorthand, no full stop needed), say what you are ' +
-    'drawing and why. JUST that one line, then stop. do NOT draw it in words, do NOT list strokes or ' +
-    'coordinates, do NOT describe how it looks.';
+    'in ONE short line, in your voice (lowercase, shorthand, no full stop needed), NAME the concrete ' +
+    'thing you are drawing - a handful of words, like "the yard", "a door", "bills face", "the window", ' +
+    '"plan of the cell". just the thing (a word of why is fine), then stop. do NOT write a sentence of ' +
+    'prose, do NOT keep the journal going, do NOT draw it in words or list strokes or coordinates.';
   if (intent.mode === 'honour') {
     return `FORM: someone outside asked you to draw ${intent.subject}. you are going to do it. ${one}`;
   }
@@ -282,6 +365,25 @@ export function drawIntentDirective(intent, { redrawSubject = null } = {}) {
   );
 }
 
+// STAGE 1 prompt. Deliberately NOT the ordinary journal continuation prompt: that
+// one reprises his own recent prose right before the cue, which makes an 8B carry
+// the journal straight on instead of naming a subject (the bug where the "subject"
+// came back as more diary text). Here the LAST thing the model reads is the naming
+// cue, not his prose, so it breaks off and names the thing. Context is kept ahead
+// of the directives for mood, but no prose reprise follows.
+export function drawDecidePrompt(contextTail, directives) {
+  const parts = [];
+  const ctx = (contextTail || '').trim();
+  if (ctx) parts.push(ctx);
+  const zoneC = (directives || '').trim();
+  if (zoneC) parts.push(zoneC);
+  parts.push(
+    '[you stop writing and pick up a scrap of paper to DRAW, not write. before the picture, ONE line: ' +
+      'name the concrete thing you are about to draw - a few words, lowercase, no full stop. then stop.]',
+  );
+  return parts.join('\n\n');
+}
+
 // STAGE 2: the DSL-only system. Says plainly he has no talent and little time,
 // gives the command grammar, and shows deliberately crude few-shot examples. A
 // hard stop token (END) plus the strict "commands only" instruction keep prose
@@ -293,6 +395,10 @@ export function drawDslSystem() {
     'of three marks, a tally, the plan of a cell, an arrow, a shape you keep redrawing. If in doubt, use',
     'FEWER lines and make it cruder.',
     '',
+    'You are drawing a PICTURE, not writing. Draw the SHAPE of the thing with lines - do NOT spell the',
+    'subject out in letters. A crude prison doodle needs no words. Use the T label at most ONCE in a whole',
+    'drawing, and only for a single tiny scrawl if you truly must; otherwise never use T.',
+    '',
     'Output ONLY drawing commands, one per line, on a 0-100 grid (x left-to-right, y top-to-bottom).',
     'NO prose, NO explanation, NO numbering, NO blank commentary. The commands are:',
     '  P x,y x,y x,y ...   a freehand line through the points',
@@ -301,7 +407,7 @@ export function drawDslSystem() {
     '  C x,y r             a circle, radius r',
     '  A x,y r a1 a2       an arc from angle a1 to a2 (degrees)',
     '  H x,y x,y n         n scratchy shading strokes between two corners',
-    '  T x,y text          a scrawled label',
+    '  T x,y text          a scrawled label (AT MOST ONE, usually none)',
     'When the drawing is done, output a line containing only: END',
     '',
     'Example - a stick figure:',
@@ -332,10 +438,36 @@ export function drawDslSystem() {
   ].join('\n');
 }
 
-// STAGE 2 prompt: name the thing, crude and quick. `badly` loosens it further.
+// STAGE 2, BASE PASS prompt: lay down the main shapes of the thing, crude and
+// quick. `badly` loosens it further. Names the subject ONLY (never his prose) and
+// hammers shape-not-words, since the failure mode is transcribing the caption.
 export function drawDslPrompt(subject, { badly = false } = {}) {
   const how = badly ? ' rushed and careless, you do not care if it is any good.' : '';
-  return `Draw this, crude and quick, commands only:${how}\n${subject}\n`;
+  return (
+    'Draw this as a crude PICTURE - lines and shapes only, NOT the written words.' +
+    how +
+    '\nThe thing: ' +
+    subject +
+    '\nStart with the main shapes. commands only:\n'
+  );
+}
+
+// STAGE 2, BUILD-UP PASS prompt: shown the drawing so far, add a little to it.
+// `pass` is 'detail' (a few dots/marks/short lines) or 'shade' (a bit of rough
+// hatching). Each pass is generated separately and validated, so a pass that adds
+// nothing usable (returns END) is simply dropped rather than appending junk.
+export function drawPassPrompt(subject, priorDsl, pass) {
+  const what =
+    pass === 'shade'
+      ? 'Add a little rough shading with H (hatch) where a surface or shadow would be. A few strokes only.'
+      : 'Add a FEW small details - a dot, a mark, a short line - lining up with what is already there.';
+  const nothing =
+    pass === 'shade' ? 'If it needs no shading, output only: END' : 'If there is nothing worth adding, output only: END';
+  return (
+    `Your drawing of "${subject}" so far, on the same 0-100 grid:\n` +
+    (priorDsl || '') +
+    `\n\n${what} Do NOT redraw what is there, do NOT write any words. ${nothing}\ncommands only:\n`
+  );
 }
 
 // ---- the dream drawing ----------------------------------------------------

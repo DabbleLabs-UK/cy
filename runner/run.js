@@ -49,15 +49,21 @@ import {
 } from './prompt.js';
 import {
   parseStrokes,
-  splitPasses,
   moodSnapshot,
   drawDecision,
   detectDrawRequest,
   resolveRequest,
   subjectFromLine,
+  subjectLooksProse,
+  validateDrawing,
+  strokesToDsl,
+  strokeSig,
   drawIntentDirective,
+  drawDecidePrompt,
   drawDslSystem,
   drawDslPrompt,
+  drawPassPrompt,
+  MIN_STROKES,
   dreamDrawing,
   dreamStrokeGapMs,
   isSmallHours,
@@ -1369,11 +1375,14 @@ async function main() {
     const redraw = !req && fixation > 0.6 && vitals.lastDrawSubject && Math.random() < 0.6;
 
     // ---- stage 1: the one-line decision, in voice, streamed to the page ----
+    // A bespoke prompt (drawDecidePrompt) whose LAST line is the naming cue, NOT a
+    // reprise of his prose - otherwise the model just carries the journal on and the
+    // "subject" comes back as diary text (the observed bug).
     const ctx = buildCtx();
     ctx.bans = bansDirective(vitals.recentOpeners);
     ctx.form = drawIntentDirective(intent, { redrawSubject: redraw ? vitals.lastDrawSubject : null });
     const dir1 = buildDirectives(vitals, 'journal', ctx);
-    const p1 = buildPrompt(contextText(), 'journal', null, dir1);
+    const p1 = drawDecidePrompt(contextText(), dir1);
     const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
     o1.stop = [...o1.stop, '\n']; // one line only
     await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
@@ -1384,16 +1393,29 @@ async function main() {
     // not, a cycle that put a line on the page counts as emitted, never empty.
     const decisionEmitted = !!line;
 
-    // what he is actually drawing
+    // what he is actually drawing. A requested subject is concrete already; a redraw
+    // reuses the last subject; a spontaneous subject is extracted from his line and
+    // must read as a short concrete thing - if it comes back as prose, skip quietly.
     let subject;
     if (intent.mode === 'honour' || intent.mode === 'badly') subject = intent.subject || subjectFromLine(line);
     else if (redraw) subject = vitals.lastDrawSubject;
     else subject = subjectFromLine(line);
-    const title = line ? line.slice(0, 100) : subject;
+    subject = (subject || '').trim();
+    if (!subject || (!redraw && intent.mode !== 'honour' && intent.mode !== 'badly' && subjectLooksProse(subject))) {
+      // stage 1 gave prose, not a subject: no drawing this time, the line still stands.
+      await logDrawFail('unusable', line);
+      vitals.lastDrawMs = now;
+      return decisionEmitted ? 'emitted' : 'empty';
+    }
+    // the caption is the SHORT subject, never the journal prose that preceded it.
+    const title = subject.slice(0, 60);
 
-    // ---- stage 2: the DSL, non-streamed, prose stopped hard ----
+    // ---- stage 2: the DSL, non-streamed, built up in validated passes ----
+    // Each pass is its own generation and is validated the same way: the base pass
+    // must be real geometry (or the whole drawing is discarded), and each later pass
+    // is shown the strokes so far and adds to them - a pass that returns nothing
+    // usable, or degenerates into labels, is simply dropped rather than appended.
     const sys2 = drawDslSystem();
-    const pr2 = drawDslPrompt(subject, { badly: intent.mode === 'badly' });
     const o2 = {
       temperature: 0.6,
       top_p: 0.9,
@@ -1403,34 +1425,54 @@ async function main() {
       num_thread: config.threads,
       stop: ['END', '\nEND', 'END\n'],
     };
-    await logPrompt('draw-dsl', sys2 + '\n---\n' + pr2);
-    const raw = await rawGenerate({ system: sys2, prompt: pr2, opts: o2 });
 
-    // AN EMPTY DSL PASS IS A FAILURE, NOT A REPEAT. The DSL-only generation with its
-    // hard stop can return nothing usable (the model emits END first, or is cut off),
-    // and it must NEVER go through the near-repeat discard path - an empty string is
-    // not a repeat of anything. Log it as its own failure, skip the garnish, and move
-    // on; the decision line already stands so the stream is never starved.
-    if (!raw || !raw.trim()) {
-      await logDrawFail('empty', raw);
-      vitals.lastDrawMs = now; // counts as an attempt so he does not hammer the DSL pass
+    // base pass: the main shapes.
+    const basePrompt = drawDslPrompt(subject, { badly: intent.mode === 'badly' });
+    await logPrompt('draw-dsl', sys2 + '\n---\n' + basePrompt);
+    const baseRaw = await rawGenerate({ system: sys2, prompt: basePrompt, opts: o2 });
+    if (!baseRaw || !baseRaw.trim()) {
+      // an empty DSL pass is a FAILURE, not a repeat (the model emitted END first, or
+      // was cut off). Skip the garnish; the decision line already stands.
+      await logDrawFail('empty', baseRaw);
+      vitals.lastDrawMs = now;
+      return decisionEmitted ? 'emitted' : 'empty';
+    }
+    const baseVal = validateDrawing(parseStrokes(baseRaw).strokes, { min: MIN_STROKES, maxText: 1 });
+    if (!baseVal.ok) {
+      // too few real strokes, or it degenerated into transcribed words - discard it.
+      await logDrawFail('unusable', baseRaw);
+      vitals.lastDrawMs = now;
       return decisionEmitted ? 'emitted' : 'empty';
     }
 
-    const { strokes } = parseStrokes(raw);
-    if (strokes.length < 3) {
-      // parsed, but too few usable strokes to be a drawing - skip the garnish (NOT a
-      // near-repeat); the decision line stands.
-      await logDrawFail('unusable', raw);
-      vitals.lastDrawMs = now; // still counts as an attempt so he does not hammer
-      return decisionEmitted ? 'emitted' : 'empty';
+    const passSpecs = [{ label: 'under', strokes: baseVal.strokes }];
+    let all = [...baseVal.strokes];
+    const seen = new Set(all.map(strokeSig));
+    // only build a real drawing up further; a crude doodle (few marks) stays one pass.
+    const baseGeom = baseVal.strokes.filter((s) => s.t !== 'T').length;
+    if (baseGeom > 6) {
+      for (const pass of ['detail', 'shade']) {
+        const raw = await rawGenerate({ system: sys2, prompt: drawPassPrompt(subject, strokesToDsl(all), pass), opts: o2 });
+        if (!raw || !raw.trim()) continue; // this pass added nothing - stop appending junk
+        const val = validateDrawing(parseStrokes(raw).strokes, { min: 1, maxText: 0 });
+        if (!val.ok) continue;
+        // drop anything this pass merely re-drew from an earlier pass
+        const fresh = val.strokes.filter((s) => {
+          const k = strokeSig(s);
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        if (!fresh.length) continue;
+        passSpecs.push({ label: pass, strokes: fresh });
+        all = all.concat(fresh);
+      }
     }
 
-    const passes = splitPasses(strokes);
     const mood = moodSnapshot(vitals);
     const id = 'd' + now.toString(36) + Math.floor(Math.random() * 1e5).toString(36);
-    const n = passes.length;
-    passes.forEach((ps, i) => {
+    const n = passSpecs.length;
+    passSpecs.forEach((ps, i) => {
       emit({
         kind: 'draw',
         payload: { id, title, strokes: ps.strokes, pass: { i, n, label: ps.label }, mood },
@@ -1445,9 +1487,9 @@ async function main() {
         ts: tsNow(),
         title,
         subject,
-        strokes,
+        strokes: all,
         mood,
-        stroke_count: strokes.length,
+        stroke_count: all.length,
         requested_by: intent.requestedBy || null,
       },
     });

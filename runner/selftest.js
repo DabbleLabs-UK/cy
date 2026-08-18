@@ -47,13 +47,16 @@ import { PowerMeter, costInjection } from './power.js';
 import {
   parseStrokes,
   splitPasses,
+  validateDrawing,
+  strokesToDsl,
+  subjectLooksProse,
   detectDrawRequest,
   resolveRequest,
   subjectFromLine,
   drawDecision,
   MIN_STROKES,
 } from './draw.js';
-import { sketchToPaths } from '../public/assets/pen.js';
+import { sketchToPaths, sketchBounds } from '../public/assets/pen.js';
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -377,6 +380,37 @@ const passes = splitPasses(parsed.strokes);
 line('passes: ' + passes.map((p) => p.label + '(' + p.strokes.length + ')').join(' -> '));
 line('layered into under -> detail -> shade: ' + (passes.length === 3 && passes[0].label === 'under' && passes[2].label === 'shade'));
 line('a doodle (<=6 strokes) stays a single pass: ' + (splitPasses(parsed.strokes.slice(0, 4)).length === 1));
+
+// VALIDATION: a word-heavy pass (the bug - transcribing the caption) is rejected
+const wordy = parseStrokes([
+  'T 40,35 cldnt', 'T 67,35 get', 'T 45,50 dis', 'L 20,20 80,20', 'C 50,50 8',
+].join('\n')).strokes;
+const wv = validateDrawing(wordy, { min: MIN_STROKES, maxText: 1 });
+line('a mostly-labels drawing is rejected as word-heavy: ' + (wv.ok === false && wv.reason === 'word-heavy'));
+// a real drawing survives, keeping at most one label
+const goodVal = validateDrawing(parsed.strokes, { min: MIN_STROKES, maxText: 1 });
+line('a real drawing validates and keeps <=1 label: ' +
+  (goodVal.ok === true && goodVal.strokes.filter((s) => s.t === 'T').length <= 1));
+// too little geometry is rejected as too-few
+line('too few geometric strokes is rejected: ' +
+  (validateDrawing(parseStrokes('L 10,10 20,20\nD 5,5').strokes, { min: MIN_STROKES }).ok === false));
+// a later (additive) pass drops all labels: maxText 0
+const addPass = validateDrawing(parseStrokes('D 50,50\nD 55,55\nT 10,90 note').strokes, { min: 1, maxText: 0 });
+line('an additive pass keeps its marks and drops labels: ' +
+  (addPass.ok === true && addPass.strokes.every((s) => s.t !== 'T')));
+
+// strokesToDsl round-trips through parseStrokes (feeding "the drawing so far" back)
+const round = parseStrokes(strokesToDsl(parsed.strokes)).strokes;
+line('strokesToDsl -> parseStrokes round-trips the stroke count: ' + (round.length === parsed.strokes.length));
+
+// stage-1 subject guard: a short concrete subject passes, a sentence of prose fails
+line('a short subject passes ("the yard"): ' + (subjectLooksProse('the yard') === false));
+line('a line of journal prose is rejected as prose: ' +
+  (subjectLooksProse('cldnt get dis outta ma hed wen fisher came back frm spurz') === true));
+
+// sketchBounds fits a drawing to its own content (small scrawl != full square)
+const sb = sketchBounds(parseStrokes('L 40,40 60,40\nL 40,50 60,50').strokes);
+line('sketchBounds tightly bounds a small scrawl (w<=20,h<=10): ' + (!!sb && sb.w <= 20 && sb.h <= 10));
 
 // geometry: exactly what pen.js will animate, produced by its own pure exports
 const font = JSON.parse(await readFile(join(HERE, '..', 'public', 'assets', 'hershey-cursive.json'), 'utf8'));

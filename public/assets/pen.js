@@ -179,6 +179,53 @@ export function sketchStrokeToPaths(s, { font } = {}) {
   }
 }
 
+// The grid-space bounding box of a set of parsed strokes, so a drawing can be
+// FITTED to its own content instead of always reserving a full 0-100 square (a
+// tiny scrawl in an enormous empty frame). Pure + DOM-free. Returns
+// { minX, minY, maxX, maxY, w, h } or null when there is nothing to bound.
+export function sketchBounds(strokes) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const add = (x, y) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  };
+  for (const s of strokes || []) {
+    if (!s || typeof s !== 'object') continue;
+    switch (s.t) {
+      case 'P':
+      case 'L':
+      case 'H':
+        for (const p of s.pts || []) add(p[0], p[1]);
+        break;
+      case 'D':
+        add(s.x, s.y);
+        break;
+      case 'C':
+      case 'A': // arc bounds approximated by the full circle - cheap and never clips
+        add(s.x - s.r, s.y - s.r);
+        add(s.x + s.r, s.y + s.r);
+        break;
+      case 'T': {
+        // a scrawled label extends right from (x,y) and sits just above the baseline
+        const len = String(s.text || '').length;
+        add(s.x, s.y - 7);
+        add(s.x + Math.max(4, len * 4.5), s.y + 2);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  if (minX === Infinity) return null;
+  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
 // A whole pass -> a flat list of { d, dot } segments in grid space. Pure, so a
 // headless caller can assert exactly what the renderer will draw.
 export function sketchToPaths(strokes, opts = {}) {
@@ -928,12 +975,31 @@ export class Pen {
       if (this.midWord || this.x > this.marginX) this._newline();
       this.y += this.size * 0.4;
       const avail = this.maxX - this.marginX;
-      const side = Math.max(120, Math.min(avail, 240));
-      const indent = Math.max(0, (avail - side) * 0.12);
-      box = { ox: this.marginX + indent, oy: this.y, side, scale: side / 100 };
+      // Fit the box to the drawing's own content, at a FIXED grid->px scale, so a
+      // small doodle is a small object and a full drawing fills the width - not a
+      // tiny scrawl marooned in a big empty square. The scale maps the full 0-100
+      // grid to a sensible max side; the actual box is only as big as the content.
+      const maxSide = Math.max(110, Math.min(avail, 220));
+      const scale = maxSide / 100;
+      const pad = 8; // grid units of breathing room around the marks
+      const b = sketchBounds(drawing.strokes);
+      let gx0 = 0;
+      let gy0 = 0;
+      let gw = 100;
+      let gh = 100;
+      if (b) {
+        gx0 = Math.max(0, b.minX - pad);
+        gy0 = Math.max(0, b.minY - pad);
+        gw = Math.max(8, Math.min(100, b.maxX + pad) - gx0);
+        gh = Math.max(8, Math.min(100, b.maxY + pad) - gy0);
+      }
+      const boxW = gw * scale;
+      const boxH = gh * scale;
+      const indent = Math.max(0, (avail - boxW) * 0.12);
+      box = { ox: this.marginX + indent, oy: this.y, w: boxW, h: boxH, gx0, gy0, scale };
       this._sketchBoxes.set(id, box);
-      // reserve the vertical run: the square + a caption line + air below
-      this.y += side + this.size * 1.9;
+      // reserve the vertical run: the drawing + a caption line + air below
+      this.y += boxH + this.size * 1.9;
       this.x = this.marginX;
       this.midWord = false;
       this._scroll();
@@ -942,9 +1008,10 @@ export class Pen {
     const style = this._sketchStyle(drawing.mood, pass);
     const grp = document.createElementNS(SVGNS, 'g');
     grp.setAttribute('class', 'sketch');
+    // translate so the content's cropped top-left (gx0,gy0) lands at the box origin
     grp.setAttribute(
       'transform',
-      `translate(${box.ox.toFixed(2)}, ${box.oy.toFixed(2)}) scale(${box.scale.toFixed(4)})`,
+      `translate(${(box.ox - box.gx0 * box.scale).toFixed(2)}, ${(box.oy - box.gy0 * box.scale).toFixed(2)}) scale(${box.scale.toFixed(4)})`,
     );
     this.ink.appendChild(grp);
     this._trackNode(grp);
@@ -972,7 +1039,7 @@ export class Pen {
   async _captionLine(grp, box, text, style, instant) {
     const capSize = Math.max(10, this.size * 0.62);
     const bx = box.ox;
-    const by = box.oy + box.side + capSize * 1.25; // baseline just below the box
+    const by = box.oy + box.h + capSize * 1.25; // baseline just below the box
     grp.setAttribute('transform', `translate(${bx.toFixed(2)}, ${by.toFixed(2)})`);
     const label = text.length > 42 ? text.slice(0, 42) : text;
     const capStyle = { sw: style.sw * 0.7, op: style.op * 0.85, jitter: 0 };
