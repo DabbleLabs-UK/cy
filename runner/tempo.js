@@ -1,31 +1,83 @@
-// tempo.js - the duty-cycle timing for viewer-driven tempo.
+// tempo.js - the viewer-driven tempo as a TARGET CADENCE, not a raw multiplier.
 //
-// Tempo is a DUTY CYCLE, not a token-rate change: the model always streams at its
-// natural speed; tempo only decides how much SILENCE sits between bursts. After a
-// burst of wall-clock duration B, wait B * (100/speed - 1) before the next one:
+// Tempo still only decides how much SILENCE sits between bursts (the model always
+// streams at its natural speed - tempo never changes the token rate). But the
+// idle is thought of as a CADENCE with a hard cap, so the experience is
+// predictable no matter how slow a burst happens to be:
 //
-//   speed=100 -> factor 0   -> no wait (continuous, the old behaviour)
-//   speed=50  -> factor 1    -> wait as long as the burst took (50% duty)
-//   speed=25  -> factor 3    -> wait 3x the burst (25% duty)
-//   speed=5   -> factor 19   -> wait 19x the burst (nobody watching)
+//   speed=100 -> continuous, no deliberate idle at all.
+//   lower speeds insert idle, but the idle is CLAMPED to maxIdleForSpeed(speed)
+//   so a slow burst can never explode the gap into tens of minutes.
 //
-// This is NOT the narrative "silence" event (Cy choosing to stop); it is the
-// machine being throttled, so run.js emits no silence event around it.
+// The old model was idle = burst * (100/speed - 1) with a single flat clamp.
+// Once a burst grew to ~75s that produced ~24 MINUTE gaps at 5% and ~4 minute
+// gaps at 30% - the page looked dead when it was merely throttled. Here the
+// duty-cycle term is still the natural idle, but the per-speed cap is what the
+// cadence is actually built around:
 //
-// The wait is clamped to MAX_TEMPO_IDLE_MS so a long burst at a low speed cannot
-// produce an absurd multi-minute gap.
+//   at 30% (someone watching)  -> capped at ~12s idle, so with a ~75s burst a
+//                                 viewer sees something new roughly every ~90s.
+//   at 5%  (nobody watching)   -> capped at 5 min idle, so several-minute gaps,
+//                                 desirable and calm, but never runaway.
+//   at 1%  (idlest)            -> capped at 13 min idle (~14-15 min cadence).
+//
+// maxIdleForSpeed interpolates (piecewise-linear on speed) between 0 at 100% and
+// a genuinely long gap at 1%. MAX_TEMPO_IDLE_MS is an absolute backstop above the
+// per-speed caps so no path can ever ask for more than a quarter-hour of silence.
+//
+// NB: public/assets/tempo.js mirrors this maths client-side (it cannot import a
+// runner module), so the viewer can preview the cadence live while dragging the
+// slider. Keep the two in step if the anchors change.
 
-export const MAX_TEMPO_IDLE_MS = 120000; // 2 minutes
+export const MAX_TEMPO_IDLE_MS = 15 * 60 * 1000; // 15 minutes - absolute safety cap
 
-// How long to idle after a burst of `burstMs` to hit a `speed`% duty cycle.
-// speed is coerced to an integer 1..100. Returns a whole number of ms in
-// [0, max].
+// The longest DELIBERATE idle allowed at a given speed, in ms. Anchors are on
+// speed (descending); values between anchors interpolate linearly. This is the
+// cap that turns the raw duty-cycle idle into a sane cadence.
+const MAX_IDLE_ANCHORS = [
+  { speed: 100, ms: 0 }, // full tilt: continuous, no idle
+  { speed: 30, ms: 12000 }, // someone watching: the burst itself is ~the cadence, so only a small pad
+  { speed: 5, ms: 300000 }, // nobody watching: several-minute gaps are fine
+  { speed: 1, ms: 780000 }, // idlest: up to ~13 min of silence
+];
+
+// The per-speed idle cap, interpolated across the anchors above. Returns a whole
+// number of ms; 0 at 100%, rising as speed falls.
+export function maxIdleForSpeed(speed) {
+  const s = clampSpeed(speed);
+  const a = MAX_IDLE_ANCHORS;
+  if (s >= a[0].speed) return a[0].ms;
+  for (let i = 0; i < a.length - 1; i++) {
+    const hi = a[i];
+    const lo = a[i + 1];
+    if (s <= hi.speed && s >= lo.speed) {
+      const frac = (s - lo.speed) / (hi.speed - lo.speed); // 0 at lo, 1 at hi
+      return Math.round(lo.ms + (hi.ms - lo.ms) * frac);
+    }
+  }
+  return a[a.length - 1].ms;
+}
+
+// How long to idle after a burst of `burstMs` at a given `speed`, to hit the
+// target cadence. The raw duty-cycle idle (burst * (100/speed - 1)) is the
+// natural gap; it is then CLAMPED to maxIdleForSpeed(speed) (and to `max`), so a
+// long burst at a low speed can never explode the gap. speed is coerced to an
+// integer 1..100. Returns a whole number of ms in [0, cap].
 export function tempoIdleMs(burstMs, speed, max = MAX_TEMPO_IDLE_MS) {
   const s = clampSpeed(speed);
-  if (s >= 100) return 0;
+  if (s >= 100) return 0; // continuous: no deliberate idle at full tilt
   const b = Math.max(0, Number(burstMs) || 0);
-  const raw = b * (100 / s - 1);
-  return Math.max(0, Math.min(max, Math.round(raw)));
+  const duty = b * (100 / s - 1); // the raw duty-cycle idle, before capping
+  const cap = Math.min(maxIdleForSpeed(s), Math.max(0, max));
+  return Math.max(0, Math.min(cap, Math.round(duty)));
+}
+
+// The effective gap a viewer perceives between bursts at `speed`, given a
+// representative burst duration: the burst plus the deliberate idle after it.
+// This is the number the panels turn into "about every Ns".
+export function effectiveCadenceMs(burstMs, speed) {
+  const b = Math.max(0, Number(burstMs) || 0);
+  return b + tempoIdleMs(b, speed);
 }
 
 // Coerce any incoming value to a valid tempo percentage integer 1..100.

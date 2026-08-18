@@ -109,11 +109,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // pinning the CPU. 2 is enough - slightly repetitive prose beats total silence.
 const MAX_DISCARDS = 2;
 
-// WATCHDOG. If no text event has been emitted for this long while awake, not
-// paused and not in a deliberate/throttle silence, something is wedged: log
-// loudly and force a full context reset (the manual recovery, automated). This
-// is the backstop that makes the silent-deadlock failure impossible to repeat.
-const WATCHDOG_MS = 4 * 60 * 1000;
+// WATCHDOG. A stall is NOT a long gap - the tempo deliberately asks for gaps of
+// minutes at low speed, and a deliberate silence is chosen stillness; neither is
+// a wedge. A stall is the runner TRYING and FAILING to produce text: STALL_CYCLES
+// generation cycles in a row that ended in empty/blocked/aborted with nothing
+// emitted (see the cycle-outcome accounting). We ALSO catch a genuinely hung
+// generation - the model pinned in eval/gen for WATCHDOG_MS without a single
+// token - which no outcome would ever record. Either way: log loudly and escalate
+// a context reset. This is the backstop that makes the silent-deadlock failure
+// impossible to repeat, without misfiring on ordinary throttled idle.
+const WATCHDOG_MS = 4 * 60 * 1000; // a generation pinned this long with zero tokens is hung
+const STALL_CYCLES = 3; // this many consecutive no-text cycles = a real stall
 
 // ---- abortable ollama stream reader ---------------------------------------
 //
@@ -372,8 +378,10 @@ async function main() {
   // Emitted only on CHANGE, and kicked out of the batch immediately (client.kick)
   // so the dot updates promptly instead of waiting on the 2s flush.
   let inferPhase = 'idle';
+  let inferBusySinceMs = 0; // stamped when the model goes idle -> busy; the hung-generation clock
   function setInfer(phase) {
     if (phase === inferPhase) return;
+    if (phase !== 'idle' && inferPhase === 'idle') inferBusySinceMs = Date.now();
     inferPhase = phase;
     emit({ kind: 'inference', payload: { phase, active: phase !== 'idle' } });
     client.kick(); // priority flush: the LED must feel instantaneous
@@ -384,6 +392,10 @@ async function main() {
   await powerMeter.load();
 
   // ---- viewer-driven tempo ----
+  // A representative recent burst duration, so the tempo event can carry a live
+  // cadence ('about every Ns') for the viewer. Seeded with a nominal ~75s (a
+  // typical burst) and smoothed toward each real burst as they complete.
+  let recentBurstMs = 75000;
   // When the polled tempo changes, mirror it into the public stream as a `tempo`
   // event so the viewer can display speed, viewer count and the cost of watching
   // live. The pence/hour anchors are derived from the power model here (the web
@@ -392,6 +404,11 @@ async function main() {
   // pph_idle (speed->0) and pph_load (speed=100). The viewer interpolates.
   client.onTempo = (t) => {
     const pph = (w) => (w / 1000) * powerMeter.tariff * 100;
+    // Turn the speed into a legible CADENCE for the viewer: the deliberate idle
+    // after a representative burst, and the effective gap between bursts. The
+    // panel renders 'about every Ns' from these rather than a bare percentage.
+    const burst = recentBurstMs;
+    const idle = tempoIdleMs(burst, t.speed);
     emit({
       kind: 'tempo',
       payload: {
@@ -400,6 +417,9 @@ async function main() {
         custom: t.custom,
         pph_idle: Number(pph(powerMeter.idleWatts).toFixed(3)),
         pph_load: Number(pph(powerMeter.loadWatts).toFixed(3)),
+        burst_ms: Math.round(burst), // representative recent burst duration
+        idle_ms: Math.round(idle), // deliberate idle the runner would insert now
+        cadence_ms: Math.round(burst + idle), // effective gap a viewer perceives between bursts
       },
     });
   };
@@ -654,6 +674,11 @@ async function main() {
         expressed: Number((vitals.expressed || 0).toFixed(3)),
         ctx_chars: contextBuf.length,
         duty: client.tempo.speed,
+        // the deliberate idle the runner will sit for after THIS burst, and the
+        // resulting gap, so the diagnostics can say 'next burst in ~Ns' rather
+        // than leaving the gap a mystery. Null on paths with no tempo throttle.
+        next_idle_ms: detail.nextIdleMs != null ? Math.round(detail.nextIdleMs) : null,
+        cadence_ms: detail.nextIdleMs != null ? Math.round((detail.burstMs || 0) + detail.nextIdleMs) : null,
         threads: config.threads,
         model: config.model,
         num_ctx: NUM_CTX,
@@ -684,13 +709,15 @@ async function main() {
   let currentAbort = null; // AbortController for the in-flight generation
   let tokenCount = 0; // tokens this vitals-tick window (broca)
   let brocaLevel = 0; // decaying live-output level driving the Broca readout
-  // WATCHDOG bookkeeping. lastTextMs stamps every real text event; watchdogQuietUntil
-  // is pushed forward whenever a LEGITIMATE quiet begins (a deliberate silence, a
-  // tempo throttle) so those never trip the watchdog. Both read on the vitals tick.
-  // watchdogStep escalates the remedy: 0 -> fresh generation, 1 -> partial trim,
-  // 2+ -> full wipe. Reset to 0 whenever real text flows (see onChunk/emitDreamText).
+  // WATCHDOG bookkeeping. lastTextMs stamps every real text event. The stall
+  // signal is NOT a timer: failedCyclesSinceEmit counts consecutive generation
+  // cycles that TRIED and produced no text (empty/blocked/aborted); it resets to
+  // 0 the moment real text flows (see onChunk/emitDreamText) and is untouched by
+  // deliberate silences and tempo throttles, so ordinary throttled idle can never
+  // trip it. watchdogStep escalates the remedy: 0 -> fresh generation, 1 -> partial
+  // trim, 2+ -> full wipe; it also resets to 0 whenever real text flows.
   let lastTextMs = Date.now();
-  let watchdogQuietUntil = 0;
+  let failedCyclesSinceEmit = 0;
   let watchdogStep = 0;
 
   // ---- CYCLE OUTCOME ACCOUNTING ----------------------------------------------
@@ -712,6 +739,16 @@ async function main() {
     recentOutcomes.push(kind);
     while (recentOutcomes.length > OUTCOME_WINDOW) recentOutcomes.shift();
     if (kind in outcomeTotals) outcomeTotals[kind]++;
+    // STALL ACCOUNTING for the watchdog. Only a cycle that genuinely tried and
+    // FAILED to produce text feeds the stall counter. A deliberate silence and a
+    // tempo throttle are legitimate quiet - they neither add to nor clear it. The
+    // clear happens where real text actually flows (onChunk/emitDreamText), which
+    // also covers the letter/dream paths that emit without a terminal 'emitted'.
+    if (kind === 'empty' || kind === 'blocked-by-warden' || kind === 'aborted') {
+      failedCyclesSinceEmit++;
+    } else if (kind === 'emitted') {
+      failedCyclesSinceEmit = 0; // a produced burst (incl. a drawing, which emits no text chunk)
+    }
     const line = `[cy] cycle outcome: ${kind}`;
     console.log(line);
     try {
@@ -1017,6 +1054,7 @@ async function main() {
     emit({ kind: 'text', payload: { s: payloadS, mode, ...(shoutSpans ? { shout: shoutSpans } : {}) } });
     lastTextMs = Date.now(); // real output: reset the watchdog clock
     watchdogStep = 0; // text is flowing again: de-escalate the watchdog remedy
+    failedCyclesSinceEmit = 0; // text reached the page: not a stall, whatever the cycle outcome reads
     burstEmitted += chunk; // original text: repeat guard reads what he actually wrote
     await appendContext(chunk); // ORIGINAL to Zone B - never the shouted form
   }
@@ -1726,23 +1764,32 @@ async function main() {
     // fast 1s sampler (see powerTimer below) so bursts that switch within seconds
     // are not aliased away by a 5s/30s sample.
 
-    // WATCHDOG: he must never again go silent for minutes while awake without it
-    // being noticed. If no text event has landed for WATCHDOG_MS while awake, not
-    // paused, not dreaming, and not inside a deliberate/throttle silence, something
-    // is wedged (a near-repeat spin, a stuck generation): log LOUDLY and force a
-    // full context reset - the same manual recovery (clearing the fed-back context)
-    // that freed him before, done automatically. Runs on this independent timer so
-    // it fires even if the generation loop itself is hung.
+    // WATCHDOG: he must never again go silent for minutes while awake because a
+    // generation is genuinely wedged - but ordinary throttled idle and deliberate
+    // silences must NOT trip it. Two real-stall signals, neither a bare timer:
+    //   STALLED - STALL_CYCLES cycles in a row tried and produced no text
+    //             (empty/blocked/aborted); the counter is untouched by throttles
+    //             and silences, so a tempo gap of minutes never counts.
+    //   HUNG    - the model has been pinned in eval/gen for WATCHDOG_MS without a
+    //             single token (no outcome would ever record this). inferPhase is
+    //             'idle' during throttle/silence idle, so those are excluded too.
+    // Either way: log LOUDLY and escalate a context reset - the manual recovery
+    // (clearing the fed-back context) done automatically. Runs on this independent
+    // timer so it fires even if the generation loop itself is hung.
+    const stalled = failedCyclesSinceEmit >= STALL_CYCLES;
+    const hung = inferPhase !== 'idle' && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
     if (
       running &&
       !client.paused &&
       !asleep &&
       currentMode !== 'paused' &&
       currentMode !== 'dream' &&
-      now > watchdogQuietUntil &&
-      now - lastTextMs > WATCHDOG_MS
+      (stalled || hung)
     ) {
       const silentS = Math.round((now - lastTextMs) / 1000);
+      const why = stalled
+        ? `${failedCyclesSinceEmit} cycles produced no text`
+        : `model pinned ${silentS}s with no token`;
       // ESCALATE GENTLY. A full context wipe destroys Zone B and with it the KV
       // cache, so the next burst is maximally slow - the old remedy made the symptom
       // worse. Climb one rung per WATCHDOG_MS the silence persists, preserving the
@@ -1765,7 +1812,7 @@ async function main() {
         try { await saveContext(contextPath, contextBuf); } catch { /* keep going */ }
         action = 'step 3/3: full context wipe (last resort)';
       }
-      const line = `[cy] WATCHDOG no text for ${silentS}s while awake - ${action}`;
+      const line = `[cy] WATCHDOG real stall (${why}) while awake - ${action}`;
       console.error(line);
       try {
         const { appendFile } = await import('node:fs/promises');
@@ -1774,8 +1821,10 @@ async function main() {
         /* never crash on watchdog logging */
       }
       if (currentAbort) currentAbort.abort(); // break any wedged in-flight generation
-      watchdogStep++; // next fire (if the silence persists) escalates one rung
-      lastTextMs = now; // fresh window after the action so it does not re-fire at once
+      watchdogStep++; // next fire (if the stall persists) escalates one rung
+      failedCyclesSinceEmit = 0; // fresh window: rebuild to STALL_CYCLES before firing again
+      inferBusySinceMs = now; // reset the hung clock so the abort itself does not re-trip it
+      lastTextMs = now;
     }
 
     try {
@@ -1926,6 +1975,7 @@ async function main() {
     emit({ kind: 'text', payload });
     lastTextMs = Date.now(); // a murmur/night-line is real output too
     watchdogStep = 0; // dream output counts as text flowing: de-escalate the watchdog
+    failedCyclesSinceEmit = 0; // real output: not a stall
   }
 
   // Keep one properly punctuated sentence from a night-waking generation.
@@ -2117,9 +2167,8 @@ async function main() {
       if (sil.silent) {
         emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
         await recordOutcome('deliberate-silence');
-        // a deliberate silence is legitimate quiet - hold the watchdog off for its
-        // full length plus a margin so it never mistakes chosen stillness for a wedge
-        watchdogQuietUntil = Date.now() + sil.seconds * 1000 + 30000;
+        // a deliberate silence is legitimate quiet: it feeds no failed cycle, so the
+        // stall counter is untouched and the watchdog cannot mistake it for a wedge.
         await idleSilently(sil.seconds * 1000);
         continue;
       }
@@ -2237,6 +2286,12 @@ async function main() {
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
       else if (wardenBlocksInGen > 0) await recordOutcome('blocked-by-warden');
       else await recordOutcome('empty');
+      // TEMPO: compute the deliberate idle this burst will sit for BEFORE emitting
+      // the gen event, so the diagnostics can show the next gap ('next burst in
+      // ~Ns') rather than leaving it a mystery. Only a burst that produced prose is
+      // throttled. Smooth the representative burst duration the tempo panel reads.
+      const idleMs = produced ? tempoIdleMs(burstMs, client.tempo.speed) : 0;
+      if (produced) recentBurstMs = Math.round(recentBurstMs * 0.6 + burstMs * 0.4);
       // live diagnostics: publish this burst's generation telemetry (no-op if the
       // burst errored before ollama returned a `done` line with counters).
       if (lastResult) {
@@ -2248,6 +2303,8 @@ async function main() {
           styles: styleDirective(vitals),
           opts: lastOpts,
           output: lastFull,
+          burstMs,
+          nextIdleMs: idleMs,
         });
       }
       // remember this burst's opening word so the next prompt can forbid it -
@@ -2276,11 +2333,10 @@ async function main() {
       // for an inbound postcard/notice so an interrupt is never swallowed.
       if (produced) {
         await sleep(150); // the small breather between bursts, as before
-        const idleMs = tempoIdleMs(burstMs, client.tempo.speed);
         if (idleMs > 0) {
           await recordOutcome('throttled'); // duty-cycle quiet, a distinct machine-imposed gap
-          // a throttle idle is machine-imposed quiet, not a wedge - hold the watchdog
-          watchdogQuietUntil = Date.now() + idleMs + 30000;
+          // a throttle idle is machine-imposed quiet, not a wedge: the stall counter
+          // is untouched by 'throttled', so the watchdog never mistakes it for one.
           await idleSilently(idleMs);
         }
       } else {

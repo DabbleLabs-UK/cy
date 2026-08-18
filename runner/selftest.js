@@ -32,7 +32,7 @@ import {
   updateVisitorStanding,
 } from './cast.js';
 import { buildSystem, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective } from './prompt.js';
-import { tempoIdleMs, clampSpeed, MAX_TEMPO_IDLE_MS } from './tempo.js';
+import { tempoIdleMs, clampSpeed, maxIdleForSpeed, MAX_TEMPO_IDLE_MS } from './tempo.js';
 import { introspect } from './introspect.js';
 import {
   reconcileLedger,
@@ -318,17 +318,24 @@ line('wing noise reaches the WAKING prompt: ' + wakeSys.includes('THE WING, RIGH
 line('wing noise reaches the SLEEP prompt: ' + sleepSys.includes('THE WING, IN THE NIGHT'));
 line('mid-sentence directive tells him not to tidy the break: ' + /do not tidy the break/.test(wingnoiseDirective(wLine, true, false)));
 
-// ---- 17. tempo duty cycle: idle = burst * (100/speed - 1), clamped ----
-hr('17. TEMPO DUTY CYCLE (idle between bursts)');
+// ---- 17. tempo as a TARGET CADENCE: duty-cycle idle, capped per speed --------
+hr('17. TEMPO CADENCE (capped idle between bursts)');
 line('speed=100 -> continuous (no idle): ' + tempoIdleMs(1000, 100) + ' ms (expect 0)');
-line('speed=50, burst 1000ms -> ' + tempoIdleMs(1000, 50) + ' ms (expect 1000, 50% duty)');
-line('speed=25, burst 1000ms -> ' + tempoIdleMs(1000, 25) + ' ms (expect 3000, 25% duty)');
-line('speed=30, burst 2000ms -> ' + tempoIdleMs(2000, 30) + ' ms (expect ' + Math.round(2000 * (100 / 30 - 1)) + ')');
-line('duty maths holds (100->0, 50->burst, 25->3x): ' +
-  (tempoIdleMs(1000, 100) === 0 && tempoIdleMs(1000, 50) === 1000 && tempoIdleMs(1000, 25) === 3000));
-line('nobody watching (speed=5), burst 1000ms -> ' + tempoIdleMs(1000, 5) + ' ms (19x, unclamped = 19000)');
-line('clamp caps an absurd gap: speed=5, burst 60000ms -> ' + tempoIdleMs(60000, 5) + ' ms (raw ' + 60000 * 19 + ', capped at ' + MAX_TEMPO_IDLE_MS + ')');
-line('clamp respected: ' + (tempoIdleMs(60000, 5) === MAX_TEMPO_IDLE_MS));
+line('short burst below the cap keeps the duty maths: 50->burst, 25->3x burst: ' +
+  (tempoIdleMs(1000, 50) === 1000 && tempoIdleMs(1000, 25) === 3000));
+line('speed=30, burst 2000ms -> ' + tempoIdleMs(2000, 30) + ' ms (duty ' + Math.round(2000 * (100 / 30 - 1)) + ', under the 30% cap)');
+// THE FIX: a ~75s burst no longer explodes the gap - each speed has a sane cap.
+line('someone watching (30%), burst 75s -> idle ' + tempoIdleMs(75000, 30) + ' ms, cadence ~' +
+  Math.round((75000 + tempoIdleMs(75000, 30)) / 1000) + 's (was ~4 min)');
+line('30% capped to maxIdleForSpeed(30): ' + (tempoIdleMs(75000, 30) === maxIdleForSpeed(30) && maxIdleForSpeed(30) === 12000));
+line('nobody watching (5%), burst 75s -> idle ' + tempoIdleMs(75000, 5) + ' ms, cadence ~' +
+  Math.round((75000 + tempoIdleMs(75000, 5)) / 60000) + ' min (was ~24 min)');
+line('5% capped to maxIdleForSpeed(5) = 5 min: ' + (tempoIdleMs(75000, 5) === maxIdleForSpeed(5) && maxIdleForSpeed(5) === 300000));
+line('cap holds for an absurd burst: speed=5, burst 600000ms -> ' + tempoIdleMs(600000, 5) + ' ms (raw ' + 600000 * 19 + ')');
+line('per-speed cap, not the flat max: ' + (tempoIdleMs(600000, 5) === maxIdleForSpeed(5) && maxIdleForSpeed(5) < MAX_TEMPO_IDLE_MS));
+line('idlest (1%) still bounded under 15 min: ' + (tempoIdleMs(600000, 1) === maxIdleForSpeed(1) && maxIdleForSpeed(1) <= MAX_TEMPO_IDLE_MS));
+line('cap rises monotonically as speed falls: ' +
+  (maxIdleForSpeed(100) === 0 && maxIdleForSpeed(50) > 0 && maxIdleForSpeed(30) < maxIdleForSpeed(5) && maxIdleForSpeed(5) < maxIdleForSpeed(1)));
 line('speed coerced into 1..100: clampSpeed(0)=' + clampSpeed(0) + ' clampSpeed(999)=' + clampSpeed(999) + ' clampSpeed("30")=' + clampSpeed('30') + ' clampSpeed(NaN)=' + clampSpeed(NaN));
 line('out-of-range speed never negative idle: ' + (tempoIdleMs(1000, 0) >= 0 && tempoIdleMs(1000, 150) === 0));
 
