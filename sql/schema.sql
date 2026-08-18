@@ -107,14 +107,22 @@ CREATE TABLE viewers (
 -- runner makes NO generation calls to ollama at all (the point being to watch the
 -- machine's CPU/memory/draw fall with the model idle); every other timer keeps
 -- running. It is deliberately NOT part of the derived duty-cycle rule above.
+-- `provider` is the active model provider ('ollama' local/free, or 'deepseek' paid)
+-- the owner selects via /api/admin.php; the runner reads it off the same tempo poll
+-- and switches mid-loop, no restart. `deepseek_available` is reported by the runner
+-- (a capability event) - whether it currently has a DeepSeek key - so the admin
+-- switch can refuse a DeepSeek selection with a clear reason when it has none.
 CREATE TABLE tempo (
-    id            TINYINT UNSIGNED PRIMARY KEY,
-    custom_speed  TINYINT UNSIGNED NULL,
-    paused        TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    updated_at    DATETIME NOT NULL
+    id                 TINYINT UNSIGNED PRIMARY KEY,
+    custom_speed       TINYINT UNSIGNED NULL,
+    paused             TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    provider           VARCHAR(16) NOT NULL DEFAULT 'ollama',
+    deepseek_available TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    updated_at         DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO tempo (id, custom_speed, paused, updated_at) VALUES (1, NULL, 0, NOW());
+INSERT INTO tempo (id, custom_speed, paused, provider, deepseek_available, updated_at)
+VALUES (1, NULL, 0, 'ollama', 0, NOW());
 
 -- Single-row record of DELL's public IP as seen by the authenticated ingest
 -- POSTs (/api/ingest.php sets it via X-Cy-Key, so it is trustworthy). It exists

@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/admin.php';
+require __DIR__ . '/../../lib/tempo.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -63,6 +64,18 @@ try {
                 $visitorUpd->bindValue(':notes', $notes, $notes !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
                 $visitorUpd->bindValue(':id', (string)$p['visitor_id'], PDO::PARAM_STR);
                 $visitorUpd->execute();
+            }
+            continue;
+        }
+
+        // capability is a side-channel runner status update (not streamed): it
+        // records whether the runner currently has a DeepSeek key, so the admin
+        // switch can refuse a DeepSeek selection with a clear reason when it does
+        // not. Idempotent - the runner re-reports on startup and on any change.
+        if ($kind === 'capability') {
+            $p = $event['payload'];
+            if (is_array($p) && array_key_exists('deepseek', $p)) {
+                captive_tempo_set_deepseek_available($db, (bool)$p['deepseek']);
             }
             continue;
         }

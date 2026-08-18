@@ -57,6 +57,13 @@ export class Client {
     // rather than at the end of the current 30-60s generation.
     this.onPause = null;
     this.onResume = null;
+    // Active model provider, owner-set via /api/admin.php and read off the same
+    // tempo poll below (it lives on the tempo row alongside `paused`). Defaults to
+    // 'ollama' so a poll failure at startup never switches blindly. onProviderChange
+    // fires the moment it transitions so the runner can cut the in-flight burst and
+    // continue with the new provider, no restart.
+    this.provider = 'ollama';
+    this.onProviderChange = null;
     // last known tempo. Defaults to 100 (continuous, the old behaviour) so an
     // endpoint that is unreachable at startup never stalls or throttles blindly;
     // the first successful poll replaces it.
@@ -291,6 +298,17 @@ export class Client {
         } else if (this.onResume) {
           this.onResume();
         }
+      }
+    }
+    // The active provider rides on the same tempo poll (it lives on the tempo row
+    // next to `paused`). Detect the TRANSITION here and fire onProviderChange so the
+    // runner can switch mid-loop - abort the in-flight burst and continue with the
+    // new provider. Handled before the speed early-return so a switch is honoured
+    // even if speed is somehow absent from a malformed tempo body.
+    if (data && typeof data.provider === 'string' && data.provider) {
+      if (data.provider !== this.provider) {
+        this.provider = data.provider;
+        if (this.onProviderChange) this.onProviderChange(data.provider);
       }
     }
     if (!data || data.speed == null) return;

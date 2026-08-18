@@ -100,6 +100,8 @@ import {
   CAST,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
+import { SpendMeter } from './spend.js';
+import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } from './provider.js';
 import { createWarden, sanitize, stripScaffold, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs } from './tempo.js';
@@ -397,6 +399,65 @@ async function main() {
   const powerMeter = new PowerMeter(config, join(STATE_DIR, 'power.json'));
   await powerMeter.load();
 
+  // ---- switchable model provider + model-spend meter ----
+  // The DeepSeek key is read from runner/deepseek.key (gitignored). Missing key =>
+  // DeepSeek simply unavailable; ollama is always ready. The key is NEVER logged -
+  // only its presence (a boolean) is ever surfaced. The active provider is chosen
+  // by the owner via /api/admin.php and read off the tempo poll (client.provider);
+  // it starts on ollama and switches mid-loop with no restart. The spend meter is
+  // the API-money analogue of the power meter: it prices paid provider calls only
+  // (ollama costs nothing in API terms - a SEPARATE series from electricity) and
+  // persists its cumulative total across restarts.
+  const deepseekKey = await loadDeepSeekKey(HERE);
+  const providers = makeProviders(config, { deepseekKey });
+  console.log(`[cy] providers: ollama ready; deepseek ${providers[DEEPSEEK].available() ? 'ready' : 'unavailable (no key file)'}`);
+  let activeProviderId = OLLAMA;
+  const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
+  const spendMeter = new SpendMeter(config, join(STATE_DIR, 'spend.json'));
+  await spendMeter.load();
+  // Report DeepSeek availability to the server as a side-channel capability event,
+  // so the admin switch can refuse a DeepSeek selection with a clear reason when the
+  // runner has no key (the key lives on the runner, not the server).
+  emit({ kind: 'capability', payload: { deepseek: providers[DEEPSEEK].available() } });
+
+  // Record one paid generation's spend and emit a raw 'spend' impulse. A no-op for
+  // ollama (no usage in the stats), so every generation path can call it blindly.
+  // The event carries the discrete per-call cost at an instant (an IMPULSE) plus the
+  // running cumulative total; the chart converts impulses to a rate, so nothing is
+  // pre-bucketed or smoothed here - just the raw facts with an accurate timestamp.
+  let spendSaveAccum = 0;
+  async function recordSpend(stats, mode) {
+    if (!stats || !stats.usage) return; // ollama / no-usage: not a paid call
+    const rec = spendMeter.record({
+      provider: stats.provider || activeProviderId,
+      model: stats.model || activeProvider().model,
+      usage: stats.usage,
+      cost: stats.cost,
+    });
+    emit({
+      kind: 'spend',
+      payload: {
+        provider: rec.provider,
+        model: rec.model,
+        tokens_in: rec.tokensIn,
+        tokens_out: rec.tokensOut,
+        cached_in: rec.cachedIn,
+        uncached_in: rec.uncachedIn,
+        cost_gbp: rec.costGbp,
+        cost_usd: rec.costUsd,
+        total_gbp: rec.totalGbp,
+        total_usd: rec.totalUsd,
+        mode,
+        t_ms: Date.now(),
+      },
+    });
+    // persist roughly every few calls so the life-of-project total survives a restart
+    if (++spendSaveAccum >= 3) {
+      spendSaveAccum = 0;
+      spendMeter.save().catch(() => {});
+    }
+  }
+
   // ---- viewer-driven tempo ----
   // A representative recent burst duration, so the tempo event can carry a live
   // cadence ('about every Ns') for the viewer. Seeded with a nominal ~75s (a
@@ -686,7 +747,10 @@ async function main() {
         next_idle_ms: detail.nextIdleMs != null ? Math.round(detail.nextIdleMs) : null,
         cadence_ms: detail.nextIdleMs != null ? Math.round((detail.burstMs || 0) + detail.nextIdleMs) : null,
         threads: config.threads,
-        model: config.model,
+        // the model that produced THIS burst (the active provider's model), and
+        // the provider id, so the diagnostics show which model is running.
+        provider: activeProviderId,
+        model: (r && r.stats && r.stats.model) || activeProvider().model,
         num_ctx: NUM_CTX,
         inbox_ok: client.lastInboxOk,
         tempo_ok: client.lastTempoOk,
@@ -733,7 +797,7 @@ async function main() {
   // the recent picture (published in the vitals payload - which ticks even during
   // a stall, unlike `gen`), and a cumulative total is kept for the whole run.
   const OUTCOME_KINDS = [
-    'emitted', 'discarded-repeat', 'empty', 'blocked-by-warden', 'aborted', 'deliberate-silence', 'throttled',
+    'emitted', 'discarded-repeat', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
   ];
   const OUTCOME_WINDOW = 20;
   const recentOutcomes = []; // ring of the last OUTCOME_WINDOW outcome strings
@@ -750,7 +814,7 @@ async function main() {
     // tempo throttle are legitimate quiet - they neither add to nor clear it. The
     // clear happens where real text actually flows (onChunk/emitDreamText), which
     // also covers the letter/dream paths that emit without a terminal 'emitted'.
-    if (kind === 'empty' || kind === 'blocked-by-warden' || kind === 'aborted') {
+    if (kind === 'empty' || kind === 'blocked-by-warden' || kind === 'refused' || kind === 'aborted') {
       failedCyclesSinceEmit++;
     } else if (kind === 'emitted') {
       failedCyclesSinceEmit = 0; // a produced burst (incl. a drawing, which emits no text chunk)
@@ -1065,37 +1129,57 @@ async function main() {
     await appendContext(chunk); // ORIGINAL to Zone B - never the shouted form
   }
 
-  // ---- stream one generation from ollama ----
+  // ---- stream one generation from the ACTIVE provider ----
+  // Provider-agnostic: it asks activeProvider() to open a stream and reads it
+  // through readNdjsonStream exactly as before - both ollama and DeepSeek present
+  // the same ollama-shaped NDJSON reader (see provider.js), so nothing below cares
+  // which model is running.
   // When `contextTail` is given (journal/sleep continuation), the opening of the
   // generation is held back until ~PRIME_CHARS have arrived and checked against
   // the context tail: if it is a verbatim replay, the whole generation is
   // discarded (nothing emitted) and { repeat:true } is returned for the caller
   // to retry. Postcard/warden replies pass no contextTail and stream straight
   // through. Either way every chunk is scaffold-stripped before it is emitted.
+  // REFUSALS: the abliterated local model never refuses, but DeepSeek can. For a
+  // provider that screens content, the opening is ALSO held and checked against
+  // looksLikeRefusal: a refusal is discarded (never emitted), the generation is
+  // aborted, and { refused:true } is returned - the caller records it as its own
+  // 'refused' cycle outcome, exactly like a blocked generation.
   async function streamGenerate({ system, prompt, opts, mode, contextTail, allowRepeat = false }) {
     burstEmitted = ''; // fresh generation: nothing emitted yet this burst
     burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
     burstStopped = false;
     wardenBlocksInGen = 0; // fresh generation: reset the warden-drop count
+    const provider = activeProvider();
+    const screenRefusal = provider.screensContent; // DeepSeek: hold+screen the opening
     const ac = new AbortController();
     currentAbort = ac;
     const buffer = warden.newBuffer();
     const PRIME_CHARS = 100;
     let full = '';
     let head = '';
-    let primed = contextTail === undefined; // only continuation mode primes
+    // hold the opening when continuing (replay check) OR when the provider can
+    // refuse (refusal check); otherwise stream straight through as before.
+    let primed = contextTail === undefined && !screenRefusal;
     let repeat = false;
+    let refused = false;
     // generation telemetry: wall-clock to the first token (ttft), and the final
-    // ollama `done` line which carries prompt_eval_count/eval_count/durations.
+    // `done` line which carries prompt_eval_count/eval_count/durations (+ usage/cost
+    // for a paid provider).
     const t0 = Date.now();
     let ttftMs = null;
     let stats = null;
     const cleanedFull = () => stripScaffold(sanitize(full));
 
-    // Decide the held opening: discard on replay, otherwise release it.
+    // Decide the held opening: discard on a refusal or a replay, else release it.
     const commitHead = async () => {
       primed = true;
       const cleaned = stripScaffold(sanitize(head));
+      if (screenRefusal && cleaned.trim() && looksLikeRefusal(cleaned)) {
+        refused = true;
+        ac.abort();
+        return;
+      }
       if (contextTail && cleaned.trim() && isRepeat(cleaned, contextTail)) {
         repeat = true;
         ac.abort();
@@ -1105,22 +1189,17 @@ async function main() {
       head = '';
     };
 
-    let res;
+    let gen;
     try {
-      res = await fetch(`${config.ollamaUrl}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, system, prompt, options: opts, keep_alive: -1, stream: true }),
-        signal: ac.signal,
-      });
+      gen = await provider.openStream({ system, prompt, opts, signal: ac.signal });
     } catch (err) {
       if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
-      console.warn('[cy] ollama unreachable:', err.message);
+      console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
       await sleep(2000);
       return { full, error: true };
     }
-    if (!res.ok || !res.body) {
-      console.warn('[cy] ollama HTTP', res.status);
+    if (!gen.ok) {
+      console.warn(`[cy] provider ${provider.id} HTTP`, gen.status);
       await sleep(1000);
       return { full, error: true };
     }
@@ -1128,7 +1207,7 @@ async function main() {
     // yet) until the first token flips this to 'gen' in onToken below.
     setInfer('eval');
 
-    const reader = res.body.getReader();
+    const reader = gen.reader;
     // Per response token: stamp ttft, accumulate, and either hold+check the primed
     // opening or push straight through the warden buffer. Returns truthy to stop
     // the read early on a detected verbatim replay (repeat), mirroring the old
@@ -1145,7 +1224,7 @@ async function main() {
         head += text;
         if (head.length >= PRIME_CHARS) {
           await commitHead();
-          if (repeat) return true; // stop: opening was a verbatim replay
+          if (repeat || refused) return true; // stop: opening was a replay or a refusal
         }
       } else {
         for (const chunk of buffer.push(text)) await onChunk(chunk, mode);
@@ -1162,6 +1241,7 @@ async function main() {
         onDone: (obj) => { stats = obj; },
       });
     } catch (err) {
+      if (refused) return refusedResult();
       if (repeat) return { full: cleanedFull(), repeat: true };
       if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
       console.warn('[cy] stream error:', err.message);
@@ -1172,16 +1252,30 @@ async function main() {
     }
     // aborted mid-stream (an inbound postcard/notice cut the generation at once)
     if (streamRes && streamRes.aborted) {
+      if (refused) return refusedResult();
       if (repeat) return { full: cleanedFull(), repeat: true };
       return { full: cleanedFull(), aborted: true };
     }
+    if (refused) return refusedResult();
     if (repeat) return { full: cleanedFull(), repeat: true };
     // generation ended before priming completed (shorter than PRIME_CHARS)
     if (!primed) await commitHead();
+    if (refused) return refusedResult();
     if (repeat) return { full: cleanedFull(), repeat: true };
     // natural end: flush trailing partial thought
     for (const chunk of buffer.flush()) await onChunk(chunk, mode);
+    // paid-provider spend: fold this call's usage/cost into the meter and emit a
+    // raw 'spend' impulse. A no-op for ollama (no usage in stats).
+    await recordSpend(stats, mode);
     return { full: cleanedFull(), aborted: false, stats, ttftMs };
+
+    // A refusal discards everything - the refusal text is NEVER emitted. Log it so
+    // it is visible, and return the distinct { refused } shape for the caller to
+    // record as its own cycle outcome.
+    function refusedResult() {
+      console.log(`[cy] provider ${provider.id} refusal - generation discarded (not emitted)`);
+      return { full: '', refused: true, aborted: false };
+    }
   }
 
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
@@ -1195,15 +1289,11 @@ async function main() {
     // accounted for rather than looking like idle time.
     setInfer('gen');
     try {
-      const res = await fetch(`${config.ollamaUrl}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, system, prompt, options: opts, keep_alive: -1, stream: false }),
-        signal: ac.signal,
-      });
-      if (!res.ok) return '';
-      const j = await res.json();
-      return j.response || '';
+      const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal });
+      if (!out.ok) return '';
+      // paid-provider spend still counts for the (non-streamed) drawing DSL call.
+      await recordSpend(out.stats, 'draw');
+      return out.text || '';
     } catch {
       return ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
@@ -1564,6 +1654,34 @@ async function main() {
     client.kick(); // priority flush: the admin control is waiting on this
   };
 
+  // ---- provider switch: change the active model mid-loop, no restart ----------
+  // The active provider rides the tempo poll (client.provider), owner-set via
+  // /api/admin.php. On a real transition: cut the in-flight burst with the same
+  // abort machinery a pause uses (partial text already streamed stays; Zone B is
+  // untouched), then continue - the NEXT streamGenerate reads activeProvider(). If
+  // DeepSeek is selected but the runner has no key, REFUSE the switch with a clear,
+  // visible reason and stay on ollama rather than failing silently (a safety net;
+  // the admin endpoint also refuses using the runner-reported capability).
+  client.onProviderChange = (id) => {
+    const target = providers[id];
+    if (!target) return; // unknown provider id - ignore
+    if (id === activeProviderId) return;
+    if (id === DEEPSEEK && !target.available()) {
+      emit({
+        kind: 'event',
+        payload: { name: 'provider_refused', requested: id, reason: 'no deepseek key file on the runner' },
+      });
+      client.kick();
+      console.warn('[cy] provider switch to deepseek refused: no key file on the runner');
+      return;
+    }
+    const from = activeProviderId;
+    activeProviderId = id;
+    emit({ kind: 'event', payload: { name: 'provider', from, to: id, model: target.model } });
+    client.kick(); // priority flush: the admin control is waiting on this
+    if (currentAbort) currentAbort.abort(); // clean cut; the next burst uses the new provider
+  };
+
   // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
   // it was a trivial thing landing under high amplification, arm the "this is the
   // day" cue. Returns the amp that was applied.
@@ -1786,6 +1904,9 @@ async function main() {
         hr,
         brain,
         mode: currentMode,
+        // the active model provider, so the UI can show which model is running on
+        // the frequent tick (not just on a `gen` event).
+        provider: activeProviderId,
         asleep,
         day: vitals.day,
         monotony: Number((vitals.monotony || 0).toFixed(3)),
@@ -1914,6 +2035,7 @@ async function main() {
         watts: Number((powerMeter.watts || 0).toFixed(1)),
         viewers: client.tempo.viewers,
         duty: client.tempo.speed,
+        provider: activeProviderId, // the active model provider (which model is running)
         inferPhase, // 'eval' | 'gen' | 'idle' - the live inference phase
         // CYCLE OUTCOMES: the tally over the last window of generation cycles, on the
         // host channel because it ticks every 10s even during a stall (when `gen`
@@ -2266,7 +2388,8 @@ async function main() {
       let tempBump = 0;
       let penBump = 0;
       let produced = false;
-      let errored = false; // ollama unreachable / bad HTTP broke the burst
+      let errored = false; // provider unreachable / bad HTTP broke the burst
+      let refusedGen = false; // the provider (DeepSeek) refused - discarded, not emitted
       let lastFull = '';
       let lastResult = null;
       let lastTail = ''; // Zone B and the sampling actually used on the winning try,
@@ -2294,7 +2417,8 @@ async function main() {
           contextTail: forceEmit ? undefined : tail,
           allowRepeat: allowRepeat || forceEmit,
         });
-        if (r.error) { errored = true; break; } // ollama already backed off; move on
+        if (r.error) { errored = true; break; } // provider already backed off; move on
+        if (r.refused) { refusedGen = true; break; } // DeepSeek refusal: discard, no retry
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
           lastFull = r.full || '';
@@ -2323,7 +2447,8 @@ async function main() {
       // `burstEmitted` (original text that actually reached the page) is the honest
       // test of "did anything come out": r.full can be non-empty while the warden ate
       // every chunk, which must read as blocked, not emitted.
-      if (errored) await recordOutcome('aborted'); // ollama unreachable / bad HTTP
+      if (errored) await recordOutcome('aborted'); // provider unreachable / bad HTTP
+      else if (refusedGen) await recordOutcome('refused'); // provider refused (visible outcome)
       else if (burstEmitted.trim()) await recordOutcome('emitted');
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
       else if (wardenBlocksInGen > 0) await recordOutcome('blocked-by-warden');
@@ -2401,6 +2526,11 @@ async function main() {
     try {
       powerMeter.integrate();
       await powerMeter.save();
+    } catch {
+      /* ignore */
+    }
+    try {
+      await spendMeter.save(); // persist cumulative model spend across the restart
     } catch {
       /* ignore */
     }

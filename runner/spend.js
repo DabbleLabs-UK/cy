@@ -1,0 +1,104 @@
+// spend.js - the MODEL-API money meter.
+//
+// The electricity meter (power.js) prices the machine being switched on. This
+// meter prices the OTHER cost: paid model-provider API calls. They are SEPARATE
+// series and must never be double counted - an ollama generation costs nothing in
+// API terms (its cost is electricity, already metered), so only paid providers
+// (DeepSeek) ever move this meter. Like the power meter, the cumulative total is
+// PERSISTED so it accumulates over the whole life of the project, across restarts.
+//
+// Per-call cost is computed by the provider (provider.js computeCost) from the
+// token usage DeepSeek returns, in GBP (via a configurable FX rate) so model spend
+// and electricity spend share one currency and can sit on the same chart. This
+// module only ACCUMULATES those per-call costs and persists the running total.
+
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+
+const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : Number(x) || 0);
+
+export class SpendMeter {
+  constructor(config, statePath) {
+    this.statePath = statePath;
+    this.totalGbp = 0;
+    this.totalUsd = 0;
+    this.tokensIn = 0;
+    this.tokensOut = 0;
+    this.calls = 0;
+    this.startTs = null; // life-of-project first-spend/switch-on time
+  }
+
+  async load() {
+    try {
+      const j = JSON.parse(await readFile(this.statePath, 'utf8'));
+      this.totalGbp = num(j.total_gbp);
+      this.totalUsd = num(j.total_usd);
+      this.tokensIn = num(j.tokens_in);
+      this.tokensOut = num(j.tokens_out);
+      this.calls = num(j.calls);
+      this.startTs = num(j.start_ts) || null;
+    } catch {
+      /* first run - nothing persisted yet */
+    }
+    if (!this.startTs) this.startTs = Date.now();
+  }
+
+  // Fold one paid generation into the running total. `usage` is the per-call token
+  // usage and `cost` is the per-call { usd, gbp } the provider already computed.
+  // Returns the per-call facts plus the new cumulative totals, for the spend event.
+  record({ provider, model, usage, cost }) {
+    const u = usage || {};
+    const gbp = num(cost && cost.gbp);
+    const usd = num(cost && cost.usd);
+    const tin = num(u.prompt_tokens);
+    const tout = num(u.completion_tokens);
+    const cached = num(u.cached_tokens);
+    const uncached = u.uncached_tokens != null ? num(u.uncached_tokens) : Math.max(0, tin - cached);
+    this.totalGbp += gbp;
+    this.totalUsd += usd;
+    this.tokensIn += tin;
+    this.tokensOut += tout;
+    this.calls += 1;
+    return {
+      provider,
+      model,
+      tokensIn: tin,
+      tokensOut: tout,
+      cachedIn: cached,
+      uncachedIn: uncached,
+      costUsd: Number(usd.toFixed(6)),
+      costGbp: Number(gbp.toFixed(6)),
+      totalGbp: Number(this.totalGbp.toFixed(6)),
+      totalUsd: Number(this.totalUsd.toFixed(6)),
+    };
+  }
+
+  snapshot() {
+    return {
+      total_gbp: Number(this.totalGbp.toFixed(6)),
+      total_usd: Number(this.totalUsd.toFixed(6)),
+      tokens_in: this.tokensIn,
+      tokens_out: this.tokensOut,
+      calls: this.calls,
+    };
+  }
+
+  async save() {
+    await mkdir(dirname(this.statePath), { recursive: true });
+    await writeFile(
+      this.statePath,
+      JSON.stringify(
+        {
+          total_gbp: this.totalGbp,
+          total_usd: this.totalUsd,
+          tokens_in: this.tokensIn,
+          tokens_out: this.tokensOut,
+          calls: this.calls,
+          start_ts: this.startTs,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+}

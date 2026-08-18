@@ -6,5 +6,18 @@
   "ollamaUrl": "http://127.0.0.1:11434",
   "dryRun": true,
   "tickMs": 5000,
-  "threads": 2
+  "threads": 2,
+  "deepseek": {
+    "_comment": "Switchable second provider (OpenAI-compatible). The API key is read from runner/deepseek.key (gitignored) - NOT stored here. A missing key file simply makes DeepSeek unavailable. Default model is V4-Flash, the cheaper of the two.",
+    "apiBase": "https://api.deepseek.com",
+    "model": "deepseek-v4-flash",
+    "maxTokens": 512,
+    "fxGbpPerUsd": 0.79,
+    "_fx_comment": "GBP per 1 USD. ASSUMPTION - a fixed rate so model spend and electricity spend share one currency and can sit on the same chart. Update as the rate moves.",
+    "prices": {
+      "_comment": "USD per MILLION tokens. Verified from DeepSeek's rate card, July 2026. Kept in config so a price change needs no code change. RE-CHECK periodically - provider prices change.",
+      "deepseek-v4-flash": { "input_cache_miss": 0.14, "input_cache_hit": 0.0028, "output": 0.28 },
+      "deepseek-v4-pro": { "input_cache_miss": 0.435, "input_cache_hit": 0.003625, "output": 0.87 }
+    }
+  }
 }

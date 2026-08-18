@@ -109,6 +109,73 @@ function captive_tempo_set_paused(PDO $db, bool $paused): void
     $stmt->execute();
 }
 
+// ---- active model provider (owner-only, persisted on the same tempo row) -----
+//
+// Which model the runner generates with: 'ollama' (local, abliterated, free in API
+// terms) or 'deepseek' (paid, metered). Owner-set via POST /api/admin.php; the
+// runner reads it via its existing tempo poll and switches mid-loop, no restart.
+// The DeepSeek key lives on the RUNNER, not here - so the runner reports whether it
+// has a key (deepseek_available, updated from a side-channel capability event in
+// ingest.php), and the admin switch refuses a DeepSeek selection with a clear
+// reason when the runner has none. Both getters are defensive: on a database that
+// has not run the 005_provider migration the columns are missing, so rather than
+// 500 the tempo endpoint they report the safe defaults ('ollama' / unavailable).
+const CY_PROVIDERS = ['ollama', 'deepseek'];
+
+function captive_tempo_provider(PDO $db): string
+{
+    try {
+        $v = $db->query('SELECT provider FROM tempo WHERE id = 1')->fetchColumn();
+    } catch (Throwable $e) {
+        return 'ollama';
+    }
+    return (is_string($v) && in_array($v, CY_PROVIDERS, true)) ? $v : 'ollama';
+}
+
+function captive_tempo_set_provider(PDO $db, string $provider): void
+{
+    if (!in_array($provider, CY_PROVIDERS, true)) {
+        $provider = 'ollama';
+    }
+    $stmt = $db->prepare(
+        'INSERT INTO tempo (id, provider, updated_at) VALUES (1, :p1, NOW())
+         ON DUPLICATE KEY UPDATE provider = :p2, updated_at = NOW()'
+    );
+    $stmt->bindValue(':p1', $provider, PDO::PARAM_STR);
+    $stmt->bindValue(':p2', $provider, PDO::PARAM_STR);
+    $stmt->execute();
+}
+
+// Whether the runner currently has a DeepSeek key (reported by the runner via a
+// capability event). Defensive: a missing column reads as "not available", so an
+// un-migrated deploy simply cannot select DeepSeek.
+function captive_tempo_deepseek_available(PDO $db): bool
+{
+    try {
+        $v = $db->query('SELECT deepseek_available FROM tempo WHERE id = 1')->fetchColumn();
+        return $v !== false && $v !== null && (int)$v !== 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+// Record the runner-reported DeepSeek key availability. Best-effort and defensive:
+// on an un-migrated deploy (no column) it does nothing, so ingestion never breaks.
+function captive_tempo_set_deepseek_available(PDO $db, bool $available): void
+{
+    try {
+        $stmt = $db->prepare(
+            'INSERT INTO tempo (id, deepseek_available, updated_at) VALUES (1, :a1, NOW())
+             ON DUPLICATE KEY UPDATE deepseek_available = :a2, updated_at = NOW()'
+        );
+        $stmt->bindValue(':a1', $available ? 1 : 0, PDO::PARAM_INT);
+        $stmt->bindValue(':a2', $available ? 1 : 0, PDO::PARAM_INT);
+        $stmt->execute();
+    } catch (Throwable $e) {
+        /* un-migrated deploy (no deepseek_available column) - degrade to no-op */
+    }
+}
+
 // Resolve the current effective tempo, reconciling the store: if nobody is
 // watching, any lingering custom value is discarded here. Returns the public
 // shape ['speed', 'viewers', 'custom', 'paused']. The runner reads 'paused' from
@@ -123,6 +190,8 @@ function captive_tempo_state(PDO $db): array
     }
     unset($d['discard']);
     $d['paused'] = captive_tempo_paused($db);
+    // the active model provider rides the same row; the runner reads it here.
+    $d['provider'] = captive_tempo_provider($db);
     return $d;
 }
 
