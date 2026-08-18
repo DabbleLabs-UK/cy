@@ -1,0 +1,320 @@
+/* timetravel.css - HISTORY navigation: the live pill as control + the tinted
+ * month-calendar dialog it opens (timetravel.js).
+ *
+ * The green connection pill IS the control. Live: it shows the connection status
+ * and opens the calendar dialog when clicked. Reading the past: it turns amber,
+ * shows the moment being viewed, and returns to live when clicked (or via its x).
+ *
+ * Colours come from the page's own palette custom properties (--chrome-*, --tel*,
+ * --line, --good) defined on :root in style.css.
+ */
+
+/* ---- the "reading the past" state ---------------------------------------- */
+/* The frozen live sheet reads unmistakably as the PAST: sepia + dimmed. The live
+ * pill is NOT hidden here - it is the control, and it turns amber to show it. */
+body.cy-history .paper,
+body.cy-history .plain,
+body.cy-history #raw { filter: sepia(0.4) brightness(0.86) contrast(0.96); }
+
+/* ---- the live pill, doubling as the time-travel control ------------------ */
+.pill.status.is-live-control {
+  cursor: pointer;
+  user-select: none;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.pill.status.is-live-control:hover { border-color: #3a4657; background: var(--chrome-1); }
+.pill.status.is-live-control:focus-visible {
+  outline: 2px solid var(--good);
+  outline-offset: 1px;
+}
+
+/* Reading the past: amber, showing the viewed moment, with a clear exit x. */
+.pill.status.is-history {
+  color: #0b0906;
+  background: #e0b968;
+  border-color: #b8860b;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill.status.is-history:hover { background: #ecc978; border-color: #d8a12a; }
+.pill.status.is-history .live-when { letter-spacing: 0.06em; }
+.pill.status.is-history .live-exit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  font-size: 12px;
+  line-height: 1;
+  color: #0b0906;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+/* ---- the dialog ---------------------------------------------------------- */
+.tt-dialog {
+  width: min(94vw, 460px);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  border: 1px solid #4a3a1e;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #17130c, #0f0c08);
+  color: var(--tel);
+  font-family: var(--mono);
+  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.75);
+}
+.tt-dialog::backdrop {
+  background: rgba(6, 5, 3, 0.6);
+  backdrop-filter: blur(1.5px);
+}
+
+.tt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.tt-title {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #e0b968;
+}
+.tt-close {
+  width: 28px; height: 28px;
+  padding: 0;
+  font-size: 20px; line-height: 1;
+  color: var(--tel-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.tt-close:hover { color: var(--tel); border-color: #4a3a1e; }
+.tt-close:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
+
+/* month navigation */
+.tt-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.tt-month {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--tel);
+}
+.tt-nav-btn {
+  width: 30px; height: 28px;
+  font-size: 18px; line-height: 1;
+  color: var(--tel);
+  background: var(--chrome-1);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.tt-nav-btn:hover:not(:disabled) { color: #e0b968; border-color: #4a3a1e; }
+.tt-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.tt-nav-btn:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
+
+/* weekday header + grid */
+.tt-dow,
+.tt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.tt-dow {
+  margin-bottom: 3px;
+}
+.tt-dow span {
+  text-align: center;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--tel-dim);
+  text-transform: uppercase;
+}
+
+.tt-day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background-color: #0e1116;
+  color: var(--tel);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 100ms, border-color 100ms;
+}
+.tt-day-num {
+  position: absolute;
+  top: 2px; left: 4px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.tt-day:hover:not(:disabled) { border-color: #e0b968; }
+.tt-day:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
+.tt-day.is-selected { border-color: var(--good); box-shadow: inset 0 0 0 1px var(--good); }
+.tt-day.is-empty {
+  color: var(--tel-dim);
+  opacity: 0.35;
+  cursor: default;
+  background-color: #0b0e12;
+}
+.tt-day.is-empty .tt-day-num { text-shadow: none; }
+.tt-blank {
+  border: 0;
+  background: transparent;
+  cursor: default;
+  min-height: 0;
+}
+
+/* notable-day markers: shape, not more colour - a neutral parchment tone. */
+.tt-marks {
+  position: absolute;
+  bottom: 2px; right: 3px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.tt-mark {
+  width: 7px; height: 7px;
+  display: block;
+  fill: #efe3c6;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+}
+
+/* ---- the hour strip (revealed on picking a day) -------------------------- */
+.tt-hours {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #3a2e18;
+}
+.tt-hours-head {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #e0b968;
+  margin-bottom: 6px;
+  outline: none;
+}
+.tt-hours-strip {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+}
+.tt-hour {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  min-height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background-color: #0e1116;
+  color: var(--tel);
+  font: inherit;
+  font-size: 8.5px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.tt-hour-lab {
+  position: absolute;
+  top: 1px; left: 0; right: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.tt-hour:hover:not(:disabled) { border-color: #e0b968; }
+.tt-hour:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
+.tt-hour.is-empty { opacity: 0.3; cursor: default; color: var(--tel-dim); }
+.tt-hour.is-empty .tt-hour-lab { text-shadow: none; }
+
+/* ---- shortcuts ----------------------------------------------------------- */
+.tt-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.tt-sc-label {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tel-dim);
+}
+.tt-sc {
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--tel);
+  background: var(--chrome-1);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.tt-sc:hover { color: #e0b968; border-color: #4a3a1e; background: rgba(224, 185, 104, 0.06); }
+.tt-sc:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
+
+/* ---- legend -------------------------------------------------------------- */
+.tt-legend {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #3a2e18;
+}
+.tt-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  margin-bottom: 6px;
+}
+.tt-legend-cap {
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tel-dim);
+  flex: 0 0 auto;
+  width: 46px;
+}
+.tt-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--tel-dim);
+}
+.tt-swatch {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+.tt-legend-chip .tt-mark { width: 9px; height: 9px; }
+.tt-legend-hint {
+  font-size: 9px;
+  color: var(--tel-dim);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.tt-empty {
+  padding: 28px 8px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--tel-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill.status.is-live-control { transition: none; }
+}

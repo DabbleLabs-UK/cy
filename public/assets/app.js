@@ -140,7 +140,7 @@ async function boot() {
 
   wireForms();
   initViewSwitch();
-  initModeSwitch();
+  initHistoryControl();
   initPauseControl();
   initLed(); // last, so the LED lands leftmost (before the selects)
 
@@ -442,6 +442,7 @@ function handleAmbient(p) {
 // ---- header / status widgets -------------------------------------------
 
 function setStatus(text, bad) {
+  if (historyMode) return; // in history the live pill shows the viewed moment, not the connection
   const el = $('#status');
   if (!el) return;
   el.textContent = text;
@@ -554,40 +555,47 @@ function applyView(view) {
   if (isPlain && window.__cyPlain && window.__cyPlain.reveal) window.__cyPlain.reveal();
 }
 
-// ---- LIVE vs HISTORY: the mode switch (LOCAL, instant) ------------------
+// ---- LIVE vs HISTORY: the live pill IS the control ----------------------
 //
-// A two-option <async-select> in LOCAL mode: LIVE (watching him now) and HISTORY
-// (reading the past). It replaces the inert "live" indicator with a real control:
-// leaving live reveals the spine (window.__cySpine) and paints the page
-// unmistakably as the past (body.cy-history: sepia sheet, loud switch, the live
-// connection pill hidden). Returning to live hides the spine and resumes following
-// the stream - the suspended poll wakes and the existing catch-up path replays the
-// gap. The mode is client-only, so both options are `local` (no round trip). It is
-// public: anyone can read back, that is the whole point.
-let modeSelect = null;
+// The green connection pill doubles as the time-travel control - a select box was
+// the wrong affordance for live-versus-history; a status indicator you can act on
+// is the right one. Live: the pill shows the connection status and, when clicked,
+// opens the calendar dialog (timetravel.js) to choose a moment. Reading the past:
+// it turns amber, shows the moment being viewed, and clicking it (or its x) returns
+// to live. One element does status, entry and exit. History is public: anyone can
+// read back. The dialog resolves a chosen moment to a seq + timestamp and announces
+// it via `cy:moment`; we consume that here to enter history, and stage 3 consumes
+// the same event / `window.__cyMoment` to replay it.
+let viewingMoment = null;
 
-function initModeSwitch() {
-  const meta = document.querySelector('.topmeta');
-  if (!meta) return;
+function initHistoryControl() {
+  const pill = $('#status');
+  if (!pill) return;
+  pill.classList.add('is-live-control');
+  pill.setAttribute('role', 'button');
+  pill.setAttribute('tabindex', '0');
+  pill.setAttribute('aria-haspopup', 'dialog');
+  pill.title = 'Travel back - pick a moment';
+  pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
 
-  const sel = document.createElement('async-select');
-  sel.className = 'cy-select cy-mode-select';
-  sel.setAttribute('label', 'Mode');
-  meta.insertBefore(sel, $('#day') || null);
-  sel.options = [
-    { value: 'live', label: 'LIVE', description: 'watching him now', local: true },
-    { value: 'history', label: 'HISTORY', description: 'reading the past', local: true },
-  ];
-  sel.value = 'live';
-  modeSelect = sel;
+  const activate = () => {
+    if (historyMode) { exitToLive(); return; }
+    pill.focus(); // so the dialog returns focus here on close
+    if (window.__cyTimeTravel) window.__cyTimeTravel.open();
+  };
+  pill.addEventListener('click', activate);
+  pill.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      e.preventDefault();
+      activate();
+    }
+  });
 
-  sel.addEventListener('confirmed', (e) => applyMode(e.detail.value));
-
-  // Stage 3 will re-render the selected moment; for now, consume the spine's
-  // committed selection as a plain textual summary so the wiring is demonstrably
-  // live (and so the event contract stage 3 depends on is exercised).
+  // The calendar dialog's committed moment: enter history and light the pill.
+  // window.__cyMoment is the clean handoff object stage 3 replays from.
   document.addEventListener('cy:moment', (e) => {
-    window.__cyMoment = e.detail; // the clean handoff object for stage 3
+    window.__cyMoment = e.detail;
+    enterHistory(e.detail);
     const s = e.detail.summary || {};
     const when = s.when || e.detail.ts || '';
     const what = (s.lines && s.lines.length) ? s.lines.join(', ') : '';
@@ -595,12 +603,41 @@ function initModeSwitch() {
   });
 }
 
-function applyMode(mode) {
-  const hist = mode === 'history';
-  historyMode = hist;
-  document.body.classList.toggle('cy-history', hist);
-  if (window.__cySpine) hist ? window.__cySpine.show() : window.__cySpine.hide();
-  if (!hist) poll(); // resume following: catch up on everything missed at once
+function enterHistory(detail) {
+  historyMode = true;
+  viewingMoment = detail;
+  document.body.classList.add('cy-history');
+  showHistoryPill(detail);
+}
+
+function exitToLive() {
+  historyMode = false;
+  viewingMoment = null;
+  document.body.classList.remove('cy-history');
+  const pill = $('#status');
+  if (pill) {
+    pill.classList.remove('is-history', 'bad');
+    pill.textContent = 'live';
+    pill.title = 'Travel back - pick a moment';
+    pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
+  }
+  if (window.__cyTimeTravel) window.__cyTimeTravel.close();
+  poll(); // resume following: the catch-up path replays everything missed at once
+}
+
+function showHistoryPill(detail) {
+  const pill = $('#status');
+  if (!pill) return;
+  const s = detail.summary || {};
+  const when = s.when || detail.ts || 'a past moment';
+  pill.classList.remove('bad');
+  pill.classList.add('is-history');
+  // Non-button x (the pill itself is the button; nested buttons are invalid). The
+  // whole pill returns to live; the x is the visible affordance for it.
+  pill.innerHTML = '<span class="live-when"></span><span class="live-exit" aria-hidden="true">&times;</span>';
+  pill.querySelector('.live-when').textContent = when;
+  pill.title = 'Return to live';
+  pill.setAttribute('aria-label', `Viewing ${when}. Activate to return to live.`);
 }
 
 // ---- operator pause/resume (ASYNC, admin only) --------------------------
