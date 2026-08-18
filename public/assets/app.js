@@ -44,6 +44,7 @@ async function boot() {
   if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT);
 
   wireForms();
+  initAdmin();
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
@@ -333,13 +334,15 @@ function setMode(mode, cause) {
   const el = $('#mode');
   if (!el) return;
   const label =
-    mode === 'letter'
-      ? 'WRITING A LETTER'
-      : mode === 'warden'
-        ? 'READING A NOTICE'
-        : mode === 'sleep' || mode === 'dream'
-          ? 'ASLEEP'
-          : 'JOURNAL';
+    mode === 'paused'
+      ? 'PAUSED'
+      : mode === 'letter'
+        ? 'WRITING A LETTER'
+        : mode === 'warden'
+          ? 'READING A NOTICE'
+          : mode === 'sleep' || mode === 'dream'
+            ? 'ASLEEP'
+            : 'JOURNAL';
   el.textContent = label + (cause && (mode === 'letter' || mode === 'warden') ? ' - ' + cause : '');
   el.dataset.mode = mode;
 }
@@ -352,6 +355,63 @@ function pushTicker(msg) {
   el.classList.add('show');
   clearTimeout(tickerTimer);
   tickerTimer = setTimeout(() => el.classList.remove('show'), 6000);
+}
+
+// ---- admin pause/resume (operator control, ?111 only) -------------------
+//
+// The button shows the COMMAND it will send: "PAUSE" while running, "RESUME"
+// while paused. It reflects the last commanded/confirmed state. The mode PILL,
+// by contrast, follows the ACTUAL runner state off the live stream (the runner
+// only stops at its next tempo poll, then emits mode:'paused'), so button =
+// command, pill = reality. Not dressed up in the fiction: this is an operator
+// control. No-op for an ordinary visitor (CFG.admin is null).
+function initAdmin() {
+  const url = CFG.admin;
+  const btn = $('#admin-pause');
+  if (!url || !btn) return;
+
+  let paused = false;
+  const render = () => {
+    btn.textContent = paused ? 'RESUME' : 'PAUSE';
+    btn.classList.toggle('paused', paused);
+    btn.title = paused
+      ? 'Operator control: RESUME the LLM. It is currently paused - no generation, so CPU and the meter DRAW fall toward idle.'
+      : 'Operator control: PAUSE the LLM (not part of the fiction). Stops generation so idle CPU/memory/draw can be read.';
+  };
+
+  // reflect current server state on load
+  fetch(url, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      if (d && typeof d.paused !== 'undefined') {
+        paused = !!d.paused;
+        render();
+      }
+    })
+    .catch(() => {});
+
+  btn.addEventListener('click', async () => {
+    const action = paused ? 'resume' : 'pause';
+    btn.disabled = true;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && typeof d.paused !== 'undefined') {
+        paused = !!d.paused;
+        render();
+      }
+    } catch (err) {
+      /* leave the button as-is; a failed toggle just does nothing */
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  render();
 }
 
 // ---- forms --------------------------------------------------------------

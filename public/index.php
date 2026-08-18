@@ -36,7 +36,11 @@ window.CY = {
   postPostcard: 'api/post-postcard.php',
   openverseSearch: 'api/openverse-search.php',
   tempo: 'api/tempo.php',
-  raw: <?= $rawEnabled ? 'true' : 'false' ?>
+  raw: <?= $rawEnabled ? 'true' : 'false' ?>,
+  // Operator pause/resume endpoint - only wired in admin (?111) mode. null for an
+  // ordinary visitor, so no control appears and the endpoint is never called. The
+  // ?111 rides on the URL because admin.php gates on it (same obscurity token).
+  admin: <?= $rawEnabled ? "'api/admin.php?111'" : 'null' ?>
 };
 </script>
 </head>
@@ -48,6 +52,12 @@ window.CY = {
     <span class="brand-sub">inmate 7734 &middot; HMP ThinkPad</span>
   </div>
   <div class="topmeta">
+<?php if ($rawEnabled): ?>
+    <!-- Operator pause/resume. Admin-only (?111). NOT part of the fiction: this is
+         a real control that stops the LLM so idle CPU/memory/draw can be read. -->
+    <button id="admin-pause" class="admin-btn" type="button"
+            title="Operator control: stop or resume the LLM (not part of the fiction). Paused = no generation, so CPU and the meter's DRAW fall toward idle.">PAUSE</button>
+<?php endif; ?>
     <span id="day" class="pill">DAY --</span>
     <span id="mode" class="pill" data-mode="journal">JOURNAL</span>
     <span id="status" class="pill status">connecting</span>

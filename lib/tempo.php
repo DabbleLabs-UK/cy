@@ -76,9 +76,41 @@ function captive_tempo_discard_custom(PDO $db): void
     $db->prepare('UPDATE tempo SET custom_speed = NULL, updated_at = NOW() WHERE id = 1')->execute();
 }
 
+// ---- operator pause flag (owner-only, persisted on the same tempo row) ------
+//
+// The pause is separate from the duty-cycle rule: it is the owner stopping the
+// LLM entirely so the machine's idle CPU/memory/draw can be read. The runner
+// reads it via the tempo poll (it is folded into captive_tempo_state below) and,
+// while paused, makes NO generation calls at all. Set via POST /api/admin.php.
+//
+// The getter is deliberately defensive: on a database that has not run the
+// 002_paused migration yet, the column is missing - rather than 500 the tempo
+// endpoint (which would break the whole page) it reports "not paused". So an
+// un-migrated deploy simply cannot be paused; nothing else breaks.
+function captive_tempo_paused(PDO $db): bool
+{
+    try {
+        $v = $db->query('SELECT paused FROM tempo WHERE id = 1')->fetchColumn();
+        return $v !== false && $v !== null && (int)$v !== 0;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function captive_tempo_set_paused(PDO $db, bool $paused): void
+{
+    $stmt = $db->prepare(
+        'INSERT INTO tempo (id, paused, updated_at) VALUES (1, :p, NOW())
+         ON DUPLICATE KEY UPDATE paused = :p, updated_at = NOW()'
+    );
+    $stmt->bindValue(':p', $paused ? 1 : 0, PDO::PARAM_INT);
+    $stmt->execute();
+}
+
 // Resolve the current effective tempo, reconciling the store: if nobody is
 // watching, any lingering custom value is discarded here. Returns the public
-// shape ['speed', 'viewers', 'custom'].
+// shape ['speed', 'viewers', 'custom', 'paused']. The runner reads 'paused' from
+// its existing tempo poll.
 function captive_tempo_state(PDO $db): array
 {
     $count = captive_viewer_count($db);
@@ -88,6 +120,7 @@ function captive_tempo_state(PDO $db): array
         captive_tempo_discard_custom($db);
     }
     unset($d['discard']);
+    $d['paused'] = captive_tempo_paused($db);
     return $d;
 }
 

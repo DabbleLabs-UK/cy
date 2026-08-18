@@ -69,8 +69,36 @@ html, body {
 #mode[data-mode="letter"] { color: #ffd08a; border-color: #6a5326; }
 #mode[data-mode="warden"] { color: #ff9d6a; border-color: #7a3a1e; }
 #mode[data-mode="sleep"] { color: #7f8fb0; }
+/* PAUSED: an operator state, made unmistakable - bright, filled, bold, pulsing. */
+#mode[data-mode="paused"] {
+  color: #ffe14d;
+  border-color: #b8860b;
+  background: #3a2c05;
+  font-weight: 700;
+  animation: pausePulse 1.6s ease-in-out infinite;
+}
+@keyframes pausePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 .status { color: var(--good); }
 .status.bad { color: var(--tel-hot); }
+
+/* Operator PAUSE/RESUME control (admin ?111 only). Deliberately reads as a
+   button, not a fiction pill. Label shows the action it will perform. */
+.admin-btn {
+  border: 1px solid #7a3a1e;
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: #ffb37a;
+  background: var(--chrome-0);
+  cursor: pointer;
+  font-family: inherit;
+}
+.admin-btn:hover { color: #ffd08a; border-color: #a8571f; }
+.admin-btn:disabled { opacity: 0.5; cursor: default; }
+/* while the runner is paused the button offers RESUME - tint it green (go). */
+.admin-btn.paused { color: #7ee0a0; border-color: #2f6b45; }
+.admin-btn.paused:hover { color: #a6f0c0; border-color: #3f8a5b; }
 
 /* ---- event ticker ---- */
 .ticker {
@@ -434,6 +462,11 @@ html, body {
 .hp-bar i.hot { background: linear-gradient(90deg, #a8571f, var(--tel-hot)); }
 .hp-v { color: #e8eef4; font-variant-numeric: tabular-nums; min-width: 4ch; text-align: right; }
 .hp-v2 { color: var(--tel); font-variant-numeric: tabular-nums; }
+/* the model footprint's source line (memory-mapped / processor / ctx) */
+.hp-v3 { color: var(--tel-dim); font-size: 10px; letter-spacing: 0.03em; }
+.hp-modelmeta { margin-top: -3px; }
+/* the misleading ollama working-set line, visually de-emphasised */
+.hp-dim { color: var(--tel-dim); }
 
 /* SYSTEM vs CY section headings inside the host panel */
 .hp-sec {

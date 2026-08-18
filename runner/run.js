@@ -685,6 +685,63 @@ async function main() {
   }
   probeOllama(); // prime a baseline now so the first host tick can show a delta
 
+  // ---- honest MODEL FOOTPRINT from ollama's own ps report --------------------
+  // A process working set is the WRONG place to look for the model's memory:
+  // llama.cpp MEMORY-MAPS the GGUF, so the multi-GB weights never appear in any
+  // process WS (with a 6.3GB model resident the ollama processes read only ~39MB
+  // and ~73MB). The ONLY honest source for the real footprint is ollama's own ps
+  // report - the /api/ps endpoint, the structured form of `ollama ps` - which
+  // gives the resident SIZE, the CPU/GPU processor split, and the context length.
+  // Fetched on the host timer, non-blocking (async, short timeout); values stay
+  // null until the first fetch lands and are kept across a transient failure.
+  const cyModel = { footprintMB: null, processor: null, ctx: null };
+  let probingModel = false;
+  // Render the CPU/GPU split the way `ollama ps` does, derived from size vs the
+  // GPU-resident portion: "100% CPU", "100% GPU", or "48%/52% CPU/GPU".
+  function processorSplit(size, vram) {
+    if (!(size > 0)) return null;
+    const gpu = Math.max(0, Math.min(100, Math.round((vram / size) * 100)));
+    const cpu = 100 - gpu;
+    if (gpu === 0) return '100% CPU';
+    if (gpu === 100) return '100% GPU';
+    return `${cpu}%/${gpu}% CPU/GPU`;
+  }
+  async function probeModelPs() {
+    if (probingModel) return; // never overlap probes
+    probingModel = true;
+    try {
+      const res = await fetch(`${config.ollamaUrl}/api/ps`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!res.ok) return; // keep last known
+      const data = await res.json();
+      const models = (data && data.models) || [];
+      if (!models.length) {
+        // nothing loaded (e.g. ollama idle-unloaded the model): report zero
+        // honestly rather than a stale figure - the footprint really is gone.
+        cyModel.footprintMB = 0;
+        cyModel.processor = null;
+        cyModel.ctx = null;
+        return;
+      }
+      // the largest resident model (there is normally exactly one loaded)
+      let m = models[0];
+      for (const x of models) if ((Number(x.size) || 0) > (Number(m.size) || 0)) m = x;
+      const size = Number(m.size) || 0; // total resident bytes - the real footprint
+      const vram = Number(m.size_vram) || 0; // portion resident on the GPU
+      cyModel.footprintMB = Math.round(size / 1024 / 1024);
+      cyModel.processor = processorSplit(size, vram);
+      const ctx = Number(m.context_length ?? (m.details && m.details.context_length));
+      cyModel.ctx = Number.isFinite(ctx) && ctx > 0 ? ctx : null;
+    } catch {
+      /* transient (ollama down / slow) - keep the last known footprint */
+    } finally {
+      probingModel = false;
+    }
+  }
+  probeModelPs(); // prime now so the first host tick can carry a real footprint
+
   // Per-burst emit state, reset at the start of every generation (streamGenerate).
   // `burstEmitted` is the text emitted so far in THIS burst, used to catch a burst
   // restating its own phrase; `burstAllowRepeat` exempts the forms that repeat by
@@ -1398,6 +1455,7 @@ async function main() {
     const free = os.freemem();
     const used = total - free;
     probeOllama(); // non-blocking: result lands on cyProc for a later tick
+    probeModelPs(); // non-blocking: model footprint lands on cyModel for a later tick
     const nodeMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
     emit({
       kind: 'host',
@@ -1407,10 +1465,15 @@ async function main() {
         memPct: Number(((used / total) * 100).toFixed(1)),
         memMB: Math.round(used / 1024 / 1024),
         memTotalMB: Math.round(total / 1024 / 1024),
-        // CY: only ollama (the model) plus this runner node process
+        // CY: the honest model footprint (from ollama ps - the weights are
+        // memory-mapped, so this is the ONLY real figure), separate from the
+        // misleading ollama process working set and this runner's own RSS.
         cyCpu: cyProc.ollamaCpu,
-        cyMemMB: cyProc.ollamaMB,
-        nodeMB,
+        modelMB: cyModel.footprintMB, // MEASURED: real resident footprint (ollama ps)
+        modelProc: cyModel.processor, // CPU/GPU split as ollama ps reports it
+        modelCtx: cyModel.ctx, // model's loaded context length, if reported
+        cyMemMB: cyProc.ollamaMB, // MEASURED: ollama process WS (misleading - see UI tip)
+        nodeMB, // MEASURED: runner's own RSS
         ollamaProcs: cyProc.ollamaProcs,
         gpu: null,
       },
@@ -1576,6 +1639,23 @@ async function main() {
   // ---- main generation loop ----
   async function genLoop() {
     while (running) {
+      // OPERATOR PAUSE (owner-only, admin ?111): the whole point is to make NO
+      // generation calls to ollama at all, so the machine's idle CPU/memory/draw
+      // can be read and the host figures reconciled. Every other timer (vitals,
+      // host stats, power sampling, event emission) runs on its own interval and
+      // keeps ticking, so the page stays live and the meter's DRAW visibly falls
+      // toward idle. Any pending postcards/warden notices stay queued and are
+      // picked up cleanly the moment we resume - the runner never restarts and no
+      // context is lost. Plain sleep (NOT idleSilently) so a queued postcard does
+      // not spin the loop and keep the CPU up - that would defeat the exercise.
+      if (client.paused) {
+        if (currentMode !== 'paused') {
+          emit({ kind: 'mode', payload: { from: currentMode, to: 'paused' } });
+          currentMode = 'paused';
+        }
+        await sleep(1000);
+        continue;
+      }
       if (pendingWarden.length) {
         await doWarden(pendingWarden.shift());
         continue;
@@ -1605,6 +1685,12 @@ async function main() {
       if (currentMode === 'dream') {
         leaveDream();
         emit({ kind: 'mode', payload: { from: 'dream', to: 'journal' } });
+      }
+      // resumed from an operator pause straight into a waking window: announce the
+      // return to the journal so the mode pill drops PAUSED at once (the asleep
+      // branch above emits its own paused->dream transition).
+      if (currentMode === 'paused') {
+        emit({ kind: 'mode', payload: { from: 'paused', to: 'journal' } });
       }
       const mode = 'journal';
       currentMode = mode;

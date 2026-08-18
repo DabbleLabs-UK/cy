@@ -102,13 +102,19 @@ CREATE TABLE viewers (
 -- leaves, so a returning viewer starts from the 30% "someone watching" default,
 -- never a stale custom value. The effective tempo is derived (see lib/tempo.php):
 -- nobody watching -> 5%, someone watching + no custom -> 30%, custom -> that value.
+-- `paused` is the owner's operator pause: an admin (?111) POST to /api/admin.php
+-- sets it, and the runner picks it up on its existing tempo poll. While paused the
+-- runner makes NO generation calls to ollama at all (the point being to watch the
+-- machine's CPU/memory/draw fall with the model idle); every other timer keeps
+-- running. It is deliberately NOT part of the derived duty-cycle rule above.
 CREATE TABLE tempo (
     id            TINYINT UNSIGNED PRIMARY KEY,
     custom_speed  TINYINT UNSIGNED NULL,
+    paused        TINYINT UNSIGNED NOT NULL DEFAULT 0,
     updated_at    DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO tempo (id, custom_speed, updated_at) VALUES (1, NULL, NOW());
+INSERT INTO tempo (id, custom_speed, paused, updated_at) VALUES (1, NULL, 0, NOW());
 
 -- Completed drawings. Cy draws through the same pen engine as his handwriting
 -- (a coarse 0-100 stroke DSL parsed in runner/draw.js); the `draw` events carry

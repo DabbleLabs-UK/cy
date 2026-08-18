@@ -11,11 +11,18 @@
 
 // Plain-language tooltips for every diagnostics stat - no jargon dumps.
 const TIP = {
-  syscpu: 'Total CPU use across the whole machine, including work that has nothing to do with 7734.',
-  sysmem: 'Total memory in use across the whole machine, including everything else running.',
-  cycpu: 'CPU used by 7734 alone - the ollama model process. The honest figure; the SYSTEM line includes everything else.',
-  cymem: 'Memory held by the model process (ollama) - the weights and its working memory.',
-  node: "The runner program's own memory: the small Node process that drives 7734.",
+  syscpu: 'Measured. Total CPU use across the whole machine, including work that has nothing to do with 7734.',
+  sysmem: 'Measured. Total memory in use across the whole machine, including everything else running.',
+  cycpu: 'Measured. CPU used by 7734 alone - the ollama model process. The honest figure; the SYSTEM line includes everything else.',
+  model:
+    "Measured. The model's REAL resident footprint, read from ollama's own ps report. llama.cpp memory-maps the GGUF weights, so they never show up in any process working set - so this ps figure, not the OLM line below, is the honest one.",
+  olmws:
+    'Measured. The ollama process working set. MISLEADING for the model: the weights are memory-mapped, so a multi-GB model shows only tens of MB here. The real footprint is the MODEL line above.',
+  node: "Measured. The runner program's own memory: the small Node process that drives 7734.",
+  othercpu: 'Derived. The rest of the machine that is NOT 7734: total CPU minus Cy. So SYSTEM = CY + OTHER.',
+  othermem: 'Derived. The rest of the machine that is NOT 7734: memory used minus Cy (model + ollama + runner). So the lines add up.',
+  proc: 'Measured. How ollama is running the model right now: all on CPU, all on GPU, or a split.',
+  modelctx: 'Measured. The context window the model is loaded with (tokens), as ollama ps reports it.',
   peval:
     'How many tokens of its briefing the model had to read this time. Anything it already held in memory is skipped, so a small number means it reused its notes and a large number means it started over.',
   kv: 'KV = key/value: the model stores a key and a value for every token it reads - its working memory of what it has read. Reusing that store is what lets it skip re-reading.',
@@ -57,24 +64,35 @@ export class Hud {
     this.hostEl.innerHTML = `
       <div class="hp-title">HMP ThinkPad &middot; Host</div>
 
-      <div class="hp-sec" title="${esc(TIP.syscpu)}">SYSTEM <span class="hp-sec-note">whole machine</span></div>
+      <div class="hp-sec" title="${esc(TIP.syscpu)}">SYSTEM <span class="hp-sec-note">whole machine, measured</span></div>
       <div class="hp-row" title="${esc(TIP.syscpu)}"><span class="hp-k">CPU</span>
         <span class="hp-bar"><i id="hp-cpu-bar"></i></span>
         <span class="hp-v" id="hp-cpu">--%</span></div>
       <div class="hp-row" title="${esc(TIP.sysmem)}"><span class="hp-k">MEM</span>
         <span class="hp-bar"><i id="hp-mem-bar"></i></span>
         <span class="hp-v" id="hp-mem">--%</span></div>
-      <div class="hp-row hp-sub" title="${esc(TIP.sysmem)}"><span class="hp-k">RSS</span>
+      <div class="hp-row hp-sub" title="${esc(TIP.sysmem)}"><span class="hp-k">USED</span>
         <span class="hp-v2" id="hp-memmb">---- MB</span></div>
 
       <div class="hp-sec" title="${esc(TIP.cycpu)}">CY <span class="hp-sec-note">7734 only</span></div>
       <div class="hp-row" title="${esc(TIP.cycpu)}"><span class="hp-k">CPU</span>
         <span class="hp-bar"><i id="hp-cycpu-bar"></i></span>
         <span class="hp-v" id="hp-cycpu">--%</span></div>
-      <div class="hp-row hp-sub" title="${esc(TIP.cymem)}"><span class="hp-k">OLM</span>
-        <span class="hp-v2" id="hp-cymemmb">---- MB</span></div>
+      <div class="hp-row hp-sub" title="${esc(TIP.model)}"><span class="hp-k">MODEL</span>
+        <span class="hp-v2" id="hp-modelmb">---- MB</span></div>
+      <div class="hp-row hp-sub hp-modelmeta" title="${esc(TIP.proc)}"><span class="hp-k"></span>
+        <span class="hp-v3" id="hp-modelmeta">memory-mapped &middot; ps figure</span></div>
+      <div class="hp-row hp-sub" title="${esc(TIP.olmws)}"><span class="hp-k">OLM</span>
+        <span class="hp-v2 hp-dim" id="hp-cymemmb">---- MB</span></div>
       <div class="hp-row hp-sub" title="${esc(TIP.node)}"><span class="hp-k">NODE</span>
         <span class="hp-v2" id="hp-nodemb">--- MB</span></div>
+
+      <div class="hp-sec" title="${esc(TIP.othercpu)}">OTHER <span class="hp-sec-note">not 7734, derived</span></div>
+      <div class="hp-row" title="${esc(TIP.othercpu)}"><span class="hp-k">CPU</span>
+        <span class="hp-bar"><i id="hp-othercpu-bar"></i></span>
+        <span class="hp-v" id="hp-othercpu">--%</span></div>
+      <div class="hp-row hp-sub" title="${esc(TIP.othermem)}"><span class="hp-k">MEM</span>
+        <span class="hp-v2" id="hp-othermb">---- MB</span></div>
 
       <details class="hp-diag">
         <summary>diagnostics</summary>
@@ -112,8 +130,13 @@ export class Hud {
     this.memMb = this.hostEl.querySelector('#hp-memmb');
     this.cyCpu = this.hostEl.querySelector('#hp-cycpu');
     this.cyCpuBar = this.hostEl.querySelector('#hp-cycpu-bar');
+    this.modelMb = this.hostEl.querySelector('#hp-modelmb');
+    this.modelMeta = this.hostEl.querySelector('#hp-modelmeta');
     this.cyMemMb = this.hostEl.querySelector('#hp-cymemmb');
     this.nodeMb = this.hostEl.querySelector('#hp-nodemb');
+    this.otherCpu = this.hostEl.querySelector('#hp-othercpu');
+    this.otherCpuBar = this.hostEl.querySelector('#hp-othercpu-bar');
+    this.otherMb = this.hostEl.querySelector('#hp-othermb');
     // diagnostics readouts
     this.g = {};
     for (const id of [
@@ -132,8 +155,12 @@ export class Hud {
     const memMb = num(p.memMB ?? p.mem_mb);
     const memTotalMb = num(p.memTotalMB ?? p.mem_total_mb);
     const cyCpu = num(p.cyCpu ?? p.cy_cpu);
-    const cyMemMb = num(p.cyMemMB ?? p.cy_mem_mb);
+    const modelMb = num(p.modelMB ?? p.model_mb); // real footprint (ollama ps)
+    const modelProc = p.modelProc ?? p.model_proc ?? null;
+    const modelCtx = num(p.modelCtx ?? p.model_ctx);
+    const cyMemMb = num(p.cyMemMB ?? p.cy_mem_mb); // ollama process WS (misleading)
     const nodeMb = num(p.nodeMB ?? p.node_mb);
+    // SYSTEM (measured)
     if (cpu != null) {
       this.cpu.textContent = cpu.toFixed(0) + '%';
       this.cpuBar.style.width = clampPct(cpu) + '%';
@@ -150,14 +177,46 @@ export class Hud {
         (memTotalMb != null ? ' / ' + Math.round(memTotalMb).toLocaleString() : '') +
         ' MB';
     }
-    // CY: only ollama + this runner. Null until the first per-process probe lands.
+    // CY (measured). Null until the first per-process / ps probe lands - leave the
+    // dash placeholder rather than showing a dishonest 0.
     if (cyCpu != null) {
       this.cyCpu.textContent = cyCpu.toFixed(0) + '%';
       this.cyCpuBar.style.width = clampPct(cyCpu) + '%';
       this.cyCpuBar.classList.toggle('hot', cyCpu > 85);
     }
+    if (modelMb != null) this.modelMb.textContent = Math.round(modelMb).toLocaleString() + ' MB';
+    if (this.modelMeta) {
+      // processor split + context length under the footprint - the rest of what
+      // ollama ps reports, so the honest figure is fully sourced.
+      const bits = ['memory-mapped'];
+      if (modelProc) bits.push(String(modelProc));
+      if (modelCtx != null) bits.push(Math.round(modelCtx).toLocaleString() + ' ctx');
+      this.modelMeta.textContent = bits.join(' · ');
+    }
     if (cyMemMb != null) this.cyMemMb.textContent = Math.round(cyMemMb).toLocaleString() + ' MB';
     if (nodeMb != null) this.nodeMb.textContent = Math.round(nodeMb).toLocaleString() + ' MB';
+    // OTHER (derived): the remainder so SYSTEM = CY + OTHER visibly. Any missing
+    // input -> '--' rather than a made-up number (honest accounting).
+    if (this.otherCpu) {
+      const oc = cpu != null && cyCpu != null ? Math.max(0, cpu - cyCpu) : null;
+      if (oc != null) {
+        this.otherCpu.textContent = oc.toFixed(0) + '%';
+        this.otherCpuBar.style.width = clampPct(oc) + '%';
+      } else {
+        this.otherCpu.textContent = '--%';
+        this.otherCpuBar.style.width = '0%';
+      }
+    }
+    if (this.otherMb) {
+      // system used minus Cy's three parts. The model footprint is the dominant
+      // real number; the mmap'd pages ARE part of system used, so subtracting the
+      // footprint (plus the small WS + runner RSS) leaves everything that is not Cy.
+      const om =
+        memMb != null && modelMb != null
+          ? Math.max(0, memMb - modelMb - (cyMemMb || 0) - (nodeMb || 0))
+          : null;
+      this.otherMb.textContent = om != null ? Math.round(om).toLocaleString() + ' MB' : '-- MB';
+    }
   }
 
   // Live generation telemetry from the `gen` event. prompt_eval_count is given

@@ -51,6 +51,11 @@ export class Client {
     // endpoint that is unreachable at startup never stalls or throttles blindly;
     // the first successful poll replaces it.
     this.tempo = { speed: 100, viewers: 0, custom: false };
+    // Operator pause (owner-only, set via /api/admin.php, read off the same tempo
+    // poll below). While true the generation loop makes NO ollama calls at all;
+    // every other timer keeps running. Defaults false so a poll failure at startup
+    // never freezes the loop - the first successful poll sets the real value.
+    this.paused = false;
     // live diagnostics: whether the last inbox/tempo poll succeeded, and the
     // last error string seen talking to the server (null once things recover).
     // Start null (unknown) so the HUD does not claim a failure before any poll.
@@ -251,6 +256,10 @@ export class Client {
         return; // transient; keep last known
       }
     }
+    // Pause rides on the same poll (it lives on the tempo row). Update it even if
+    // speed is somehow absent, so a resume/pause is honoured promptly and cannot
+    // be stranded by a malformed tempo body.
+    if (data && typeof data.paused !== 'undefined') this.paused = !!data.paused;
     if (!data || data.speed == null) return;
     const next = {
       speed: clampSpeed(data.speed),
