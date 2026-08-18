@@ -442,34 +442,60 @@ export function buildDirectives(v, mode, ctx = {}) {
     if (ctx.material) dp.push(ctx.material);
     return dp.join('\n\n');
   }
-  const parts = [];
+  // ---- ZONE C ORDER: stable-first, volatile-last (the KV-cache lever) --------
+  //
+  // Zone C sits after the append-only Zone B, so ollama's prompt cache reuses the
+  // whole ZONE_A(system) + Zone B prefix and then re-evaluates from the FIRST byte
+  // of Zone C that differs from the previous burst. The dominant per-burst cost on
+  // this CPU box is prompt-eval (~9 tok/s), so the single biggest win is to make
+  // that first-differing byte as LATE as possible - i.e. front-load the directives
+  // that are byte-identical between consecutive bursts and push the ones that change
+  // every burst to the very end. Ordered wrong (a per-tick line first) the cache
+  // breaks at the Zone C boundary and the entire ~500-token block is re-evaluated;
+  // ordered right, an event-free burst re-evaluates only the small volatile tail.
   const style = styleDirective(v);
-  if (style) parts.push(style);
-  if (ctx.bans) parts.push(ctx.bans);
   if (mode === 'sleep') {
+    const parts = [];
+    // the half-under blurb is a constant -> first, so it joins the cached prefix
     parts.push(
       'You are half under. Bang-up done, lights out. Only fragments surface - a word, a\n' +
         'half-image, then gone. Do not form full thoughts. Drift.',
     );
-    if (ctx.wingnoise) parts.push(ctx.wingnoise);
+    if (style) parts.push(style); // per-tick, volatile
+    if (ctx.bans) parts.push(ctx.bans); // per-burst, volatile
+    if (ctx.wingnoise) parts.push(ctx.wingnoise); // one-shot noise, freshest last
     return parts.join('\n\n');
   }
-  if (ctx.regime) parts.push(ctx.regime);
-  if (ctx.cast) parts.push(ctx.cast);
-  if (ctx.grudge) parts.push(ctx.grudge);
+  // TIER 1 - STABLE: byte-identical between consecutive event-free bursts, so the
+  // cached prefix extends right through them. Most-stable first (a constant), then
+  // the phase/relation blocks that only move on an event. Held ahead of the one-
+  // shot cues so a cue firing never pushes these out of the reused prefix.
+  const parts = [];
+  if (mode === 'journal') parts.push(ONE_SUBJECT); // constant anti-salad rule
+  if (ctx.regime) parts.push(ctx.regime); // changes ~8x/day at phase boundaries
+  if (ctx.cast) parts.push(ctx.cast); // moves only on a social event
+  if (ctx.grudge) parts.push(ctx.grudge); // moves only on a grudge change
+  // The incidents are the substance - the concrete material to write FROM. Kept as
+  // late as the stable tier allows (last here, just before the one-shot cues) so it
+  // still reads reasonably fresh, but ahead of the every-burst tail so a burst with
+  // no new incident reuses it from cache instead of re-evaluating it.
+  if (ctx.incidents) parts.push(ctx.incidents);
+  // TIER 2 - ONE-SHOT CUES: present in only the single burst they fire, absent the
+  // rest. Placed AFTER the stable tier so their appearance/disappearance only ever
+  // invalidates from here on, never the stable prefix above.
+  if (ctx.cost) parts.push(ctx.cost);
+  if (ctx.amplified) parts.push(ctx.amplified);
   if (ctx.officer) parts.push(ctx.officer);
   if (ctx.overheard) parts.push(ctx.overheard);
-  if (ctx.wingnoise) parts.push(ctx.wingnoise);
   if (ctx.visitor) parts.push(ctx.visitor);
-  if (ctx.amplified) parts.push(ctx.amplified);
   if (ctx.warden) parts.push(ctx.warden);
-  if (ctx.cost) parts.push(ctx.cost);
-  // Hold him to a single subject for the whole waking entry (the anti-salad rule).
-  // Sits just before the raw material so it frames what he writes FROM.
-  if (mode === 'journal') parts.push(ONE_SUBJECT);
-  // The incidents are the substance - the concrete material to write FROM - and
-  // the form is the shape to write it in; both go last so they read freshest.
-  if (ctx.incidents) parts.push(ctx.incidents);
+  if (ctx.wingnoise) parts.push(ctx.wingnoise);
+  // TIER 3 - VOLATILE: changes every burst, so it is re-evaluated no matter what -
+  // put it last, closest to the generation cue, where it also reads freshest. The
+  // state notation drifts every tick, the opener bans gain the last burst's opener,
+  // and the form is re-sampled per burst; the form (the shape) is dead last.
+  if (style) parts.push(style);
+  if (ctx.bans) parts.push(ctx.bans);
   if (ctx.form) parts.push(ctx.form);
   return parts.join('\n\n');
 }

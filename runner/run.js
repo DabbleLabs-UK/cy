@@ -591,6 +591,13 @@ async function main() {
   // the diagnostics readout needs (duty cycle, poll health, model/threads/ctx).
   // Guards on stats so an aborted/errored generation with no `done` line is a
   // no-op rather than a run of dashes.
+  // NB on tokens_in: ollama reports `prompt_eval_count` as the FULL prompt length
+  // even when the KV prefix was served from cache (its server log shows the real
+  // "cached n_tokens" reuse, but the API does not surface it). So tokens_in staying
+  // ~1749 across bursts does NOT mean the cache is cold - it always reads full. The
+  // honest cache-health signals are ttft_ms and total_ms: when the stable Zone A +
+  // Zone B prefix (and now the stable head of Zone C) is reused, only the volatile
+  // tail is actually evaluated and ttft_ms drops sharply even though tokens_in does not.
   // `detail` (optional) carries the per-burst material the RAW debugging view
   // renders: the three prompt zones (A fixed voice, B fed-back context, C volatile
   // directives), the sampling options actually sent to ollama, the full post-warden
