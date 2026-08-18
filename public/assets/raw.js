@@ -1,13 +1,16 @@
 // raw.js - the RAW debugging view for CY.
 //
 // An unstyled, live, debugging-grade view of what the runner is actually doing.
-// Gated behind admin (index.php sets window.CY.raw): only then does the
-// HANDWRITTEN | RAW toggle appear and this module do anything. Admin is decided
-// server-side (lib/admin.php) - the browser is on DELL's network (auto-detected
-// from the public IP DELL ingests from), OR the ?111 fallback flag is present.
-// The choice is remembered per session (sessionStorage) so a reload stays in RAW
-// while still admin. This is deliberate light obscurity, agreed with the owner -
-// NOT a login.
+// Gated behind admin (index.php sets window.CY.raw): only then is this module even
+// loaded, and only then does the RAW option appear in the view switch. Admin is
+// decided server-side (lib/admin.php) - the browser is on DELL's network
+// (auto-detected from the public IP DELL ingests from), OR the ?111 fallback flag
+// is present. This is deliberate light obscurity, agreed with the owner - NOT a
+// login.
+//
+// The view switch (app.js) owns which view is on screen and remembers the choice
+// for the session; this module just exposes window.__cyRaw.start()/stop() so the
+// switch can run RAW's own faster poll only while the raw view is showing.
 //
 // RAW replaces the paper sheet in place (the instrument panels keep updating,
 // driven by app.js as normal). It polls the SAME public event feed as app.js but
@@ -41,9 +44,8 @@ let logEl = null;        // the scrolling line container
 let jumpBtn = null;      // 'jump to live' affordance
 let capNote = null;      // "showing last N of M" footer
 let searchInput = null;
-let toggleWrap = null;
 
-let mode = 'handwritten'; // current view
+let active = false;       // is the raw view currently on screen (driven by app.js)
 let pollTimer = null;
 let hydrated = false;     // has RAW loaded a backlog yet
 let sinceSeq = 0;         // raw's own high-water mark (independent of app.js)
@@ -62,16 +64,17 @@ let wardenSinceGen = [];
 // ---- boot ---------------------------------------------------------------
 
 function boot() {
-  if (!CFG.raw) return; // not admin -> no toggle, no raw view, nothing to do
-  buildToggle();
+  if (!CFG.raw) return; // not admin -> raw.js is never loaded, but guard anyway
   buildShell();
-  // restore the session's choice; default to the ordinary handwritten sheet
-  const stored = sessionStorage.getItem('cy-view');
-  setMode(stored === 'raw' ? 'raw' : 'handwritten');
+
+  // The view switch (app.js) owns visibility; expose start/stop so it can run our
+  // faster poll only while the raw view is on screen.
+  window.__cyRaw = { start: startRaw, stop: stopRaw };
 
   if (document.body.dataset.test === '1') {
     window.__CY_RAW__ = {
-      setMode,
+      start: startRaw,
+      stop: stopRaw,
       isStuck: () => stuck,
       rowCount: () => logEl.querySelectorAll('.rl').length,
       kinds: () => [...logEl.querySelectorAll('.rl')].map((r) => r.dataset.kind),
@@ -79,27 +82,6 @@ function boot() {
       jumpBtn: () => jumpBtn,
     };
   }
-}
-
-// ---- the chrome toggle: HANDWRITTEN | RAW -------------------------------
-
-function buildToggle() {
-  const meta = $('.topmeta');
-  toggleWrap = document.createElement('div');
-  toggleWrap.className = 'viewtoggle';
-  toggleWrap.setAttribute('role', 'group');
-  toggleWrap.setAttribute('aria-label', 'view');
-  for (const [key, label] of [['handwritten', 'HANDWRITTEN'], ['raw', 'RAW']]) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'vt-btn';
-    b.dataset.view = key;
-    b.textContent = label;
-    b.addEventListener('click', () => setMode(key));
-    toggleWrap.appendChild(b);
-  }
-  // place it before the status pill so it reads left-to-right in the chrome
-  if (meta) meta.insertBefore(toggleWrap, meta.firstChild);
 }
 
 // ---- the raw view shell -------------------------------------------------
@@ -192,33 +174,15 @@ function logRootChips() {
   return $('#raw') ? $('#raw').querySelectorAll('.raw-chip') : [];
 }
 
-// ---- mode switching -----------------------------------------------------
-
-function setMode(next) {
-  mode = next === 'raw' ? 'raw' : 'handwritten';
-  sessionStorage.setItem('cy-view', mode);
-  document.body.classList.toggle('raw-active', mode === 'raw');
-
-  const paper = $('#paper');
-  const raw = $('#raw');
-  if (paper) paper.hidden = mode === 'raw';
-  if (raw) raw.hidden = mode !== 'raw';
-
-  if (toggleWrap) {
-    for (const b of toggleWrap.querySelectorAll('.vt-btn')) {
-      b.classList.toggle('sel', b.dataset.view === mode);
-    }
-  }
-
-  if (mode === 'raw') startRaw();
-  else stopRaw();
-}
+// ---- activation (driven by the view switch in app.js) -------------------
 
 function startRaw() {
-  if (!hydrated) { hydrated = true; hydrate(); }
+  active = true;
+  if (!hydrated) { hydrated = true; hydrate(); } // pull a backlog on first entry
   if (!pollTimer) pollTimer = setInterval(pollRaw, POLL_MS);
 }
 function stopRaw() {
+  active = false;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
@@ -245,7 +209,7 @@ async function hydrate() {
 }
 
 async function pollRaw() {
-  if (mode !== 'raw') return;
+  if (!active) return;
   try {
     const data = await fetchStream(sinceSeq);
     for (const ev of data.events || []) render(ev);

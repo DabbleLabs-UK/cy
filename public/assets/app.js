@@ -14,6 +14,9 @@ import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
+// Registers the <async-select> custom element used by the view switch and the
+// operator pause control below. Side-effect import (it self-defines the element).
+import '../components/async-select/async-select.js';
 
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
@@ -30,7 +33,6 @@ const $ = (sel) => document.querySelector(sel);
 let pen, postcards, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
-let adminCtl = null; // the pause control's state machine (wired in initAdmin)
 
 // ---- inference LED (public, everyone) -----------------------------------
 // A small dot next to the pause control that lights while the model is producing
@@ -102,8 +104,9 @@ async function boot() {
   if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT);
 
   wireForms();
-  initLed();
-  initAdmin();
+  initViewSwitch();
+  initPauseControl();
+  initLed(); // last, so the LED lands leftmost (before the selects)
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
@@ -407,7 +410,7 @@ function setMode(mode, cause) {
   // across the whole page (not just the pill), and feed it to the pause control so
   // the button settles to confirmed reality rather than an optimistic guess.
   document.body.classList.toggle('cy-paused', mode === 'paused');
-  if (adminCtl) adminCtl.syncMode(mode);
+  syncRunnerState(mode);
   const el = $('#mode');
   if (!el) return;
   const label =
@@ -434,125 +437,174 @@ function pushTicker(msg) {
   tickerTimer = setTimeout(() => el.classList.remove('show'), 6000);
 }
 
-// ---- admin pause/resume (operator control, admin only) ------------------
+// ---- view switch: handwritten / plain / raw (LOCAL, instant) ------------
 //
-// "Admin" is decided server-side (lib/admin.php): the browser is on DELL's
-// network (auto-detected) OR the ?111 fallback is present. index.php only sets
-// CFG.admin (the endpoint URL) when admin; it is null otherwise, so this is a
-// no-op for an ordinary visitor and the endpoint is never touched.
+// A single <async-select> in LOCAL mode. Switching view is a client-only concern -
+// no server round trip - so every option is `local`: it applies instantly with no
+// pending state (the deliberate counterpart to the genuinely-async pause control
+// below; the SAME component serves both kinds). handwritten and plain are for
+// everyone; raw is admin-only, so the raw option is simply ABSENT (not disabled)
+// when CFG.raw is false. The choice is remembered for the session so a reload keeps
+// it; ?view= (CFG.viewOverride) can force the starting view.
+const VIEW_KEY = 'cy-view';
+let viewSelect = null;
+
+function initViewSwitch() {
+  const meta = document.querySelector('.topmeta');
+  if (!meta) return;
+  const admin = CFG.raw === true;
+
+  const options = [
+    { value: 'handwritten', label: 'Handwritten', description: 'pen on paper', local: true },
+    { value: 'plain', label: 'Plain', description: 'clean reading view', local: true },
+  ];
+  if (admin) options.push({ value: 'raw', label: 'Raw', description: 'terminal log', local: true });
+
+  const sel = document.createElement('async-select');
+  sel.className = 'cy-select cy-view-select';
+  sel.setAttribute('label', 'View');
+  meta.insertBefore(sel, $('#day') || null); // left of the day/mode/status pills
+  sel.options = options;
+
+  // initial view: ?view override > remembered session choice > default handwritten
+  let initial = 'handwritten';
+  const stored = sessionStorage.getItem(VIEW_KEY);
+  if (stored && options.some((o) => o.value === stored)) initial = stored;
+  if (CFG.viewOverride && options.some((o) => o.value === CFG.viewOverride)) initial = CFG.viewOverride;
+
+  sel.value = initial; // seed the confirmed value (an external set, no 'confirmed')
+  viewSelect = sel;
+  applyView(initial); // actually reveal it
+
+  // a LOCAL option confirms instantly and emits 'confirmed' with local:true
+  sel.addEventListener('confirmed', (e) => applyView(e.detail.value));
+}
+
+function applyView(view) {
+  sessionStorage.setItem(VIEW_KEY, view);
+  const isHand = view === 'handwritten';
+  const isPlain = view === 'plain';
+  const isRaw = view === 'raw';
+
+  const paper = $('#paper');
+  const postcards = $('#postcards');
+  const plainEl = $('#plain');
+  const rawEl = $('#raw');
+  if (paper) paper.hidden = !isHand;
+  if (postcards) postcards.hidden = !isHand; // reply cards belong to the handwritten sheet
+  if (plainEl) plainEl.hidden = !isPlain;
+  if (rawEl) rawEl.hidden = !isRaw;
+
+  document.body.classList.toggle('raw-active', isRaw);
+  document.body.classList.toggle('plain-active', isPlain);
+
+  // RAW runs its own faster poll only while shown (admin only; __cyRaw is absent
+  // otherwise). PLAIN is fed continuously by dispatch(), so it is already populated -
+  // it just needs pinning to the live edge when revealed (its scroll offsets are
+  // meaningless while it is display:none).
+  if (window.__cyRaw) isRaw ? window.__cyRaw.start() : window.__cyRaw.stop();
+  if (isPlain && window.__cyPlain && window.__cyPlain.reveal) window.__cyPlain.reveal();
+}
+
+// ---- operator pause/resume (ASYNC, admin only) --------------------------
 //
-// The control shows STATE, not a command: the label reads exactly 'ACTIVE' or
-// 'PAUSED', reflecting the RUNNER'S REAL state off the live stream (the mode goes
-// 'paused' only once the runner has actually stopped). The tooltip describes what a
-// tap will DO ('pause generation' / 'resume generation').
-//
-// A tap does not optimistically flip the label. It:
-//   1. gives immediate feedback - a disabled, pulsing PENDING look - so it never
-//      feels dead, while POSTing the command to admin.php;
-//   2. surfaces a POST failure at once (the command never reached/persisted);
-//   3. otherwise WAITS for the runner to acknowledge via the stream, then settles
-//      the label to the confirmed state;
-//   4. if no acknowledgement arrives within a few seconds, shows FAILED so the
-//      operator knows the runner did not act (and can tap again to retry).
-// No-op for an ordinary visitor (CFG.admin is null): the button is not rendered.
-function initAdmin() {
+// The genuinely asynchronous counterpart to the view switch: a two-option
+// <async-select> (ACTIVE / PAUSED) whose commit POSTs to admin.php but settles ONLY
+// when the runner's REAL state confirms OUT OF BAND on the event stream - not from
+// the POST response. So the control shows a pending state until the runner actually
+// stops/starts; a POST failure surfaces at once (rejects the commit); and if the
+// runner never acknowledges, the component's own timeout drops it into a retryable
+// FAILED state. The component's supersede guard handles a double-tap. No-op for an
+// ordinary visitor (CFG.admin is null), and admin.php enforces the gate server-side.
+let pauseSelect = null;
+let pauseWaiter = null; // { target, resolve, reject } awaiting the stream confirmation
+
+function initPauseControl() {
   const url = CFG.admin;
-  const btn = $('#admin-pause');
-  if (!url || !btn) return;
+  const meta = document.querySelector('.topmeta');
+  if (!url || !meta) return;
 
-  let confirmed = null; // the runner's REAL paused state (from the stream). null = unknown
-  let pending = null; // { target:boolean } while awaiting the runner's acknowledgement
-  let failed = false; // last command did not reach/land - surfaced until the next tap
-  let failTimer = null;
-  const ACK_TIMEOUT_MS = 15000; // safety margin; the runner now cuts the burst and acks within a poll, so this should almost never be hit
+  const sel = document.createElement('async-select');
+  sel.className = 'cy-select cy-pause-select';
+  sel.setAttribute('label', 'Runner');
+  // the runner cuts its burst and acks within a poll; this is only the safety net
+  // past which "never acknowledged" becomes a retryable FAILED.
+  sel.setAttribute('timeout', '15000');
+  meta.insertBefore(sel, $('#day') || null);
+  sel.options = [
+    { value: 'active', label: 'ACTIVE', description: 'generating' },
+    { value: 'paused', label: 'PAUSED', description: 'generation stopped' },
+  ];
+  sel.value = 'active'; // provisional seed; corrected below by the flag + the stream
 
-  const render = () => {
-    const isPaused = confirmed === true;
-    btn.textContent = isPaused ? 'PAUSED' : 'ACTIVE'; // STATE, nothing else
-    btn.classList.toggle('paused', isPaused);
-    btn.classList.toggle('pending', !!pending);
-    btn.classList.toggle('failed', failed);
-    btn.disabled = !!pending;
-    if (pending) {
-      btn.title = pending.target ? 'Pausing... waiting for the runner to stop.' : 'Resuming... waiting for the runner to start.';
-    } else if (failed) {
-      btn.title = 'The runner did not acknowledge - it may not have acted. Tap to try again.';
-    } else {
-      btn.title = isPaused ? 'resume generation' : 'pause generation';
-    }
-  };
+  // commit resolves only on the runner's real acknowledgement (via syncRunnerState).
+  sel.commit = (value, ctx) =>
+    new Promise((resolve, reject) => {
+      const waiter = { target: value, resolve, reject };
+      pauseWaiter = waiter;
 
-  const clearFail = () => {
-    if (failTimer) clearTimeout(failTimer);
-    failTimer = null;
-  };
+      // supersede (double-tap) or timeout aborts the signal: drop our waiter and
+      // reject so the component settles (superseded is ignored; timeout -> FAILED).
+      ctx.signal.addEventListener('abort', () => {
+        if (pauseWaiter === waiter) pauseWaiter = null;
+        reject(new Error('superseded or timed out'));
+      });
 
-  // the runner's real mode arriving on the stream - the only thing that settles a
-  // pending toggle. Matching target -> confirmed; a change we did not ask for still
-  // keeps the label honest.
-  const syncMode = (mode) => {
-    if (mode == null) return;
-    const nowPaused = mode === 'paused';
-    confirmed = nowPaused;
-    if (pending && pending.target === nowPaused) {
-      pending = null;
-      failed = false;
-      clearFail();
-    }
-    render();
-  };
+      // A POST failure means the command never landed - reject NOW rather than
+      // waiting out a stream confirmation that will never come.
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: value === 'paused' ? 'pause' : 'resume' }),
+        signal: ctx.signal,
+      })
+        .then(async (res) => {
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok || (d && d.ok === false)) {
+            if (pauseWaiter === waiter) pauseWaiter = null;
+            reject(new Error((d && d.error) || 'HTTP ' + res.status));
+          }
+          // accepted + persisted: keep waiting for the runner's real state
+        })
+        .catch((err) => {
+          if (pauseWaiter === waiter) pauseWaiter = null;
+          reject(err);
+        });
+    });
 
-  // seed the label from the server's current flag so it is not blank before the
-  // first stream frame; the stream then keeps it honest (this is a hint only).
+  pauseSelect = sel;
+
+  // seed the label from the server's current flag so it is not a guess before the
+  // first stream frame; the stream then keeps it honest (a silent hint only).
   fetch(url, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (d && typeof d.paused !== 'undefined' && confirmed === null) {
-        confirmed = !!d.paused;
-        render();
+      if (d && typeof d.paused !== 'undefined') {
+        sel.setConfirmed(d.paused ? 'paused' : 'active', { silent: true });
       }
     })
     .catch(() => {});
+}
 
-  btn.addEventListener('click', async () => {
-    if (pending) return; // already awaiting an acknowledgement
-    const target = !(confirmed === true); // paused -> resume, active/unknown -> pause
-    pending = { target };
-    failed = false;
-    render();
-    clearFail();
-    failTimer = setTimeout(() => {
-      if (pending) {
-        pending = null;
-        failed = true; // the runner never acknowledged within the window
-        render();
-      }
-    }, ACK_TIMEOUT_MS);
+// The runner's REAL mode off the live stream (fed from setMode). This is the only
+// thing that settles a pending pause/resume: it resolves the in-flight commit once
+// the runner reaches the requested state, and otherwise reconciles the control
+// honestly if the state moved for another reason. Any non-'paused' mode = active.
+function syncRunnerState(mode) {
+  if (mode == null || !pauseSelect) return;
+  const value = mode === 'paused' ? 'paused' : 'active';
 
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: target ? 'pause' : 'resume' }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok || (d && d.ok === false)) {
-        throw new Error((d && d.error) || 'HTTP ' + res.status);
-      }
-      // command accepted + persisted. Do NOT flip the label here - wait for the
-      // runner's real acknowledgement via syncMode (or the fail timer).
-    } catch (err) {
-      // the POST itself failed: the command did not land, so surface it now rather
-      // than waiting out the timeout.
-      pending = null;
-      failed = true;
-      clearFail();
-      render();
-    }
-  });
-
-  adminCtl = { syncMode };
-  render();
+  if (pauseWaiter && pauseWaiter.target === value) {
+    // the runner reached what we asked for: resolve the commit and let the
+    // component settle itself (a brief confirmed tick, then idle).
+    const w = pauseWaiter;
+    pauseWaiter = null;
+    w.resolve();
+    return;
+  }
+  // no matching in-flight request: adopt the authoritative value (external change,
+  // or the first confirmation). setConfirmed is a no-op when already there.
+  if (pauseSelect.value !== value) pauseSelect.setConfirmed(value);
 }
 
 // ---- forms --------------------------------------------------------------

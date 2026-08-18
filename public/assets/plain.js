@@ -20,13 +20,11 @@
 // bordered block, in order, newest at the bottom, auto-scrolling unless the reader
 // has scrolled up. Everything is ordinary selectable/copyable text.
 //
-// STAGE 3: exposed behind a temporary ?view=plain flag (index.php sets
-// window.CY.plain). Stage 4 wires the view-switching select; this module is
-// deliberately agnostic about how it is turned on.
+// The view switch (app.js) owns which view is on screen; this module is agnostic
+// about how it is turned on. It stays hidden until the switch selects it and
+// exposes window.__cyPlain (event sink + font handoff + reveal) for app.js.
 
 import { sketchToPaths } from './pen.js';
-
-const CFG = window.CY || {};
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
@@ -45,22 +43,16 @@ const draws = new Map();          // drawing id -> { svg, strokes[] }
 // ---- boot ---------------------------------------------------------------
 
 function boot() {
-  if (!CFG.plain) return; // flag absent -> do nothing at all
   root = document.getElementById('plain');
   if (!root) return;
 
   buildShell();
 
-  // PLAIN replaces the paper sheet in place; the instrument panels stay untouched.
-  const paper = document.getElementById('paper');
-  const postcards = document.getElementById('postcards');
-  if (paper) paper.hidden = true;
-  if (postcards) postcards.hidden = true;
-  root.hidden = false;
-  document.body.classList.add('plain-active');
-
-  // the contract app.js forwards to (event sink + font handoff)
-  window.__cyPlain = { handle, setFont };
+  // The view switch (app.js) owns visibility - PLAIN stays hidden (index.php marks
+  // #plain hidden) until it is selected. app.js forwards EVERY event here from the
+  // moment it registers, so the pane is always populated and switching to it is
+  // instant; reveal() just pins it to the live edge when it becomes visible.
+  window.__cyPlain = { handle, setFont, reveal };
 
   if (document.body.dataset.test === '1') {
     window.__CY_PLAIN__ = {
@@ -351,6 +343,14 @@ function autoScroll() {
 function scrollToBottom() {
   scrollEl.scrollTop = scrollEl.scrollHeight;
   if (jumpBtn) jumpBtn.hidden = true;
+}
+
+// Called by the view switch (app.js) when PLAIN becomes visible: pin it to the
+// live edge. Scroll offsets computed while the pane was display:none are
+// meaningless, so this restores the "following live" position on reveal.
+function reveal() {
+  stuck = true;
+  scrollToBottom();
 }
 
 boot();

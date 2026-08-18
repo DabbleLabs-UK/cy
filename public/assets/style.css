@@ -81,31 +81,37 @@ html, body {
 .status { color: var(--good); }
 .status.bad { color: var(--tel-hot); }
 
-/* Operator PAUSE/RESUME control (admin ?111 only). Deliberately reads as a
-   button, not a fiction pill. Label shows the action it will perform. */
-.admin-btn {
-  border: 1px solid #7a3a1e;
-  border-radius: 3px;
-  padding: 3px 10px;
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  color: #ffb37a;
-  background: var(--chrome-0);
-  cursor: pointer;
-  font-family: inherit;
+/* ---- top-bar async-selects: the view switch + the operator pause control ----
+   Both are instances of the reusable <async-select>, themed ONLY through its
+   public --as-* custom properties (never by reaching past its shadow boundary) so
+   they sit in the instrument panel like the pills beside them: compact, the same
+   size as each other, and no larger than they need to be. State colouring
+   (pending / confirmed / rejected / failed) is the component's own, mapped here to
+   the panel's telemetry palette. */
+.cy-select {
+  --as-bg: var(--chrome-1);
+  --as-bg-raised: var(--chrome-0);
+  --as-bg-hover: var(--chrome-2);
+  --as-border: var(--line);
+  --as-border-strong: #3a4657;
+  --as-text: var(--tel);
+  --as-text-dim: var(--tel-dim);
+  --as-text-faint: var(--tel-dim);
+  --as-accent: var(--tel-cool);
+  --as-good: var(--good);
+  --as-bad: var(--tel-hot);
+  --as-provisional: #ffbf47;
+  --as-focus-ring: #6fb2ff;
+  --as-radius: 3px;
+  --as-hit: 24px;            /* a top-bar control, not a form field */
+  --as-pad-y: 3px;          /* match the pills' padding for a consistent height */
+  --as-pad-x: 9px;
+  --as-gap: 6px;
+  --as-font: var(--mono);
+  --as-font-size: 11px;
 }
-.admin-btn:hover { color: #ffd08a; border-color: #a8571f; }
-.admin-btn:disabled { cursor: default; }
-/* the label reads STATE: PAUSED is filled green (stopped/go-to-resume), ACTIVE is
-   the default amber outline. */
-.admin-btn.paused { color: #7ee0a0; border-color: #2f6b45; }
-.admin-btn.paused:hover { color: #a6f0c0; border-color: #3f8a5b; }
-/* PENDING: command sent, waiting for the runner to acknowledge - a pulsing,
-   disabled look so the control never feels dead on a tap. */
-.admin-btn.pending { opacity: 0.75; animation: adminPending 1s ease-in-out infinite; }
-@keyframes adminPending { 0%, 100% { opacity: 0.75; } 50% { opacity: 0.35; } }
-/* FAILED: the runner did not acknowledge (or the command never landed). */
-.admin-btn.failed { color: #ff8a6a; border-color: var(--tel-hot); }
+.cy-view-select { --as-min-width: 8.5rem; }
+.cy-pause-select { --as-min-width: 8rem; }
 
 /* ---- inference LED (public): lights while the model is producing text -------- */
 .infer-led {
@@ -939,31 +945,7 @@ body.cy-paused::after {
   .col-brain, .col-side { order: 1; }
 }
 
-/* ================= RAW DEBUGGING VIEW (behind ?111) ================= */
-
-/* the chrome toggle: HANDWRITTEN | RAW */
-.viewtoggle {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  overflow: hidden;
-  margin-right: 4px;
-}
-.vt-btn {
-  appearance: none;
-  background: var(--chrome-1);
-  color: var(--tel-dim);
-  border: none;
-  border-right: 1px solid var(--line);
-  padding: 4px 9px;
-  font-family: var(--mono);
-  font-size: 9.5px;
-  letter-spacing: 0.16em;
-  cursor: pointer;
-}
-.vt-btn:last-child { border-right: none; }
-.vt-btn:hover { color: var(--tel); }
-.vt-btn.sel { background: var(--tel-cool); color: #eaf2f8; }
+/* ================= RAW DEBUGGING VIEW (admin only) ================= */
 
 /* the raw panel sits exactly where the paper sheet did */
 .raw {

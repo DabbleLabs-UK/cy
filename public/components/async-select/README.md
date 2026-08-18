@@ -166,6 +166,8 @@ async-select {
   --as-provisional: #ffbf47;  /* requested, not yet true */
   --as-radius: 6px;
   --as-hit: 44px;             /* min touch target */
+  --as-pad-y: 8px;            /* trigger padding - lower for a compact/top-bar fit */
+  --as-pad-x: 12px;
   --as-min-width: 12rem;
 }
 ```
