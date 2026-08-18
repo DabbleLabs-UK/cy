@@ -337,3 +337,70 @@ export function drawDslPrompt(subject, { badly = false } = {}) {
   const how = badly ? ' rushed and careless, you do not care if it is any good.' : '';
   return `Draw this, crude and quick, commands only:${how}\n${subject}\n`;
 }
+
+// ---- the dream drawing ----------------------------------------------------
+//
+// Asleep, he draws ABSURDLY SLOWLY: one stroke every 1-2 minutes, so a single
+// abstract shape emerges over an hour or more. Someone checking the page at 4am
+// sees one more line than there was at 3am. At most ONE dream drawing per night,
+// started at a random point in the small hours. The strokes are generated here
+// (deterministic given `rnd`, no model call) as the SAME stroke DSL the pen
+// consumes - abstract, not representational: concentric marks, a shape gone over
+// and over, something enclosing something else.
+
+// The small hours - the window a dream drawing may START in (01:00-05:00).
+export const SMALL_HOURS_START = 1 * 60;
+export const SMALL_HOURS_END = 5 * 60;
+export function isSmallHours(mins) {
+  return mins >= SMALL_HOURS_START && mins < SMALL_HOURS_END;
+}
+// A random minute-of-day to begin the night's one drawing, kept inside the small
+// hours with room to spare before it ends.
+export function pickDreamStartMin(rnd = Math.random) {
+  const span = SMALL_HOURS_END - SMALL_HOURS_START - 20; // leave >=20 min of window
+  return SMALL_HOURS_START + Math.floor(rnd() * Math.max(1, span));
+}
+
+// One stroke every 1-2 minutes. Returned per stroke so each mark is paced apart.
+export function dreamStrokeGapMs(rnd = Math.random) {
+  return Math.round((60 + rnd() * 60) * 1000); // 60_000 .. 120_000
+}
+
+// Build the night's abstract drawing as an ordered stroke list. Repeated motifs:
+// a stack of concentric circles, the same arc gone over again and again, a box
+// enclosing the lot, and a mark at the centre stabbed a few times. Coordinates
+// stay on the 0-100 grid the pen expects.
+export function dreamDrawing(rnd = Math.random) {
+  const clampG = (n) => Math.max(4, Math.min(96, Math.round(n)));
+  const cx = 42 + Math.round(rnd() * 12);
+  const cy = 42 + Math.round(rnd() * 12);
+  const strokes = [];
+  // concentric marks: something enclosing something else, ring after ring
+  const rings = 5 + Math.floor(rnd() * 4); // 5..8
+  for (let i = 0; i < rings; i++) {
+    const r = Math.min(40, 5 + i * (3 + rnd() * 3));
+    strokes.push({ t: 'C', x: cx, y: cy, r });
+  }
+  // a shape gone over again and again: the same arc, redrawn with a small drift
+  const reps = 3 + Math.floor(rnd() * 3); // 3..5
+  for (let i = 0; i < reps; i++) {
+    const r = 18 + rnd() * 10;
+    strokes.push({ t: 'A', x: cx, y: cy, r, a1: 20 + i * 6, a2: 300 + i * 9 });
+  }
+  // the box around it all
+  const h = 34;
+  const corners = [
+    [cx - h, cy - h],
+    [cx + h, cy - h],
+    [cx + h, cy + h],
+    [cx - h, cy + h],
+  ].map(([x, y]) => [clampG(x), clampG(y)]);
+  for (let i = 0; i < 4; i++) {
+    strokes.push({ t: 'L', pts: [corners[i], corners[(i + 1) % 4]] });
+  }
+  // the centre, gone over
+  for (let i = 0; i < 3; i++) {
+    strokes.push({ t: 'D', x: clampG(cx + (rnd() * 2 - 1)), y: clampG(cy + (rnd() * 2 - 1)) });
+  }
+  return strokes;
+}

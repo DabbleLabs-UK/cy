@@ -11,6 +11,17 @@ import { BY_KEY, CAST, OFFICERS } from './cast.js';
 
 export const NUM_CTX = 3072;
 
+// ---- the sleep window (single source of truth) -----------------------------
+//
+// He is asleep - and dreaming - between lights_out (22:30) and lights_on (06:30)
+// UK time. Defined here so the clock predicate the loop branches on and the tests
+// that assert the branch selection read from ONE place and can never drift.
+export const LIGHTS_OUT_MIN = 22 * 60 + 30; // 22:30
+export const LIGHTS_ON_MIN = 6 * 60 + 30; //  06:30
+export function isSleepWindow(mins) {
+  return mins >= LIGHTS_OUT_MIN || mins < LIGHTS_ON_MIN;
+}
+
 // BURST BOUNDARY. Consecutive generations are concatenated into both the emitted
 // text stream and the fed-back Zone B context. If the previous context ends
 // mid-word (no trailing whitespace) and the next burst's first chunk does not
@@ -295,6 +306,121 @@ export function bansDirective(recentOpeners = []) {
   return lines.join('\n');
 }
 
+// ---- DREAM MODE -------------------------------------------------------------
+//
+// Asleep, he does not write journal entries - he emits MURMURS. This is the one
+// place incoherence is CORRECT: dream logic, broken grammar, wrong names,
+// impossible juxtapositions, half a thing that never lands. The waking coherence
+// rules (ONE_SUBJECT, train-of-thought, the anti-salad caps) are deliberately
+// NOT applied. Kept as its own small directive so it can never mix with waking.
+export const MURMUR_MIN_WORDS = 3;
+export const MURMUR_MAX_WORDS = 8;
+
+const DREAM_MURMUR = [
+  'You are deep under, dreaming. This is not a thought - it is a murmur in your sleep,',
+  'half said aloud to nobody. 3 to 8 words. lowercase. no capitals, no full stop.',
+  'It does not have to make sense and should not: names land on the wrong faces, a',
+  'place you have never been, half a thing that never finishes. say it once, then nothing.',
+].join('\n');
+
+// The night-waking line: a wing noise drags him up for ONE lucid, frightened,
+// properly punctuated line - the OPPOSITE of a murmur - and then straight back
+// under. Deliberately different in register so it lands hard.
+export function dreamWakeDirective(line) {
+  return [
+    'A noise on the wing drags you up out of it: ' + (line || 'something in the dark') + '.',
+    'For ONE line you are awake, and it is frightening and clear - a full, properly',
+    'punctuated sentence, a capital to start, a full stop to end, nothing like the murmurs.',
+    'Then you go straight back under.',
+  ].join('\n');
+}
+
+// Weighted sample without replacement: k items drawn in proportion to weight.
+function weightedSample(pool, k, rnd = Math.random) {
+  const cand = (Array.isArray(pool) ? pool : []).filter((p) => p && p.text && (p.weight || 0) > 0).slice();
+  const out = [];
+  const n = Math.max(0, Math.min(k, cand.length));
+  for (let i = 0; i < n; i++) {
+    const total = cand.reduce((s, p) => s + (p.weight || 0), 0);
+    if (total <= 0) break;
+    let r = rnd() * total;
+    let idx = 0;
+    for (; idx < cand.length; idx++) {
+      r -= cand[idx].weight || 0;
+      if (r <= 0) break;
+    }
+    idx = Math.min(idx, cand.length - 1);
+    out.push(cand[idx]);
+    cand.splice(idx, 1);
+  }
+  return out;
+}
+
+// The dream MATERIAL: drawn from the memory POOL (postcard images + captions,
+// news headlines, the cast, older incidents) - RECOMBINED AND DISTORTED, never
+// an accurate replay. `pool` is [{ kind, text, weight }] assembled by the loop,
+// where weight already folds significance and recency (the image significance/
+// decay weighting). Returns the seed directive plus the items chosen and the
+// top significance, so the loop can decide whether a fragment surfaces at unlock.
+export function dreamMaterial(pool, { rnd = Math.random } = {}) {
+  const items = weightedSample(pool, 2 + Math.floor(rnd() * 2), rnd); // 2-3
+  const frags = items.map((it) => (it.text || '').trim()).filter(Boolean);
+  if (!frags.length) return { directive: '', items: [], significance: 0 };
+  const significance = items.reduce((s, it) => Math.max(s, it.weight || 0), 0);
+  const lines = [
+    'DREAM STUFF (already coming apart - do NOT tell it straight, do NOT get it right):',
+    ...frags.map((f) => '- ' + f),
+    'let these bleed into each other - the wrong name on the wrong face, one place turning',
+    'into another, the yard somewhere you have never been. a fragment, not the whole thing.',
+  ];
+  return { directive: lines.join('\n'), items, significance };
+}
+
+// Enforce the murmur shape on whatever the model returned: lowercase, first
+// clause only, at most MURMUR_MAX_WORDS words, no terminal punctuation. Defensive
+// - the constraint holds even when the model overshoots. Returns '' if empty.
+export function shapeMurmur(raw, { maxWords = MURMUR_MAX_WORDS } = {}) {
+  let t = String(raw || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (!t) return '';
+  const words = t.split(' ').filter(Boolean).slice(0, maxWords);
+  t = words.join(' ');
+  t = t.replace(/[\s.?!,;:'"()\-]+$/g, ''); // strip any terminal punctuation
+  return t.trim();
+}
+
+// True iff `text` reads as a valid sleep-talk murmur: lowercase, no terminal
+// stop, MURMUR_MIN_WORDS..MURMUR_MAX_WORDS words. Used by tests and as a guard.
+export function isMurmur(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t !== t.toLowerCase()) return false; // no capitals
+  if (/[.?!]$/.test(t)) return false; // no terminal punctuation
+  const n = t.split(/\s+/).filter(Boolean).length;
+  return n >= MURMUR_MIN_WORDS && n <= MURMUR_MAX_WORDS;
+}
+
+// Murmurs are spaced far apart - 5 to 20 minutes - so the page stays mostly
+// still, much longer than the waking cadence.
+export function dreamMurmurGapMs(rnd = Math.random) {
+  return Math.round((5 + rnd() * 15) * 60 * 1000);
+}
+
+// Dream sampling lives in its own HIGH band (1.1-1.35), pushed by dissociation,
+// INDEPENDENT of the waking `sampling` formula. This is where high temperature
+// belongs; the waking prose must stay coherent and is unaffected by this.
+export function dreamSampling(v) {
+  const m = (v && v.mental) || {};
+  const diss = typeof m.dissociation === 'number' ? m.dissociation : 0.5;
+  const temperature = Number(Math.max(1.1, Math.min(1.35, 1.12 + 0.22 * diss)).toFixed(3));
+  return {
+    temperature,
+    top_p: 0.98,
+    repeat_penalty: 1.1,
+    repeat_last_n: 64,
+    num_predict: 24, // a murmur is tiny; shapeMurmur trims to 3-8 words anyway
+  };
+}
+
 // ---- ZONE C: the volatile directives, rebuilt every burst -------------------
 //
 // Everything here changes per burst (state directives, the selected form, the
@@ -305,6 +431,17 @@ export function bansDirective(recentOpeners = []) {
 //   { bans, regime, cast, grudge, officer, overheard, wingnoise, visitor,
 //     amplified, warden, cost, incidents, form } - any may be omitted/empty.
 export function buildDirectives(v, mode, ctx = {}) {
+  // DREAM is a wholly separate branch. It shares only the persona/voice in the
+  // cached Zone A; NONE of the waking Zone C directives (state style, form, one-
+  // subject, incidents, bans) apply, and no waking directive is allowed to leak
+  // in here - so dream incoherence never contaminates the waking coherence rules
+  // and vice versa. Either it is a night-waking lucid line, or it is a murmur.
+  if (mode === 'dream') {
+    if (ctx.wake) return dreamWakeDirective(ctx.wakeLine);
+    const dp = [DREAM_MURMUR];
+    if (ctx.material) dp.push(ctx.material);
+    return dp.join('\n\n');
+  }
   const parts = [];
   const style = styleDirective(v);
   if (style) parts.push(style);
@@ -426,7 +563,9 @@ const STOP = [
 
 // Assemble ollama options from vitals + config, with per-mode overrides.
 export function options(v, threads, mode, overrides = {}) {
-  const s = sampling(v);
+  // Dream mode samples from its OWN high-temperature band; the waking formula is
+  // not used here (and dream temperature never feeds back into waking sampling).
+  const s = mode === 'dream' ? dreamSampling(v) : sampling(v);
   if (mode === 'sleep') s.num_predict = Math.max(12, Math.round(s.num_predict * 0.3));
   return {
     ...s,
@@ -498,6 +637,21 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
       '',
       '[you read it twice. it lands. then, in your head:]',
     );
+    return lines.join('\n');
+  }
+  // dream: a murmur (or a night-waking line) seeded ONLY from the dream directives.
+  // The waking Zone B prose is deliberately DROPPED here - the dream must not
+  // continue his day, and no waking prose may seed a murmur. Symmetrically, dream
+  // text is never appended to Zone B by the loop, so it never reaches a waking
+  // prompt either: the two context windows are kept strictly apart.
+  if (mode === 'dream') {
+    const wake = payload && payload.wake;
+    const cue = wake
+      ? '[you come up hard out of sleep, awake for one second:]'
+      : '[deep under. a murmur surfaces in your sleep, half a word:]';
+    const lines = [];
+    if (zoneC) lines.push(zoneC);
+    lines.push('', cue);
     return lines.join('\n');
   }
   // journal / sleep: prose (Zone B), then the volatile directives (Zone C), then

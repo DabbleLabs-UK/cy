@@ -142,7 +142,9 @@ function dispatch(ev, bootstrap) {
   const p = ev.payload || {};
   switch (ev.kind) {
     case 'text':
-      pen.write(p.s, p.mode);
+      // p.mode 'dream' + p.lucid distinguishes a faint sleep-talk murmur from the
+      // rare, normal-weight lucid night-waking line.
+      pen.write(p.s, p.mode, p.lucid);
       break;
 
     case 'draw':
@@ -150,7 +152,10 @@ function dispatch(ev, bootstrap) {
       // backlog fill pen.instant is set, so a drawing that finished before you
       // arrived lays down complete instead of re-animating from scratch.
       pen.draw(p);
-      if (!bootstrap && p.pass && p.pass.i === 0) {
+      if (!bootstrap && p.dream) {
+        // the night's slow dream drawing: mention it once, quietly, at its start
+        if (p.seq === 0) pushTicker('drawing something in his sleep');
+      } else if (!bootstrap && p.pass && p.pass.i === 0) {
         pushTicker('picking the pen up' + (p.title ? ': ' + String(p.title).slice(0, 48) : ''));
       }
       break;
@@ -295,7 +300,13 @@ function setMode(mode, cause) {
   const el = $('#mode');
   if (!el) return;
   const label =
-    mode === 'letter' ? 'WRITING A LETTER' : mode === 'warden' ? 'READING A NOTICE' : mode === 'sleep' ? 'ASLEEP' : 'JOURNAL';
+    mode === 'letter'
+      ? 'WRITING A LETTER'
+      : mode === 'warden'
+        ? 'READING A NOTICE'
+        : mode === 'sleep' || mode === 'dream'
+          ? 'ASLEEP'
+          : 'JOURNAL';
   el.textContent = label + (cause && (mode === 'letter' || mode === 'warden') ? ' - ' + cause : '');
   el.dataset.mode = mode;
 }

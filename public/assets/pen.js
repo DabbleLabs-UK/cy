@@ -70,6 +70,14 @@ function strokeToPath(pts) {
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
+// Dream murmurs render fainter and smaller than waking prose - the page at night
+// should look almost empty. A lucid night-waking line is the exception: it uses
+// the normal weight so it lands hard. Pure + static so a headless test can assert
+// the murmur style is genuinely faint and small without a browser.
+export function dreamTextStyle() {
+  return { opacityScale: 0.45, sizeScale: 0.82 };
+}
+
 // ---- sketch geometry ------------------------------------------------------
 //
 // A drawing is the SAME engine as handwriting: the model emits a coarse 0-100
@@ -254,6 +262,17 @@ export class Pen {
     this.textLayer.setAttribute('class', 'text-layer');
     this.scrollG.appendChild(this.textLayer);
 
+    // dream layer - the slowly-filling surface for the night's dream drawing. It
+    // sits in the SVG ROOT user space (a sibling of the scroll group, NOT inside
+    // it), so it does NOT scroll away with the text: the abstract shape stays put
+    // and accumulates one mark at a time through the small hours. Faint ink, no
+    // ruled lines. Persists until lights_on, when it fades and is set aside.
+    this.dreamLayer = document.createElementNS(SVGNS, 'g');
+    this.dreamLayer.setAttribute('class', 'dream-layer');
+    this.dreamLayer.setAttribute('aria-hidden', 'true');
+    svg.appendChild(this.dreamLayer);
+    this._dreamBoxes = new Map(); // dream drawing id -> its fixed surface box
+
     // nib layer sits in the SVG root user space (never translated), so a point
     // mapped through path.getCTM() lands correctly over the ink without any
     // scroll correction.
@@ -368,16 +387,30 @@ export class Pen {
       this._enqueue({ type: 'newline' });
       this.write('Dear friend,', 'letter');
       this._enqueue({ type: 'newline' });
-    } else if (prev === 'letter') {
+      return;
+    }
+    if (mode === 'dream') {
+      // night: mark the paper as the dream surface (a hook for a dimmer sheet) and
+      // start the murmurs on a fresh line. No salutation, nothing else.
+      if (this.root && this.root.classList) this.root.classList.add('paper-dream');
+      this._enqueue({ type: 'newline' });
+      return;
+    }
+    if (prev === 'letter') {
       this.ruled = true;
       this.root.classList.remove('paper-unruled');
+      this._enqueue({ type: 'newline' });
+    } else if (prev === 'dream') {
+      // lights_on: fade the dream surface aside and resume normal ruled paper.
+      if (this.root && this.root.classList) this.root.classList.remove('paper-dream');
+      this._fadeDreamSurface();
       this._enqueue({ type: 'newline' });
     }
   }
 
   // ---- public: queue text ----------------------------------------------
 
-  write(str, mode) {
+  write(str, mode, lucid) {
     if (!str) return;
     // a fresh thought clears any lingering abort state
     this.abortFlag = false;
@@ -385,6 +418,9 @@ export class Pen {
     // tag the instant flag onto the job so a mid-drain setInstant(false) does
     // not accidentally animate the tail of the backlog.
     const instant = this.instant;
+    // a dream murmur is written faint + small; a lucid night-waking line (lucid)
+    // uses the normal hand so it lands hard, even though it too carries mode dream.
+    const dreamText = mode === 'dream' && !lucid;
     // resuming after a long silence: lay down the time marker on its own fresh
     // line first, in the same hand, so the gap reads as "then, at HH:MM...".
     if (this._resumeMarker) {
@@ -393,7 +429,7 @@ export class Pen {
       for (const ch of mk) this._enqueue({ type: 'char', ch, instant });
       this._enqueue({ type: 'newline' });
     }
-    for (const ch of str) this._enqueue({ type: 'char', ch, instant });
+    for (const ch of str) this._enqueue({ type: 'char', ch, instant, dream: dreamText });
     this._pump();
   }
 
@@ -407,6 +443,12 @@ export class Pen {
   draw(drawing) {
     if (!drawing || !Array.isArray(drawing.strokes) || !drawing.strokes.length) return;
     this.abortFlag = false;
+    // a dream drawing (drawing.dream) accumulates on the separate, non-scrolling
+    // dream surface, one mark at a time; a waking drawing lays into the page flow.
+    if (drawing.dream) {
+      this._enqueue({ type: 'dreamdraw', drawing, instant: this.instant });
+      return;
+    }
     this._enqueue({ type: 'draw', drawing, instant: this.instant });
   }
 
@@ -487,6 +529,10 @@ export class Pen {
           await this._drawSketch(job.drawing, job.instant);
           continue;
         }
+        if (job.type === 'dreamdraw') {
+          await this._drawDreamStroke(job.drawing, job.instant);
+          continue;
+        }
         // char
         const ch = job.ch;
         if (ch === '\n') {
@@ -495,11 +541,11 @@ export class Pen {
         }
         if (ch === ' ' || ch === '\t') {
           this._recordChar(' '); // real space in the text, at its own x
-          this.x += this._spaceAdvance();
+          this.x += this._spaceAdvance(job.dream);
           this.midWord = false;
           continue;
         }
-        await this._drawChar(ch, job.instant);
+        await this._drawChar(ch, job.instant, job.dream);
       }
     } finally {
       this.running = false;
@@ -507,8 +553,9 @@ export class Pen {
     }
   }
 
-  _spaceAdvance() {
-    return 6 * (this.size / 21); // ~ half advance of a mid-width glyph
+  _spaceAdvance(dream) {
+    const size = dream ? this.size * dreamTextStyle().sizeScale : this.size;
+    return 6 * (size / 21); // ~ half advance of a mid-width glyph
   }
 
   _glyphFor(ch) {
@@ -581,15 +628,18 @@ export class Pen {
     this._announce(line.chars.join(''));
   }
 
-  async _drawChar(ch, instant) {
+  async _drawChar(ch, instant, dream) {
     const g = this._glyphFor(ch);
     if (!g) {
       // no glyph for this codepoint: still keep it in the readable text
       this._recordChar(ch);
-      this.x += this._spaceAdvance();
+      this.x += this._spaceAdvance(dream);
       return;
     }
-    const scale = this.size / 21;
+    // a dream murmur renders smaller and fainter than waking prose
+    const ds = dream ? dreamTextStyle() : null;
+    const size = ds ? this.size * ds.sizeScale : this.size;
+    const scale = size / 21;
     const advance = g.o * 2 * scale;
 
     // word wrap: only wrap at a word boundary (never mid-word), never on the
@@ -608,10 +658,10 @@ export class Pen {
     const dyBase = (Math.random() * 2 - 1) * this.jitterBase;
     const sx = scale * (1 + (Math.random() * 2 - 1) * this.jitterScale);
     const sw = this.strokeWidth * (0.9 + Math.random() * 0.2);
-    const op = this.inkOpacity * (0.9 + Math.random() * 0.1);
+    const op = this.inkOpacity * (0.9 + Math.random() * 0.1) * (ds ? ds.opacityScale : 1);
 
     const grp = document.createElementNS(SVGNS, 'g');
-    grp.setAttribute('class', 'glyph');
+    grp.setAttribute('class', ds ? 'glyph dream' : 'glyph');
     grp.setAttribute(
       'transform',
       `translate(${this.x.toFixed(2)}, ${(this.y + dyBase).toFixed(2)}) rotate(${rot.toFixed(2)}) scale(${sx.toFixed(4)}, ${scale.toFixed(4)}) translate(0, ${-BASELINE})`,
@@ -900,6 +950,54 @@ export class Pen {
       anim.oncancel = settle;
       setTimeout(finalize, dur + 150);
     });
+  }
+
+  // ---- dream surface: the slow, non-scrolling drawing of the night ---------
+  //
+  // A dream drawing arrives ONE stroke at a time over the small hours, all events
+  // sharing an `id`. The first stroke reserves a fixed box on the dream layer
+  // (centred, in root user space so it never scrolls away); every later stroke
+  // overlays into that SAME box, so the shape accumulates. Because each stroke is
+  // its own event, a page reload replays them all and the surface rebuilds to
+  // exactly where it was. Faint ink, no ruled lines. Backlog fill lays each mark
+  // down flat (instant), so a mid-drawing reload is not re-animated from scratch.
+  async _drawDreamStroke(drawing, instant) {
+    const id = drawing.id || 'dream';
+    let box = this._dreamBoxes.get(id);
+    if (!box) {
+      const side = Math.max(140, Math.min(this.w, this.h) * 0.5);
+      const grp = document.createElementNS(SVGNS, 'g');
+      grp.setAttribute('class', 'dream-sketch');
+      const ox = (this.w - side) / 2;
+      const oy = (this.h - side) / 2;
+      grp.setAttribute('transform', `translate(${ox.toFixed(2)}, ${oy.toFixed(2)}) scale(${(side / 100).toFixed(4)})`);
+      this.dreamLayer.appendChild(grp);
+      box = { ox, oy, side, scale: side / 100, grp };
+      this._dreamBoxes.set(id, box);
+    }
+    // very faint, a touch of wobble; despair/mood not applied - a dream is dim.
+    const style = { sw: 1.0, op: 0.26, jitter: 0.6 };
+    for (const seg of sketchToPaths(drawing.strokes, { font: this.font })) {
+      if (this.abortFlag) break;
+      const jx = (Math.random() * 2 - 1) * style.jitter;
+      const jy = (Math.random() * 2 - 1) * style.jitter;
+      await this._sketchStroke(box.grp, seg, box.scale, style, jx, jy, instant);
+    }
+  }
+
+  // lights_on: fade the accumulated dream surface aside and clear it so the next
+  // night starts on a fresh surface. The strokes already laid down stay faint
+  // under the fade; a real fade-out is left to CSS via the `.faded` class.
+  _fadeDreamSurface() {
+    if (!this.dreamLayer) return;
+    if (this.dreamLayer.classList) this.dreamLayer.classList.add('faded');
+    this._dreamBoxes.clear();
+    const clear = () => {
+      while (this.dreamLayer.firstChild) this.dreamLayer.removeChild(this.dreamLayer.firstChild);
+      if (this.dreamLayer.classList) this.dreamLayer.classList.remove('faded');
+    };
+    if (typeof setTimeout !== 'undefined') setTimeout(clear, 2000);
+    else clear();
   }
 
   // ---- nib -------------------------------------------------------------

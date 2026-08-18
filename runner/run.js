@@ -29,7 +29,23 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { ZONE_A, buildDirectives, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, applyBurstSeparator, NUM_CTX } from './prompt.js';
+import {
+  ZONE_A,
+  buildDirectives,
+  buildPrompt,
+  options,
+  letterPredict,
+  amplifiedDirective,
+  pickForm,
+  bansDirective,
+  wingnoiseDirective,
+  applyBurstSeparator,
+  NUM_CTX,
+  isSleepWindow,
+  shapeMurmur,
+  dreamMaterial,
+  dreamMurmurGapMs,
+} from './prompt.js';
 import {
   parseStrokes,
   splitPasses,
@@ -41,6 +57,10 @@ import {
   drawIntentDirective,
   drawDslSystem,
   drawDslPrompt,
+  dreamDrawing,
+  dreamStrokeGapMs,
+  isSmallHours,
+  pickDreamStartMin,
 } from './draw.js';
 import { introspect } from './introspect.js';
 import {
@@ -48,6 +68,7 @@ import {
   makeIncident,
   pushIncident,
   incidentsDirective,
+  incidentLine,
   resolveThreads,
 } from './incidents.js';
 import {
@@ -68,6 +89,7 @@ import {
   updateVisitorStanding,
   isOfficer,
   BY_KEY,
+  CAST,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
 import { createWarden, sanitize, stripScaffold, isRepeat, repeatsWithinBurst } from './warden.js';
@@ -115,8 +137,9 @@ function londonParts(d = new Date()) {
   return { date: `${p.year}-${p.month}-${p.day}`, hour, minute, mins: hour * 60 + minute };
 }
 
-// asleep between lights_out (22:30) and lights_on (06:30)
-const isAsleep = (mins) => mins >= 22 * 60 + 30 || mins < 6 * 60 + 30;
+// asleep between lights_out (22:30) and lights_on (06:30). The predicate lives in
+// prompt.js so the loop and the dream tests read the window from one place.
+const isAsleep = isSleepWindow;
 
 const SCHEDULE = [
   { name: 'lights_on', mins: 6 * 60 + 30 },
@@ -269,6 +292,14 @@ async function main() {
   if (typeof vitals.lastDrawMs !== 'number') vitals.lastDrawMs = 0;
   if (typeof vitals.lastImageMs !== 'number') vitals.lastImageMs = 0;
   if (typeof vitals.lastDrawSubject !== 'string') vitals.lastDrawSubject = '';
+  // DREAM state (persists with everything else). dreamPool holds the memory
+  // material dreams recombine (postcard images/captions + news headlines, decayed
+  // by recency and scaled by significance); the date fields cap the night's one
+  // slow drawing to a single occurrence.
+  if (!Array.isArray(vitals.dreamPool)) vitals.dreamPool = [];
+  if (typeof vitals.dreamDrawDate !== 'string') vitals.dreamDrawDate = '';
+  if (typeof vitals.dreamPlanDate !== 'string') vitals.dreamPlanDate = '';
+  if (typeof vitals.dreamStartMin !== 'number') vitals.dreamStartMin = 0;
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
@@ -332,6 +363,45 @@ async function main() {
     pushIncident(vitals.ledger, inc);
     vitals.lastIncidentMs = Date.now();
     return inc;
+  }
+
+  // Capture a piece of memory into the dream pool: a postcard image/caption or a
+  // news headline. `sig` (0..1, from the amplification the event landed under) is
+  // stored so significant material weighs heavier in dreams; the timestamp lets
+  // recency decay it. Capped so the pool stays small and recent.
+  function pushDreamMemory(kind, text, sig) {
+    const t = (text || '').toString().trim();
+    if (!t) return;
+    vitals.dreamPool.push({ kind, text: t.slice(0, 120), sig: clamp(typeof sig === 'number' ? sig : 0.5), ts: Date.now() });
+    while (vitals.dreamPool.length > 24) vitals.dreamPool.shift();
+  }
+
+  // Assemble the weighted candidate pool a dream recombines: recent images/
+  // headlines (significance * recency decay), older incidents from the ledger,
+  // and the cast (whoever is charged rises). Weight folds significance and
+  // recency exactly as the image significance/decay weighting does.
+  function buildDreamPool() {
+    const now = Date.now();
+    const out = [];
+    for (const it of vitals.dreamPool || []) {
+      const ageH = (now - (it.ts || now)) / 3600000;
+      const decay = Math.max(0.1, 1 - ageH / 72); // ~3-day fade
+      const w = (typeof it.sig === 'number' ? it.sig : 0.5) * decay;
+      if (w > 0.02) out.push({ kind: it.kind, text: it.text, weight: Number(w.toFixed(3)) });
+    }
+    const led = Array.isArray(vitals.ledger) ? vitals.ledger : [];
+    led.forEach((inc, i) => {
+      const text = incidentLine(inc);
+      if (!text) return;
+      const recency = led.length ? (i + 1) / led.length : 0.5; // newer -> heavier
+      out.push({ kind: 'incident', text, weight: Number((0.3 + 0.3 * recency).toFixed(3)) });
+    });
+    for (const c of CAST) {
+      const r = (vitals.relations || {})[c.key] || {};
+      const charge = (r.grudge || 0) + (r.warmth || 0) * 0.5 + (r.suspicion || 0) * 0.4;
+      out.push({ kind: 'person', text: c.name, weight: Number((0.25 + charge).toFixed(3)) });
+    }
+    return out;
   }
 
   // ZONE B: the model's own CLEANED output, fed back in. Only scaffold-free prose
@@ -750,7 +820,13 @@ async function main() {
     fireEvent(evName, { from: pc.from_name || null });
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
-    if (pc.image_path) vitals.lastImageMs = Date.now(); // a picture just came - he may draw off it
+    if (pc.image_path) {
+      vitals.lastImageMs = Date.now(); // a picture just came - he may draw off it
+      // remember the picture for dreams: its caption/attribution is the material,
+      // significance scaled by the amplification the mail landed under.
+      const sig = clamp(0.3 + 0.2 * (ampOf(vitals) - 1));
+      pushDreamMemory('image', pc.caption || pc.image_attrib || 'a picture through the door', sig);
+    }
     // a reply arriving clears the mail-wait / awaiting-reply threads in the ledger
     resolveThreads(vitals.ledger, ['reply', 'message', 'mail']);
 
@@ -945,7 +1021,9 @@ async function main() {
       interrupt = true;
     }
     for (const n of data.news || []) {
-      fireEvent('news_arrives', { headline: n.headline || null });
+      const a = fireEvent('news_arrives', { headline: n.headline || null });
+      // a headline is dream material too: significance from the amp it landed under
+      if (n.headline) pushDreamMemory('headline', n.headline, clamp(0.3 + 0.2 * (a - 1)));
     }
     for (const w of data.warden || []) {
       if (!w || !w.text) continue;
@@ -1236,6 +1314,152 @@ async function main() {
     }
   }
 
+  // ---- DREAM: murmurs, one slow abstract drawing, night waking ---------------
+  //
+  // Transient per-night state (the persistent parts - the pool and the one-
+  // drawing-per-night date - live on vitals). nextMurmurAt paces murmurs 5-20 min
+  // apart; draw holds the night's single slowly-accumulating abstract drawing.
+  const dreamState = {
+    nextMurmurAt: 0,
+    draw: null, // { id, strokes, next, nextStrokeAt, n, mood }
+    frag: null, // last dream fragment, for the rare morning carry
+    fragSig: 0, // best significance seen this night
+  };
+
+  // Emit a dream text event (a murmur, or a lucid night-waking line). Screened
+  // like any output, but DELIBERATELY NOT appended to contextBuf: dream content
+  // must never enter the waking Zone B context window.
+  async function emitDreamText(s, { lucid = false } = {}) {
+    const chunk = stripScaffold(sanitize(s));
+    if (!chunk.trim()) return;
+    const res = warden.screenOut(chunk);
+    if (!res.ok) {
+      await warden.logBlock(res.reason, chunk, tsNow());
+      return;
+    }
+    const payload = { s: chunk + ' ', mode: 'dream' };
+    if (lucid) payload.lucid = true;
+    emit({ kind: 'text', payload });
+  }
+
+  // Keep one properly punctuated sentence from a night-waking generation.
+  function firstSentence(raw) {
+    let t = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    const m = t.match(/^(.*?[.!?])(?:\s|$)/);
+    t = m ? m[1] : t.slice(0, 120).replace(/[,;:\s]+$/, '') + '.';
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  // Arm the night's ONE slow drawing: pick a random start minute in the small
+  // hours once per night, and once the clock reaches it, plan the abstract shape.
+  function maybeArmDream(now, mins, date) {
+    if (vitals.dreamDrawDate === date) return; // already drew tonight
+    if (dreamState.draw) return; // one in progress
+    if (!isSmallHours(mins)) return;
+    if (vitals.dreamPlanDate !== date) {
+      vitals.dreamPlanDate = date;
+      vitals.dreamStartMin = pickDreamStartMin();
+    }
+    if (mins < vitals.dreamStartMin) return;
+    vitals.dreamDrawDate = date; // claim the night's single drawing
+    const strokes = dreamDrawing();
+    dreamState.draw = { id: 'dr' + now.toString(36), strokes, next: 0, nextStrokeAt: 0, n: strokes.length, mood: moodSnapshot(vitals) };
+  }
+
+  // Release the next stroke of the dream drawing if one is due (1-2 min apart).
+  // Each stroke is its own `draw` event carrying dream:true and a seq/total, so
+  // the slow accumulation is real and survives a page reload mid-drawing.
+  function advanceDreamDraw(now) {
+    const d = dreamState.draw;
+    if (!d) return false;
+    if (now < (d.nextStrokeAt || 0)) return false;
+    if (d.next >= d.strokes.length) {
+      dreamState.draw = null;
+      return false;
+    }
+    const stroke = d.strokes[d.next];
+    emit({ kind: 'draw', payload: { id: d.id, dream: true, strokes: [stroke], seq: d.next, total: d.n, mood: d.mood } });
+    d.next++;
+    d.nextStrokeAt = now + dreamStrokeGapMs();
+    if (d.next >= d.strokes.length) dreamState.draw = null;
+    return true;
+  }
+
+  // He just woke: he does NOT remember the dream at unlock, UNLESS the material
+  // scored highly, in which case a fragment may surface as an incident this
+  // morning. Then reset the night's transient dream state.
+  function leaveDream() {
+    if (dreamState.frag && dreamState.fragSig >= 0.6 && Math.random() < 0.5) {
+      pushIncident(vitals.ledger, {
+        actor: '',
+        verb: '',
+        object: '',
+        detail: 'something left over from a dream, ' + dreamState.frag,
+        resolved: false,
+        ts: tsNow(),
+      });
+      vitals.lastIncidentMs = Date.now();
+    }
+    dreamState.frag = null;
+    dreamState.fragSig = 0;
+    dreamState.draw = null;
+    dreamState.nextMurmurAt = 0;
+  }
+
+  // One night iteration: a night-waking lucid line if a wing noise surfaced him,
+  // else advance the slow drawing, else a murmur if one is due, else sit still a
+  // short slice so the next stroke lands within its 1-2 min window.
+  async function dreamStep(mins) {
+    const now = Date.now();
+    const date = londonParts(new Date(now)).date;
+
+    // NIGHT WAKING: a wing noise drags him up for ONE lucid line, then back under.
+    if (wingNoiseCue && wingNoiseCue.wake && now < wingNoiseCue.until) {
+      const line = wingNoiseCue.line;
+      wingNoiseCue = null; // fire once
+      const directives = buildDirectives(vitals, 'dream', { wake: true, wakeLine: line });
+      const prompt = buildPrompt('', 'dream', { wake: true }, directives);
+      const opts = options(vitals, config.threads, 'dream', { num_predict: 48 });
+      await logPrompt('dream-wake', ZONE_A + '\n\n---PROMPT---\n' + prompt);
+      const raw = await rawGenerate({ system: ZONE_A, prompt, opts });
+      const one = firstSentence(raw);
+      if (one) await emitDreamText(one, { lucid: true });
+      dreamState.nextMurmurAt = now + dreamMurmurGapMs(); // settle back under
+      await idleSilently(4000);
+      return;
+    }
+
+    // the night's one slow abstract drawing: arm it, then release a due stroke
+    maybeArmDream(now, mins, date);
+    if (advanceDreamDraw(now)) {
+      await idleSilently(3000);
+      return;
+    }
+
+    // a murmur, spaced far apart (5-20 min)
+    if (now >= dreamState.nextMurmurAt) {
+      const mat = dreamMaterial(buildDreamPool(), {});
+      if (mat.items.length) {
+        dreamState.frag = mat.items[0].text;
+        dreamState.fragSig = Math.max(dreamState.fragSig || 0, mat.significance || 0);
+      }
+      const directives = buildDirectives(vitals, 'dream', { material: mat.directive });
+      const prompt = buildPrompt('', 'dream', null, directives);
+      const opts = options(vitals, config.threads, 'dream');
+      await logPrompt('dream', ZONE_A + '\n\n---PROMPT---\n' + prompt);
+      const raw = await rawGenerate({ system: ZONE_A, prompt, opts });
+      const murmur = shapeMurmur(raw);
+      if (murmur) await emitDreamText(murmur);
+      dreamState.nextMurmurAt = now + dreamMurmurGapMs();
+      await idleSilently(2000);
+      return;
+    }
+
+    // nothing due: hold still a short slice (strokes are serviced ~every 1-2 min)
+    await idleSilently(20000);
+  }
+
   // ---- main generation loop ----
   async function genLoop() {
     while (running) {
@@ -1249,27 +1473,47 @@ async function main() {
       }
       const { mins } = londonParts();
       const asleep = isAsleep(mins);
-      const mode = asleep ? 'sleep' : 'journal';
+
+      // ASLEEP: DREAM mode runs its own step - murmurs spaced far apart, one slow
+      // abstract drawing accumulating through the small hours, and the rare night
+      // waking. It is a wholly separate branch from the waking journal below (its
+      // own prompt, sampling and rendering), so dream incoherence never touches
+      // the waking coherence rules.
+      if (asleep) {
+        if (currentMode !== 'dream') {
+          emit({ kind: 'mode', payload: { from: currentMode, to: 'dream' } });
+          currentMode = 'dream';
+        }
+        await dreamStep(mins);
+        continue;
+      }
+      // just woke: carry a dream fragment into the morning only if it scored high
+      // (he does not otherwise remember it), then resume the ruled-paper journal.
+      if (currentMode === 'dream') {
+        leaveDream();
+        emit({ kind: 'mode', payload: { from: 'dream', to: 'journal' } });
+      }
+      const mode = 'journal';
       currentMode = mode;
 
       // REAL SILENCE: sometimes he just stops. Emit a silence event (no text),
       // sit still for its duration - vitals keep ticking on their own timer, so
       // the graphs stay alive while the page goes quiet - then loop.
       const sinceIncident = Date.now() - (vitals.lastIncidentMs || 0);
-      const sil = silenceDecision(vitals, asleep, sinceIncident);
+      const sil = silenceDecision(vitals, false, sinceIncident);
       if (sil.silent) {
         emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
         await idleSilently(sil.seconds * 1000);
         continue;
       }
 
-      // DRAWING: occasionally he picks up the pen and draws instead of writing
-      // (waking only). Weighted by fixation/dissociation/longing, a fresh image,
-      // waiting on mail, or a queued request. doDraw does both stages and emits.
-      if (!asleep) {
+      // DRAWING: occasionally he picks up the pen and draws instead of writing.
+      // Weighted by fixation/dissociation/longing, a fresh image, waiting on mail,
+      // or a queued request. doDraw does both stages and emits.
+      {
         const nowMs = Date.now();
         const dd = drawDecision(vitals, {
-          asleep,
+          asleep: false,
           sinceDrawMs: nowMs - (vitals.lastDrawMs || 0),
           waiting: nowMs - (vitals.lastMailMs || nowMs) > 3 * 3600 * 1000,
           recentImage: !!vitals.lastImageMs && nowMs - vitals.lastImageMs < 15 * 60 * 1000,
@@ -1281,25 +1525,15 @@ async function main() {
         }
       }
 
-      // sleep mode gets no cast/cost/incident injections - he is half under -
-      // but still the opener bans. Zone A is the fixed ollama `system` (never
-      // rebuilt); the volatile Zone C directives are assembled once per burst and
-      // folded into the prompt TAIL by buildPrompt so the KV-cache prefix
-      // survives. buildCtx/pickForm have fire-once side effects, so this must
-      // happen exactly once per burst - only the sampling and the context tail
-      // vary across the repeat-retries below.
+      // Zone A is the fixed ollama `system` (never rebuilt); the volatile Zone C
+      // directives are assembled once per burst and folded into the prompt TAIL by
+      // buildPrompt so the KV-cache prefix survives. buildCtx/pickForm have
+      // fire-once side effects, so this must happen exactly once per burst - only
+      // the sampling and the context tail vary across the repeat-retries below.
       const bans = bansDirective(vitals.recentOpeners);
       noiseThisBurst = false;
       let directives;
-      if (mode === 'sleep') {
-        const sctx = { bans };
-        if (wingNoiseCue && Date.now() < wingNoiseCue.until) {
-          sctx.wingnoise = wingnoiseDirective(wingNoiseCue.line, wingNoiseCue.mid, wingNoiseCue.wake);
-          wingNoiseCue = null; // fire once
-          noiseThisBurst = true;
-        }
-        directives = buildDirectives(vitals, 'sleep', sctx);
-      } else {
+      {
         const ctx = buildCtx();
         ctx.bans = bans;
         ctx.regime = regimeDirective(mins);
@@ -1313,10 +1547,9 @@ async function main() {
       }
       const baseOpts = options(vitals, config.threads, mode);
       // Forms that restate a phrase on purpose (the repeat form, "you repeat
-      // yourself" from fatigue) and the fragmentary sleep drift opt out of the
-      // within-burst repeat guard, so a deliberate refrain is not cut short.
-      const allowRepeat =
-        mode === 'sleep' || /say it again|cannot get past|you repeat yourself/.test(directives);
+      // yourself" from fatigue) opt out of the within-burst repeat guard, so a
+      // deliberate refrain is not cut short.
+      const allowRepeat = /say it again|cannot get past|you repeat yourself/.test(directives);
 
       const burstStart = Date.now();
       let discards = 0;
@@ -1362,9 +1595,10 @@ async function main() {
           vitals.recentOpeners.push(w);
           while (vitals.recentOpeners.length > 5) vitals.recentOpeners.shift();
         }
-        // let his own text move the mental state (waking bursts only - sleep is
-        // fragmentary by design and must not be read as a spiral).
-        if (mode !== 'sleep') await applyIntrospection(lastFull);
+        // let his own text move the mental state. This path is waking only now -
+        // dream murmurs never reach here (they are handled in dreamStep) so a
+        // fragmentary murmur can never be read as a waking spiral.
+        await applyIntrospection(lastFull);
       }
       // roll the "did this burst carry a wing noise" window for the no-drumbeat rule
       recentNoise = [recentNoise[1], noiseThisBurst];
@@ -1377,12 +1611,12 @@ async function main() {
       // event is emitted; the vitals/host/power timers keep ticking on their own
       // so the page stays alive and never looks broken. idleSilently breaks early
       // for an inbound postcard/notice so an interrupt is never swallowed.
-      if (mode !== 'sleep' && produced) {
+      if (produced) {
         await sleep(150); // the small breather between bursts, as before
         const idleMs = tempoIdleMs(burstMs, client.tempo.speed);
         if (idleMs > 0) await idleSilently(idleMs);
       } else {
-        await sleep(mode === 'sleep' ? 8000 : produced ? 150 : 700);
+        await sleep(700);
       }
     }
   }
