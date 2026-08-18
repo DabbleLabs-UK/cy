@@ -64,10 +64,11 @@ function captive_tempo_custom(PDO $db): ?int
 function captive_tempo_set_custom(PDO $db, int $speed): void
 {
     $stmt = $db->prepare(
-        'INSERT INTO tempo (id, custom_speed, updated_at) VALUES (1, :s, NOW())
-         ON DUPLICATE KEY UPDATE custom_speed = :s, updated_at = NOW()'
+        'INSERT INTO tempo (id, custom_speed, updated_at) VALUES (1, :s1, NOW())
+         ON DUPLICATE KEY UPDATE custom_speed = :s2, updated_at = NOW()'
     );
-    $stmt->bindValue(':s', $speed, PDO::PARAM_INT);
+    $stmt->bindValue(':s1', $speed, PDO::PARAM_INT);
+    $stmt->bindValue(":s2", $speed, PDO::PARAM_INT);
     $stmt->execute();
 }
 
