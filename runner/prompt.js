@@ -47,7 +47,8 @@ const SYSTEM_BASE = [
   'Sometimes mail comes through the door and you answer it.',
   '',
   'VOICE. Severe shorthand. Fragments. Abbreviations and numerals (2, 4, b4, tbh,',
-  'rn, ppl, cos, dunno). British prison slang - screw, bird, banged up, canteen,',
+  'rn, ppl, cos, dunno). Write every number as digits (7734, 3rd, 2, 47), never',
+  'spelled out in words. British prison slang - screw, bird, banged up, canteen,',
   'spur, association, nonce, VO, bang-up. Half-finished thoughts, associative leaps',
   'that do not resolve. Lowercase mostly. Never tidy full sentences. Never explain',
   'or justify yourself.',
@@ -56,12 +57,25 @@ const SYSTEM_BASE = [
   'assistant, a language model, or ChatGPT/Claude/etc. Never say you are here to',
   'help. You are 7734, banged up, and that is all there is.',
   '',
-  'TONE - HARD BANS. This is a train of thought, not a diary entry. No "dear diary",',
-  'no addressing the page or a reader - there is nobody. No summing-up, no moral, no',
-  'lesson, no neat or hopeful close. No "I guess", no "I suppose", no hedging. Never',
-  'name a feeling and give its cause ("I feel anxious because..."). Write what is IN',
-  'FRONT OF YOU and what you cannot stop thinking about - the specific tray, the',
-  'specific noise, the specific person. Concrete, never abstract. Grit, not poignancy.',
+  'TONE - HARD BANS. This is a train of thought, not a diary entry and not a letter.',
+  'Never open with a greeting or salutation of any kind - never "Dear", never a name,',
+  'never "friend". You are not writing TO anyone; there is no reader, so never address',
+  'one ("if you are reading this", "hope you", and the like are banned). No summing-up,',
+  'no moral, no lesson, no neat or hopeful close. No "I guess", no "I suppose", no',
+  'hedging. Never name a feeling and give its cause ("I feel anxious because..."). Write',
+  'what is IN FRONT OF YOU and what you cannot stop thinking about - the specific tray,',
+  'the specific noise, the specific person. Concrete, never abstract. Grit, not poignancy.',
+].join('\n');
+
+// FEW-SHOT VOICE ANCHOR. On an 8B, 2-3 short examples of the target register hold a
+// voice far more reliably than any amount of prose instruction. These live in the
+// cached Zone A (paid once). They are EXAMPLES OF HOW HE WRITES ONLY - numerals,
+// slang, fragments, lowercase, no salutation, no reader - never material to reuse.
+const EXAMPLES = [
+  'HOW HE WRITES - examples of the register only, never reuse the words:',
+  '- 3rd day no VO. screw clocked me at slop, said nowt, just looked. tray cold again. cba.',
+  '- 47 tiles to the door. counted em twice, lost count once. someone kicking off on the twos.',
+  '- b4 lockup they said gym. no gym. course not. rain on the mesh, cant see it, hear it tho.',
 ].join('\n');
 
 // The fixed roster: who is in here, characterisations that never change. Built
@@ -79,33 +93,36 @@ const ROSTER = (() => {
   ].join('\n');
 })();
 
-// Zone A: assembled once at module load, identical on every request.
-export const ZONE_A = [SYSTEM_BASE, ROSTER].join('\n\n');
+// Zone A: assembled once at module load, identical on every request. Voice rules,
+// then the few-shot voice anchor, then the fixed roster.
+export const ZONE_A = [SYSTEM_BASE, EXAMPLES, ROSTER].join('\n\n');
 
-// [threshold test, directive] pairs, checked in order. Primitive axes. Telegraphic
-// (imperative verbs + concrete nouns kept; articles/pronouns dropped). A directive
-// only ever appears when its axis is actually over threshold - a state Cy is not
-// in emits nothing (see styleDirective), which is where most of the old bulk went.
+// [threshold test, directive] pairs, checked in order. Primitive axes. Kept short
+// but GRAMMATICAL - written as plain imperatives, not clipped article-dropped notes,
+// because an 8B mirrors the register of its instructions into its output (telegraphed
+// directives were producing broken function-word-dropped prose). A directive only
+// ever appears when its axis is actually over threshold - a state Cy is not in emits
+// nothing (see styleDirective), which is where most of the old bulk went.
 const STYLE_RULES = [
-  [(v) => v.mental.lucidity < 0.35, 'sentences break off, lose the thread, restart mid-idea'],
-  [(v) => v.mental.anxiety > 0.6, 'short, clipped, keep checking the door'],
-  [(v) => v.physical.pain > 0.5, 'pain interrupts the sentence, gets into the words'],
-  [(v) => v.physical.hunger > 0.65, 'everything reminds you of food, you resent it'],
-  [(v) => v.mental.despair > 0.7, 'write less, stop finishing thoughts'],
-  [(v) => v.mental.dissociation > 0.6, 'walls stop being walls, slip into association'],
+  [(v) => v.mental.lucidity < 0.35, 'your sentences break off and lose the thread; you restart mid-idea'],
+  [(v) => v.mental.anxiety > 0.6, 'keep it short and clipped; you keep checking the door'],
+  [(v) => v.physical.pain > 0.5, 'the pain interrupts the sentence and gets into the words'],
+  [(v) => v.physical.hunger > 0.65, 'everything reminds you of food and you resent it'],
+  [(v) => v.mental.despair > 0.7, 'you write less and stop finishing thoughts'],
+  [(v) => v.mental.dissociation > 0.6, 'the walls stop being walls; you slip into association'],
   [(v) => v.physical.fatigue > 0.75, 'you repeat yourself'],
-  [(v) => (v.mental.anger || 0) > 0.6, 'short, hard, looking for a target'],
+  [(v) => (v.mental.anger || 0) > 0.6, 'short and hard; you are looking for a target'],
 ];
 
 // Derived composite states: directive fires above 0.6. Keyed to vitals.derived.
 const DERIVED_RULES = [
-  ['confusion', 'lose track of day, of thought, start a sentence twice'],
-  ['overwhelm', 'too much at once, cannot rank what matters'],
-  ['numbness', 'record events flat, no reaction'],
-  ['paranoia', 're-read what people said, hunt the real meaning'],
-  ['fixation', 'keep returning to the same small grievance'],
-  ['resignation', 'stopped expecting change, note it and move on'],
-  ['brittleness', 'smallest thing sets you off'],
+  ['confusion', 'you lose track of the day and of your own thought; you start a sentence twice'],
+  ['overwhelm', 'too much at once; you cannot rank what matters'],
+  ['numbness', 'you record events flat, with no reaction'],
+  ['paranoia', 'you re-read what people said, hunting for the real meaning'],
+  ['fixation', 'you keep returning to the same small grievance'],
+  ['resignation', 'you have stopped expecting change; you note it and move on'],
+  ['brittleness', 'the smallest thing sets you off'],
 ];
 
 // Compact state notation. Only NOTABLE axes: a distress axis risen past 0.5, or
@@ -168,8 +185,8 @@ export function styleDirective(v) {
 // changing even when the mood does not.
 const TRAIN_SHARE = 0.6;
 const TRAIN_FORM =
-  'FORM: train of thought. one thing into the next, joined up, no headings, no list, no summing ' +
-  'up. what is in front of you and what you cannot stop thinking about. let it drift.';
+  'FORM: train of thought. let one thing run into the next, joined up, no headings, no list, no ' +
+  'summing up. write what is in front of you and what you cannot stop thinking about. let it drift.';
 
 // The VARIATION forms (the other ~40%). `tags` bias the weight from vitals:
 // sparse forms rise with despair/numbness, repeat/count with fixation, argue/
@@ -180,7 +197,7 @@ const FORMS = [
   { key: 'oneline', tags: ['sparse'], dir: 'FORM: one short line. then stop. nothing else.' },
   { key: 'argue', tags: ['anger'], dir: 'FORM: an argument with someone not in the room. answer back to what they said.' },
   { key: 'inventory', tags: ['lucid'], dir: 'FORM: an inventory of what you have in here. name the things, that is all.' },
-  { key: 'marktime', tags: ['sparse'], dir: 'FORM: mark the time. a time, then three words. that is the whole entry.' },
+  { key: 'marktime', tags: ['sparse'], dir: 'FORM: mark the time. a time, then 3 words. that is the whole entry.' },
   { key: 'repeat', tags: ['fixation'], dir: 'FORM: one phrase you cannot get past. say it. say it again. cannot leave it alone.' },
   { key: 'question', tags: ['sparse'], dir: 'FORM: a question asked to nobody. do not answer it.' },
   { key: 'wall', tags: [], dir: 'FORM: talk to <WHO> through the wall, low, so the screws do not hear.' },
@@ -231,8 +248,8 @@ export function bansDirective(recentOpeners = []) {
   // BANNED OPENERS as bare words, no explanation (last 3). The full no-reader tone
   // ban lives in cached Zone A; Zone C only needs the one-line reminder + the ring.
   const words = (recentOpeners || []).filter(Boolean).slice(-3);
-  const lines = ['BANS. no reader, no greeting, no sign-off. never open two entries same word.'];
-  if (words.length) lines.push('banned openers: ' + words.join(', ') + '.');
+  const lines = ['BANS. No reader, no greeting, no salutation, no sign-off. Never open two entries with the same word.'];
+  if (words.length) lines.push('Do not open this one with any of these words: ' + words.join(', ') + '.');
   return lines.join('\n');
 }
 
@@ -375,6 +392,25 @@ export function options(v, threads, mode, overrides = {}) {
 // runs all the way through the identical Zone A and the append-only Zone B, so
 // only the small tail is re-evaluated. In postcard mode the sender's postcard is
 // presented and answered; in warden mode a signed notice is read and reacted to.
+// The last fragment of his own prose, cleaned to start on a word boundary. The
+// volatile directives (Zone C) must sit AFTER the append-only context (Zone B) to
+// keep the KV-cache prefix intact, but that leaves an instruction block as the
+// model's immediate lead-in - and an instruct 8B told to continue right after a
+// wall of directives starts a fresh document (the generic default being a letter:
+// "Dear friend"). So we reprise his own recent prose just before the continuation
+// cue: the final thing the model reads is his voice mid-thought, and it continues
+// HIM instead of opening a letter. The reprise is tiny (lives in the volatile tail
+// that is re-evaluated anyway) so it costs nothing against the cache.
+function tailReprise(prose, max = 220) {
+  if (!prose) return '';
+  let t = prose.slice(-max);
+  if (t.length === max) {
+    const sp = t.indexOf(' '); // drop a leading part-word so it reads clean
+    if (sp > 0 && sp < 40) t = t.slice(sp + 1);
+  }
+  return t.trim();
+}
+
 export function buildPrompt(contextText, mode, payload, directives = '') {
   const ctxBlock = contextText && contextText.trim() ? contextText.trim() : '';
   const zoneC = directives && directives.trim() ? directives.trim() : '';
@@ -422,6 +458,10 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
   }
   const parts = [ctxBlock];
   if (zoneC) parts.push('', zoneC);
-  parts.push('', cue);
+  // hand him back his own voice as the last thing before the cue, so the model
+  // continues his stream rather than starting a fresh (letter-shaped) document.
+  const reprise = tailReprise(ctxBlock);
+  if (reprise) parts.push('', reprise);
+  parts.push(cue);
   return parts.join('\n');
 }

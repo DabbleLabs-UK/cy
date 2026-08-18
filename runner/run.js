@@ -913,11 +913,13 @@ async function main() {
   // but moves the numbers barely (awake) or wakes him (night). Rate-limited hard
   // so it never becomes a drumbeat: at most ~1 every 3-4 min awake, rarer asleep,
   // and suppressed outright if the last two bursts both carried a noise.
+  // Numbers as digits (matches the VOICE numerals rule) so raw material he echoes
+  // never feeds him spelled-out numbers. Landings are the 1s/2s in wing slang.
   const WING_NOISES = [
     'a shout goes up down the landing',
-    'a door goes, heavy, somewhere on the twos',
-    'the meds trolley, wheels squeaking along the ones',
-    'someone kicking off two doors down, boots and shouting',
+    'a door goes, heavy, somewhere on the 2s',
+    'the meds trolley, wheels squeaking along the 1s',
+    'someone kicking off 2 doors down, boots and shouting',
     'a radio through the wall, tinny, same station as always',
     'keys close by, jangling, then gone',
     'someone crying further along, low, trying not to be heard',
