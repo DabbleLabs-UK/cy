@@ -28,7 +28,7 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, NUM_CTX } from './prompt.js';
+import { ZONE_A, buildDirectives, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, NUM_CTX } from './prompt.js';
 import {
   parseStrokes,
   splitPasses,
@@ -317,21 +317,27 @@ async function main() {
     return inc;
   }
 
-  // rolling ~800 tokens (~3200 chars) of the model's own CLEANED output, fed
-  // back in. Only scaffold-free prose ever lands here (see onChunk), so the
-  // model never re-reads its own instruction frames and echoes them.
-  const CONTEXT_MAX_CHARS = 3200;
+  // ZONE B: the model's own CLEANED output, fed back in. Only scaffold-free prose
+  // ever lands here (see onChunk), so the model never re-reads its own instruction
+  // frames and echoes them. APPEND-ONLY: it grows at the END every burst and is
+  // NEVER re-sliced from the front per burst, so the KV-cache prefix (Zone A +
+  // this) stays stable and keeps GROWING. Only when it crosses CONTEXT_HARD is it
+  // trimmed - in one large chunk back to CONTEXT_SOFT - so the cache is broken
+  // rarely (every ~6 bursts) instead of every single burst.
+  const CONTEXT_SOFT = 3000;
+  const CONTEXT_HARD = 4600;
   let contextBuf = await loadContext(contextPath);
-  const contextText = () => contextBuf.slice(-CONTEXT_MAX_CHARS);
+  if (contextBuf.length > CONTEXT_HARD) contextBuf = contextBuf.slice(-CONTEXT_SOFT);
+  const contextText = () => contextBuf;
   async function appendContext(chunk) {
-    contextBuf = (contextBuf + chunk).slice(-CONTEXT_MAX_CHARS * 2);
-    await saveContext(contextPath, contextBuf.slice(-CONTEXT_MAX_CHARS));
+    contextBuf += chunk;
+    if (contextBuf.length > CONTEXT_HARD) contextBuf = contextBuf.slice(-CONTEXT_SOFT); // rare, large trim
+    await saveContext(contextPath, contextBuf);
   }
   // Shrink the effective context tail (on a near-repeat, to jolt the model off
-  // the passage it keeps copying).
+  // the passage it keeps copying) - a deliberate, one-off cache break.
   function trimContext(frac) {
-    const eff = Math.min(contextBuf.length, CONTEXT_MAX_CHARS);
-    const keep = Math.max(0, eff - Math.floor(eff * frac));
+    const keep = Math.max(0, contextBuf.length - Math.floor(contextBuf.length * frac));
     contextBuf = keep > 0 ? contextBuf.slice(-keep) : '';
   }
   // Discards go to state/run.out.log so the loop is observable in the detached
@@ -609,11 +615,11 @@ async function main() {
     const recog = visitorForPrompt(visitor, { now: Date.now() });
     if (recog) ctx.visitor = recog;
 
-    const system = buildSystem(vitals, 'letter', ctx);
-    const prompt = buildPrompt(contextText(), 'postcard', pc);
+    const directives = buildDirectives(vitals, 'letter', ctx);
+    const prompt = buildPrompt(contextText(), 'postcard', pc, directives);
     const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(pc.body) });
-    await logPrompt('postcard', system);
-    const { full } = await streamGenerate({ system, prompt, opts, mode: 'letter' });
+    await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
+    const { full } = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter' });
 
     // the public, streamed record of Cy's reply (kept as postcard_out)
     const reply = (full || '').trim();
@@ -651,11 +657,11 @@ async function main() {
     vitals.monotony = clamp((vitals.monotony || 0) - 0.5);
     emit({ kind: 'event', payload: { name: 'warden', amp: Number(a.toFixed(3)), text: notice.text } });
 
-    const system = buildSystem(vitals, 'journal', buildCtx());
-    const prompt = buildPrompt(contextText(), 'warden', notice);
+    const directives = buildDirectives(vitals, 'journal', buildCtx());
+    const prompt = buildPrompt(contextText(), 'warden', notice, directives);
     const opts = options(vitals, config.threads, 'journal', { num_predict: letterPredict(notice.text) });
-    await logPrompt('warden', system);
-    await streamGenerate({ system, prompt, opts, mode: 'warden' });
+    await logPrompt('warden', ZONE_A + '\n\n---PROMPT---\n' + prompt);
+    await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden' });
 
     emit({ kind: 'mode', payload: { from: 'warden', to: 'journal' } });
     currentMode = 'journal';
@@ -686,12 +692,12 @@ async function main() {
     const ctx = buildCtx();
     ctx.bans = bansDirective(vitals.recentOpeners);
     ctx.form = drawIntentDirective(intent, { redrawSubject: redraw ? vitals.lastDrawSubject : null });
-    const sys1 = buildSystem(vitals, 'journal', ctx);
-    const p1 = buildPrompt(contextText(), 'journal');
+    const dir1 = buildDirectives(vitals, 'journal', ctx);
+    const p1 = buildPrompt(contextText(), 'journal', null, dir1);
     const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
     o1.stop = [...o1.stop, '\n']; // one line only
-    await logPrompt('draw-decide', sys1);
-    const r1 = await streamGenerate({ system: sys1, prompt: p1, opts: o1, mode: 'journal' });
+    await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
+    const r1 = await streamGenerate({ system: ZONE_A, prompt: p1, opts: o1, mode: 'journal' });
     if (r1.aborted) return; // an interrupt landed - let the loop handle it, try drawing again later
     const line = (r1.full || '').trim();
 
@@ -1105,12 +1111,15 @@ async function main() {
       }
 
       // sleep mode gets no cast/cost/incident injections - he is half under -
-      // but still the opener bans. Build the system + ctx ONCE (buildCtx has
-      // fire-once side effects; a form is chosen once per burst); only the
-      // sampling and the context tail vary across repeat-retries.
+      // but still the opener bans. Zone A is the fixed ollama `system` (never
+      // rebuilt); the volatile Zone C directives are assembled once per burst and
+      // folded into the prompt TAIL by buildPrompt so the KV-cache prefix
+      // survives. buildCtx/pickForm have fire-once side effects, so this must
+      // happen exactly once per burst - only the sampling and the context tail
+      // vary across the repeat-retries below.
       const bans = bansDirective(vitals.recentOpeners);
       noiseThisBurst = false;
-      let system;
+      let directives;
       if (mode === 'sleep') {
         const sctx = { bans };
         if (wingNoiseCue && Date.now() < wingNoiseCue.until) {
@@ -1118,7 +1127,7 @@ async function main() {
           wingNoiseCue = null; // fire once
           noiseThisBurst = true;
         }
-        system = buildSystem(vitals, 'sleep', sctx);
+        directives = buildDirectives(vitals, 'sleep', sctx);
       } else {
         const ctx = buildCtx();
         ctx.bans = bans;
@@ -1128,7 +1137,7 @@ async function main() {
           relations: vitals.relations,
           mailWaitMs: Date.now() - (vitals.lastMailMs || Date.now()),
         });
-        system = buildSystem(vitals, 'journal', ctx);
+        directives = buildDirectives(vitals, 'journal', ctx);
       }
       const baseOpts = options(vitals, config.threads, mode);
 
@@ -1140,14 +1149,14 @@ async function main() {
       let lastFull = '';
       for (;;) {
         const tail = contextText();
-        const prompt = buildPrompt(tail, mode);
+        const prompt = buildPrompt(tail, mode, null, directives);
         const opts = {
           ...baseOpts,
           temperature: Number(Math.min(1.6, baseOpts.temperature + tempBump).toFixed(3)),
           repeat_penalty: Number(Math.min(1.6, baseOpts.repeat_penalty + penBump).toFixed(3)),
         };
-        await logPrompt(mode, system);
-        const r = await streamGenerate({ system, prompt, opts, mode, contextTail: tail });
+        await logPrompt(mode, ZONE_A + '\n\n---PROMPT---\n' + prompt);
+        const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode, contextTail: tail });
         if (r.error) break; // ollama already backed off; move on
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
@@ -1224,8 +1233,23 @@ async function main() {
   process.on('SIGTERM', shutdown);
 
   client.start();
-  console.log(`[cy] runner up. dryRun=${config.dryRun} model=${config.model}`);
+  console.log(`[cy] runner up. dryRun=${config.dryRun} model=${config.model} threads=${config.threads}`);
   console.log(`[cy] state dir: ${STATE_DIR}`);
+  // Observability: the character cost of each prompt zone. Zone A is fixed and
+  // cached by ollama (paid once); Zone B grows append-only; Zone C is rebuilt
+  // every burst (a representative sample from the current state is measured).
+  const sampleC = buildDirectives(vitals, 'journal', {
+    bans: bansDirective(vitals.recentOpeners),
+    regime: regimeDirective(londonParts().mins),
+    cast: castForPrompt(vitals.relations),
+    grudge: grudgeDirective(vitals.relations),
+    form: pickForm(vitals, { relations: vitals.relations }),
+    incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0 }),
+  });
+  console.log(
+    `[cy] prompt zones (chars): A(fixed,cached)=${ZONE_A.length} | ` +
+      `B(context,append-only)=${contextBuf.length}/${CONTEXT_HARD} | C(volatile,sample)=${sampleC.length}`,
+  );
   await genLoop();
 }
 

@@ -33,10 +33,40 @@ before exit.
 | `tickMs`    | vitals tick interval (ms); the design assumes 5000             |
 | `threads`   | ollama `num_thread` (benchmarked at 2)                         |
 | `costInjectEvery` | inject the electricity cost into the prompt every Nth generation (default 40; a whole-pound crossing also forces it) |
-| `logPrompts`| `true` = mirror each built system prompt to `state/prompts.log` (debug) |
+| `logPrompts`| `true` = mirror each built prompt (Zone A + `---PROMPT---` + the Zone B/C tail) to `state/prompts.log` (debug) |
 | `power`     | `{ idleWatts, loadWatts, tariff }` for the meter (defaults 25 / 55 / 0.245 GBP per kWh) |
 
 The model runs with `num_ctx: 3072`, `num_thread: threads`, `keep_alive: -1`.
+
+`num_thread` comes straight from `config.threads`. NOTE: on this hardware it is
+prompt EVALUATION (re-reading the prompt before the first token) that scales with
+threads - measured ~5.9 tok/s at 2 threads, ~11.1 at 4 - while token GENERATION
+barely moves with thread count. Because CY's system prompt is large, a cold
+prompt eval costs real seconds; raising `threads` mostly buys back that eval time,
+not faster prose. See the append-only prompt layout below, which is what keeps the
+eval from happening every burst in the first place.
+
+## Prompt zones (KV-cache reuse)
+
+ollama reuses its KV cache for the longest common PREFIX between consecutive
+requests, so anything volatile near the FRONT throws the whole cache away and the
+large prompt is re-evaluated from scratch. The prompt is therefore built in three
+strictly ordered zones, most-stable first (`prompt.js`):
+
+- **Zone A** (`ZONE_A`) - persona, setting, voice, tone bans, and the fixed
+  cast/officer roster. Built ONCE at module load and sent as the ollama `system`
+  byte-for-byte every request (no timestamps, no interpolated numbers), so it is
+  cached after the first eval.
+- **Zone B** - CY's own rolling prose, fed back for continuity. APPEND-ONLY: it
+  grows at the end and is never re-sliced from the front per burst, so the shared
+  prefix keeps growing. Only when it crosses a hard cap is it trimmed in one large
+  chunk (breaking the cache once, rarely) rather than a little every burst.
+- **Zone C** - all volatile directives (state, selected form, incident ledger,
+  opener bans, cost injection). Assembled fresh each burst and placed LAST, after
+  Zone B, so only this small tail is re-evaluated.
+
+A startup log line reports the character length of each zone so the cost is
+observable.
 
 ## Model
 
@@ -153,7 +183,8 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 - `cast.js` - inmates + officers + visitor memory: relations map, social/officer
   events, overheard remarks, grudge directive, visitor recognition.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
-- `prompt.js` - system prompt, style directive, sampling, contextual injections.
+- `prompt.js` - the three prompt zones (fixed `ZONE_A`, `buildDirectives` for the
+  volatile Zone C), style directive, sampling, and `buildPrompt` which orders them.
 - `warden.js` - sentence buffering + outbound/inbound content screen.
 - `client.js` - batched POST to `api/ingest.php`, inbox poll, tempo poll, disk-queue retry.
 - `tempo.js` - duty-cycle timing: `tempoIdleMs(burstMs, speed)` and speed clamping.
@@ -162,6 +193,10 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
   the pure DSL-stroke -> SVG-path geometry, shared so tests can validate it).
 - `run.js` - the loop: generation, ticks, scheduler, postcard/notice interrupts.
 - `selftest.js` - deterministic checks for the above (no ollama needed).
+- `promptcachetest.js` - deterministic proof of the append-only prompt ordering:
+  builds several consecutive bursts with changing state and asserts Zone A is
+  byte-identical, the shared prefix grows vs a naive rebuild, and all volatile
+  substrings fall after the shared prefix (no ollama).
 - `livesample.js` - drives two real generations to sample CY's prose.
 - `drawtest.js` - drives two real DRAWINGS against ollama, printing the raw DSL
   and confirming the parser/geometry, with NO writes to the site (in-memory
