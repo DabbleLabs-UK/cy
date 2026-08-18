@@ -477,7 +477,10 @@ export class Pen {
 
   // ---- public: queue text ----------------------------------------------
 
-  write(str, mode, lucid) {
+  // `shout` (optional) is an array of [start, end) character ranges within `str`
+  // that were capitalised as anger: those glyphs get heavier, slightly larger ink
+  // so the shouting reads as physical pressure on the page (see _drawChar).
+  write(str, mode, lucid, shout) {
     if (!str) return;
     // a fresh thought clears any lingering abort state
     this.abortFlag = false;
@@ -488,6 +491,12 @@ export class Pen {
     // a dream murmur is written faint + small; a lucid night-waking line (lucid)
     // uses the normal hand so it lands hard, even though it too carries mode dream.
     const dreamText = mode === 'dream' && !lucid;
+    const spans = Array.isArray(shout) ? shout : null;
+    const inShout = (i) => {
+      if (!spans) return false;
+      for (const r of spans) if (i >= r[0] && i < r[1]) return true;
+      return false;
+    };
     // resuming after a long silence: lay down the time marker on its own fresh
     // line first, in the same hand, so the gap reads as "then, at HH:MM...".
     if (this._resumeMarker) {
@@ -496,7 +505,13 @@ export class Pen {
       for (const ch of mk) this._enqueue({ type: 'char', ch, instant });
       this._enqueue({ type: 'newline' });
     }
-    for (const ch of str) this._enqueue({ type: 'char', ch, instant, dream: dreamText });
+    // index over the code UNITS of str, so the offsets line up with the runner's
+    // character ranges (the transform only ever capitalises ASCII letters).
+    let i = 0;
+    for (const ch of str) {
+      this._enqueue({ type: 'char', ch, instant, dream: dreamText, shout: inShout(i) });
+      i += ch.length;
+    }
     this._pump();
   }
 
@@ -612,7 +627,7 @@ export class Pen {
           this.midWord = false;
           continue;
         }
-        await this._drawChar(ch, job.instant, job.dream);
+        await this._drawChar(ch, job.instant, job.dream, job.shout);
       }
     } finally {
       this.running = false;
@@ -713,7 +728,7 @@ export class Pen {
     this._announce(line.chars.join(''));
   }
 
-  async _drawChar(ch, instant, dream) {
+  async _drawChar(ch, instant, dream, shout) {
     const g = this._glyphFor(ch);
     if (!g) {
       // no glyph for this codepoint: still keep it in the readable text
@@ -723,7 +738,11 @@ export class Pen {
     }
     // a dream murmur renders smaller and fainter than waking prose
     const ds = dream ? dreamTextStyle() : null;
-    const size = ds ? this.size * ds.sizeScale : this.size;
+    // pen PRESSURE: a shouted glyph is pressed slightly larger and heavier, like
+    // someone bearing down on the page. Kept tasteful - a firmer hand, not a
+    // different font. Never applied to faint dream murmurs.
+    const pressed = shout && !ds;
+    const size = (ds ? this.size * ds.sizeScale : this.size) * (pressed ? 1.12 : 1);
     const scale = size / 21;
     const advance = g.o * 2 * scale;
 
@@ -756,7 +775,7 @@ export class Pen {
     const rot = (Math.random() * 2 - 1) * this.jitterRot;
     const dyBase = (Math.random() * 2 - 1) * this.jitterBase;
     const sx = scale * (1 + (Math.random() * 2 - 1) * this.jitterScale);
-    const sw = this.strokeWidth * (0.9 + Math.random() * 0.2);
+    const sw = this.strokeWidth * (0.9 + Math.random() * 0.2) * (pressed ? 1.55 : 1);
     const op = this.inkOpacity * (0.9 + Math.random() * 0.1) * (ds ? ds.opacityScale : 1);
 
     const grp = document.createElementNS(SVGNS, 'g');

@@ -42,6 +42,9 @@ const TIP = {
   model: 'The exact model file driving 7734.',
   poll: 'Whether the last checks for new mail and for the viewer tempo reached the server.',
   err: 'The most recent error the runner hit talking to the server, if any.',
+  anger: 'How angry he FEELS right now (0-1): fast to rise on a slight, slow to sulk back down.',
+  expressed:
+    'How much anger actually reaches the PAGE as shouting (0-1). It trails the felt anger through a lag - quick to rise, much slower to fall - so the shouting appears a beat after the feeling and the comedown outlasts the flare.',
 };
 
 const esc = (s) =>
@@ -113,6 +116,8 @@ export class Hud {
             <span class="hp-gk" title="${esc(TIP.ctx)}">context</span><span class="hp-gv" id="hp-ctx" title="${esc(TIP.ctx)}">--</span>
             <span class="hp-gk" title="${esc(TIP.duty)}">duty cycle</span><span class="hp-gv" id="hp-duty" title="${esc(TIP.duty)}">--</span>
             <span class="hp-gk" title="${esc(TIP.mode)}">mode</span><span class="hp-gv" id="hp-genmode" title="${esc(TIP.mode)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.anger)}">anger felt</span><span class="hp-gv" id="hp-anger" title="${esc(TIP.anger)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.expressed)}">expressed</span><span class="hp-gv" id="hp-expressed" title="${esc(TIP.expressed)}">--</span>
             <span class="hp-gk" title="${esc(TIP.threads)}">threads</span><span class="hp-gv" id="hp-threads" title="${esc(TIP.threads)}">--</span>
             <span class="hp-gk" title="${esc(TIP.nctx)}">num_ctx</span><span class="hp-gv" id="hp-nctx" title="${esc(TIP.nctx)}">--</span>
             <span class="hp-gk" title="${esc(TIP.poll)}">polls</span><span class="hp-gv" id="hp-poll" title="${esc(TIP.poll)}">--</span>
@@ -141,7 +146,7 @@ export class Hud {
     this.g = {};
     for (const id of [
       'peval', 'peval-note', 'tin', 'tout', 'ptoks', 'gtoks', 'ttft', 'total',
-      'ctx', 'duty', 'genmode', 'threads', 'nctx', 'poll', 'model', 'err', 'errrow',
+      'ctx', 'duty', 'genmode', 'anger', 'expressed', 'threads', 'nctx', 'poll', 'model', 'err', 'errrow',
     ]) {
       this.g[id] = this.hostEl.querySelector('#hp-' + id);
     }
@@ -246,6 +251,12 @@ export class Hud {
     setTxt(g.ctx, num(p.ctx_chars), (v) => Math.round(v).toLocaleString() + ' ch');
     setTxt(g.duty, num(p.duty), (v) => Math.round(v) + '%');
     if (p.mode) g.genmode.textContent = String(p.mode);
+    // felt anger vs the outward expressed value - the gap between them is the lag.
+    setTxt(g.anger, num(p.anger), (v) => v.toFixed(2));
+    setTxt(g.expressed, num(p.expressed), (v) => v.toFixed(2));
+    if (g.expressed && num(p.anger) != null && num(p.expressed) != null) {
+      g.expressed.classList.toggle('warm', p.expressed < p.anger - 0.05); // rising, page lagging behind
+    }
     setTxt(g.threads, num(p.threads), (v) => String(Math.round(v)));
     setTxt(g.nctx, num(p.num_ctx), (v) => v.toLocaleString());
     if (p.inbox_ok != null || p.tempo_ok != null) {

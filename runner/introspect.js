@@ -30,15 +30,15 @@ for (const o of OFFICERS) {
 
 // ---- lexicons -------------------------------------------------------------
 
-const THREAT = /\b(shiv|shank|blade|jump(?:ed|ing)?|kick(?:ing)?\s+off|smash|batter|deck(?:ed)?|done\s+over|watch\s+(?:your|my|his|their)\s+back|coming\s+for|get\s+(?:me|you|him)|threat|beef|blood|fight|glass(?:ed)?|slit|throat|hurt\s+you|do\s+you\s+in|off\s+the\s+wing)\b/gi;
+export const THREAT = /\b(shiv|shank|blade|jump(?:ed|ing)?|kick(?:ing)?\s+off|smash|batter|deck(?:ed)?|done\s+over|watch\s+(?:your|my|his|their)\s+back|coming\s+for|get\s+(?:me|you|him)|threat|beef|blood|fight|glass(?:ed)?|slit|throat|hurt\s+you|do\s+you\s+in|off\s+the\s+wing)\b/gi;
 
-const FOOD = /\b(tray|slop|canteen|servery|scran|egg|eggs|toast|tea|meal|dinner|breakfast|lunch|food|hungry|starving|stomach|belly|bread|plate|spoon|jam\s+roll|gruel|beans|porridge|hunger)\b/gi;
+export const FOOD = /\b(tray|slop|canteen|servery|scran|egg|eggs|toast|tea|meal|dinner|breakfast|lunch|food|hungry|starving|stomach|belly|bread|plate|spoon|jam\s+roll|gruel|beans|porridge|hunger)\b/gi;
 
-const NEG = /\b(never|no\s*one|nobody|nothing|none|always|forever|cant|can'?t|cannot|wont|won'?t|no\s+more|not\s+ever|every\s+time|all\s+the\s+time|no\s+point|pointless|useless|no\s+way\s+out)\b/gi;
+export const NEG = /\b(never|no\s*one|nobody|nothing|none|always|forever|cant|can'?t|cannot|wont|won'?t|no\s+more|not\s+ever|every\s+time|all\s+the\s+time|no\s+point|pointless|useless|no\s+way\s+out)\b/gi;
 
 const LONGING = /\b(miss\s+(?:you|him|her|them)|wish\s+(?:you|i|we)|come\s+back|used\s+to|remember\s+when|out\s+there|waiting\s+for\s+you|love\s+you|if\s+you\s+were|where\s+are\s+you|think(?:ing)?\s+of\s+you|see\s+you\s+again)\b/gi;
 
-const PROFANITY = /\b(fuck(?:ing|ers?|ed|s)?|shit(?:e|ty|s)?|bastard|cunt|prick|twat|wanker|bollocks|arse(?:hole)?|dickhead|piss(?:ed|ing)?|shithouse)\b/gi;
+export const PROFANITY = /\b(fuck(?:ing|ers?|ed|s)?|shit(?:e|ty|s)?|bastard|cunt|prick|twat|wanker|bollocks|arse(?:hole)?|dickhead|piss(?:ed|ing)?|shithouse)\b/gi;
 
 const POSITIVE = /\b(sound|alright|decent|good\s+lad|looked\s+out|sorted\s+me|passed\s+me|laughed|mate|fair|straight|helped|kind|shared|solid|had\s+my\s+back|not\s+bad|stood\s+up|square)\b/gi;
 
@@ -218,4 +218,17 @@ export function introspect(text, { prev = '' } = {}) {
   }
 
   return { deltas, rel, signals };
+}
+
+// A cheap 0..1 read of how ANGRY a burst's own text is, from the same profanity /
+// threat / imperative signals introspect already uses. Reused (not duplicated) by
+// shout.js to feed the live anger value - a burst full of swearing and barked
+// commands drives anger up on the next tick, closing the feedback loop.
+export function angerSignals(text) {
+  const raw = String(text || '');
+  const prof = (raw.match(PROFANITY) || []).length;
+  const threat = (raw.match(THREAT) || []).length;
+  const imperatives = segments(raw).filter((s) => IMPERATIVE_OPEN.test(s.toLowerCase())).length;
+  const intensity = Math.min(1, (prof * 1.0 + threat * 0.8 + imperatives * 0.5) / 4);
+  return { profanity: prof, threat, imperatives, intensity };
 }

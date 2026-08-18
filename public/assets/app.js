@@ -212,7 +212,7 @@ function dispatch(ev, bootstrap) {
       if (p.mode === 'letter') {
         postcards.write(p.s);
       } else {
-        pen.write(p.s, p.mode, p.lucid);
+        pen.write(p.s, p.mode, p.lucid, p.shout);
       }
       break;
 

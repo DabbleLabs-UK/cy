@@ -90,6 +90,14 @@ export function initialVitals() {
     hopeComedownUntil: 0,
     // monotony (0..1): rises when nothing happens, drops on any input. Drives amp.
     monotony: 0,
+    // expressed (0..1): the OUTWARD anger that drives capitalisation. It TRAILS
+    // mental.anger through an asymmetric lag (quick up, slow down) - see
+    // shout.updateAffect - so the shouting appears a beat after the feeling and
+    // the comedown outlasts the flare. Never drive caps from anger directly.
+    expressed: 0,
+    // lastBurstAnger (0..1): profanity/threat density of his most recent burst,
+    // set from introspect and decayed each tick; feeds the live anger target.
+    lastBurstAnger: 0,
     // derived composite states, recomputed each tick from the primitives above.
     derived: {},
     day: 1,

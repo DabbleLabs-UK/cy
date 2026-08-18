@@ -63,7 +63,8 @@ import {
   isSmallHours,
   pickDreamStartMin,
 } from './draw.js';
-import { introspect } from './introspect.js';
+import { introspect, angerSignals } from './introspect.js';
+import { shout, updateAffect, grudgeNames } from './shout.js';
 import {
   reconcileLedger,
   makeIncident,
@@ -574,6 +575,10 @@ async function main() {
   async function applyIntrospection(text) {
     const ins = introspect(text, { prev: vitals.introspectPrev || '' });
     vitals.introspectPrev = String(text || '').slice(-1200);
+    // feed the burst's own profanity/threat density into the live anger value: a
+    // spike here raises anger on the next tick, which raises `expressed` a beat
+    // later, which shows as shouting - and his shouting keeps the density high.
+    vitals.lastBurstAnger = angerSignals(text).intensity;
     if (!ins) return;
     applyDeltas(vitals, ins.deltas || {}, 1);
     for (const [k, d] of Object.entries(ins.rel || {})) {
@@ -624,6 +629,10 @@ async function main() {
         total_ms: ns(s.total_duration) ? Math.round(s.total_duration / 1e6) : null,
         load_ms: ns(s.load_duration) ? Math.round(s.load_duration / 1e6) : null,
         mode,
+        // felt anger vs the outward `expressed` that trails it - the diagnostics
+        // panel shows the lag between what he feels and what reaches the page.
+        anger: Number((vitals.mental.anger || 0).toFixed(3)),
+        expressed: Number((vitals.expressed || 0).toFixed(3)),
         ctx_chars: contextBuf.length,
         duty: client.tempo.speed,
         threads: config.threads,
@@ -927,10 +936,30 @@ async function main() {
       if (currentAbort) currentAbort.abort();
       return;
     }
-    emit({ kind: 'text', payload: { s: chunk, mode } });
+    // ANGER-DRIVEN CAPITALISATION. The paper shows the SHOUTED rendering; the
+    // model's ORIGINAL text is what feeds back into Zone B (and introspection).
+    // Feeding the caps back would make him imitate his own shouting until the page
+    // is permanently capped - the same failure mode as the old scaffold leak.
+    // Evaluated per emitted chunk against `expressed` AT THIS INSTANT, so a span
+    // can escalate across a long burst as the lagged value climbs. Replies on the
+    // postcard (mode 'letter') are left un-shouted so mail stays legible.
+    let payloadS = chunk;
+    let shoutSpans = null;
+    if (mode !== 'letter') {
+      const sh = shout(chunk, {
+        expressed: vitals.expressed || 0,
+        despair: vitals.mental.despair || 0,
+        numbness: (vitals.derived && vitals.derived.numbness) || 0,
+        hunger: vitals.physical.hunger || 0,
+        grudgeNames: grudgeNames(vitals.relations),
+      });
+      payloadS = sh.text;
+      if (sh.spans && sh.spans.length) shoutSpans = sh.spans;
+    }
+    emit({ kind: 'text', payload: { s: payloadS, mode, ...(shoutSpans ? { shout: shoutSpans } : {}) } });
     lastTextMs = Date.now(); // real output: reset the watchdog clock
-    burstEmitted += chunk;
-    await appendContext(chunk);
+    burstEmitted += chunk; // original text: repeat guard reads what he actually wrote
+    await appendContext(chunk); // ORIGINAL to Zone B - never the shouted form
   }
 
   // ---- stream one generation from ollama ----
@@ -1573,6 +1602,9 @@ async function main() {
     const { mins } = londonParts(new Date(now));
     const asleep = isAsleep(mins);
     tick(vitals, { asleep, now });
+    // live anger + expressed (the lagged, outward value that drives shouting).
+    // Runs every tick so the lag is smooth and a spike sulks down between bursts.
+    updateAffect(vitals, { amp: ampOf(vitals) });
     scheduler(now);
 
     const winMs = config.tickMs > 0 ? config.tickMs : 5000;
@@ -1602,6 +1634,10 @@ async function main() {
         day: vitals.day,
         monotony: Number((vitals.monotony || 0).toFixed(3)),
         amp: Number(ampOf(vitals).toFixed(3)),
+        // both the felt anger (also in mental.anger) and the outward `expressed`
+        // that trails it, so the HUD/diagnostics can show the lag between feeling
+        // and expression.
+        expressed: Number((vitals.expressed || 0).toFixed(3)),
         relations: vitals.relations,
       },
     });
