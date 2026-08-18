@@ -613,11 +613,16 @@ function humanDur(secs) {
   return Math.round(secs / 3600) + 'h';
 }
 
+// Neutral, clearly-visible fallback for any tint that fails to parse - never
+// silently emit an invalid or near-black colour.
+const RGB_FALLBACK = { r: 74, g: 74, b: 82 };
+
 function hexToRgb(hex) {
   let h = String(hex).replace('#', '');
   if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return RGB_FALLBACK;
   const n = parseInt(h, 16);
-  if (!Number.isFinite(n)) return { r: 74, g: 74, b: 82 };
+  if (!Number.isFinite(n)) return RGB_FALLBACK;
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 

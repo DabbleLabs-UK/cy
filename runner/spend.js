@@ -66,17 +66,17 @@ export class SpendMeter {
       tokensOut: tout,
       cachedIn: cached,
       uncachedIn: uncached,
-      costUsd: Number(usd.toFixed(6)),
-      costGbp: Number(gbp.toFixed(6)),
-      totalGbp: Number(this.totalGbp.toFixed(6)),
-      totalUsd: Number(this.totalUsd.toFixed(6)),
+      costUsd: Number(usd.toFixed(8)),
+      costGbp: Number(gbp.toFixed(8)),
+      totalGbp: Number(this.totalGbp.toFixed(8)),
+      totalUsd: Number(this.totalUsd.toFixed(8)),
     };
   }
 
   snapshot() {
     return {
-      total_gbp: Number(this.totalGbp.toFixed(6)),
-      total_usd: Number(this.totalUsd.toFixed(6)),
+      total_gbp: Number(this.totalGbp.toFixed(8)),
+      total_usd: Number(this.totalUsd.toFixed(8)),
       tokens_in: this.tokensIn,
       tokens_out: this.tokensOut,
       calls: this.calls,
