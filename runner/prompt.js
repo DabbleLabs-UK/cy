@@ -559,6 +559,18 @@ const STOP = [
   'I apologize',
   "Here's an attempt",
   'To continue from where we left off',
+  // HTML/XML markup the model sometimes emits into the prose (stripped downstream
+  // in warden.sanitize too, for split-token and malformed variants that dodge these).
+  '<br',
+  '</br',
+  '<b>',
+  '</b>',
+  '<p>',
+  '</p>',
+  '<i>',
+  '</i>',
+  '<u>',
+  '</u>',
 ];
 
 // Assemble ollama options from vitals + config, with per-mode overrides.

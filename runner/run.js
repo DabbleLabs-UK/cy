@@ -93,7 +93,7 @@ import {
   CAST,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
-import { createWarden, sanitize, stripScaffold, isRepeat, repeatsWithinBurst } from './warden.js';
+import { createWarden, sanitize, stripScaffold, narrationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs } from './tempo.js';
 
@@ -485,6 +485,19 @@ async function main() {
   }
   // The introspect deltas, logged so the state->text link is observable: a mental
   // move that lands here is attributable to a specific feature of what he wrote.
+  // Narration/assistant-frame drops, logged so we can see how often the second-
+  // person-narrator and helper-model filter fires (see warden.narrationHits).
+  async function logNarration(hits, mode) {
+    if (!hits || !hits.length) return;
+    const line = `[cy] narration-drop (${mode}): ${hits.join(' | ')}`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
   async function logIntrospect(ins) {
     const sig = (ins && ins.signals) || [];
     if (!sig.length) return;
@@ -578,6 +591,7 @@ async function main() {
   let currentMode = 'journal';
   let currentAbort = null; // AbortController for the in-flight generation
   let tokenCount = 0; // tokens this vitals-tick window (broca)
+  let brocaLevel = 0; // decaying live-output level driving the Broca readout
   const pendingPostcards = [];
   const pendingWarden = [];
   const pendingDrawRequests = []; // postcards that asked him to draw something
@@ -610,10 +624,24 @@ async function main() {
     if (process.platform !== 'win32') return; // Windows-only probe; leave nulls elsewhere
     if (probingOllama) return; // never overlap probes
     probingOllama = true;
-    // Sum CPU-seconds and working set over every ollama process; emit "cpu|ws|n".
+    // The model does NOT live in the small `ollama.exe` CLI/server stub - it runs
+    // in a CHILD runner process (`ollama_llama_server`, or on newer builds a second
+    // `ollama` process spawned as `runner`) that holds the weights (hundreds of MB
+    // up to GBs resident) and does the actual inference compute. Matching only the
+    // exact name `ollama` caught the stub, which is why OLM read ~19 MB and CY cpu
+    // ~0. So: match the whole `ollama*` family, DROP the `ollama app` tray GUI (not
+    // the model), then attribute the model to the runner - preferring a process
+    // named *server*/*runner*/*llama*, else falling back to the largest-resident of
+    // the rest (which is the runner once a model is loaded). Report ITS cpu-seconds
+    // and working set, plus the non-tray process count. NB `$host` is a reserved
+    // automatic variable in PowerShell - use `$t`.
     const script =
-      '$p=Get-Process ollama -ErrorAction SilentlyContinue;' +
-      'if($p){$c=($p|Measure-Object CPU -Sum).Sum;$w=($p|Measure-Object WorkingSet64 -Sum).Sum;$n=($p|Measure-Object).Count}' +
+      "$p=Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue;" +
+      "$p=$p|Where-Object{$_.Name -ne 'ollama app'};" +
+      'if($p){$t=$p|Where-Object{$_.Name -match ' +
+      "'server|runner|llama'}|Sort-Object WorkingSet64 -Descending|Select-Object -First 1;" +
+      'if(-not $t){$t=$p|Sort-Object WorkingSet64 -Descending|Select-Object -First 1};' +
+      '$c=$t.CPU;$w=$t.WorkingSet64;$n=($p|Measure-Object).Count}' +
       'else{$c=0;$w=0;$n=0};' +
       "Write-Output ('{0}|{1}|{2}' -f $c,$w,$n)";
     let child;
@@ -678,8 +706,11 @@ async function main() {
   //      the same line twice ("im finished the thought of ... im finished ...").
   async function onChunk(rawChunk, mode) {
     if (burstStopped) return; // the repeat guard already ended this burst
-    let chunk = stripScaffold(sanitize(rawChunk));
-    if (!chunk.trim()) return; // was nothing but control tokens / scaffold
+    const cleaned = sanitize(rawChunk);
+    const nHits = narrationHits(cleaned); // log narration/assistant-frame drops
+    let chunk = stripScaffold(cleaned);
+    if (nHits.length) await logNarration(nHits, mode);
+    if (!chunk.trim()) return; // was nothing but control tokens / scaffold / narration
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
@@ -1305,11 +1336,18 @@ async function main() {
     tick(vitals, { asleep, now });
     scheduler(now);
 
-    const rate = tokenCount / (config.tickMs / 1000); // tok/s over the window
-    const broca = clamp(rate / 4); // ~3.4 tok/s model -> ~0.85 at full flow
+    const winMs = config.tickMs > 0 ? config.tickMs : 5000;
+    const rate = tokenCount / (winMs / 1000); // tok/s over the window
+    const brocaTarget = clamp(rate / 4); // ~3.4 tok/s model -> ~0.85 at full flow
+    // Broca tracks live language OUTPUT. A raw per-window rate snaps to 0 the moment
+    // a 5s window catches no tokens - between two short bursts, or during the long
+    // prompt-eval lead-in before the first token - so the readout showed SUPPRESSED
+    // even while he was plainly mid-entry. Light up at once on output, then DECAY
+    // across the gaps, so it only falls to 0 on real silence/sleep, never mid-flow.
+    brocaLevel = Math.max(brocaTarget, brocaLevel * 0.55);
     tokenCount = 0;
     const v1 = vitals.imageRecall > 0.05 ? clamp(0.3 + 0.6 * vitals.imageRecall) : 0;
-    const brain = brainRegions(vitals, { broca: Number(broca.toFixed(3)), v1: Number(v1.toFixed(3)), asleep });
+    const brain = brainRegions(vitals, { broca: Number(brocaLevel.toFixed(3)), v1: Number(v1.toFixed(3)), asleep });
     const hr = heartRate(vitals, asleep);
 
     emit({

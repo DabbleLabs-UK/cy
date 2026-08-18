@@ -735,7 +735,17 @@ html, body {
 .pw-fig { display: flex; flex-direction: column; gap: 1px; }
 .pw-fk { font-size: 8.5px; letter-spacing: 0.16em; color: var(--tel-dim); }
 .pw-fv { font-size: 12px; color: var(--tel); font-variant-numeric: tabular-nums; }
-.pw-chartwrap { margin-top: 2px; }
+.pw-chartwrap { margin-top: 2px; position: relative; }
+.pw-tip {
+  position: absolute; top: 2px; z-index: 5; pointer-events: none;
+  display: flex; gap: 6px; align-items: baseline; white-space: nowrap;
+  background: #11151c; border: 1px solid var(--line); border-radius: 3px;
+  padding: 2px 6px; font-size: 10px; color: #e8eef4;
+  font-variant-numeric: tabular-nums; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+.pw-tip[hidden] { display: none; }
+.pw-tip-v { color: #e6b45e; }
+.pw-tip-t { color: var(--tel-dim); }
 .pw-svg {
   display: block; width: 100%; height: 96px;
   background: #0b0e13; border: 1px solid var(--line); border-radius: 4px;

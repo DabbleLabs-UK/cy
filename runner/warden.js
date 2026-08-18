@@ -109,6 +109,14 @@ export function sanitize(s) {
     .replace(/\|?(?:im_start|im_end|eot_id|sysmsg_\d+|start_header_id|end_header_id|begin_of_text)\|?/gi, '')
     .replace(/<\|+|\|+>/g, '') // stray <| or |>
     .replace(/(^|\s)\|(\s|$)/g, '$1$2') // isolated pipe
+    // HTML/XML-ish markup the model leaks into prose: opening/closing tags with or
+    // without attributes, doubled closers ('<br>>'), and a tag truncated at the end
+    // of the chunk ('<b', '</br'). Tag-like = '<' + optional '/' + a LETTER, so a
+    // real comparator or emoticon ('5 < 3', '<3') - never followed by a letter - is
+    // left untouched. Generic: it does not need to know the tag name in advance.
+    .replace(/<\/?[a-zA-Z][^<>]*>+/g, ' ') // <br>, </br>, <b>, <p class=x>, '<br>>'
+    .replace(/<\/?[a-zA-Z][a-zA-Z0-9]*\s*$/g, ' ') // tag cut off at the end: '<b', '</br'
+    .replace(/<\/?>/g, ' ') // stray '<>' / '</>'
     .replace(/[ \t]{2,}/g, ' ');
 }
 
@@ -140,9 +148,50 @@ const SCAFFOLD = [
   /^[ \t]*\d{3,5}[ \t]*$/gm, // bare turn-label, e.g. a line that is only "7734"
 ];
 
+// Assistant / narrator frame-breaks: the model stops BEING 7734 and starts
+// narrating him in the second person ("You're writing about Bill...", "You
+// continue", "It seems like you...") or answers as a helper model ("Here is",
+// "Let me", "As an AI", "I apologize"). Same class as the old "You continue
+// writing:" leak but generalised, so a new grammatical variant is caught without
+// adding the exact string. Deliberately NARROW: it targets narration ABOUT his
+// own writing and assistant openers - never a bare "you", because CY legitimately
+// says "you" to an inmate, an officer, or a postcard sender. Stripped from every
+// emitted chunk and before context feedback; run.js logs each hit (narrationHits).
+const NARRATION = [
+  // second person narrating his own writing/activity - drop to the end of the line
+  /\byou(?:'re|r| are| were| have been|['’]ve been)\s+writing\b[^\n]*/gi,
+  /\byou\s+continue\b[^\n]*/gi,
+  /\byou\s+keep\s+(?:writing|scribbling|going|describing)\b[^\n]*/gi,
+  /\byou(?:'re| are)\s+(?:describing|telling|narrating|recounting|putting\s+down|writing\s+down)\b[^\n]*/gi,
+  /\bit\s+seems?\s+like\s+you\b[^\n]*/gi,
+  // assistant framing / breaking character - anchored to the start of a line
+  /^[\s"'>]*here\s+is\b[^\n]*/gim,
+  /^[\s"'>]*here'?s\b[^\n]*/gim,
+  /^[\s"'>]*let\s+me\b[^\n]*/gim,
+  /^[\s"'>]*i\s+can\s+help\b[^\n]*/gim,
+  /^[\s"'>]*to\s+continue\b[^\n]*/gim,
+  // assistant self-identification - a strong signal anywhere in the chunk
+  /\bas\s+an?\s+(?:ai|assistant|language\s+model)\b[^\n]*/gi,
+  /\bi\s+apologi[sz]e\b[^\n]*/gi,
+];
+
+// The NARRATION fragments present in `s`, for logging how often the filter fires.
+// Non-mutating; global regexes are reset so lastIndex never leaks between calls.
+export function narrationHits(s) {
+  const t = s || '';
+  const hits = [];
+  for (const re of NARRATION) {
+    re.lastIndex = 0;
+    const m = t.match(re);
+    if (m) for (const x of m) hits.push(x.trim().replace(/\s+/g, ' ').slice(0, 80));
+  }
+  return hits;
+}
+
 export function stripScaffold(s) {
   let out = s || '';
   for (const re of SCAFFOLD) out = out.replace(re, ' ');
+  for (const re of NARRATION) out = out.replace(re, ' ');
   out = out.replace(/^[ \t]*["']+[ \t]*/, ''); // stray opening quote left at the head
   return out.replace(/[ \t]{2,}/g, ' ');
 }

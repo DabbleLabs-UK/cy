@@ -58,6 +58,7 @@ export class Power {
           <path id="pw-area" class="pw-area" d=""/>
           <path id="pw-line" class="pw-line" d=""/>
         </svg>
+        <div class="pw-tip" id="pw-tip" hidden></div>
         <div class="pw-axis">
           <span class="pw-yl" id="pw-ytop">-- W</span>
           <span class="pw-caption">area under the line = cost</span>
@@ -73,6 +74,50 @@ export class Power {
     this.lineEl = this.root.querySelector('#pw-line');
     this.yTopEl = this.root.querySelector('#pw-ytop');
     this.xSpanEl = this.root.querySelector('#pw-xspan');
+    this.svgEl = this.root.querySelector('.pw-svg');
+    this.tipEl = this.root.querySelector('#pw-tip');
+    this._geo = null; // { t0, span, W } set each render, for tooltip mapping
+    this._bindTooltip();
+  }
+
+  // Hover the chart to read the p/h rate and the clock time at the nearest sample.
+  // Kept in the existing dark instrument style (see .pw-tip in style.css).
+  _bindTooltip() {
+    const svg = this.svgEl;
+    const tip = this.tipEl;
+    if (!svg || !tip || typeof svg.addEventListener !== 'function') return; // no real DOM (headless test)
+    const move = (e) => {
+      const pts = this.points;
+      if (!pts.length || !this._geo) {
+        tip.hidden = true;
+        return;
+      }
+      const rect = svg.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const { t0, span, W } = this._geo;
+      const vbX = ((e.clientX - rect.left) / rect.width) * W;
+      // nearest sample by x position
+      let best = pts[0];
+      let bestD = Infinity;
+      for (const q of pts) {
+        const d = Math.abs(((q.t - t0) / span) * W - vbX);
+        if (d < bestD) {
+          bestD = d;
+          best = q;
+        }
+      }
+      tip.innerHTML =
+        `<span class="pw-tip-v">${sig2(best.cph * 100)} p/h</span>` +
+        `<span class="pw-tip-t">${fmtClock(best.t)}</span>`;
+      tip.hidden = false;
+      const bx = ((best.t - t0) / span) * rect.width;
+      const half = tip.offsetWidth / 2;
+      tip.style.left = Math.max(0, Math.min(rect.width - tip.offsetWidth, bx - half)).toFixed(1) + 'px';
+    };
+    svg.addEventListener('mousemove', move);
+    svg.addEventListener('mouseleave', () => {
+      tip.hidden = true;
+    });
   }
 
   // ingest one power event. tsMs optional (from the event's ts); falls back to now.
@@ -124,6 +169,7 @@ export class Power {
     const span = Math.max(1, t1 - t0);
     const W = 300;
     const H = 120;
+    this._geo = { t0, span, W }; // for the hover tooltip's x -> sample mapping
     const x = (t) => ((t - t0) / span) * W;
     const y = (w) => H - Math.max(0, Math.min(1, w / wMax)) * H;
 
@@ -145,6 +191,13 @@ function num(x) {
   if (typeof x === 'number' && Number.isFinite(x)) return x;
   if (typeof x === 'string' && x.trim() !== '' && Number.isFinite(+x)) return +x;
   return null;
+}
+
+// Format to 2 significant figures for the tooltip (e.g. 3.4, 0.85, 12), dropping
+// any trailing-zero noise toPrecision leaves behind.
+function sig2(v) {
+  if (!Number.isFinite(v)) return '--';
+  return String(Number(v.toPrecision(2)));
 }
 
 // Format the running total for the headline: pence under GBP 1 (e.g. "3.0p" for

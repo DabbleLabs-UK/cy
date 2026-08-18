@@ -196,6 +196,9 @@ export class Pen {
     this.root = root; // #paper element
     this.font = font; // { name, chars: [ {d,o} | null, ... ] }
     this.glyphCache = new Map();
+    // right-edge crop instrumentation, gated behind ?111 (window.CY.raw): logs the
+    // sheet clientWidth, viewBox width, maxX, and any glyph that reaches past maxX.
+    this._debug = typeof window !== 'undefined' && !!(window.CY && window.CY.raw);
 
     // ---- style baselines (modulated by vitals) ----
     this.size = 19; // cap height px
@@ -314,8 +317,21 @@ export class Pen {
   // the size actually changed so callers can re-flow (rescroll) only then.
   _resize() {
     const r = this.root.getBoundingClientRect();
-    const w = Math.max(200, Math.round(r.width));
-    const h = Math.max(200, Math.round(r.height));
+    // Size the coordinate space to the CONTENT box, not the border box.
+    // getBoundingClientRect().width is the border-box width - it includes the
+    // sheet's 1px border (and any padding). The SVG is CSS width:100%, so it
+    // actually renders at the content width; feeding the wider border-box width
+    // into the viewBox made 1 user unit slightly narrower than 1px and let the
+    // wrap point (maxX) sit a couple of px past the visible right edge. Subtract
+    // padding + border so the viewBox, the rendered width, and the wrap point all
+    // agree on ONE number.
+    const cs = typeof getComputedStyle !== 'undefined' ? getComputedStyle(this.root) : null;
+    const padX = cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0;
+    const padY = cs ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) : 0;
+    const cw = (this.root.clientWidth || Math.round(r.width)) - padX; // clientWidth excludes border
+    const ch = (this.root.clientHeight || Math.round(r.height)) - padY;
+    const w = Math.max(200, Math.round(cw));
+    const h = Math.max(200, Math.round(ch));
     if (w === this.w && h === this.h) return false;
     this.w = w;
     this.h = h;
@@ -324,6 +340,15 @@ export class Pen {
     this.svg.setAttribute('height', h);
     // wrap point comes from the SAME width used for the viewBox above.
     this.maxX = this.w - this.marginRight;
+    if (this._debug) {
+      // eslint-disable-next-line no-console
+      console.log('[pen] resize', {
+        clientWidth: this.root.clientWidth,
+        rectWidth: Math.round(r.width),
+        viewBoxW: w,
+        maxX: this.maxX,
+      });
+    }
     return true;
   }
 
@@ -702,9 +727,23 @@ export class Pen {
     const scale = size / 21;
     const advance = g.o * 2 * scale;
 
-    // word wrap: only wrap at a word boundary (never mid-word), never on the
-    // very first glyph of a line.
-    if (!this.midWord && this.x + advance > this.maxX && this.x > this.marginX) {
+    if (this._debug && this.x + advance > this.maxX) {
+      // eslint-disable-next-line no-console
+      console.log('[pen] glyph past maxX', {
+        ch,
+        x: +this.x.toFixed(1),
+        advance: +advance.toFixed(1),
+        rightEdge: +(this.x + advance).toFixed(1),
+        maxX: this.maxX,
+        midWord: this.midWord,
+      });
+    }
+    // word wrap: prefer wrapping at a word boundary (so whole words move down), but
+    // a single word too long to fit the line must ALSO break mid-word - otherwise
+    // its tail runs off the right edge and is cropped ('degre|es', 'smell|s',
+    // 'whisper|s'). Never wrap on the very first glyph of a line (x > marginX), which
+    // also guarantees a glyph wider than the whole line still lands rather than looping.
+    if (this.x + advance > this.maxX && this.x > this.marginX) {
       this._newline();
     }
     this.midWord = true;
