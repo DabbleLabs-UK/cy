@@ -87,6 +87,10 @@ function event_for_seq(int $seq): ?array
     if ($seq % 14 === 0) {
         return ['tempo', fake_tempo($seq)];
     }
+    // generation telemetry after (fake) bursts, on its own cadence
+    if ($seq % 13 === 0) {
+        return ['gen', fake_gen($seq)];
+    }
 
     // a postcard cycle: interrupt -> mode:letter -> postcard_in -> reply -> back
     $inCycle = $seq % 120;
@@ -268,5 +272,52 @@ function fake_host(int $seq): array
     $cpu = round(35 + 45 * (0.5 + 0.5 * sin($t / 3.0)), 1);
     $memPct = round(58 + 12 * (0.5 + 0.5 * sin($t / 7.0 + 1.0)), 1);
     $memMB = (int)round(($memPct / 100) * 16384);
-    return ['cpu' => $cpu, 'memPct' => $memPct, 'memMB' => $memMB, 'gpu' => null];
+    // CY: only ollama + this runner node - a slice of the whole-machine figure,
+    // so the panel can show an HONEST system-vs-Cy split in test mode.
+    $cyCpu = round(16 + 30 * (0.5 + 0.5 * sin($t / 3.0 + 0.6)), 1);
+    return [
+        'cpu' => $cpu,
+        'memPct' => $memPct,
+        'memMB' => $memMB,
+        'memTotalMB' => 16384,
+        'cyCpu' => $cyCpu,
+        'cyMemMB' => 5400 + ($seq % 600),
+        'nodeMB' => 68 + ($seq % 22),
+        'ollamaProcs' => 1,
+        'gpu' => null,
+    ];
+}
+
+// A fake generation-telemetry snapshot. prompt_eval_count is mostly small (the
+// cached prefix was reused) but every ~5th burst the KV cache is invalidated and
+// the whole briefing is re-read - so the diagnostics panel shows both regimes.
+function fake_gen(int $seq): array
+{
+    $burst = intdiv($seq, 13);
+    $invalidated = ($burst % 5 === 0);
+    $tokIn = $invalidated ? 2600 + ($seq % 400) : 12 + ($seq % 44);
+    $tokOut = 60 + ($seq % 120);
+    $promptTokS = round(180 + 90 * (0.5 + 0.5 * sin($seq / 9.0)), 1);
+    $genTokS = round(7 + 3 * (0.5 + 0.5 * sin($seq / 11.0)), 2);
+    $ttft = (int)round(($tokIn / max(1.0, $promptTokS)) * 1000) + 40;
+    $total = (int)round(($tokOut / max(0.1, $genTokS)) * 1000 + $ttft);
+    $mode = ($seq % 120 >= 42 && $seq % 120 < 70) ? 'letter' : 'journal';
+    return [
+        'tokens_in' => $tokIn,
+        'tokens_out' => $tokOut,
+        'prompt_tok_s' => $promptTokS,
+        'gen_tok_s' => $genTokS,
+        'ttft_ms' => $ttft,
+        'total_ms' => $total,
+        'load_ms' => 0,
+        'mode' => $mode,
+        'ctx_chars' => 3000 + ($seq % 1600),
+        'duty' => 30,
+        'threads' => 4,
+        'model' => 'hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M',
+        'num_ctx' => 3072,
+        'inbox_ok' => true,
+        'tempo_ok' => true,
+        'last_error' => null,
+    ];
 }

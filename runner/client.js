@@ -45,6 +45,12 @@ export class Client {
     // endpoint that is unreachable at startup never stalls or throttles blindly;
     // the first successful poll replaces it.
     this.tempo = { speed: 100, viewers: 0, custom: false };
+    // live diagnostics: whether the last inbox/tempo poll succeeded, and the
+    // last error string seen talking to the server (null once things recover).
+    // Start null (unknown) so the HUD does not claim a failure before any poll.
+    this.lastInboxOk = null;
+    this.lastTempoOk = null;
+    this.lastError = null;
     this._flushTimer = null;
     this._inboxTimer = null;
     this._tempoTimer = null;
@@ -112,7 +118,9 @@ export class Client {
       });
       if (!res.ok) throw new Error(`ingest HTTP ${res.status}`);
       this.backoff = 0;
+      this.lastError = null;
     } catch (err) {
+      this.lastError = String(err && err.message ? err.message : err);
       // Persist to disk queue and back off. Never lose the events.
       await this._appendEvents(this.queuePath, events);
       this.backoff = Math.min(MAX_BACKOFF_MS, this.backoff ? this.backoff * 2 : 2000);
@@ -167,8 +175,9 @@ export class Client {
       try {
         const raw = await readFile(this.inboxPath, 'utf8');
         data = JSON.parse(raw);
+        this.lastInboxOk = true;
       } catch {
-        return; // no dry-run inbox present
+        return; // no dry-run inbox present (not treated as a failure)
       }
       // Consume it so the same items are not re-delivered on the next poll.
       try {
@@ -183,9 +192,16 @@ export class Client {
           headers: { 'X-Cy-Key': this.config.ingestKey },
           signal: AbortSignal.timeout(15000),
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          this.lastInboxOk = false;
+          this.lastError = `inbox HTTP ${res.status}`;
+          return;
+        }
         data = await res.json();
-      } catch {
+        this.lastInboxOk = true;
+      } catch (err) {
+        this.lastInboxOk = false;
+        this.lastError = String(err && err.message ? err.message : err);
         return; // transient; try again next poll
       }
     }
@@ -205,6 +221,7 @@ export class Client {
     if (this.config.dryRun) {
       try {
         data = JSON.parse(await readFile(this.tempoPath, 'utf8'));
+        this.lastTempoOk = true;
       } catch {
         return; // no dry-run tempo file - keep last known
       }
@@ -215,9 +232,16 @@ export class Client {
           headers: { 'X-Cy-Key': this.config.ingestKey },
           signal: AbortSignal.timeout(10000),
         });
-        if (!res.ok) return; // keep last known
+        if (!res.ok) {
+          this.lastTempoOk = false;
+          this.lastError = `tempo HTTP ${res.status}`;
+          return; // keep last known
+        }
         data = await res.json();
-      } catch {
+        this.lastTempoOk = true;
+      } catch (err) {
+        this.lastTempoOk = false;
+        this.lastError = String(err && err.message ? err.message : err);
         return; // transient; keep last known
       }
     }

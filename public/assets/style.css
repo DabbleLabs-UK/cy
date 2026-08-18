@@ -282,6 +282,61 @@ html, body {
 .hp-v { color: #e8eef4; font-variant-numeric: tabular-nums; min-width: 4ch; text-align: right; }
 .hp-v2 { color: var(--tel); font-variant-numeric: tabular-nums; }
 
+/* SYSTEM vs CY section headings inside the host panel */
+.hp-sec {
+  font-size: 9px; letter-spacing: 0.24em; color: var(--tel-dim);
+  margin: 10px 0 4px; text-transform: uppercase;
+}
+.hp-sec:first-of-type { margin-top: 4px; }
+.hp-sec-note { color: var(--line); letter-spacing: 0.08em; text-transform: none; }
+
+/* ---- diagnostics (collapsed by default) ---- */
+.hp-diag {
+  margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 4px;
+}
+.hp-diag > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--tel-dim); padding: 4px 0; outline: none;
+}
+.hp-diag > summary::-webkit-details-marker { display: none; }
+.hp-diag > summary::before { content: '+ '; color: var(--line); }
+.hp-diag[open] > summary::before { content: '- '; }
+.hp-diag > summary:hover { color: var(--tel); }
+.hp-diag-body { font-family: var(--mono); margin-top: 4px; }
+
+/* prompt_eval_count - the prominent, load-bearing number */
+.hp-peval {
+  border: 1px solid var(--line); border-radius: 4px;
+  background: #0b0e13; padding: 7px 9px; margin-bottom: 7px;
+}
+.hp-peval-k { font-size: 9px; letter-spacing: 0.16em; color: var(--tel-dim); text-transform: uppercase; }
+.hp-peval-v {
+  font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums;
+  color: #e8eef4; margin: 1px 0;
+}
+.hp-peval-v.good { color: var(--good, #5fd08a); }
+.hp-peval-v.warm { color: var(--tel-hot, #d8863a); }
+.hp-peval-note { font-size: 9.5px; color: var(--tel-dim); line-height: 1.3; }
+.hp-kvnote {
+  font-size: 9px; color: var(--tel-dim); line-height: 1.35;
+  margin-bottom: 8px; padding-left: 2px; border-left: 2px solid var(--line);
+  padding: 2px 0 2px 6px;
+}
+
+.hp-grid {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: baseline;
+}
+.hp-gk { font-size: 10px; color: var(--tel-dim); letter-spacing: 0.04em; }
+.hp-gv { font-size: 11px; color: #dfe7ee; font-variant-numeric: tabular-nums; text-align: right; }
+.hp-gv.warm { color: var(--tel-hot, #d8863a); }
+.hp-modelrow, .hp-errrow {
+  display: flex; justify-content: space-between; gap: 8px; margin-top: 6px;
+  font-size: 10px; align-items: baseline;
+}
+.hp-model { color: var(--tel); font-size: 10px; text-align: right; word-break: break-all; }
+.hp-err { color: var(--tel-hot, #d8863a); font-size: 10px; text-align: right; word-break: break-all; }
+
 /* ================= FORMS ================= */
 .cell-form { display: flex; flex-direction: column; gap: 8px; }
 .cell-form input[type=text],

@@ -11,6 +11,7 @@
 // SIGINT flushes the batch queue and persists vitals before exiting.
 
 import os from 'node:os';
+import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -401,6 +402,43 @@ async function main() {
     await logIntrospect(ins);
   }
 
+  // ---- generation telemetry: emit a `gen` event after a completed burst ----
+  // Folds ollama's per-generation counters (prompt_eval_count, eval_count and the
+  // nanosecond durations) into interpretable numbers, plus the live runner state
+  // the diagnostics readout needs (duty cycle, poll health, model/threads/ctx).
+  // Guards on stats so an aborted/errored generation with no `done` line is a
+  // no-op rather than a run of dashes.
+  function emitGen(r, mode) {
+    const s = r && r.stats;
+    if (!s) return;
+    const ns = (x) => (typeof x === 'number' && x > 0 ? x : 0);
+    const promptTokS = ns(s.prompt_eval_duration)
+      ? (s.prompt_eval_count || 0) / (s.prompt_eval_duration / 1e9)
+      : 0;
+    const genTokS = ns(s.eval_duration) ? (s.eval_count || 0) / (s.eval_duration / 1e9) : 0;
+    emit({
+      kind: 'gen',
+      payload: {
+        tokens_in: s.prompt_eval_count || 0,
+        tokens_out: s.eval_count || 0,
+        prompt_tok_s: Number(promptTokS.toFixed(1)),
+        gen_tok_s: Number(genTokS.toFixed(2)),
+        ttft_ms: r.ttftMs != null ? Math.round(r.ttftMs) : null,
+        total_ms: ns(s.total_duration) ? Math.round(s.total_duration / 1e6) : null,
+        load_ms: ns(s.load_duration) ? Math.round(s.load_duration / 1e6) : null,
+        mode,
+        ctx_chars: contextBuf.length,
+        duty: client.tempo.speed,
+        threads: config.threads,
+        model: config.model,
+        num_ctx: NUM_CTX,
+        inbox_ok: client.lastInboxOk,
+        tempo_ok: client.lastTempoOk,
+        last_error: client.lastError || null,
+      },
+    });
+  }
+
   // ---- shared loop state ----
   let running = true;
   let currentMode = 'journal';
@@ -420,6 +458,70 @@ async function main() {
   let prevMins = null;
   let prevDate = londonParts().date;
   let prevCpu = cpuSnapshot();
+
+  // ---- honest per-process attribution (ollama + this runner node) ------------
+  // Whole-machine cpu/mem (os.*) includes unrelated work, so it is misleading to
+  // call it "Cy". We ALSO attribute honestly: the only thing that is Cy is the
+  // ollama model process plus this runner's own Node process. ollama figures come
+  // from an occasional powershell probe (Windows) that runs detached and lands on
+  // cyProc for a LATER host tick - it never blocks the generation loop. The
+  // runner's own RSS is read in-process. cpu% is normalised to 0-100 across all
+  // logical cores, matching the system reading, by deltaing cumulative CPU-seconds.
+  const NCPU = Math.max(1, os.cpus().length);
+  const cyProc = { ollamaCpu: null, ollamaMB: null, ollamaProcs: null };
+  let prevOllamaCpuSec = null;
+  let prevOllamaProbeMs = null;
+  let probingOllama = false;
+  function probeOllama() {
+    if (process.platform !== 'win32') return; // Windows-only probe; leave nulls elsewhere
+    if (probingOllama) return; // never overlap probes
+    probingOllama = true;
+    // Sum CPU-seconds and working set over every ollama process; emit "cpu|ws|n".
+    const script =
+      '$p=Get-Process ollama -ErrorAction SilentlyContinue;' +
+      'if($p){$c=($p|Measure-Object CPU -Sum).Sum;$w=($p|Measure-Object WorkingSet64 -Sum).Sum;$n=($p|Measure-Object).Count}' +
+      'else{$c=0;$w=0;$n=0};' +
+      "Write-Output ('{0}|{1}|{2}' -f $c,$w,$n)";
+    let child;
+    try {
+      child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+        windowsHide: true,
+      });
+    } catch {
+      probingOllama = false;
+      return;
+    }
+    let out = '';
+    child.stdout.on('data', (d) => {
+      out += d.toString();
+    });
+    child.on('error', () => {
+      probingOllama = false;
+    });
+    child.on('close', () => {
+      probingOllama = false;
+      const parts = out.trim().split('|');
+      if (parts.length < 3) return;
+      const cpuSec = Number(parts[0]); // cumulative CPU-seconds across ollama procs
+      const ws = Number(parts[1]); // summed working set (bytes)
+      const n = Number(parts[2]); // process count
+      const nowMs = Date.now();
+      if (Number.isFinite(cpuSec) && prevOllamaCpuSec != null && prevOllamaProbeMs != null) {
+        const dSec = cpuSec - prevOllamaCpuSec;
+        const dWall = (nowMs - prevOllamaProbeMs) / 1000;
+        if (dWall > 0 && dSec >= 0) {
+          cyProc.ollamaCpu = Number((clamp(dSec / dWall / NCPU) * 100).toFixed(1));
+        }
+      }
+      if (Number.isFinite(cpuSec)) {
+        prevOllamaCpuSec = cpuSec;
+        prevOllamaProbeMs = nowMs;
+      }
+      if (Number.isFinite(ws)) cyProc.ollamaMB = Math.round(ws / 1024 / 1024);
+      if (Number.isFinite(n)) cyProc.ollamaProcs = n;
+    });
+  }
+  probeOllama(); // prime a baseline now so the first host tick can show a delta
 
   // Set true at the start of every generation, consumed on its FIRST emitted
   // chunk: the burst-boundary guard so consecutive bursts do not run together
@@ -467,6 +569,11 @@ async function main() {
     let head = '';
     let primed = contextTail === undefined; // only continuation mode primes
     let repeat = false;
+    // generation telemetry: wall-clock to the first token (ttft), and the final
+    // ollama `done` line which carries prompt_eval_count/eval_count/durations.
+    const t0 = Date.now();
+    let ttftMs = null;
+    let stats = null;
     const cleanedFull = () => stripScaffold(sanitize(full));
 
     // Decide the held opening: discard on replay, otherwise release it.
@@ -522,6 +629,7 @@ async function main() {
             continue;
           }
           if (typeof obj.response === 'string' && obj.response.length) {
+            if (ttftMs === null) ttftMs = Date.now() - t0; // first token out
             full += obj.response;
             tokenCount++;
             if (!primed) {
@@ -534,6 +642,8 @@ async function main() {
               for (const chunk of buffer.push(obj.response)) await onChunk(chunk, mode);
             }
           }
+          // the final streamed line carries the timing/counters for the burst
+          if (obj.done) stats = obj;
         }
       }
     } catch (err) {
@@ -550,7 +660,7 @@ async function main() {
     if (repeat) return { full: cleanedFull(), repeat: true };
     // natural end: flush trailing partial thought
     for (const chunk of buffer.flush()) await onChunk(chunk, mode);
-    return { full: cleanedFull(), aborted: false };
+    return { full: cleanedFull(), aborted: false, stats, ttftMs };
   }
 
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
@@ -653,10 +763,11 @@ async function main() {
     const prompt = buildPrompt(contextText(), 'postcard', pc, directives);
     const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(pc.body) });
     await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    const { full } = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter' });
+    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter' });
+    emitGen(r, 'letter');
 
     // the public, streamed record of Cy's reply (kept as postcard_out)
-    const reply = (full || '').trim();
+    const reply = (r.full || '').trim();
     if (reply) {
       emit({ kind: 'postcard_out', payload: { id: pc.id, reply_to: pc.id, body: reply } });
     }
@@ -1080,12 +1191,21 @@ async function main() {
     const total = os.totalmem();
     const free = os.freemem();
     const used = total - free;
+    probeOllama(); // non-blocking: result lands on cyProc for a later tick
+    const nodeMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
     emit({
       kind: 'host',
       payload: {
+        // SYSTEM: the whole machine, including work that is NOT Cy
         cpu: Number((cpu * 100).toFixed(1)),
         memPct: Number(((used / total) * 100).toFixed(1)),
         memMB: Math.round(used / 1024 / 1024),
+        memTotalMB: Math.round(total / 1024 / 1024),
+        // CY: only ollama (the model) plus this runner node process
+        cyCpu: cyProc.ollamaCpu,
+        cyMemMB: cyProc.ollamaMB,
+        nodeMB,
+        ollamaProcs: cyProc.ollamaProcs,
         gpu: null,
       },
     });
@@ -1184,6 +1304,7 @@ async function main() {
       let penBump = 0;
       let produced = false;
       let lastFull = '';
+      let lastResult = null;
       for (;;) {
         const tail = contextText();
         const prompt = buildPrompt(tail, mode, null, directives);
@@ -1198,6 +1319,7 @@ async function main() {
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
           lastFull = r.full || '';
+          lastResult = r;
           break;
         }
         // near-repeat: discard, bump randomness + repeat penalty, trim context
@@ -1209,6 +1331,9 @@ async function main() {
         if (discards >= 2) break; // dropped oldest half - move on to a fresh gen
       }
       const burstMs = Date.now() - burstStart;
+      // live diagnostics: publish this burst's generation telemetry (no-op if the
+      // burst errored before ollama returned a `done` line with counters).
+      if (lastResult) emitGen(lastResult, mode);
       // remember this burst's opening word so the next prompt can forbid it -
       // the last-5-openers ban that keeps him off the same starting word.
       if (produced) {

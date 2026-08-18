@@ -202,6 +202,10 @@ function dispatch(ev, bootstrap) {
       hud.setHost(p);
       break;
 
+    case 'gen':
+      hud.setGen(p);
+      break;
+
     case 'power':
       if (power) power.push(p, ev.ts ? Date.parse(String(ev.ts).replace(' ', 'T')) : Date.now());
       break;
