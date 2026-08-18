@@ -141,7 +141,8 @@ async function boot() {
   wireForms();
   initViewSwitch();
   initHistoryControl();
-  initPauseControl();
+  initGearMenu();        // admin only: pause + model provider
+  initModelIndicator();  // public: which model is running
   initLed(); // last, so the LED lands leftmost (before the selects)
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
@@ -182,7 +183,7 @@ async function firstLoad() {
   // The LED stays idle through the backlog fill; only inference events newer than
   // the load point may ever drive it, so replayed history can never light it.
   led.lastSeq = lastSeq;
-  setStatus('live', false);
+  setStatus('Show Live', false);
 }
 
 // tokens beyond this many in one batch mean we fell behind (backgrounded tab,
@@ -203,7 +204,7 @@ async function poll() {
     // (after rendering, so it wins over any token fast-path in the same batch).
     driveLedFromBatch(events);
     if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
-    setStatus('live', false);
+    setStatus('Show Live', false);
   } catch (e) {
     setStatus('reconnecting', true);
   } finally {
@@ -341,7 +342,16 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         latestMode = p.mode;
         setMode(p.mode);
       }
+      // the active model provider rides this frequent tick: settle a pending model
+      // switch and keep the compact indicator honest (see initGearMenu).
+      if (p.provider) syncProviderState(p.provider);
       if (typeof p.day === 'number') setDay(p.day);
+      break;
+
+    case 'capability':
+      // the runner reports whether it holds a DeepSeek key; drives the menu's
+      // DeepSeek availability so it is shown (with a reason) rather than hidden.
+      syncCapability((ev.payload || {}).deepseek);
       break;
 
     case 'host':
@@ -401,6 +411,21 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
 
 function handleAmbient(p) {
   const name = p.name || '';
+  if (name === 'provider') {
+    // the runner switched provider mid-loop: settle any pending switch at once
+    // (the frequent vitals tick would also settle it, this is just faster).
+    syncProviderState(p.to);
+    pushTicker('model switched to ' + (p.to === 'deepseek' ? 'DeepSeek' : 'Ollama'));
+    return;
+  }
+  if (name === 'provider_refused') {
+    // the runner refused a DeepSeek switch (no key). Reflect unavailability and
+    // fail any in-flight request so the control shows a retryable failure.
+    providerCtl.available = false;
+    if (providerCtl.phase === 'pending') failCtl(providerCtl, 'DeepSeek unavailable - no API key on the runner');
+    renderGearIfPresent();
+    return;
+  }
   if (name === 'social') {
     const who = p.who || 'someone';
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
@@ -617,7 +642,7 @@ function exitToLive() {
   const pill = $('#status');
   if (pill) {
     pill.classList.remove('is-history', 'bad');
-    pill.textContent = 'live';
+    pill.textContent = 'Show Live';
     pill.title = 'Travel back - pick a moment';
     pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
   }
@@ -640,105 +665,407 @@ function showHistoryPill(detail) {
   pill.setAttribute('aria-label', `Viewing ${when}. Activate to return to live.`);
 }
 
-// ---- operator pause/resume (ASYNC, admin only) --------------------------
+// ---- operator gear menu (ASYNC, admin only) -----------------------------
 //
-// The genuinely asynchronous counterpart to the view switch: a two-option
-// <async-select> (ACTIVE / PAUSED) whose commit POSTs to admin.php but settles ONLY
-// when the runner's REAL state confirms OUT OF BAND on the event stream - not from
-// the POST response. So the control shows a pending state until the runner actually
-// stops/starts; a POST failure surfaces at once (rejects the commit); and if the
-// runner never acknowledges, the component's own timeout drops it into a retryable
-// FAILED state. The component's supersede guard handles a double-tap. No-op for an
-// ordinary visitor (CFG.admin is null), and admin.php enforces the gate server-side.
-let pauseSelect = null;
-let pauseWaiter = null; // { target, resolve, reject } awaiting the stream confirmation
+// Replaces the old ACTIVE/PAUSED select with a small gear that opens a menu:
+//   - a RUNNER pair (Active / Paused) where the CURRENT state is greyed and inert
+//     and only the OTHER item is clickable - the action you can take;
+//   - a MODEL submenu (Ollama (DELL) / DeepSeek) showing which is active, with
+//     DeepSeek shown as unavailable (with a reason) when the runner holds no key.
+//
+// Both the pause and the model switch are genuinely ASYNCHRONOUS: the click POSTs to
+// admin.php but the item only SETTLES when the runner's REAL state confirms OUT OF
+// BAND on the event stream (pause via setMode's `mode`; provider via the frequent
+// `vitals` provider field and the `provider` event). Until then the item shows a
+// pending spinner; a POST failure or a confirmation that never arrives (own timeout)
+// drops it into a retryable FAILED state. The UI never claims a change happened
+// before the runner confirms it. No-op for an ordinary visitor (CFG.admin is null);
+// admin.php enforces the gate server-side regardless.
+const CONFIRM_TIMEOUT_MS = 15000; // safety net past which "never acknowledged" -> retryable FAILED
 
-function initPauseControl() {
+// Two independent little state machines. confirmed = the runner's real value;
+// target = what we asked for while pending; phase = idle | pending | failed.
+const runnerCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null };
+const providerCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null, available: false };
+
+let gearBuilt = false;
+let gearBtn = null, gearMenu = null, gearWrap = null;
+let menuOpen = false, modelExpanded = false;
+let modelToggle = null, modelGroup = null;
+const gearItems = {}; // active, paused, ollama, deepseek, deepseekNote
+
+const GEAR_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
+
+function makeItem(kind, val, label) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'cy-menu-item';
+  b.dataset.kind = kind;
+  b.dataset.val = val;
+  b.setAttribute('role', 'menuitem');
+  const mark = document.createElement('span');
+  mark.className = 'cy-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  const lab = document.createElement('span');
+  lab.className = 'cy-menu-lab';
+  lab.textContent = label;
+  b.appendChild(mark);
+  b.appendChild(lab);
+  return b;
+}
+
+function initGearMenu() {
   const url = CFG.admin;
   const meta = document.querySelector('.topmeta');
   if (!url || !meta) return;
 
-  const sel = document.createElement('async-select');
-  sel.className = 'cy-select cy-pause-select';
-  sel.setAttribute('label', 'Runner');
-  // the runner cuts its burst and acks within a poll; this is only the safety net
-  // past which "never acknowledged" becomes a retryable FAILED.
-  sel.setAttribute('timeout', '15000');
-  meta.insertBefore(sel, $('#day') || null);
-  sel.options = [
-    { value: 'active', label: 'ACTIVE', description: 'generating' },
-    { value: 'paused', label: 'PAUSED', description: 'generation stopped' },
-  ];
-  sel.value = 'active'; // provisional seed; corrected below by the flag + the stream
+  gearWrap = document.createElement('div');
+  gearWrap.className = 'cy-gear';
 
-  // commit resolves only on the runner's real acknowledgement (via syncRunnerState).
-  sel.commit = (value, ctx) =>
-    new Promise((resolve, reject) => {
-      const waiter = { target: value, resolve, reject };
-      pauseWaiter = waiter;
+  gearBtn = document.createElement('button');
+  gearBtn.type = 'button';
+  gearBtn.className = 'cy-gear-btn';
+  gearBtn.setAttribute('aria-haspopup', 'menu');
+  gearBtn.setAttribute('aria-expanded', 'false');
+  gearBtn.setAttribute('aria-label', 'Operator settings');
+  gearBtn.title = 'Operator settings';
+  gearBtn.innerHTML = GEAR_SVG;
 
-      // supersede (double-tap) or timeout aborts the signal: drop our waiter and
-      // reject so the component settles (superseded is ignored; timeout -> FAILED).
-      ctx.signal.addEventListener('abort', () => {
-        if (pauseWaiter === waiter) pauseWaiter = null;
-        reject(new Error('superseded or timed out'));
-      });
+  gearMenu = document.createElement('div');
+  gearMenu.className = 'cy-menu';
+  gearMenu.setAttribute('role', 'menu');
+  gearMenu.setAttribute('aria-label', 'Operator settings');
+  gearMenu.hidden = true;
 
-      // A POST failure means the command never landed - reject NOW rather than
-      // waiting out a stream confirmation that will never come.
-      fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: value === 'paused' ? 'pause' : 'resume' }),
-        signal: ctx.signal,
-      })
-        .then(async (res) => {
-          const d = await res.json().catch(() => ({}));
-          if (!res.ok || (d && d.ok === false)) {
-            if (pauseWaiter === waiter) pauseWaiter = null;
-            reject(new Error((d && d.error) || 'HTTP ' + res.status));
-          }
-          // accepted + persisted: keep waiting for the runner's real state
-        })
-        .catch((err) => {
-          if (pauseWaiter === waiter) pauseWaiter = null;
-          reject(err);
-        });
-    });
+  const capR = document.createElement('span');
+  capR.className = 'cy-menu-cap';
+  capR.textContent = 'Runner';
+  gearItems.active = makeItem('runner', 'active', 'Active');
+  gearItems.paused = makeItem('runner', 'paused', 'Paused');
 
-  pauseSelect = sel;
+  const sep = document.createElement('div');
+  sep.className = 'cy-menu-sep';
+  sep.setAttribute('role', 'separator');
 
-  // seed the label from the server's current flag so it is not a guess before the
-  // first stream frame; the stream then keeps it honest (a silent hint only).
+  modelToggle = document.createElement('button');
+  modelToggle.type = 'button';
+  modelToggle.className = 'cy-menu-item cy-menu-sub';
+  modelToggle.setAttribute('role', 'menuitem');
+  modelToggle.setAttribute('aria-haspopup', 'true');
+  modelToggle.setAttribute('aria-expanded', 'false');
+  const mMark = document.createElement('span');
+  mMark.className = 'cy-mark';
+  mMark.setAttribute('aria-hidden', 'true');
+  const mLab = document.createElement('span');
+  mLab.className = 'cy-menu-lab';
+  mLab.textContent = 'Model';
+  modelToggle.appendChild(mMark);
+  modelToggle.appendChild(mLab);
+
+  modelGroup = document.createElement('div');
+  modelGroup.className = 'cy-menu-group';
+  modelGroup.hidden = true;
+  gearItems.ollama = makeItem('provider', 'ollama', 'Ollama (DELL)');
+  gearItems.deepseek = makeItem('provider', 'deepseek', 'DeepSeek');
+  const dsNote = document.createElement('span');
+  dsNote.className = 'cy-menu-note';
+  dsNote.hidden = true;
+  gearItems.deepseek.appendChild(dsNote);
+  gearItems.deepseekNote = dsNote;
+  modelGroup.appendChild(gearItems.ollama);
+  modelGroup.appendChild(gearItems.deepseek);
+
+  gearMenu.appendChild(capR);
+  gearMenu.appendChild(gearItems.active);
+  gearMenu.appendChild(gearItems.paused);
+  gearMenu.appendChild(sep);
+  gearMenu.appendChild(modelToggle);
+  gearMenu.appendChild(modelGroup);
+
+  gearWrap.appendChild(gearBtn);
+  gearWrap.appendChild(gearMenu);
+  meta.insertBefore(gearWrap, $('#day') || null);
+  gearBuilt = true;
+
+  gearBtn.addEventListener('click', () => (menuOpen ? closeGear(true) : openGear()));
+  gearBtn.addEventListener('keydown', (e) => {
+    if (!menuOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+      e.preventDefault();
+      openGear();
+    }
+  });
+  gearMenu.addEventListener('keydown', onGearKeydown);
+
+  gearItems.active.addEventListener('click', () => sendRunner('active'));
+  gearItems.paused.addEventListener('click', () => sendRunner('paused'));
+  gearItems.ollama.addEventListener('click', () => sendProvider('ollama'));
+  gearItems.deepseek.addEventListener('click', () => sendProvider('deepseek'));
+  modelToggle.addEventListener('click', () => (modelExpanded ? collapseModel() : expandModel()));
+
+  renderGear();
+
+  // seed from the server's current truth so the menu is not a guess before the
+  // first stream frame; the stream then keeps it honest.
   fetch(url, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (d && typeof d.paused !== 'undefined') {
-        sel.setConfirmed(d.paused ? 'paused' : 'active', { silent: true });
-      }
+      if (!d) return;
+      if (typeof d.paused !== 'undefined') runnerCtl.confirmed = d.paused ? 'paused' : 'active';
+      if (d.provider) { providerCtl.confirmed = d.provider; setModelIndicator(d.provider); }
+      if (typeof d.deepseek_available !== 'undefined') providerCtl.available = !!d.deepseek_available;
+      renderGear();
     })
     .catch(() => {});
 }
 
-// The runner's REAL mode off the live stream (fed from setMode). This is the only
-// thing that settles a pending pause/resume: it resolves the in-flight commit once
-// the runner reaches the requested state, and otherwise reconciles the control
-// honestly if the state moved for another reason. Any non-'paused' mode = active.
-function syncRunnerState(mode) {
-  if (mode == null || !pauseSelect) return;
-  const value = mode === 'paused' ? 'paused' : 'active';
+// The menu items reachable by arrow keys right now: visible, enabled, laid out.
+function focusableGearItems() {
+  return [gearItems.active, gearItems.paused, modelToggle, gearItems.ollama, gearItems.deepseek]
+    .filter((el) => el && !el.hidden && !el.disabled && el.offsetParent !== null);
+}
 
-  if (pauseWaiter && pauseWaiter.target === value) {
-    // the runner reached what we asked for: resolve the commit and let the
-    // component settle itself (a brief confirmed tick, then idle).
-    const w = pauseWaiter;
-    pauseWaiter = null;
-    w.resolve();
+function openGear() {
+  if (menuOpen || !gearMenu) return;
+  menuOpen = true;
+  gearMenu.hidden = false;
+  gearBtn.setAttribute('aria-expanded', 'true');
+  document.addEventListener('pointerdown', onGearDocDown, true);
+  const items = focusableGearItems();
+  if (items[0]) items[0].focus();
+}
+
+function closeGear(focusGear) {
+  if (!menuOpen) return;
+  menuOpen = false;
+  gearMenu.hidden = true;
+  collapseModel();
+  gearBtn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', onGearDocDown, true);
+  if (focusGear) gearBtn.focus();
+}
+
+function onGearDocDown(e) {
+  if (menuOpen && gearWrap && !e.composedPath().includes(gearWrap)) closeGear(false);
+}
+
+function expandModel() {
+  modelExpanded = true;
+  modelGroup.hidden = false;
+  modelToggle.setAttribute('aria-expanded', 'true');
+  const first = focusableGearItems().find((el) => el === gearItems.ollama || el === gearItems.deepseek);
+  if (first) first.focus();
+}
+
+function collapseModel() {
+  modelExpanded = false;
+  if (modelGroup) modelGroup.hidden = true;
+  if (modelToggle) modelToggle.setAttribute('aria-expanded', 'false');
+}
+
+function onGearKeydown(e) {
+  const items = focusableGearItems();
+  const idx = items.indexOf(document.activeElement);
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      if (items.length) items[(idx + 1 + items.length) % items.length].focus();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      if (items.length) items[(idx - 1 + items.length) % items.length].focus();
+      break;
+    case 'Home':
+      e.preventDefault();
+      if (items[0]) items[0].focus();
+      break;
+    case 'End':
+      e.preventDefault();
+      if (items.length) items[items.length - 1].focus();
+      break;
+    case 'ArrowLeft':
+      if (modelExpanded) { e.preventDefault(); collapseModel(); modelToggle.focus(); }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      closeGear(true);
+      break;
+    case 'Tab':
+      closeGear(false); // let focus move on naturally
+      break;
+  }
+}
+
+// ---- async send + settle (shared shape for the runner + the provider) ----
+
+function sendRunner(target) {
+  const c = runnerCtl;
+  if (c.phase === 'pending') return;
+  if (c.confirmed === target && c.phase === 'idle') return; // already there
+  c.phase = 'pending';
+  c.target = target;
+  c.error = '';
+  clearTimeout(c.timer);
+  c.timer = setTimeout(() => failCtl(c, 'Timed out - not saved yet.'), CONFIRM_TIMEOUT_MS);
+  renderGear();
+  postAdmin({ action: target === 'paused' ? 'pause' : 'resume' }, c, target);
+}
+
+function sendProvider(target) {
+  const c = providerCtl;
+  if (c.phase === 'pending') return;
+  if (target === 'deepseek' && !c.available) return;
+  if (c.confirmed === target && c.phase === 'idle') return;
+  c.phase = 'pending';
+  c.target = target;
+  c.error = '';
+  clearTimeout(c.timer);
+  c.timer = setTimeout(() => failCtl(c, 'Timed out - not saved yet.'), CONFIRM_TIMEOUT_MS);
+  renderGear();
+  postAdmin({ action: 'provider', provider: target }, c, target);
+}
+
+function postAdmin(body, c, target) {
+  fetch(CFG.admin, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(async (res) => {
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || (d && d.ok === false)) throw new Error((d && d.error) || 'HTTP ' + res.status);
+      // accepted + persisted: keep waiting for the runner's real state on the stream
+    })
+    .catch((err) => {
+      // only fail if this is still the in-flight request (not already settled)
+      if (c.phase === 'pending' && c.target === target) failCtl(c, String((err && err.message) || err));
+    });
+}
+
+function failCtl(c, msg) {
+  clearTimeout(c.timer);
+  c.phase = 'failed';
+  c.error = msg;
+  renderGearIfPresent();
+}
+
+// The runner's REAL mode off the live stream (fed from setMode). Settles a pending
+// pause/resume once the runner reaches the requested state, and otherwise adopts the
+// authoritative value. Any non-'paused' mode = active.
+function syncRunnerState(mode) {
+  if (mode == null) return;
+  const value = mode === 'paused' ? 'paused' : 'active';
+  const c = runnerCtl;
+  c.confirmed = value;
+  if (c.phase === 'pending' && c.target === value) {
+    clearTimeout(c.timer);
+    c.phase = 'idle';
+    c.target = null;
+  }
+  renderGearIfPresent();
+}
+
+// The runner's REAL active provider off the frequent `vitals` field (and the
+// `provider` event). Settles a pending model switch and keeps the compact chrome
+// indicator honest for everyone (admin or not).
+function syncProviderState(provider) {
+  if (provider !== 'ollama' && provider !== 'deepseek') return;
+  const c = providerCtl;
+  c.confirmed = provider;
+  if (c.phase === 'pending' && c.target === provider) {
+    clearTimeout(c.timer);
+    c.phase = 'idle';
+    c.target = null;
+  }
+  setModelIndicator(provider);
+  renderGearIfPresent();
+}
+
+function syncCapability(deepseekAvailable) {
+  providerCtl.available = !!deepseekAvailable;
+  renderGearIfPresent();
+}
+
+function renderGearIfPresent() {
+  if (gearBuilt) renderGear();
+}
+
+function renderGear() {
+  if (!gearBuilt) return;
+  paintItem(gearItems.active, runnerCtl, 'active', false);
+  paintItem(gearItems.paused, runnerCtl, 'paused', false);
+
+  const dsUnavail = !providerCtl.available;
+  paintItem(gearItems.ollama, providerCtl, 'ollama', false);
+  paintItem(gearItems.deepseek, providerCtl, 'deepseek', dsUnavail);
+  if (gearItems.deepseekNote) {
+    gearItems.deepseekNote.hidden = !dsUnavail;
+    gearItems.deepseekNote.textContent = dsUnavail ? 'unavailable - no API key on the runner' : '';
+  }
+
+  // If the focused item just became inert, keep focus usable inside the open menu.
+  if (menuOpen) {
+    const a = document.activeElement;
+    if (a && gearMenu.contains(a) && (a.disabled || a.hidden)) {
+      const items = focusableGearItems();
+      if (items[0]) items[0].focus();
+    }
+  }
+}
+
+// One item's visual state from its control. `unavail` forces a disabled,
+// reason-titled state (DeepSeek with no key on the runner).
+function paintItem(el, c, val, unavail) {
+  if (!el) return;
+  el.classList.remove('is-current', 'is-pending', 'is-failed', 'is-unavail');
+  el.disabled = false;
+  el.removeAttribute('title');
+
+  if (unavail) {
+    el.classList.add('is-unavail');
+    el.disabled = true;
+    el.title = 'DeepSeek unavailable - no API key on the runner';
     return;
   }
-  // no matching in-flight request: adopt the authoritative value (external change,
-  // or the first confirmation). setConfirmed is a no-op when already there.
-  if (pauseSelect.value !== value) pauseSelect.setConfirmed(value);
+  if (c.phase === 'pending' && c.target === val) {
+    el.classList.add('is-pending');
+    el.disabled = true;
+    el.title = 'Waiting for the runner to confirm...';
+  } else if (c.phase === 'failed' && c.target === val) {
+    el.classList.add('is-failed');
+    el.title = (c.error || 'Change failed') + ' - click to retry';
+  } else if (c.confirmed === val) {
+    el.classList.add('is-current');
+    el.disabled = true; // the current state is inert; only the other item acts
+  } else if (c.phase === 'pending') {
+    el.disabled = true; // a change is in flight; hold the rest of the pair/group
+  }
+}
+
+// ---- compact model indicator (public) -----------------------------------
+// Shows which provider is running without opening the menu. Understated; amber when
+// DeepSeek is active, because that is the one that costs money.
+let modelIndicatorEl = null;
+
+function initModelIndicator() {
+  const meta = document.querySelector('.topmeta');
+  if (!meta) return;
+  const el = document.createElement('span');
+  el.id = 'model-indicator';
+  el.className = 'pill model-indicator';
+  el.hidden = true; // until the first provider is known off the stream/seed
+  meta.insertBefore(el, $('#day') || null);
+  modelIndicatorEl = el;
+  if (providerCtl.confirmed) setModelIndicator(providerCtl.confirmed);
+}
+
+function setModelIndicator(provider) {
+  if (!modelIndicatorEl || (provider !== 'ollama' && provider !== 'deepseek')) return;
+  const paid = provider === 'deepseek';
+  modelIndicatorEl.hidden = false;
+  modelIndicatorEl.textContent = paid ? 'DeepSeek' : 'Ollama';
+  modelIndicatorEl.classList.toggle('is-paid', paid);
+  modelIndicatorEl.title = paid ? 'Running DeepSeek (paid API)' : 'Running Ollama on DELL (local)';
 }
 
 // ---- forms --------------------------------------------------------------

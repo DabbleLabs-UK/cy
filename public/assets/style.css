@@ -111,7 +111,135 @@ html, body {
   --as-font-size: 11px;
 }
 .cy-view-select { --as-min-width: 8.5rem; }
-.cy-pause-select { --as-min-width: 8rem; }
+
+/* ---- operator gear menu (admin): runner pause + model provider --------------
+   Replaces the old ACTIVE/PAUSED select. The trigger is a small gear no taller
+   than the pills beside it; the menu is absolutely positioned so opening it causes
+   no layout shift. Item state (current / pending / failed / unavailable) is drawn
+   with pure-CSS marks in the fixed mark column, so nothing reflows as it settles. */
+.cy-gear { position: relative; display: inline-flex; align-items: center; }
+.cy-gear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--chrome-0);
+  color: var(--tel);
+  cursor: pointer;
+}
+.cy-gear-btn:hover { background: var(--chrome-2); }
+.cy-gear-btn:focus-visible { outline: 2px solid #6fb2ff; outline-offset: 1px; }
+.cy-gear-btn svg { width: 14px; height: 14px; display: block; fill: currentColor; }
+.cy-gear-btn[aria-expanded="true"] { background: var(--chrome-2); border-color: #3a4657; }
+
+.cy-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 200px;
+  padding: 5px;
+  background: var(--chrome-1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+}
+.cy-menu-cap {
+  display: block;
+  padding: 3px 8px 2px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tel-dim);
+}
+.cy-menu-sep { height: 1px; margin: 5px 4px; background: var(--line); }
+.cy-menu-group { padding-left: 6px; }
+
+.cy-menu-item {
+  display: flex;
+  flex-wrap: wrap;              /* lets the DeepSeek "unavailable" note drop to its own line */
+  align-items: flex-start;
+  gap: 6px 6px;
+  width: 100%;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: left;
+  color: var(--tel);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.cy-menu-item:hover:not([disabled]) { background: var(--chrome-2); }
+.cy-menu-item:focus-visible { outline: 2px solid #6fb2ff; outline-offset: -2px; }
+.cy-menu-item[disabled] { cursor: default; }
+.cy-menu-item.is-current { color: var(--tel-dim); }   /* greyed, inert current state */
+.cy-menu-item.is-unavail { color: var(--tel-dim); opacity: 0.7; }
+.cy-menu-item.is-failed { color: var(--tel-hot); }
+.cy-menu-lab { flex: 1 1 auto; }
+.cy-menu-note { flex: 1 0 100%; padding-left: 18px; margin-top: 1px; font-size: 9px; color: var(--tel-dim); }
+
+/* the fixed mark column: a check (current), a spinner (pending), a warning (failed),
+   or a chevron (the Model submenu toggle) - never changing the item's footprint. */
+.cy-mark { position: relative; flex: 0 0 auto; width: 12px; height: 13px; }
+.cy-menu-item.is-current .cy-mark::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--good);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.cy-menu-item.is-pending .cy-mark::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  border-top-color: #ffbf47;
+  animation: cySpin 0.7s linear infinite;
+}
+@keyframes cySpin { to { transform: rotate(360deg); } }
+.cy-menu-item.is-failed .cy-mark::after {
+  content: '!';
+  position: absolute;
+  left: 4px;
+  top: 0;
+  font-weight: 700;
+  color: var(--tel-hot);
+}
+.cy-menu-sub .cy-mark::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 3px;
+  width: 5px;
+  height: 5px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+.cy-menu-sub[aria-expanded="true"] .cy-mark::after { transform: rotate(45deg); top: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .cy-menu-item.is-pending .cy-mark::after { animation: none; }
+}
+
+/* ---- compact model indicator (public): which provider is running ------------ */
+.model-indicator { color: var(--tel-dim); }
+.model-indicator.is-paid { color: #ffd08a; border-color: #6a5326; }
 
 /* ---- inference LED (public): lights while the model is producing text -------- */
 .infer-led {

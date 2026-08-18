@@ -24,7 +24,7 @@ try {
     // DB unreachable: still render the page, honouring the ?111 fallback alone.
     $isAdmin = array_key_exists('111', $_GET);
 }
-$rawEnabled = $isAdmin; // RAW view and the pause control unlock together on admin
+$rawEnabled = $isAdmin; // RAW view and the operator gear menu unlock together on admin
 
 // The view switch (handwritten / plain / raw) is a LOCAL async-select in app.js
 // that remembers the session's choice. ?view= is an optional deep-link that forces
@@ -72,8 +72,9 @@ window.CY = {
   // view switch is a local async-select in app.js that otherwise remembers the
   // session's choice; this just lets a deep-link pick where it opens.
   viewOverride: <?= $viewOverride !== null ? json_encode($viewOverride, JSON_UNESCAPED_SLASHES) : 'null' ?>,
-  // Operator pause/resume endpoint - only wired in admin mode. null for an
-  // ordinary visitor, so no control appears and the endpoint is never called.
+  // Operator control endpoint (pause/resume + model provider) - only wired in
+  // admin mode. null for an ordinary visitor, so no gear appears and it is never
+  // called.
   // When admin came from same-network detection the plain URL is enough (admin.php
   // re-checks the network server-side); when it came from ?111 we carry the flag
   // through so admin.php still recognises it off-network.
@@ -89,10 +90,11 @@ window.CY = {
     <span class="brand-sub">inmate 7734 &middot; HMP ThinkPad</span>
   </div>
   <div class="topmeta">
-    <!-- The inference LED, the view switch, and (admin only) the operator pause
-         control are inserted here by app.js, to the left of these pills. The pause
-         control is a real async-select, NOT part of the fiction: it stops the LLM
-         so idle CPU/memory/draw can be read. -->
+    <!-- The inference LED, the view switch, the public model indicator, and (admin
+         only) the operator gear menu are inserted here by app.js, to the left of
+         these pills. The gear menu is NOT part of the fiction: it pauses/resumes the
+         LLM (so idle CPU/memory/draw can be read) and switches the model provider.
+         Both actions settle only on the runner's real state off the event stream. -->
     <span id="day" class="pill">DAY --</span>
     <span id="mode" class="pill" data-mode="journal">JOURNAL</span>
     <span id="status" class="pill status">connecting</span>

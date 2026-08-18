@@ -239,34 +239,6 @@ body.cy-history #raw { filter: sepia(0.4) brightness(0.86) contrast(0.96); }
 .tt-hour.is-empty { opacity: 0.3; cursor: default; color: var(--tel-dim); }
 .tt-hour.is-empty .tt-hour-lab { text-shadow: none; }
 
-/* ---- shortcuts ----------------------------------------------------------- */
-.tt-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-}
-.tt-sc-label {
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--tel-dim);
-}
-.tt-sc {
-  font: inherit;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-  color: var(--tel);
-  background: var(--chrome-1);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 3px 9px;
-  cursor: pointer;
-}
-.tt-sc:hover { color: #e0b968; border-color: #4a3a1e; background: rgba(224, 185, 104, 0.06); }
-.tt-sc:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
-
 /* ---- legend -------------------------------------------------------------- */
 .tt-legend {
   margin-top: 12px;

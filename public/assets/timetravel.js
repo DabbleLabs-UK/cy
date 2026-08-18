@@ -12,7 +12,6 @@
 //     shape, not more hue, so they stay separable from the mood tint.
 //   - Selecting a day reveals a 24-cell hour strip, tinted the same way, so the
 //     second click gets full resolution. Two clicks, both familiar.
-//   - Quiet shortcuts (earlier today, yesterday, last postcard, last drawing).
 //   - A small legend explains the tints and the marker shapes.
 //
 // It draws itself ENTIRELY from the aggregate day index (GET /api/history.php); the
@@ -58,14 +57,12 @@ let gridEl = null;      // the calendar grid
 let hourWrapEl = null;  // the revealed hour strip container
 let hourHeadEl = null;
 let hourStripEl = null;
-let shortcutsEl = null;
 let legendEl = null;
 let emptyEl = null;
 
 let index = null;       // { days:[], byDate:{}, moods:{} }
 let loadedAt = 0;
 let maxDayChars = 1;    // busiest day's char count, for day-cell intensity
-let shortcuts = {};     // computed quick targets
 let viewYear = 0, viewMonth = 0; // the month on screen (0-based month)
 let minYM = 0, maxYM = 0;        // data bounds as year*12+month
 let selectedDate = null;         // the day whose hour strip is showing
@@ -84,7 +81,7 @@ function boot() {
   if (document.body.dataset.test === '1') {
     window.__CY_TT__ = {
       load, open, close, confirmMoment, selectDay, renderMonth,
-      buildMoment, getIndex: () => index, getShortcuts: () => shortcuts,
+      buildMoment, getIndex: () => index,
     };
   }
 }
@@ -159,10 +156,6 @@ function build() {
   hourWrapEl.appendChild(hourHeadEl);
   hourWrapEl.appendChild(hourStripEl);
 
-  // shortcuts
-  shortcutsEl = document.createElement('div');
-  shortcutsEl.className = 'tt-shortcuts';
-
   // legend
   legendEl = document.createElement('div');
   legendEl.className = 'tt-legend';
@@ -173,7 +166,6 @@ function build() {
   dlg.appendChild(gridEl);
   dlg.appendChild(emptyEl);
   dlg.appendChild(hourWrapEl);
-  dlg.appendChild(shortcutsEl);
   dlg.appendChild(legendEl);
   document.body.appendChild(dlg);
 
@@ -245,38 +237,6 @@ function computeDerived(days, moods) {
     viewYear = parseInt(nm.slice(0, 4), 10);
     viewMonth = parseInt(nm.slice(5, 7), 10) - 1;
   }
-  computeShortcuts();
-}
-
-function computeShortcuts() {
-  shortcuts = {};
-  if (!index || !index.days.length) return;
-  const days = index.days;
-  const newest = days[days.length - 1];
-  shortcuts.today = { date: newest.date, hour: firstActiveHour(newest), label: 'Earlier today' };
-  if (days.length >= 2) {
-    const y = days[days.length - 2];
-    shortcuts.yesterday = { date: y.date, hour: firstActiveHour(y), label: 'Yesterday' };
-  }
-  // last postcard / drawing: newest day first, latest marked hour within it
-  for (let di = days.length - 1; di >= 0 && (!shortcuts.post || !shortcuts.draw); di--) {
-    const day = days[di];
-    const hrs = (day.hours || []).slice().sort((a, b) => b.h - a.h);
-    for (const h of hrs) {
-      const m = h.m;
-      if (!m) continue;
-      if (!shortcuts.post && (m.pin || m.pout)) shortcuts.post = { date: day.date, hour: h.h, label: 'Last postcard' };
-      if (!shortcuts.draw && m.draw) shortcuts.draw = { date: day.date, hour: h.h, label: 'Last drawing' };
-    }
-  }
-}
-
-function firstActiveHour(day) {
-  let best = null;
-  for (const h of day.hours || []) if (h.c > 0 && (best === null || h.h < best)) best = h.h;
-  if (best !== null) return best;
-  const ts = day.ts && day.ts[0];
-  return ts ? (parseInt(String(ts).slice(11, 13), 10) || 0) : 0;
 }
 
 // ---- rendering ----------------------------------------------------------
@@ -289,7 +249,6 @@ function renderAll() {
   gridEl.hidden = !has;
   monthLabelEl.parentElement.hidden = !has;
   if (has) renderMonth();
-  renderShortcuts();
   renderLegend();
 }
 
@@ -428,27 +387,6 @@ function selectDay(date) {
 
 function hideHours() {
   if (hourWrapEl) hourWrapEl.hidden = true;
-}
-
-function renderShortcuts() {
-  shortcutsEl.textContent = '';
-  const order = ['today', 'yesterday', 'post', 'draw'];
-  const present = order.filter((k) => shortcuts[k]);
-  if (!present.length) return;
-  const lab = document.createElement('span');
-  lab.className = 'tt-sc-label';
-  lab.textContent = 'Jump to';
-  shortcutsEl.appendChild(lab);
-  for (const key of present) {
-    const j = shortcuts[key];
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'tt-sc';
-    b.textContent = j.label;
-    b.title = `${j.label} - ${shortDate(j.date)}, ${pad2(j.hour)}:00`;
-    b.addEventListener('click', () => confirmMoment(j.date, j.hour));
-    shortcutsEl.appendChild(b);
-  }
 }
 
 function renderLegend() {
