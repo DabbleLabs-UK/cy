@@ -53,16 +53,15 @@ template.innerHTML = `
     >
       <span class="face" part="face">
         <span class="value" part="value"></span>
-        <span class="provisional-tag" part="provisional-tag" hidden>requested</span>
       </span>
-      <span class="indicator" part="indicator" aria-hidden="true"></span>
+      <span class="glyph" part="glyph" data-icon="chevron" aria-hidden="true"></span>
     </button>
-    <div class="status" part="status" aria-hidden="true">
-      <span class="status-icon" part="status-icon" aria-hidden="true"></span>
-      <span class="status-text" part="status-text"></span>
-      <button class="retry" part="retry" type="button" hidden>Retry</button>
-    </div>
+    <!-- Interactive warning affordance: overlays the glyph slot in rejected/
+         failed states only. Transparent hit area over the visible glyph; it adds
+         no footprint, carries the reason as a tooltip, and is the retry control. -->
+    <button class="action" part="action" type="button" tabindex="-1" hidden></button>
     <div class="listbox" part="listbox" role="listbox" tabindex="-1" hidden></div>
+    <span class="desc"></span>
     <span class="live" aria-live="polite" role="status"></span>
     <span class="live-assertive" aria-live="assertive"></span>
   </div>
@@ -80,17 +79,17 @@ export class AsyncSelect extends HTMLElement {
 
     this._trigger = root.querySelector('.trigger');
     this._valueEl = root.querySelector('.value');
-    this._provTag = root.querySelector('.provisional-tag');
-    this._statusEl = root.querySelector('.status');
-    this._statusIcon = root.querySelector('.status-icon');
-    this._statusText = root.querySelector('.status-text');
-    this._retryBtn = root.querySelector('.retry');
+    this._glyph = root.querySelector('.glyph');
+    this._action = root.querySelector('.action');
+    this._descEl = root.querySelector('.desc');
     this._listbox = root.querySelector('.listbox');
     this._live = root.querySelector('.live');
     this._liveAssertive = root.querySelector('.live-assertive');
 
     this._listbox.id = uid('as-listbox');
     this._trigger.setAttribute('aria-controls', this._listbox.id);
+    this._descEl.id = uid('as-desc');
+    this._trigger.setAttribute('aria-describedby', this._descEl.id);
 
     // Model ----------------------------------------------------------------
     this._options = [];
@@ -102,7 +101,8 @@ export class AsyncSelect extends HTMLElement {
 
     this._seq = 0;               // monotonic request id; guards stale responses
     this._req = null;            // { seq, value, controller, timers... }
-    this._flashTimer = null;
+    this._flashTimer = null;     // confirmed-tick fade
+    this._extFlashTimer = null;  // external-change highlight
 
     this._open = false;
     this._activeIndex = -1;
@@ -120,7 +120,7 @@ export class AsyncSelect extends HTMLElement {
     this._onOptionClick = this._onOptionClick.bind(this);
     this._onOptionPointerMove = this._onOptionPointerMove.bind(this);
     this._onDocPointerDown = this._onDocPointerDown.bind(this);
-    this._onRetry = this._onRetry.bind(this);
+    this._onAction = this._onAction.bind(this);
     this._onFocusOut = this._onFocusOut.bind(this);
   }
 
@@ -142,7 +142,7 @@ export class AsyncSelect extends HTMLElement {
     this._trigger.addEventListener('keydown', this._onTriggerKeydown);
     this._listbox.addEventListener('click', this._onOptionClick);
     this._listbox.addEventListener('pointermove', this._onOptionPointerMove);
-    this._retryBtn.addEventListener('click', this._onRetry);
+    this._action.addEventListener('click', this._onAction);
     this.addEventListener('focusout', this._onFocusOut);
 
     if (!this.hasAttribute('role')) this.setAttribute('role', 'group');
@@ -156,11 +156,12 @@ export class AsyncSelect extends HTMLElement {
     this._trigger.removeEventListener('keydown', this._onTriggerKeydown);
     this._listbox.removeEventListener('click', this._onOptionClick);
     this._listbox.removeEventListener('pointermove', this._onOptionPointerMove);
-    this._retryBtn.removeEventListener('click', this._onRetry);
+    this._action.removeEventListener('click', this._onAction);
     this.removeEventListener('focusout', this._onFocusOut);
     document.removeEventListener('pointerdown', this._onDocPointerDown, true);
     this._clearRequestTimers();
     clearTimeout(this._flashTimer);
+    clearTimeout(this._extFlashTimer);
     clearTimeout(this._typeaheadTimer);
   }
 
@@ -344,7 +345,10 @@ export class AsyncSelect extends HTMLElement {
       }
       this._renderOptions();
       this._render();
-      if (previous !== value) this._emit('externalchange', { value, previous, duringPending: true });
+      if (previous !== value) {
+        this._flashExternal();
+        this._emit('externalchange', { value, previous, duringPending: true });
+      }
       return;
     }
 
@@ -355,9 +359,21 @@ export class AsyncSelect extends HTMLElement {
     this._renderOptions();
     this._render();
     if (previous !== value) {
+      this._flashExternal();
       if (opts.silent !== true) this._announce(`Changed to ${this._labelOf(value)} elsewhere.`);
       this._emit('externalchange', { value, previous, duringPending: false });
     }
+  }
+
+  // Momentary highlight for an authoritative value that moved elsewhere - no
+  // text, no layout change. The CSS transition is dropped under reduced motion.
+  _flashExternal() {
+    this.classList.remove('as-flash');
+    // Force reflow so re-adding the class restarts the highlight if it repeats.
+    void this.offsetWidth;
+    this.classList.add('as-flash');
+    clearTimeout(this._extFlashTimer);
+    this._extFlashTimer = setTimeout(() => this.classList.remove('as-flash'), 700);
   }
 
   // === Settlement ==========================================================
@@ -444,12 +460,18 @@ export class AsyncSelect extends HTMLElement {
     this._open ? this._close() : this._openList();
   }
 
-  _onRetry(e) {
+  // The warning glyph is the recovery affordance. In FAILED it retries the
+  // attempted value; in REJECTED (nothing to retry) it re-opens the list so the
+  // user can choose again. Keyboard-reachable; focus returns to the trigger.
+  _onAction(e) {
     e.stopPropagation();
     if (this._phase === 'failed' && this._requested != null) {
       const v = this._requested;
       this.requestValue(v);
       this._trigger.focus();
+    } else {
+      this._trigger.focus();
+      this._openList();
     }
   }
 
@@ -684,8 +706,8 @@ export class AsyncSelect extends HTMLElement {
     this.classList.toggle('is-disabled', disabled);
 
     // Which value does the FACE show?
-    //   pending (shown)  -> the requested value, marked provisional
-    //   failed           -> the attempted value, marked unsaved
+    //   pending (shown)  -> the requested value, styled provisional
+    //   failed           -> the attempted value, styled provisional
     //   everything else  -> the confirmed, authoritative value
     const pendingShown = this._phase === 'pending' && this._req && this._req.pendingShown;
     let faceValue = this._confirmed;
@@ -694,10 +716,8 @@ export class AsyncSelect extends HTMLElement {
 
     this._valueEl.textContent = this._labelOf(faceValue);
 
-    // Provisional tag on the face.
+    // The face itself carries "not yet true" - dashed + italic, no word tag.
     const provisional = pendingShown || this._phase === 'failed';
-    this._provTag.hidden = !provisional;
-    this._provTag.textContent = this._phase === 'failed' ? 'unsaved' : 'requested';
 
     // Data-phase drives all styling; the visible pending state only turns on
     // once pendingShown is true (latency guard), so a fast trip shows nothing.
@@ -706,32 +726,48 @@ export class AsyncSelect extends HTMLElement {
     this.dataset.phase = visualPhase;
     this._trigger.classList.toggle('is-provisional', provisional);
 
-    // Status line (space is always reserved; see CSS min-height).
-    let icon = '';
-    let text = '';
-    let showRetry = false;
-    if (visualPhase === 'pending') {
-      icon = 'spin';
-      text = this._req && this._req.escalated ? 'Still saving...' : 'Saving...';
-    } else if (visualPhase === 'confirmed') {
-      icon = 'ok';
-      text = this._statusMsg || 'Saved';
-    } else if (visualPhase === 'rejected') {
-      icon = 'bad';
-      text = this._statusMsg || 'Rejected';
-    } else if (visualPhase === 'failed') {
-      icon = 'bad';
-      text = this._statusMsg || 'Failed';
-      showRetry = true;
-    }
-    this._statusIcon.dataset.icon = icon;
-    this._statusText.textContent = text;
-    this._retryBtn.hidden = !showRetry;
+    // A single glyph in the chevron slot expresses state. No status row, no
+    // reserved space beneath: the control never exceeds the select's footprint.
+    //   idle      -> chevron        confirmed -> tick (fades to idle)
+    //   pending   -> spinner        rejected/failed -> warning
+    let icon = 'chevron';
+    if (visualPhase === 'pending') icon = 'spin';
+    else if (visualPhase === 'confirmed') icon = 'ok';
+    else if (visualPhase === 'rejected' || visualPhase === 'failed') icon = 'warn';
+    this._glyph.dataset.icon = icon;
+    // Escalation is expressed by INTENSIFYING the spinner glyph, not adding words.
+    this._glyph.dataset.escalated =
+      visualPhase === 'pending' && this._req && this._req.escalated ? 'true' : 'false';
 
-    // When pending, the face shows the requested value; make the authoritative
-    // value explicit in the status so the control never hides which is which.
-    if (visualPhase === 'pending' && this._requested !== this._confirmed) {
-      this._statusText.textContent = `${text} (currently ${this._labelOf(this._confirmed)})`;
+    // Warning states: reason lives ONLY in a tooltip + the accessible
+    // description + the live region - never as visible layout. The glyph
+    // doubles as the clickable/keyboard-reachable recovery control.
+    const warn = visualPhase === 'rejected' || visualPhase === 'failed';
+    const canRetry = visualPhase === 'failed' && this._requested != null;
+    if (warn) {
+      const reason = this._statusMsg || (visualPhase === 'failed' ? 'Change failed' : 'Change rejected');
+      const hint = canRetry ? ' Activate to retry.' : ' Activate to choose again.';
+      this._action.hidden = false;
+      this._action.tabIndex = 0;
+      this._action.setAttribute('aria-label', reason + hint);
+      this._action.title = reason + hint;
+      this._trigger.title = reason;
+      this._descEl.textContent = reason;
+    } else {
+      this._action.hidden = true;
+      this._action.tabIndex = -1;
+      this._action.removeAttribute('aria-label');
+      this._action.removeAttribute('title');
+      this._trigger.removeAttribute('title');
+      // Pending has no visible words, but a screen reader focusing the control
+      // mid-flight still learns a change is in progress via the description.
+      if (visualPhase === 'pending') {
+        this._descEl.textContent = this._requested !== this._confirmed
+          ? `Saving ${this._labelOf(this._requested)}; currently ${this._labelOf(this._confirmed)}.`
+          : `Saving ${this._labelOf(this._requested)}.`;
+      } else {
+        this._descEl.textContent = '';
+      }
     }
 
     this._syncSelectedFlags();

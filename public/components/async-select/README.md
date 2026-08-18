@@ -15,8 +15,11 @@ elsewhere (external change).
 - Works with a slow, fallible network: latency-aware pending state, escalation,
   timeout, retry.
 - Also serves **local** (instant, no-server) options - one component, both kinds.
-- Fully keyboard operable, screen-reader friendly, no layout shift, themeable
-  through CSS custom properties.
+- **Occupies exactly the footprint of a plain select box in every state** - no
+  status row, no error field, no reserved space, no layout shift. State is
+  expressed with a single glyph in the chevron slot plus a border/wash tint.
+- Fully keyboard operable, screen-reader friendly, themeable through CSS custom
+  properties.
 
 ## Quick start (the one-line case)
 
@@ -61,17 +64,28 @@ With no `commit` supplied, changes apply instantly (a plain select). Supply a
 
 ## The state machine
 
+Every state below stays within the select's own footprint - the visible signal
+is a glyph in the chevron slot, the value's own treatment, and a border/wash
+tint. Words that used to sit in a status row now live only in the accessible
+description, the tooltip, and the live region.
+
 | State | Meaning | What the control does |
 |-------|---------|-----------------------|
-| **IDLE** | Display equals confirmed server value. | Shows the confirmed value, no status. |
-| **PENDING** | A request is in flight. | Shows the *requested* value as provisional (dashed + `requested` tag) and spells out the still-authoritative current value. Below ~150 ms latency it shows nothing (no flicker). |
-| **CONFIRMED** | Server agreed. | Brief, quiet tick, then settles to idle. |
-| **REJECTED** | Server refused, or returned a *different* value. | Reverts to the authoritative value and states why, specifically. |
-| **FAILED** | Network error or timeout. | Keeps the attempted value visible (`unsaved`), explains, offers **Retry**. Never silently reverts. |
+| **IDLE** | Display equals confirmed server value. | Shows the confirmed value; plain chevron. |
+| **PENDING** | A request is in flight. | Shows the *requested* value as provisional (subdued italic, dashed underline) with a spinner in the glyph slot. Below ~150 ms latency it shows nothing (no flicker). |
+| **CONFIRMED** | Server agreed. | Brief, quiet tick glyph, then fades back to idle. |
+| **REJECTED** | Server refused, or returned a *different* value. | Reverts to the authoritative value; warning glyph + red tint, with the reason in the tooltip / live region only. |
+| **FAILED** | Network error or timeout. | Keeps the attempted value visible (provisional), warning glyph + red tint. The glyph is the **retry** control (clickable + keyboard reachable). Never silently reverts. |
 | **SUPERSEDED** | User changed their mind mid-flight. | Newer request wins; the stale response is ignored (guarded by a sequence number, not by ordering). |
-| **EXTERNAL CHANGE** | Authoritative value changed for another reason. | Reconciles the baseline without stealing focus or discarding in-flight intent. |
+| **EXTERNAL CHANGE** | Authoritative value changed for another reason. | Momentary highlight, no text; reconciles the baseline without stealing focus or discarding in-flight intent. |
 | **UNAVAILABLE** | Control disabled, or an option not permitted. | Disabled control / disabled option, announced, never requested. |
 | **LOCAL** | Option needs no confirmation. | Applies instantly; also supersedes any in-flight server request. |
+
+### Escalation
+
+A slow request (past `escalate-delay`, default 3 s) is signalled by
+**intensifying the spinner glyph** - thicker and warmer - not by adding any
+text. The live region re-announces "still trying" for screen readers.
 
 ## The `commit` contract
 
@@ -157,8 +171,8 @@ async-select {
 ```
 
 Structural parts are exposed for deeper theming: `trigger`, `face`, `value`,
-`provisional-tag`, `indicator`, `status`, `status-icon`, `status-text`,
-`retry`, `listbox`, `option`, `option-tag`, `option-desc`.
+`glyph` (the state indicator in the chevron slot), `action` (the interactive
+warning/retry affordance), `listbox`, `option`, `option-tag`, `option-desc`.
 
 ## Accessibility
 
@@ -169,14 +183,22 @@ Structural parts are exposed for deeper theming: `trigger`, `face`, `value`,
   to leave, and type-ahead.
 - A polite live region announces outcomes (confirmed / rejected / failed /
   external), not every keystroke; failures announce assertively.
-- Visible focus ring; `prefers-reduced-motion` respected; touch targets >= 44 px;
-  no layout shift between states.
+- Because the state text is no longer visible, the same information is carried in
+  the accessible description (`aria-describedby`) and the tooltip: pending
+  ("Saving X; currently Y"), and the reject/fail reason. The warning glyph is a
+  real focusable button, so a keyboard or screen-reader user can reach the reason
+  and trigger retry.
+- Visible focus ring; `prefers-reduced-motion` respected (spinner and highlight
+  transitions drop out); touch targets >= 44 px. The control never changes size
+  between states - it always occupies exactly the select box.
 
 ## Demo
 
 `demo.html` exercises every state deliberately - instant / 800 ms / 4 s success,
 rejection with a reason, network failure, timeout, a superseding second change,
-an external change mid-flight, and local + disabled. Served from the wamp share:
+an external change mid-flight, and local + disabled. Each control sits beside a
+plain native `<select>` of the same width so you can verify at a glance that the
+box never grows. Served from the wamp share:
 
 ```
 http://localhost/cy/public/components/async-select/demo.html
