@@ -109,3 +109,23 @@ CREATE TABLE tempo (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO tempo (id, custom_speed, updated_at) VALUES (1, NULL, NOW());
+
+-- Completed drawings. Cy draws through the same pen engine as his handwriting
+-- (a coarse 0-100 stroke DSL parsed in runner/draw.js); the `draw` events carry
+-- each build-up pass into the public stream, and this table is the durable
+-- record of the finished thing. `id` is the client-side drawing id that ties the
+-- passes together. strokes/mood are JSON but always bound as STRING params from
+-- PHP (MariaDB has no CAST AS JSON). `requested_by` is the visitor who asked for
+-- it, when he honoured a request, else NULL.
+CREATE TABLE drawings (
+    id            VARCHAR(40) PRIMARY KEY,
+    ts            DATETIME(3) NOT NULL,
+    title         VARCHAR(200) NULL,
+    subject       VARCHAR(120) NULL,
+    strokes       JSON NOT NULL,
+    mood          JSON NULL,
+    stroke_count  INT NOT NULL DEFAULT 0,
+    requested_by  CHAR(32) NULL,
+    INDEX idx_ts (ts),
+    INDEX idx_requested_by (requested_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

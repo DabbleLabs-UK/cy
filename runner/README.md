@@ -89,6 +89,8 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `visitor_seen` | `{ visitor_id, notes, warmth, suspicion, grudge }` - PRIVATE: a memory/standing write-back consumed by `ingest.php`, never inserted into the event log or streamed |
 | `day`    | `{ n, date }` - day rollover (Europe/London)                      |
 | `tempo`  | `{ speed, viewers, custom, pph_idle, pph_load }` - emitted when the viewer-driven tempo changes; the pence/hour anchors let the viewer show the cost of watching |
+| `draw`   | `{ id, title, strokes, pass:{i,n,label}, mood }` - one build-up pass of a drawing; the same pen engine animates the stroke DSL glyph-for-glyph. Passes sharing `id` build the picture (under -> detail -> shade) |
+| `draw_saved` | `{ id, ts, title, subject, strokes, mood, stroke_count, requested_by }` - PRIVATE: the finished-drawing record consumed by `ingest.php` into the `drawings` table, never streamed |
 
 `brain` is a map of ten region activations (0..1). `derived` is the seven
 composite states (confusion, overwhelm, numbness, paranoia, fixation,
@@ -123,6 +125,19 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 - **The meter** (`power.js`) - estimates Dell OptiPlex draw from CPU load,
   integrates to kWh and cost at the tariff, persists cumulatively to
   `state/power.json`, and periodically tells CY what he costs (Warden pays).
+- **Drawing** (`draw.js`) - occasionally (roughly one per 20-40 min waking,
+  weighted by fixation/dissociation/longing, a fresh postcard image, or waiting)
+  he draws instead of writing. Two stages: he decides in ONE line of his own
+  voice what he is drawing and why (streamed as normal text), then a second
+  generation emits ONLY a coarse 0-100 stroke DSL (`P/L/D/C/A/H/T`). The DSL is
+  parsed defensively (bad lines skipped, coords clamped, 120-stroke cap, <3
+  strokes discarded), split into build-up passes (rough shapes -> detail ->
+  shading), and emitted as `draw` events the SAME pen engine animates stroke by
+  stroke - no second renderer. A postcard can ASK him to draw something (keyword
+  match, no LLM); he honours it, honours it badly, or refuses and draws his own,
+  weighted by standing + mood. Mood shapes the marks (anger heavier, despair
+  fainter/sparser). Finished drawings persist to the `drawings` table via a
+  private `draw_saved` event.
 - **Tempo** (`tempo.js`) - a viewer-driven DUTY CYCLE. The client polls
   `GET /api/tempo.php` (~12s) for the current speed (5% nobody watching, 30%
   someone watching, or a viewer's custom 1-100); after each waking burst the loop
@@ -142,9 +157,15 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 - `warden.js` - sentence buffering + outbound/inbound content screen.
 - `client.js` - batched POST to `api/ingest.php`, inbox poll, tempo poll, disk-queue retry.
 - `tempo.js` - duty-cycle timing: `tempoIdleMs(burstMs, speed)` and speed clamping.
+- `draw.js` - drawing: DSL parse/caps, build-up passes, frequency + request
+  weighting, and the two-stage prompt text. Renders through `pen.js` (which owns
+  the pure DSL-stroke -> SVG-path geometry, shared so tests can validate it).
 - `run.js` - the loop: generation, ticks, scheduler, postcard/notice interrupts.
 - `selftest.js` - deterministic checks for the above (no ollama needed).
 - `livesample.js` - drives two real generations to sample CY's prose.
+- `drawtest.js` - drives two real DRAWINGS against ollama, printing the raw DSL
+  and confirming the parser/geometry, with NO writes to the site (in-memory
+  dryRun config; never touches `config.json`).
 
 `state/` (gitignored) holds runtime files: `vitals.json`, `power.json`,
 `context.jsonl`, `events.jsonl` (dryRun), `queue.jsonl` (offline retry),

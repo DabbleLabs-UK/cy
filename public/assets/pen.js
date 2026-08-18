@@ -70,6 +70,119 @@ function strokeToPath(pts) {
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
+// ---- sketch geometry ------------------------------------------------------
+//
+// A drawing is the SAME engine as handwriting: the model emits a coarse 0-100
+// stroke DSL, we turn each command into SVG path "d" data in grid space, and the
+// pen reveals it stroke by stroke through the exact same WAAPI queue. These
+// converters are PURE and DOM-free (no document/window), so the runner and the
+// headless tests can validate the geometry the renderer will consume without a
+// browser. The Pen class wraps them in a scaled group and animates them.
+
+function circlePathGrid(cx, cy, r, n = 24) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return strokeToPath(pts);
+}
+
+function arcPathGrid(cx, cy, r, a1, a2, n = 20) {
+  const s = (a1 * Math.PI) / 180;
+  const e = (a2 * Math.PI) / 180;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const a = s + (e - s) * (i / n);
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  return strokeToPath(pts);
+}
+
+// n scratchy near-parallel shading strokes spanning the box of two corners.
+function hatchPathsGrid([x1, y1], [x2, y2], n) {
+  const xa = Math.min(x1, x2);
+  const xb = Math.max(x1, x2);
+  const ya = Math.min(y1, y2);
+  const yb = Math.max(y1, y2);
+  const N = Math.max(1, Math.min(24, n | 0));
+  const slant = (xb - xa) * 0.14 + 1.5;
+  const out = [];
+  for (let k = 0; k < N; k++) {
+    const t = N === 1 ? 0.5 : k / (N - 1);
+    const fx = xa + (xb - xa) * t;
+    const ex = Math.min(100, fx + slant);
+    out.push(`M${fx.toFixed(2)},${ya.toFixed(2)} L${ex.toFixed(2)},${yb.toFixed(2)}`);
+  }
+  return out;
+}
+
+// A scrawled label rendered small with the same Hershey glyphs the hand uses,
+// laid into grid space with its baseline at (x, y). Needs the font; without it,
+// the label is silently dropped (defensive, like every other malformed input).
+function glyphTextPathsGrid(text, x, y, size, font) {
+  if (!font || !Array.isArray(font.chars)) return [];
+  const scale = size / 21;
+  const out = [];
+  let cx = x;
+  for (const ch of String(text)) {
+    if (ch === ' ') {
+      cx += 6 * scale;
+      continue;
+    }
+    const idx = ch.charCodeAt(0) - 33;
+    const raw = idx >= 0 && idx < font.chars.length ? font.chars[idx] : null;
+    if (!raw || !raw.d) {
+      cx += 6 * scale;
+      continue;
+    }
+    for (const seg of parseGlyph(raw.d)) {
+      out.push(strokeToPath(seg.map(([gx, gy]) => [cx + gx * scale, y + (gy - BASELINE) * scale])));
+    }
+    cx += raw.o * 2 * scale;
+  }
+  return out;
+}
+
+// One parsed DSL stroke -> zero or more grid-space "d" strings.
+export function sketchStrokeToPaths(s, { font } = {}) {
+  if (!s || typeof s !== 'object') return [];
+  switch (s.t) {
+    case 'P':
+    case 'L':
+      return s.pts && s.pts.length >= 2 ? [strokeToPath(s.pts)] : [];
+    case 'D': {
+      // a dot/stab: a minimal stroke; the round cap makes it a blob at pen width
+      const x = Number(s.x);
+      const y = Number(s.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return [];
+      return [`M${x.toFixed(2)},${y.toFixed(2)} L${(x + 0.2).toFixed(2)},${y.toFixed(2)}`];
+    }
+    case 'C':
+      return [circlePathGrid(s.x, s.y, s.r)];
+    case 'A':
+      return [arcPathGrid(s.x, s.y, s.r, s.a1, s.a2)];
+    case 'H':
+      return s.pts && s.pts.length >= 2 ? hatchPathsGrid(s.pts[0], s.pts[1], s.n) : [];
+    case 'T':
+      return glyphTextPathsGrid(s.text, s.x, s.y, 7, font);
+    default:
+      return [];
+  }
+}
+
+// A whole pass -> a flat list of { d, dot } segments in grid space. Pure, so a
+// headless caller can assert exactly what the renderer will draw.
+export function sketchToPaths(strokes, opts = {}) {
+  const out = [];
+  for (const s of strokes || []) {
+    for (const d of sketchStrokeToPaths(s, opts)) {
+      if (d && d.length) out.push({ d, dot: s.t === 'D' });
+    }
+  }
+  return out;
+}
+
 export class Pen {
   constructor(root, font) {
     this.root = root; // #paper element
@@ -103,6 +216,7 @@ export class Pen {
     this.running = false;
     this.abortFlag = false;
     this.glyphNodes = []; // for pruning
+    this._sketchBoxes = new Map(); // drawing id -> its reserved box, across passes
 
     this._buildSvg();
   }
@@ -213,6 +327,19 @@ export class Pen {
     this._pump();
   }
 
+  // ---- public: queue a drawing (one pass) --------------------------------
+  //
+  // Same queue, same ink, same nib. A drawing arrives as one or more passes
+  // sharing an `id` (underdrawing, then detail, then shading), each carrying the
+  // parsed strokes for that pass. The first pass reserves a square on the sheet;
+  // later passes overlay into it so the viewer watches it BUILD. Backlog fill
+  // (this.instant) lays a completed drawing down flat, exactly like text.
+  draw(drawing) {
+    if (!drawing || !Array.isArray(drawing.strokes) || !drawing.strokes.length) return;
+    this.abortFlag = false;
+    this._enqueue({ type: 'draw', drawing, instant: this.instant });
+  }
+
   // ---- silence: a real gap, left blank -----------------------------------
   //
   // He stopped. Leave visible empty space proportional to the duration - no ink,
@@ -277,6 +404,10 @@ export class Pen {
         const job = this.jobs.shift();
         if (job.type === 'newline') {
           this._newline();
+          continue;
+        }
+        if (job.type === 'draw') {
+          await this._drawSketch(job.drawing, job.instant);
           continue;
         }
         // char
@@ -469,6 +600,179 @@ export class Pen {
       anim.onfinish = finalize;
       anim.oncancel = settle;
       // safety: resolve even if onfinish is missed
+      setTimeout(finalize, dur + 150);
+    });
+  }
+
+  // ---- sketch: a drawing pass, rendered on the same sheet ----------------
+
+  // Marks tracked to the mood of the drawing (a vitals snapshot taken when he
+  // drew it): anger presses heavier, despair goes faint and sparse. The line-
+  // level shape (crossing strokes, repeated motifs) is decided in the DSL; here
+  // we only carry the pressure and the wobble of the hand.
+  _sketchStyle(mood, pass) {
+    const m = (mood && mood.mental) || {};
+    const anger = clamp01(m.anger ?? 0.2);
+    const despair = clamp01(m.despair ?? 0.3);
+    let sw = 1.3 + anger * 1.7 - despair * 0.5;
+    sw = Math.max(0.6, Math.min(3.2, sw));
+    let op = 0.9 - despair * 0.45 + anger * 0.08;
+    op = Math.max(0.35, Math.min(1, op));
+    if (pass && pass.label === 'shade') op *= 0.8; // shading sits under the line
+    const jitter = 0.6 + despair * 0.4; // grid-units of hand wobble
+    return { sw, op, jitter };
+  }
+
+  async _drawSketch(drawing, instant) {
+    const id = drawing.id || 'anon';
+    const pass = drawing.pass || { i: 0, n: 1 };
+    const isFirst = pass.i === 0 || !this._sketchBoxes.has(id);
+    const isLast = pass.i >= (pass.n || 1) - 1;
+
+    let box = this._sketchBoxes.get(id);
+    if (isFirst || !box) {
+      // start on a clean line with a little air above the drawing
+      if (this.midWord || this.x > this.marginX) this._newline();
+      this.y += this.size * 0.4;
+      const avail = this.maxX - this.marginX;
+      const side = Math.max(120, Math.min(avail, 240));
+      const indent = Math.max(0, (avail - side) * 0.12);
+      box = { ox: this.marginX + indent, oy: this.y, side, scale: side / 100 };
+      this._sketchBoxes.set(id, box);
+      // reserve the vertical run: the square + a caption line + air below
+      this.y += side + this.size * 1.9;
+      this.x = this.marginX;
+      this.midWord = false;
+      this._scroll();
+    }
+
+    const style = this._sketchStyle(drawing.mood, pass);
+    const grp = document.createElementNS(SVGNS, 'g');
+    grp.setAttribute('class', 'sketch');
+    grp.setAttribute(
+      'transform',
+      `translate(${box.ox.toFixed(2)}, ${box.oy.toFixed(2)}) scale(${box.scale.toFixed(4)})`,
+    );
+    this.ink.appendChild(grp);
+    this._trackNode(grp);
+
+    for (const seg of sketchToPaths(drawing.strokes, { font: this.font })) {
+      if (this.abortFlag) break;
+      const jx = (Math.random() * 2 - 1) * style.jitter;
+      const jy = (Math.random() * 2 - 1) * style.jitter;
+      await this._sketchStroke(grp, seg, box.scale, style, jx, jy, instant);
+    }
+
+    // caption in the same hand beneath the drawing, once, on the final pass
+    if (isLast) {
+      if (drawing.title) {
+        const cap = document.createElementNS(SVGNS, 'g');
+        cap.setAttribute('class', 'sketch-caption');
+        this.ink.appendChild(cap);
+        this._trackNode(cap);
+        await this._captionLine(cap, box, String(drawing.title), style, instant);
+      }
+      this._sketchBoxes.delete(id);
+    }
+  }
+
+  async _captionLine(grp, box, text, style, instant) {
+    const capSize = Math.max(10, this.size * 0.62);
+    const bx = box.ox;
+    const by = box.oy + box.side + capSize * 1.25; // baseline just below the box
+    grp.setAttribute('transform', `translate(${bx.toFixed(2)}, ${by.toFixed(2)})`);
+    const label = text.length > 42 ? text.slice(0, 42) : text;
+    const capStyle = { sw: style.sw * 0.7, op: style.op * 0.85, jitter: 0 };
+    for (const d of glyphTextPathsGrid(label, 0, 0, capSize, this.font)) {
+      if (this.abortFlag) break;
+      await this._sketchStroke(grp, { d, dot: false }, 1, capStyle, 0, 0, instant);
+    }
+  }
+
+  // The sketch analogue of _drawStroke: reveal one grid-space path through the
+  // scaled group, riding the nib, honouring instant fill and abort-to-scar. Kept
+  // separate from _drawStroke so the handwriting path is untouched.
+  _sketchStroke(grp, seg, scale, style, jx, jy, instant) {
+    return new Promise((resolve) => {
+      const path = document.createElementNS(SVGNS, 'path');
+      path.setAttribute('d', seg.d);
+      path.setAttribute('class', 'stroke');
+      const swPx = style.sw * (seg.dot ? 2.2 : 1) * (0.9 + Math.random() * 0.2);
+      path.style.strokeWidth = (swPx / scale).toFixed(3); // keep on-screen width even under the group scale
+      path.style.opacity = style.op.toFixed(2);
+      if (jx || jy) path.setAttribute('transform', `translate(${jx.toFixed(2)},${jy.toFixed(2)})`);
+      grp.appendChild(path);
+
+      if (instant) {
+        resolve();
+        return;
+      }
+
+      let len = 0;
+      try {
+        len = path.getTotalLength();
+      } catch {
+        len = 0;
+      }
+      if (!len) {
+        resolve();
+        return;
+      }
+
+      const sketchSpeed = this.penSpeed * 1.4; // a hurried hand, faster than writing
+      const onscreen = len * scale;
+      let dur = Math.max(50, (onscreen / sketchSpeed) * 1000);
+
+      const aborting = this.abortFlag;
+      let visible = len;
+      if (aborting) {
+        visible = len * (0.25 + Math.random() * 0.35);
+        dur = Math.max(40, ((visible * scale) / sketchSpeed) * 1000);
+        path.classList.add('scar');
+      }
+
+      path.style.strokeDasharray = `${len}`;
+      path.style.strokeDashoffset = `${len}`;
+      const anim = path.animate(
+        [{ strokeDashoffset: len }, { strokeDashoffset: len - visible }],
+        { duration: dur, easing: 'linear', fill: 'forwards' },
+      );
+      this._cur = { path, anim };
+
+      this._showNib();
+      const start = performance.now();
+      let stopped = false;
+      const tick = (now) => {
+        if (stopped) return;
+        const k = Math.min(1, (now - start) / dur);
+        this._moveNib(path, visible * k);
+        if (k < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+
+      let settled = false;
+      const finalize = () => {
+        if (settled) return;
+        settled = true;
+        stopped = true;
+        if (!path.__frozen) path.style.strokeDashoffset = String(len - visible);
+        try {
+          anim.cancel();
+        } catch {
+          /* ignore */
+        }
+        if (this._cur && this._cur.path === path) this._cur = null;
+        resolve();
+      };
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        stopped = true;
+        if (this._cur && this._cur.path === path) this._cur = null;
+        resolve();
+      };
+      anim.onfinish = finalize;
+      anim.oncancel = settle;
       setTimeout(finalize, dur + 150);
     });
   }

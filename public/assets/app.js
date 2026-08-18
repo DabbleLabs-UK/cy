@@ -139,6 +139,16 @@ function dispatch(ev, bootstrap) {
       pen.write(p.s, p.mode);
       break;
 
+    case 'draw':
+      // a drawing pass: the same pen engine, fed strokes instead of glyphs. On
+      // backlog fill pen.instant is set, so a drawing that finished before you
+      // arrived lays down complete instead of re-animating from scratch.
+      pen.draw(p);
+      if (!bootstrap && p.pass && p.pass.i === 0) {
+        pushTicker('picking the pen up' + (p.title ? ': ' + String(p.title).slice(0, 48) : ''));
+      }
+      break;
+
     case 'mode':
       latestMode = p.to || latestMode;
       pen.setMode(latestMode);

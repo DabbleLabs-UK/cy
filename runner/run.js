@@ -28,7 +28,19 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective } from './prompt.js';
+import { buildSystem, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, NUM_CTX } from './prompt.js';
+import {
+  parseStrokes,
+  splitPasses,
+  moodSnapshot,
+  drawDecision,
+  detectDrawRequest,
+  resolveRequest,
+  subjectFromLine,
+  drawIntentDirective,
+  drawDslSystem,
+  drawDslPrompt,
+} from './draw.js';
 import { introspect } from './introspect.js';
 import {
   reconcileLedger,
@@ -236,6 +248,10 @@ async function main() {
   if (!Array.isArray(vitals.recentOpeners)) vitals.recentOpeners = [];
   if (typeof vitals.lastIncidentMs !== 'number') vitals.lastIncidentMs = 0;
   if (typeof vitals.lastWingNoiseMs !== 'number') vitals.lastWingNoiseMs = 0;
+  // drawing state (rides on the vitals object so it persists with everything else)
+  if (typeof vitals.lastDrawMs !== 'number') vitals.lastDrawMs = 0;
+  if (typeof vitals.lastImageMs !== 'number') vitals.lastImageMs = 0;
+  if (typeof vitals.lastDrawSubject !== 'string') vitals.lastDrawSubject = '';
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
@@ -370,6 +386,7 @@ async function main() {
   let tokenCount = 0; // tokens this vitals-tick window (broca)
   const pendingPostcards = [];
   const pendingWarden = [];
+  const pendingDrawRequests = []; // postcards that asked him to draw something
   // ambient cues armed by the scheduler, consumed once by the next generation
   let officerCue = null; // { key, ev, until }
   let overheardCue = null; // { item, misheard, until }
@@ -498,6 +515,29 @@ async function main() {
     return { full: cleanedFull(), aborted: false };
   }
 
+  // A one-shot, non-streaming generation whose text is NOT emitted chunk by
+  // chunk (used for the drawing DSL, which must never reach the pen as prose).
+  // Wired to currentAbort so an inbound postcard/notice can cut it short.
+  async function rawGenerate({ system, prompt, opts }) {
+    const ac = new AbortController();
+    currentAbort = ac;
+    try {
+      const res = await fetch(`${config.ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: config.model, system, prompt, options: opts, keep_alive: -1, stream: false }),
+        signal: ac.signal,
+      });
+      if (!res.ok) return '';
+      const j = await res.json();
+      return j.response || '';
+    } catch {
+      return ''; // aborted, unreachable, or bad body - caller treats as no drawing
+    } finally {
+      if (currentAbort === ac) currentAbort = null;
+    }
+  }
+
   // Assemble the contextual prompt injections for a waking generation: the cast
   // standing, any hot grudge, an amplified trivial event, and - on a cadence or a
   // whole-pound crossing - the running electricity cost.
@@ -545,6 +585,7 @@ async function main() {
     fireEvent(evName, { from: pc.from_name || null });
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
+    if (pc.image_path) vitals.lastImageMs = Date.now(); // a picture just came - he may draw off it
     // a reply arriving clears the mail-wait / awaiting-reply threads in the ledger
     resolveThreads(vitals.ledger, ['reply', 'message', 'mail']);
 
@@ -620,6 +661,101 @@ async function main() {
     currentMode = 'journal';
   }
 
+  // ---- drawing: he picks up the pen and draws instead of writing ----
+  //
+  // Two stages. First he decides, in ONE line of his own voice, what he is
+  // drawing and why - streamed like any other thought, so it lands in the page.
+  // Then a second, non-streamed generation produces ONLY the stroke DSL, which
+  // is parsed defensively, split into build-up passes, and emitted as `draw`
+  // events (one per pass) plus a private `draw_saved` record for the drawings
+  // table. Fewer than MIN_STROKES valid strokes and the drawing is discarded -
+  // the decision line still stands.
+  async function doDraw() {
+    const now = Date.now();
+    currentMode = 'journal';
+
+    // resolve a queued request, or draw something of his own
+    const req = pendingDrawRequests.shift() || null;
+    const intent = req ? resolveRequest(req, vitals) : { mode: 'spontaneous', subject: null, requestedBy: null };
+
+    // fixation: he keeps redrawing the same thing
+    const fixation = (vitals.derived && vitals.derived.fixation) || 0;
+    const redraw = !req && fixation > 0.6 && vitals.lastDrawSubject && Math.random() < 0.6;
+
+    // ---- stage 1: the one-line decision, in voice, streamed to the page ----
+    const ctx = buildCtx();
+    ctx.bans = bansDirective(vitals.recentOpeners);
+    ctx.form = drawIntentDirective(intent, { redrawSubject: redraw ? vitals.lastDrawSubject : null });
+    const sys1 = buildSystem(vitals, 'journal', ctx);
+    const p1 = buildPrompt(contextText(), 'journal');
+    const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
+    o1.stop = [...o1.stop, '\n']; // one line only
+    await logPrompt('draw-decide', sys1);
+    const r1 = await streamGenerate({ system: sys1, prompt: p1, opts: o1, mode: 'journal' });
+    if (r1.aborted) return; // an interrupt landed - let the loop handle it, try drawing again later
+    const line = (r1.full || '').trim();
+
+    // what he is actually drawing
+    let subject;
+    if (intent.mode === 'honour' || intent.mode === 'badly') subject = intent.subject || subjectFromLine(line);
+    else if (redraw) subject = vitals.lastDrawSubject;
+    else subject = subjectFromLine(line);
+    const title = line ? line.slice(0, 100) : subject;
+
+    // ---- stage 2: the DSL, non-streamed, prose stopped hard ----
+    const sys2 = drawDslSystem();
+    const pr2 = drawDslPrompt(subject, { badly: intent.mode === 'badly' });
+    const o2 = {
+      temperature: 0.6,
+      top_p: 0.9,
+      repeat_penalty: 1.12,
+      num_predict: 320,
+      num_ctx: NUM_CTX,
+      num_thread: config.threads,
+      stop: ['END', '\nEND', 'END\n'],
+    };
+    await logPrompt('draw-dsl', sys2 + '\n---\n' + pr2);
+    const raw = await rawGenerate({ system: sys2, prompt: pr2, opts: o2 });
+
+    const { strokes } = parseStrokes(raw);
+    if (strokes.length < 3) {
+      // not enough to be a drawing - discard it; the decision line stands.
+      await logDiscard('draw', raw, 0);
+      vitals.lastDrawMs = now; // still counts as an attempt so he does not hammer
+      return;
+    }
+
+    const passes = splitPasses(strokes);
+    const mood = moodSnapshot(vitals);
+    const id = 'd' + now.toString(36) + Math.floor(Math.random() * 1e5).toString(36);
+    const n = passes.length;
+    passes.forEach((ps, i) => {
+      emit({
+        kind: 'draw',
+        payload: { id, title, strokes: ps.strokes, pass: { i, n, label: ps.label }, mood },
+      });
+    });
+    // private record for the drawings table (like visitor_seen: consumed by
+    // ingest.php, never inserted into the event log or streamed).
+    emit({
+      kind: 'draw_saved',
+      payload: {
+        id,
+        ts: tsNow(),
+        title,
+        subject,
+        strokes,
+        mood,
+        stroke_count: strokes.length,
+        requested_by: intent.requestedBy || null,
+      },
+    });
+
+    vitals.lastDrawMs = now;
+    vitals.lastDrawSubject = subject;
+    vitals.monotony = clamp((vitals.monotony || 0) - 0.15); // drawing is something happening
+  }
+
   // ---- inbox: postcards interrupt; news just colours the state ----
   client.onInbox = (data) => {
     let interrupt = false;
@@ -627,6 +763,19 @@ async function main() {
       // screen any text; an image-only postcard (no body) is always allowed
       if (pc.body && !warden.screenIn(pc.body).ok) continue; // silent reject
       pendingPostcards.push(pc);
+      // a postcard can also ASK him to draw something - queue it (he may honour
+      // it, honour it badly, or refuse, decided later against standing + mood).
+      if (pc.body) {
+        const dr = detectDrawRequest(pc.body);
+        if (dr) {
+          pendingDrawRequests.push({
+            subject: dr.subject,
+            visitor_id: pc.visitor_id || null,
+            warmth: pc.visitor ? pc.visitor.warmth : null,
+            grudge: pc.visitor ? pc.visitor.grudge : null,
+          });
+        }
+      }
       interrupt = true;
     }
     for (const n of data.news || []) {
@@ -935,6 +1084,24 @@ async function main() {
         emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
         await idleSilently(sil.seconds * 1000);
         continue;
+      }
+
+      // DRAWING: occasionally he picks up the pen and draws instead of writing
+      // (waking only). Weighted by fixation/dissociation/longing, a fresh image,
+      // waiting on mail, or a queued request. doDraw does both stages and emits.
+      if (!asleep) {
+        const nowMs = Date.now();
+        const dd = drawDecision(vitals, {
+          asleep,
+          sinceDrawMs: nowMs - (vitals.lastDrawMs || 0),
+          waiting: nowMs - (vitals.lastMailMs || nowMs) > 3 * 3600 * 1000,
+          recentImage: !!vitals.lastImageMs && nowMs - vitals.lastImageMs < 15 * 60 * 1000,
+          hasRequestPending: pendingDrawRequests.length > 0,
+        });
+        if (dd.draw) {
+          await doDraw();
+          continue;
+        }
       }
 
       // sleep mode gets no cast/cost/incident injections - he is half under -

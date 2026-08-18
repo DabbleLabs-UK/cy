@@ -44,6 +44,17 @@ import {
   resolveThreads,
 } from './incidents.js';
 import { PowerMeter, costInjection } from './power.js';
+import {
+  parseStrokes,
+  splitPasses,
+  detectDrawRequest,
+  resolveRequest,
+  subjectFromLine,
+  drawDecision,
+  MIN_STROKES,
+} from './draw.js';
+import { sketchToPaths } from '../public/assets/pen.js';
+import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -320,5 +331,90 @@ line('clamp caps an absurd gap: speed=5, burst 60000ms -> ' + tempoIdleMs(60000,
 line('clamp respected: ' + (tempoIdleMs(60000, 5) === MAX_TEMPO_IDLE_MS));
 line('speed coerced into 1..100: clampSpeed(0)=' + clampSpeed(0) + ' clampSpeed(999)=' + clampSpeed(999) + ' clampSpeed("30")=' + clampSpeed('30') + ' clampSpeed(NaN)=' + clampSpeed(NaN));
 line('out-of-range speed never negative idle: ' + (tempoIdleMs(1000, 0) >= 0 && tempoIdleMs(1000, 150) === 0));
+
+// ---- 18. drawing: defensive DSL parse, passes, requests, geometry ----
+hr('18. DRAWING (DSL parse + passes + requests + geometry)');
+
+// a realistic drawing with a deliberately MALFORMED line and out-of-range coords
+const dsl = [
+  'C 50,20 8',            // head
+  'L 50,28 50,60',        // body
+  'this is not a command', // <- malformed, must be skipped
+  'L 50,38 38,50',        // arm
+  'L 50,38 62,50',        // arm
+  'P 40,80 45,70 55,70 60,80 999,-40', // freehand, last point clamps to grid
+  'D 47,18',              // an eye
+  'H 20,85 80,95 5',      // shading
+  'T 30,99 me',           // a label
+  'Z 1,2 3,4',            // unknown op, skipped
+].join('\n');
+const parsed = parseStrokes(dsl);
+line('raw DSL lines: 10 (2 junk: a prose line and an unknown op)');
+line('parsed to ' + parsed.count + ' valid strokes (both junk lines dropped): ' + (parsed.count === 8));
+const poly = parsed.strokes.find((s) => s.t === 'P');
+const lastPt = poly.pts[poly.pts.length - 1];
+line('out-of-range polyline point 999,-40 clamped to grid: ' + JSON.stringify(lastPt) + ' -> ' + (lastPt[0] === 100 && lastPt[1] === 0));
+line('every coord inside 0..100: ' + parsed.strokes.every((s) => {
+  const pts = s.pts || (typeof s.x === 'number' ? [[s.x, s.y]] : []);
+  return pts.every(([x, y]) => x >= 0 && x <= 100 && y >= 0 && y <= 100);
+}));
+
+// caps + the < MIN_STROKES discard
+const big = Array.from({ length: 300 }, (_, i) => `D ${i % 100},${i % 100}`).join('\n');
+line('120-stroke cap holds on a 300-line drawing: ' + (parseStrokes(big).count === 120));
+const junk = parseStrokes('hello\nworld\nnot a drawing at all');
+line('a drawing with 0 valid strokes is below the ' + MIN_STROKES + '-stroke floor (discarded by caller): ' + (junk.count < MIN_STROKES));
+
+// build-up passes: rough structure, then detail, then shading
+const passes = splitPasses(parsed.strokes);
+line('passes: ' + passes.map((p) => p.label + '(' + p.strokes.length + ')').join(' -> '));
+line('layered into under -> detail -> shade: ' + (passes.length === 3 && passes[0].label === 'under' && passes[2].label === 'shade'));
+line('a doodle (<=6 strokes) stays a single pass: ' + (splitPasses(parsed.strokes.slice(0, 4)).length === 1));
+
+// geometry: exactly what pen.js will animate, produced by its own pure exports
+const font = JSON.parse(await readFile(join(HERE, '..', 'public', 'assets', 'hershey-cursive.json'), 'utf8'));
+const segs = sketchToPaths(parsed.strokes, { font });
+const allValid = segs.length > 0 && segs.every((s) => typeof s.d === 'string' && /^M[-0-9.,\sLC]+$/.test(s.d));
+line('pen.js sketchToPaths yields ' + segs.length + ' SVG path segments (T expands to glyph strokes, H to n strokes)');
+line('every segment is a valid non-empty SVG path the renderer consumes: ' + allValid);
+line('the label T renders as real glyph strokes (more segments than strokes): ' + (segs.length > parsed.strokes.length));
+
+// request detection (keyword/pattern, no LLM) + honour/badly/refuse weighting
+const r1 = detectDrawRequest('hey 7734, can you draw the yard for me? cheers');
+line('detects a draw request + subject: ' + JSON.stringify(r1) + ' -> ' + (!!r1 && /yard/.test(r1.subject)));
+line('a plain postcard is not a request: ' + (detectDrawRequest('thinking of you son, stay strong') === null));
+line('"sketch a window" detected: ' + (detectDrawRequest('please sketch a window')?.isRequest === true));
+
+// warm sender vs hostile grudge sender, deterministic rng, over many rolls
+const warmReq = { subject: 'a bird', visitor_id: 'v1', warmth: 0.85, grudge: 0.02 };
+const grudgeReq = { subject: 'a bird', visitor_id: 'v2', warmth: 0.05, grudge: 0.85 };
+function reqTally(req, v) {
+  const out = { honour: 0, badly: 0, refuse: 0 };
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  for (let i = 0; i < 400; i++) out[resolveRequest(req, v, { rnd }).mode]++;
+  return out;
+}
+const vCalm = initialVitals();
+const warmTally = reqTally(warmReq, vCalm);
+const angryV = initialVitals();
+angryV.mental.anger = 0.8;
+const grudgeTally = reqTally(grudgeReq, angryV);
+line('warm sender, calm mood -> mostly honoured: ' + JSON.stringify(warmTally) + ' -> ' + (warmTally.honour > warmTally.refuse));
+line('grudge sender, angry mood -> refusal likely: ' + JSON.stringify(grudgeTally) + ' -> ' + (grudgeTally.refuse > 0));
+const honoured = resolveRequest(warmReq, vCalm, { rnd: () => 0 }); // first band = honour
+const refused = resolveRequest(grudgeReq, angryV, { rnd: () => 0.3 }); // lands in the refuse band
+line('honoured request carries requested_by (' + honoured.mode + ' -> ' + honoured.requestedBy + '); ' +
+  'refusal does not (' + refused.mode + ' -> ' + refused.requestedBy + '): ' +
+  (honoured.requestedBy === 'v1' && refused.mode === 'refuse' && refused.requestedBy === null));
+
+// subject extraction for the "keeps redrawing the same thing" memory
+line('subjectFromLine("drawin the yard again cos i forget the bench") -> "' +
+  subjectFromLine('drawin the yard again cos i forget the bench') + '"');
+
+// frequency gate: never asleep, respects the gap floor, climbs with time
+line('never draws while asleep: ' + (drawDecision({ mental: {}, derived: {} }, { asleep: true, sinceDrawMs: 1e9, rnd: () => 0 }).draw === false));
+line('inside the gap floor -> no draw: ' + (drawDecision({ mental: {}, derived: {} }, { sinceDrawMs: 60000, rnd: () => 0 }).draw === false));
+line('a pending request shortens the floor: ' + (drawDecision({ mental: {}, derived: {} }, { sinceDrawMs: 6 * 60 * 1000, hasRequestPending: true, rnd: () => 0.1 }).draw === true));
 
 line('\n(selftest complete)');

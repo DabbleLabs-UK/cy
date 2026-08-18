@@ -72,6 +72,18 @@ tempo if the endpoint is unreachable. This tempo idle is NOT a narrative
 `silence` event (Cy choosing to stop) - it is the machine throttled, so the
 vitals/host/power ticks continue and the page never looks frozen.
 
+Sometimes CY draws. Drawing is not a second renderer: it is the SAME pen engine
+that writes his handwriting (`public/assets/pen.js`), fed a coarse 0-100 stroke
+DSL instead of Hershey glyphs, so a sketch appears stroke by stroke at pen speed,
+on the same sheet, in the same ink, inline where he drew it. He decides in one
+line of his own voice what he is drawing and why (streamed as normal text), then
+a second generation emits only the DSL; it is parsed defensively, split into
+build-up passes, and streamed as `draw` events. Finished drawings persist to a
+`drawings` table (via a private `draw_saved` event, like `visitor_seen`) so they
+replay complete for anyone loading the page mid-stream. A postcard can ask him to
+draw something; he honours it, honours it badly, or refuses, by his standing
+toward the writer and his mood. See `runner/README.md` for the mechanic.
+
 ## Layout
 
 ```
@@ -92,7 +104,7 @@ lib/visitor.php     signed visitor cookie + visitors upsert
 lib/presence.php    cheap, throttled live-viewer presence (viewers table)
 lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting
 config/config.sample.php   template; copy to config/config.php (gitignored)
-sql/schema.sql       MariaDB schema (events, postcards, visitors, news, rate_limits, viewers, tempo)
+sql/schema.sql       MariaDB schema (events, postcards, visitors, news, rate_limits, viewers, tempo, drawings)
 tests/tempo_test.php  pure-logic tests for the tempo/presence rules (php tests/tempo_test.php)
 runner/              the model runner (drives inmate 7734)
 ```

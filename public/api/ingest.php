@@ -27,6 +27,18 @@ try {
          SET warmth = :warmth, suspicion = :suspicion, grudge = :grudge, notes = :notes
          WHERE visitor_id = :id'
     );
+    // Persist a completed drawing. Like visitor_seen this is a side-channel: the
+    // per-pass `draw` events already carry the animation into the public stream,
+    // and this writes the durable record. ON DUPLICATE keeps a re-sent batch
+    // idempotent. strokes/mood are bound as strings (no CAST AS JSON in MariaDB).
+    $drawInsert = $db->prepare(
+        'INSERT INTO drawings (id, ts, title, subject, strokes, mood, stroke_count, requested_by)
+         VALUES (:id, :ts, :title, :subject, :strokes, :mood, :stroke_count, :requested_by)
+         ON DUPLICATE KEY UPDATE
+            strokes = VALUES(strokes), mood = VALUES(mood),
+            stroke_count = VALUES(stroke_count), title = VALUES(title),
+            subject = VALUES(subject), requested_by = VALUES(requested_by)'
+    );
     $inserted = 0;
 
     foreach ($input['events'] as $event) {
@@ -50,6 +62,32 @@ try {
                 $visitorUpd->bindValue(':notes', $notes, $notes !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
                 $visitorUpd->bindValue(':id', (string)$p['visitor_id'], PDO::PARAM_STR);
                 $visitorUpd->execute();
+            }
+            continue;
+        }
+
+        // draw_saved is a side-channel record of a finished drawing, not streamed.
+        if ($kind === 'draw_saved') {
+            $p = $event['payload'];
+            if (is_array($p) && !empty($p['id']) && isset($p['strokes'])) {
+                $strokesJson = json_encode($p['strokes']);
+                $moodJson = isset($p['mood']) ? json_encode($p['mood']) : null;
+                if ($strokesJson === false) {
+                    throw new InvalidArgumentException('invalid drawing strokes');
+                }
+                $title = isset($p['title']) ? mb_substr((string)$p['title'], 0, 200) : null;
+                $subject = isset($p['subject']) ? mb_substr((string)$p['subject'], 0, 120) : null;
+                $requestedBy = !empty($p['requested_by']) ? (string)$p['requested_by'] : null;
+                $ts = isset($p['ts']) ? (string)$p['ts'] : (string)$event['ts'];
+                $drawInsert->bindValue(':id', (string)$p['id'], PDO::PARAM_STR);
+                $drawInsert->bindValue(':ts', $ts, PDO::PARAM_STR);
+                $drawInsert->bindValue(':title', $title, $title !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $drawInsert->bindValue(':subject', $subject, $subject !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $drawInsert->bindValue(':strokes', $strokesJson, PDO::PARAM_STR);
+                $drawInsert->bindValue(':mood', $moodJson, $moodJson !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $drawInsert->bindValue(':stroke_count', (int)($p['stroke_count'] ?? 0), PDO::PARAM_INT);
+                $drawInsert->bindValue(':requested_by', $requestedBy, $requestedBy !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $drawInsert->execute();
             }
             continue;
         }
