@@ -42,10 +42,22 @@ let polling = false;
 //   gen  - bright: tokens are being produced right now
 //   eval - dim/amber: the model is reading its prompt (CPU pinned, nothing appears)
 //   idle - dark
+// Watchdogs are a SAFETY NET only, for the rare dropped 'idle' - the runner
+// reliably kicks an 'idle' at the end of every generation. They must not expire
+// mid-phase. On this hardware prompt-eval alone runs ~55s (and legitimately longer
+// after a cache reset), so the eval fallback has to sit well above that: the old
+// 15s value blanked the LED ~40s into every eval while the CPU was still pinned,
+// which is a large part of why the dot looked uncorrelated with the machine. It
+// stays below the runner's own 4-min hang watchdog so a truly wedged model still
+// clears. Gen is refreshed by every streamed token, so a short fallback is fine.
+const LED_EVAL_WATCHDOG_MS = 90000;
+const LED_GEN_WATCHDOG_MS = 4000;
+
 const led = {
   el: null,
   phase: 'idle',
   watchdog: null,
+  lastSeq: -1, // highest inference-event seq applied; guards against stale/replayed phases
   set(phase) {
     this.phase = phase;
     if (!this.el) return;
@@ -62,17 +74,37 @@ const led = {
   signal(phase) {
     this.set(phase);
     clearTimeout(this.watchdog);
-    // safety net if an 'idle' is ever dropped: gen refreshes on every token below;
-    // eval can legitimately run several seconds on a cache reset, so give it slack.
-    if (phase !== 'idle') this.watchdog = setTimeout(() => this.set('idle'), phase === 'gen' ? 4000 : 15000);
+    if (phase !== 'idle') {
+      this.watchdog = setTimeout(
+        () => this.set('idle'),
+        phase === 'gen' ? LED_GEN_WATCHDOG_MS : LED_EVAL_WATCHDOG_MS,
+      );
+    }
   },
-  // fast path: a streamed token IS active generation, so light immediately
+  // fast path: a streamed LIVE token IS active generation, so light immediately
   activity() {
     if (this.phase !== 'gen') this.set('gen');
     clearTimeout(this.watchdog);
-    this.watchdog = setTimeout(() => this.set('idle'), 4000);
+    this.watchdog = setTimeout(() => this.set('idle'), LED_GEN_WATCHDOG_MS);
   },
 };
+
+// Drive the LED from the single FRESHEST inference event in a live batch, never by
+// replaying each historical transition. Called once per live poll (never for the
+// backlog fill or the instant catch-up replay), so after any batch - even a
+// catch-up flood after a backgrounded tab - the LED lands on the true CURRENT
+// phase instead of flashing through a whole past burst and sticking on a stale
+// value. Events arrive ordered by seq, so the last inference event is the newest;
+// the seq guard rejects anything we have already shown or that arrives out of order.
+function driveLedFromBatch(events) {
+  let latest = null;
+  for (const ev of events) if (ev.kind === 'inference') latest = ev;
+  if (!latest) return;
+  const seq = typeof latest.seq === 'number' ? latest.seq : null;
+  if (seq != null && seq <= led.lastSeq) return;
+  if (seq != null) led.lastSeq = seq;
+  led.signal((latest.payload || {}).phase || 'idle');
+}
 
 function initLed() {
   const meta = document.querySelector('.topmeta');
@@ -143,6 +175,9 @@ async function firstLoad() {
   pen.setInstant(false);
   postcards.setInstant(false);
   if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
+  // The LED stays idle through the backlog fill; only inference events newer than
+  // the load point may ever drive it, so replayed history can never light it.
+  led.lastSeq = lastSeq;
   setStatus('live', false);
 }
 
@@ -157,7 +192,11 @@ async function poll() {
   polling = true;
   try {
     const data = await fetchStream(lastSeq);
-    dispatchBatch(data.events || []);
+    const events = data.events || [];
+    dispatchBatch(events);
+    // Drive the public LED from the freshest inference phase in THIS live batch
+    // (after rendering, so it wins over any token fast-path in the same batch).
+    driveLedFromBatch(events);
     if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
     setStatus('live', false);
   } catch (e) {
@@ -186,7 +225,9 @@ function dispatchBatch(events) {
       flat = false;
     }
     if (ev.kind === 'text') seenText++;
-    dispatch(ev, false);
+    // The flat (caught-up) portion is HISTORICAL: it must not drive the live LED
+    // via the token fast-path. Only the animated tail counts as live.
+    dispatch(ev, false, !flat);
   }
   pen.setInstant(false);
   postcards.setInstant(false);
@@ -208,7 +249,7 @@ async function fetchStream(since) {
 
 let latestMode = 'journal';
 
-function dispatch(ev, bootstrap) {
+function dispatch(ev, bootstrap, live = !bootstrap) {
   // PLAIN reading view (behind ?view=plain): forward the same event stream, backlog
   // included, so it can render its own clean blocks. No-op unless plain.js loaded.
   if (window.__cyPlain) window.__cyPlain.handle(ev, bootstrap);
@@ -220,7 +261,7 @@ function dispatch(ev, bootstrap) {
       // on the journal sheet. Everything else (journal, warden, dream murmurs -
       // p.mode 'dream' + p.lucid distinguishes a faint murmur from a lucid
       // night-waking line) is handwritten on the paper.
-      if (!bootstrap) led.activity(); // a live token means the model is generating now
+      if (live) led.activity(); // a genuinely live token means the model is generating now
       if (p.mode === 'letter') {
         postcards.write(p.s);
       } else {
@@ -315,11 +356,13 @@ function dispatch(ev, bootstrap) {
       break;
 
     case 'inference':
-      // live generation indicator (public). Explicit boundary from the runner:
-      // eval (reading, nothing appears yet) / gen (writing) / idle. Live only - a
-      // backlog replay must not flash a stale phase; the LED starts idle and the
-      // continuous live stream lights it within a poll.
-      if (!bootstrap) led.signal(p.phase || 'idle');
+      // The LED is deliberately NOT driven here, per event. Replaying each
+      // historical transition (the backlog fill, or a catch-up batch after a
+      // backgrounded tab) would flash it through a whole past burst in
+      // milliseconds and leave it on a stale phase - the "looks random" bug.
+      // Instead poll() drives the LED once per batch from the single FRESHEST
+      // inference event (driveLedFromBatch), so it always lands on the true
+      // current phase and never on replayed history.
       break;
 
     case 'day':

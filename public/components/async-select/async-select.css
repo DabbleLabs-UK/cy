@@ -35,12 +35,14 @@
   --as-pad-y: 8px;            /* trigger padding - lower these for a compact fit */
   --as-pad-x: 12px;           /* (e.g. a dense top bar) without piercing the shadow */
   --as-min-width: 12rem;
+  --as-max-width: none;        /* cap the fit-to-widest growth; then labels ellipsize */
   --as-font: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   --as-font-size: 14px;
   --as-gap: 8px;
   --as-motion: 140ms;
 
   display: inline-block;
+  max-width: var(--as-max-width);
   font-family: var(--as-font);
   font-size: var(--as-font-size);
   color: var(--as-text);
@@ -49,6 +51,21 @@
 
 :host([hidden]) { display: none; }
 
+/* --- sizing modes --------------------------------------------------------
+ * Default ("fit"): the control grows to fit its widest option (via the hidden
+ * .sizer) so nothing ever needs to truncate or scroll; --as-max-width caps that
+ * growth, after which labels ellipsize. "fixed": the host sets the width (or it
+ * falls back to --as-min-width) and labels ellipsize. "fill": the control fills
+ * its container. In EVERY mode overflow is structurally impossible - the trigger
+ * value and every option truncate with an ellipsis, never a horizontal scrollbar. */
+:host([sizing="fixed"]) .sizer,
+:host([sizing="fill"]) .sizer { display: none; }
+:host([sizing="fill"]) {
+  display: block;
+  max-width: none;
+}
+:host([sizing="fill"]) .wrap { min-width: 0; }
+
 *,
 *::before,
 *::after { box-sizing: border-box; }
@@ -56,6 +73,24 @@
 .wrap {
   position: relative;
   min-width: var(--as-min-width);
+  max-width: 100%;
+}
+
+/* Hidden width-setter: one nowrap line per option label, plus the trigger's own
+   padding, gap and glyph slot. It gives the control its natural width (= widest
+   option) at default sizing so the value never truncates or scrolls. Zero height,
+   never painted, not in the accessibility tree. Suppressed in fixed/fill modes. */
+.sizer {
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  padding-left: var(--as-pad-x);
+  padding-right: calc(var(--as-pad-x) + var(--as-gap) + 14px);
+}
+.sizer > span {
+  display: block;
+  white-space: nowrap;
 }
 
 /* --- trigger ------------------------------------------------------------ */
@@ -232,7 +267,9 @@
   right: 0;
   z-index: 40;
   max-height: 16rem;
-  overflow-y: auto;
+  /* y scrolls when the list is long; x is NEVER allowed to - long labels
+     truncate below, so a horizontal scrollbar can never appear. */
+  overflow: hidden auto;
   padding: 4px;
   background: var(--as-bg);
   border: 1px solid var(--as-border-strong);
@@ -248,12 +285,28 @@
   padding: 8px 10px;
   border-radius: 4px;
   cursor: pointer;
+  overflow: hidden;                /* no option can widen the list */
 }
-.option-main { display: flex; align-items: center; gap: 8px; }
-.option-label { color: var(--as-text); }
-.option-desc { font-size: 0.82em; color: var(--as-text-faint); }
+.option-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Label truncates before it can force horizontal scroll; the confirmed/requested
+   marker (::after, margin-left:auto) and the "instant" tag keep their space. */
+.option-label {
+  color: var(--as-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.option-desc {
+  font-size: 0.82em;
+  color: var(--as-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .option-tag {
+  flex: none;
   padding: 1px 6px;
   font-size: 0.72em;
   letter-spacing: 0.06em;

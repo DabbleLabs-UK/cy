@@ -61,6 +61,9 @@ template.innerHTML = `
          no footprint, carries the reason as a tooltip, and is the retry control. -->
     <button class="action" part="action" type="button" tabindex="-1" hidden></button>
     <div class="listbox" part="listbox" role="listbox" tabindex="-1" hidden></div>
+    <!-- Width-setter: mirrors each option label so the control sizes to its
+         widest option (default "fit" sizing). Hidden, zero-height, aria-hidden. -->
+    <div class="sizer" part="sizer" aria-hidden="true"></div>
     <span class="desc"></span>
     <span class="live" aria-live="polite" role="status"></span>
     <span class="live-assertive" aria-live="assertive"></span>
@@ -82,6 +85,7 @@ export class AsyncSelect extends HTMLElement {
     this._glyph = root.querySelector('.glyph');
     this._action = root.querySelector('.action');
     this._descEl = root.querySelector('.desc');
+    this._sizer = root.querySelector('.sizer');
     this._listbox = root.querySelector('.listbox');
     this._live = root.querySelector('.live');
     this._liveAssertive = root.querySelector('.live-assertive');
@@ -635,6 +639,15 @@ export class AsyncSelect extends HTMLElement {
   _renderOptions() {
     const lb = this._listbox;
     lb.textContent = '';
+    // Rebuild the hidden width-setter so the control's natural width tracks the
+    // widest option label (default "fit" sizing). One nowrap line per label; the
+    // "instant" tag widens its line so a tagged option is never clipped either.
+    this._sizer.textContent = '';
+    this._options.forEach((o) => {
+      const line = document.createElement('span');
+      line.textContent = o.local ? `${o.label} instant` : o.label;
+      this._sizer.appendChild(line);
+    });
     this._options.forEach((o, i) => {
       const el = document.createElement('div');
       el.setAttribute('role', 'option');
@@ -650,6 +663,7 @@ export class AsyncSelect extends HTMLElement {
       const lbl = document.createElement('span');
       lbl.className = 'option-label';
       lbl.textContent = o.label;
+      lbl.title = o.label; // full text recoverable when the label is truncated
       main.appendChild(lbl);
 
       if (o.local) {
@@ -714,7 +728,11 @@ export class AsyncSelect extends HTMLElement {
     if (pendingShown) faceValue = this._requested;
     else if (this._phase === 'failed') faceValue = this._requested;
 
-    this._valueEl.textContent = this._labelOf(faceValue);
+    const faceText = this._labelOf(faceValue);
+    this._valueEl.textContent = faceText;
+    // Full text stays recoverable on hover when a narrow host truncates it; the
+    // accessible name (below) carries it for assistive tech.
+    this._valueEl.title = faceText;
 
     // The face itself carries "not yet true" - dashed + italic, no word tag.
     const provisional = pendingShown || this._phase === 'failed';

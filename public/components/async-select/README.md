@@ -125,7 +125,25 @@ fires on supersede and timeout.
 
 `value`, `disabled`, `label` (accessible name), `timeout` (ms, default 10000),
 `pending-delay` (ms below which no pending state shows, default 150),
-`escalate-delay` (ms after which messaging escalates, default 3000).
+`escalate-delay` (ms after which messaging escalates, default 3000),
+`sizing` (see below).
+
+### Sizing (never a horizontal scrollbar)
+
+Overflow is structurally impossible: the trigger value and every option always
+truncate with an ellipsis (full text stays available via `title` on hover and via
+the accessible name), and neither the trigger nor the dropdown can ever scroll
+sideways. The status glyph keeps its slot regardless of label length. Choose how
+width is decided with the `sizing` attribute:
+
+| `sizing` | Behaviour |
+| --- | --- |
+| (unset) / `fit` | **Default.** Grows to fit the widest option so nothing truncates, up to `--as-max-width` (default `none`); beyond that cap, labels ellipsize. Least surprising - a value never gets clipped just because the list has one long entry. |
+| `fixed` | The host decides the width (set `width`, or it falls back to `--as-min-width`); labels ellipsize to fit. Use in a dense/fixed-column layout. |
+| `fill` | The control fills its container's width; labels ellipsize to fit. |
+
+Relevant custom properties: `--as-min-width` (default `12rem`), `--as-max-width`
+(default `none`, caps `fit` growth).
 
 ### Option fields
 
@@ -169,12 +187,14 @@ async-select {
   --as-pad-y: 8px;            /* trigger padding - lower for a compact/top-bar fit */
   --as-pad-x: 12px;
   --as-min-width: 12rem;
+  --as-max-width: none;       /* caps fit-to-widest growth; then labels ellipsize */
 }
 ```
 
 Structural parts are exposed for deeper theming: `trigger`, `face`, `value`,
 `glyph` (the state indicator in the chevron slot), `action` (the interactive
-warning/retry affordance), `listbox`, `option`, `option-tag`, `option-desc`.
+warning/retry affordance), `listbox`, `option`, `option-tag`, `option-desc`,
+`sizer` (the hidden width-setter; not normally themed).
 
 ## Accessibility
 

@@ -214,6 +214,49 @@
 
   </div>
 
+  <h1 style="margin:34px 0 4px;color:var(--ink);font-size:16px;letter-spacing:0.03em;">Width &amp; overflow</h1>
+  <p style="margin:0 0 12px;color:var(--tel-dim);font-size:12px;max-width:64ch;">
+    A horizontal scrollbar on a select box is never acceptable. Every control below
+    is fed a <b>deliberately over-long option label</b>. In no mode - and at no width -
+    may the trigger or the dropdown ever scroll sideways: it fits, or it truncates
+    with an ellipsis (full text on hover / for assistive tech). The status glyph is
+    never pushed out. Open each list and confirm the same holds there.</p>
+
+  <div class="grid">
+    <!-- fit-to-widest (default): grows to the widest option, capped by --as-max-width,
+         then ellipsizes. Here capped at 20rem so the monster label truncates. -->
+    <div class="row" id="w-fit" style="grid-template-columns:1fr;">
+      <div class="desc">
+        <h2>Default (fit-to-widest, capped at 20rem)</h2>
+        <p>Sizes to the widest option so normal labels never truncate; the over-long
+          one ellipsizes at the cap. <code>sizing</code> unset = <code>fit</code>.</p>
+        <async-select label="Fit" style="width:auto;--as-min-width:12rem;--as-max-width:20rem;margin-top:8px;"></async-select>
+      </div>
+    </div>
+
+    <!-- fixed, very narrow: host constrains width; everything ellipsizes. -->
+    <div class="row" id="w-narrow" style="grid-template-columns:1fr;">
+      <div class="desc">
+        <h2>Fixed &amp; very narrow (7rem)</h2>
+        <p>Host pins the width; the glyph holds its slot and the value ellipsizes -
+          no sideways scroll. <code>sizing="fixed"</code>.</p>
+        <async-select label="Narrow" sizing="fixed" style="width:7rem;--as-min-width:0;margin-top:8px;"></async-select>
+      </div>
+    </div>
+
+    <!-- fill-container: takes the width of a narrow parent. -->
+    <div class="row" id="w-fill" style="grid-template-columns:1fr;">
+      <div class="desc">
+        <h2>Fill container (in a 9rem box)</h2>
+        <p>Fills whatever the host gives it; contents truncate to fit.
+          <code>sizing="fill"</code>.</p>
+        <div style="width:9rem;margin-top:8px;">
+          <async-select label="Fill" sizing="fill" style="width:100%;--as-min-width:0;"></async-select>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <p class="foot">Keyboard: <b>Tab</b> to a control, then <b>Down/Up/Home/End</b> to
     move, <b>Enter/Space</b> to choose, <b>Esc</b> to close, or type to jump. In a
     warning state, <b>Tab</b> reaches the glyph and <b>Enter</b> recovers. Outcomes
@@ -327,6 +370,32 @@
     el.value = 'off';
     el.commit = async (v, { signal }) => { await wait(700, signal); };
     section.querySelector('[data-toggle-disabled]').addEventListener('click', () => { el.disabled = !el.disabled; });
+  }
+
+  // Width & overflow: a deliberately over-long label (plus a no-space monster, the
+  // worst case) fed to fit / fixed / fill so a horizontal scrollbar can never
+  // regress unnoticed. Commit resolves instantly - the point is the box, not state.
+  {
+    const WIDE = [
+      { value: 'draft', label: 'Draft', description: 'Only you can see it' },
+      {
+        value: 'published',
+        label: 'Published to every subscriber, syndication partner and archive mirror worldwide',
+        description: 'A deliberately over-long label that must never cause horizontal scroll',
+      },
+      {
+        value: 'monster',
+        label: 'Supercalifragilisticexpialidocious-antidisestablishmentarianism-pneumonoultramicroscopicsilicovolcanoconiosis',
+        description: 'No spaces: the worst case for wrapping - it must ellipsize, not scroll',
+      },
+      { value: 'archived', label: 'Archived', description: 'Hidden but kept' },
+    ];
+    for (const id of ['w-fit', 'w-narrow', 'w-fill']) {
+      const el = $(id);
+      el.options = WIDE;
+      el.value = 'draft';
+      el.commit = async () => { /* instant confirm */ };
+    }
   }
 </script>
 </body>
