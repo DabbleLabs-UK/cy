@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
+require __DIR__ . '/../../lib/admin.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -106,6 +107,12 @@ try {
 
     $maxSeq = (int)$db->query('SELECT COALESCE(MAX(seq), 0) FROM events')->fetchColumn();
     $db->commit();
+
+    // Record DELL's public IP (this request is X-Cy-Key authenticated, so it is
+    // DELL). It backs the automatic same-network admin unlock in lib/admin.php.
+    // Deliberately AFTER the commit and self-guarded: a missing ingest_origin
+    // table on an un-migrated deploy must never break ingestion.
+    captive_admin_record_ingest_ip($db, captive_admin_client_ip());
 
     captive_json_response(['ok' => true, 'inserted' => $inserted, 'now' => $maxSeq]);
 } catch (InvalidArgumentException $e) {

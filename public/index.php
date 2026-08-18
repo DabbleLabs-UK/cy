@@ -1,16 +1,30 @@
 <?php
 declare(strict_types=1);
 
+require __DIR__ . '/../lib/db.php';
+require __DIR__ . '/../lib/http.php';
+require __DIR__ . '/../lib/admin.php';
+
 // Point the viewer at the fake replay feed with ?stream=test so the renderer
 // can be exercised with no database present.
 $useTest = isset($_GET['stream']) && $_GET['stream'] === 'test';
 $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
 
-// The RAW debugging view is gated behind the ?111 query flag (deliberate light
-// obscurity, agreed with the owner - NOT a login). Only when present does the
-// HANDWRITTEN | RAW toggle appear and the raw client load; without it the page
-// is the ordinary paper sheet and raw.js is never even fetched.
-$rawEnabled = array_key_exists('111', $_GET);
+// The operator controls (pause/resume + the RAW debugging view) unlock for an
+// ADMIN. Admin is decided server-side (lib/admin.php): EITHER this browser is on
+// the same network as DELL - detected automatically from the public IP DELL
+// ingests from, no token to type - OR the ?111 fallback flag is present (for the
+// owner off-network, e.g. on mobile data). Only then do the pause control and the
+// HANDWRITTEN | RAW toggle render and raw.js load; otherwise the page is the
+// ordinary paper sheet and raw.js is never even fetched.
+$isAdmin = false;
+try {
+    $isAdmin = captive_is_admin(captive_db());
+} catch (Throwable $e) {
+    // DB unreachable: still render the page, honouring the ?111 fallback alone.
+    $isAdmin = array_key_exists('111', $_GET);
+}
+$rawEnabled = $isAdmin; // RAW view and the pause control unlock together on admin
 
 // Cache-busting: append the asset's own modification time as ?v=, so every
 // deploy serves fresh JS/CSS and browsers never run a stale cached copy on top
@@ -37,10 +51,12 @@ window.CY = {
   openverseSearch: 'api/openverse-search.php',
   tempo: 'api/tempo.php',
   raw: <?= $rawEnabled ? 'true' : 'false' ?>,
-  // Operator pause/resume endpoint - only wired in admin (?111) mode. null for an
-  // ordinary visitor, so no control appears and the endpoint is never called. The
-  // ?111 rides on the URL because admin.php gates on it (same obscurity token).
-  admin: <?= $rawEnabled ? "'api/admin.php?111'" : 'null' ?>
+  // Operator pause/resume endpoint - only wired in admin mode. null for an
+  // ordinary visitor, so no control appears and the endpoint is never called.
+  // When admin came from same-network detection the plain URL is enough (admin.php
+  // re-checks the network server-side); when it came from ?111 we carry the flag
+  // through so admin.php still recognises it off-network.
+  admin: <?= $isAdmin ? json_encode('api/admin.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>
 };
 </script>
 </head>

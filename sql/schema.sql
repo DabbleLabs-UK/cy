@@ -116,6 +116,22 @@ CREATE TABLE tempo (
 
 INSERT INTO tempo (id, custom_speed, paused, updated_at) VALUES (1, NULL, 0, NOW());
 
+-- Single-row record of DELL's public IP as seen by the authenticated ingest
+-- POSTs (/api/ingest.php sets it via X-Cy-Key, so it is trustworthy). It exists
+-- for the automatic admin unlock (lib/admin.php): a browser whose resolved public
+-- IP matches this - i.e. is behind the same NAT as DELL - is treated as the owner
+-- (admin), unlocking the pause control and RAW view without typing ?111. Traffic
+-- arrives via Cloudflare, so the real client IP comes from CF-Connecting-IP, but
+-- only when REMOTE_ADDR is a verified Cloudflare edge (else it is forgeable). The
+-- write is throttled to once a minute; a value older than 15 minutes is treated
+-- as stale and grants nothing. HONEST CAVEAT: anyone else behind DELL's home NAT
+-- is also admin - accepted and intended here (see lib/admin.php).
+CREATE TABLE ingest_origin (
+    id       TINYINT UNSIGNED PRIMARY KEY,
+    ip       VARCHAR(45) NOT NULL,
+    seen_at  DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Completed drawings. Cy draws through the same pen engine as his handwriting
 -- (a coarse 0-100 stroke DSL parsed in runner/draw.js); the `draw` events carry
 -- each build-up pass into the public stream, and this table is the durable

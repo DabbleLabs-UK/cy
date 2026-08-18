@@ -1,11 +1,13 @@
 // raw.js - the RAW debugging view for CY.
 //
 // An unstyled, live, debugging-grade view of what the runner is actually doing.
-// Gated behind ?111 (index.php sets window.CY.raw): only then does the
-// HANDWRITTEN | RAW toggle appear and this module do anything. The choice is
-// remembered per session (sessionStorage) so a reload stays in RAW while ?111 is
-// still present. This is deliberate light obscurity, agreed with the owner - NOT
-// a login.
+// Gated behind admin (index.php sets window.CY.raw): only then does the
+// HANDWRITTEN | RAW toggle appear and this module do anything. Admin is decided
+// server-side (lib/admin.php) - the browser is on DELL's network (auto-detected
+// from the public IP DELL ingests from), OR the ?111 fallback flag is present.
+// The choice is remembered per session (sessionStorage) so a reload stays in RAW
+// while still admin. This is deliberate light obscurity, agreed with the owner -
+// NOT a login.
 //
 // RAW replaces the paper sheet in place (the instrument panels keep updating,
 // driven by app.js as normal). It polls the SAME public event feed as app.js but
@@ -60,7 +62,7 @@ let wardenSinceGen = [];
 // ---- boot ---------------------------------------------------------------
 
 function boot() {
-  if (!CFG.raw) return; // no ?111 -> no toggle, no raw view, nothing to do
+  if (!CFG.raw) return; // not admin -> no toggle, no raw view, nothing to do
   buildToggle();
   buildShell();
   // restore the session's choice; default to the ordinary handwritten sheet

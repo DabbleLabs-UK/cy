@@ -14,24 +14,29 @@ declare(strict_types=1);
 // operator sees CPU fall and the meter's DRAW drop in real time. Resuming picks
 // up cleanly mid-stream - the runner is never restarted and no context is lost.
 //
-// GATE: the same ?111 admin token as the RAW debugging view (deliberate light
-// obscurity, agreed with the owner - NOT a login). Absent the flag this 404s so
-// the endpoint is invisible to an ordinary visitor. The paused flag lives on the
-// single `tempo` row; the runner reads it through its existing tempo poll.
+// GATE: admin, decided server-side by lib/admin.php - EITHER this browser is on
+// the same network as DELL (automatic), OR the ?111 fallback flag is present.
+// Enforced HERE, not just hidden in the UI: a pause/resume POST from a non-admin
+// client is rejected (404, so the endpoint stays invisible to an ordinary
+// visitor). The paused flag lives on the single `tempo` row; the runner reads it
+// through its existing tempo poll.
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
+require __DIR__ . '/../../lib/admin.php';
 require __DIR__ . '/../../lib/tempo.php';
 
 header('Cache-Control: no-store');
 
-// ?111 obscurity gate - same token as the raw view. Not a login by design.
-if (!array_key_exists('111', $_GET)) {
-    captive_error_response('not found', 404);
-}
-
 try {
     $db = captive_db();
+
+    // Server-side admin gate. Absent admin this 404s so the endpoint is invisible
+    // to an ordinary visitor - the UI hiding the control is not the enforcement.
+    if (!captive_is_admin($db)) {
+        captive_error_response('not found', 404);
+    }
+
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
     if ($method === 'POST') {

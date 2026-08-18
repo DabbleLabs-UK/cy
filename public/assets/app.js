@@ -425,7 +425,12 @@ function pushTicker(msg) {
   tickerTimer = setTimeout(() => el.classList.remove('show'), 6000);
 }
 
-// ---- admin pause/resume (operator control, ?111 only) -------------------
+// ---- admin pause/resume (operator control, admin only) ------------------
+//
+// "Admin" is decided server-side (lib/admin.php): the browser is on DELL's
+// network (auto-detected) OR the ?111 fallback is present. index.php only sets
+// CFG.admin (the endpoint URL) when admin; it is null otherwise, so this is a
+// no-op for an ordinary visitor and the endpoint is never touched.
 //
 // The control shows STATE, not a command: the label reads exactly 'ACTIVE' or
 // 'PAUSED', reflecting the RUNNER'S REAL state off the live stream (the mode goes
