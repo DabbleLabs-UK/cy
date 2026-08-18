@@ -121,6 +121,8 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `tempo`  | `{ speed, viewers, custom, pph_idle, pph_load }` - emitted when the viewer-driven tempo changes; the pence/hour anchors let the viewer show the cost of watching |
 | `draw`   | `{ id, title, strokes, pass:{i,n,label}, mood }` - one build-up pass of a drawing; the same pen engine animates the stroke DSL glyph-for-glyph. Passes sharing `id` build the picture (under -> detail -> shade) |
 | `draw_saved` | `{ id, ts, title, subject, strokes, mood, stroke_count, requested_by }` - PRIVATE: the finished-drawing record consumed by `ingest.php` into the `drawings` table, never streamed |
+| `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
+| `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
 `brain` is a map of ten region activations (0..1). `derived` is the seven
 composite states (confusion, overwhelm, numbness, paranoia, fixation,

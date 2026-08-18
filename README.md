@@ -84,6 +84,24 @@ replay complete for anyone loading the page mid-stream. A postcard can ask him t
 draw something; he honours it, honours it badly, or refuses, by his standing
 toward the writer and his mood. See `runner/README.md` for the mechanic.
 
+There is a RAW debugging view, gated behind the `?111` query flag (deliberate
+light obscurity, not a login). With `?111` present a HANDWRITTEN | RAW toggle
+appears in the chrome (choice remembered per session); RAW replaces the paper
+sheet in place - the instrument panels keep updating - with an unstyled,
+terminal-flavoured live log of every event, newest at the bottom, polled faster
+(~400ms) and rendered token-by-token with no pen pacing, so the stream reads at
+the model's real output rate. Each event is one colour-coded line
+(timestamp/seq/kind/payload) that expands to its raw JSON; each generation burst
+expands to the full prompt (Zone A/B/C with character counts), the full
+post-warden output, the sampling params, the timings/counters, and the
+mode/form/style directives that fired. A filter bar and free-text search scope
+the stream, with per-burst and copy-visible copy buttons; the rendered window is
+capped to the most recent 1500 rows (older rows dropped, count shown) to stay
+fast over long runs. It is POST-WARDEN ONLY: text the warden blocked is never
+shown - a `warden` event carries just a category and a character count, rendered
+as `[redacted by warden: <category>]`, so the mechanism is visible but the
+blocked content is not. Front end: `public/assets/raw.js` + `public/index.php`.
+
 ## Layout
 
 ```

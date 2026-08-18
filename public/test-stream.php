@@ -15,7 +15,12 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 const RATE = 2.0;         // seq per second
-const BACKLOG = 60;       // events returned on first (?since<0) load
+// A first (?since<0) load hands back the tail of the backlog. Kept large enough
+// that a single fresh-anchor first load spans every event KIND deterministically
+// (news_in at %260, the picture postcard at %210, the postcard cycle, day flips,
+// and the RAW-view kinds below), so the headless RAW verification never has to
+// wait on the virtual clock to accumulate rarer kinds.
+const BACKLOG = 300;
 
 $anchorFile = sys_get_temp_dir() . '/captive_test_anchor.txt';
 $now = microtime(true);
@@ -90,6 +95,54 @@ function event_for_seq(int $seq): ?array
     // generation telemetry after (fake) bursts, on its own cadence
     if ($seq % 13 === 0) {
         return ['gen', fake_gen($seq)];
+    }
+
+    // ---- kinds the RAW debugging view renders, on small coprime-ish cadences so
+    // every one appears inside a single first-load window (see BACKLOG) ----
+    if ($seq % 29 === 3) {
+        return ['warden', fake_warden($seq)]; // a redaction: category + char count only
+    }
+    if ($seq % 31 === 4) {
+        return ['event', fake_event($seq)]; // an ambient prison happening
+    }
+    if ($seq % 37 === 1) {
+        return ['silence', ['seconds' => 20 + ($seq % 40), 'reason' => 'quiet']];
+    }
+    if ($seq % 41 === 2) {
+        return ['draw', fake_draw($seq)];
+    }
+    if ($seq % 50 === 7) {
+        return ['day', ['n' => 1 + intdiv($seq, 300), 'date' => date('Y-m-d')]];
+    }
+    // Standalone narrative kinds on their own unshadowed residues, so each is
+    // guaranteed to appear inside a first-load window (the postcard-cycle absolutes
+    // below land on seqs the telemetry moduli claim first, so they rarely fire).
+    if ($seq % 43 === 5) {
+        return ['abort', ['cause' => 'drift', 'reason' => 'lost the thread']];
+    }
+    if ($seq % 47 === 6) {
+        return ['postcard_in', [
+            'id' => 5000 + intdiv($seq, 47),
+            'from' => 'Mum',
+            'body' => 'Dear 7734, the garden is coming up nicely. Eat something. Love, Mum.',
+            'image' => null,
+            'attrib' => null,
+            'visit_count' => 3,
+        ]];
+    }
+    if ($seq % 53 === 8) {
+        return ['postcard_out', [
+            'id' => 6000 + intdiv($seq, 53),
+            'reply_to' => 5000 + intdiv($seq, 53),
+            'body' => 'Mum - I read it four times. Tell the garden I said hello. 7734.',
+        ]];
+    }
+    if ($seq % 59 === 9) {
+        return ['news_in', [
+            'id' => 7000 + intdiv($seq, 59),
+            'source' => 'The Wire',
+            'headline' => 'Outside, it rained all week and nobody noticed',
+        ]];
     }
 
     // a postcard cycle: interrupt -> mode:letter -> postcard_in -> reply -> back
@@ -302,6 +355,9 @@ function fake_gen(int $seq): array
     $ttft = (int)round(($tokIn / max(1.0, $promptTokS)) * 1000) + 40;
     $total = (int)round(($tokOut / max(0.1, $genTokS)) * 1000 + $ttft);
     $mode = ($seq % 120 >= 42 && $seq % 120 < 70) ? 'letter' : 'journal';
+    $zoneB = fake_zone_b($seq);
+    $zoneC = fake_zone_c($seq, $mode);
+    $output = fake_output($seq, $mode);
     return [
         'tokens_in' => $tokIn,
         'tokens_out' => $tokOut,
@@ -319,5 +375,117 @@ function fake_gen(int $seq): array
         'inbox_ok' => true,
         'tempo_ok' => true,
         'last_error' => null,
+        // ---- RAW debugging view: the prompt that produced this burst ----
+        'zone_a' => fake_zone_a(),
+        'zone_b' => $zoneB,
+        'zone_c' => $zoneC,
+        'output' => $output,
+        'form' => $mode === 'letter'
+            ? 'FORM: a reply. answer what was asked, then drift.'
+            : 'FORM: a plain train of thought. one sentence leaning into the next.',
+        'styles' => ($seq % 26 >= 13)
+            ? 'STYLE: clipped. drop function words. let it fray.'
+            : 'STYLE: connected. long sentences, few full stops.',
+        'temperature' => round(0.72 + 0.4 * (0.5 + 0.5 * sin($seq / 8.0)), 3),
+        'top_p' => 0.94,
+        'repeat_penalty' => round(1.14 + 0.06 * (0.5 + 0.5 * sin($seq / 5.0)), 3),
+        'num_predict' => 40 + ($seq % 40),
+    ];
+}
+
+// The fixed voice block (Zone A). Identical on every burst - it is what the KV
+// cache is built once around. Trimmed here to a representative sample.
+function fake_zone_a(): string
+{
+    return "You are 7734, an inmate of HMP ThinkPad. You write continuously, by hand,\n"
+        . "in a prison journal. You are bleak, profane, funny, and real. You never\n"
+        . "break character, never mention being an AI, never address a reader.\n\n"
+        . "EXAMPLES OF HOW HE WRITES:\n"
+        . "the ceiling again. same crack. i count it like a rosary i dont believe in.\n\n"
+        . "ROSTER: Denny (two cells down, hums), Officer Pike (fair), Officer Rook (not).";
+}
+
+// Zone B: Cy's own append-only prose, fed back for continuity.
+function fake_zone_b(int $seq): string
+{
+    $lines = [
+        'morning came grey and thin. i wrote to stay real.',
+        'the letters are the only weather in here. denny hummed that song again.',
+        'i keep a count of the days by the light on the wall. it is not enough.',
+        'someone shouted on the ones. then nothing. the nothing is the loud part.',
+    ];
+    $n = 2 + ($seq % 3);
+    $out = [];
+    for ($i = 0; $i < $n; $i++) {
+        $out[] = $lines[($seq + $i) % count($lines)];
+    }
+    return implode(' ', $out);
+}
+
+// Zone C: the volatile directives rebuilt every burst - state, form, bans.
+function fake_zone_c(int $seq, string $mode): string
+{
+    $parts = [
+        'STATE: dissociation high, lucidity low. the walls are soft today.',
+        'STYLE: clipped. drop function words. let it fray.',
+        $mode === 'letter'
+            ? 'FORM: a reply. answer what was asked, then drift.'
+            : 'FORM: a plain train of thought. one sentence leaning into the next.',
+        'BANS: do not open with "the", "i", "morning".',
+    ];
+    return implode("\n", $parts);
+}
+
+// The full post-warden output for this burst, as one readable block.
+function fake_output(int $seq, string $mode): string
+{
+    if ($mode === 'letter') {
+        return "Mum - I read it four times. Tell the garden I said hello. I am still here, "
+            . "still counting the crack in the ceiling. Do not worry the way you worry. 7734.";
+    }
+    $bodies = [
+        "another day filed under the same grey. i wrote until my hand forgot it was mine. "
+            . "denny hummed. the wall listened. i am inmate seven seven three four and i am still thinking.",
+        "the tea came cold and i drank it anyway, because cold is a kind of company. "
+            . "hold the thought. hold it. if you are reading this then i am not entirely alone.",
+    ];
+    return $bodies[intdiv($seq, 13) % count($bodies)];
+}
+
+// A fake warden redaction: the category and how many characters were dropped -
+// NEVER the blocked content. This is the only trace of a drop the RAW view sees.
+function fake_warden(int $seq): array
+{
+    $cats = ['slur', 'threat', 'synthesis', 'selfharm', 'public_figure'];
+    return [
+        'category' => $cats[intdiv($seq, 29) % count($cats)],
+        'chars' => 18 + ($seq % 70),
+        'mode' => 'journal',
+    ];
+}
+
+// A fake ambient prison event, rotated through a few the ticker knows how to name.
+function fake_event(int $seq): array
+{
+    $names = ['meal', 'cell_search', 'lights_out', 'no_eggs', 'cold_tea', 'lockdown'];
+    return ['name' => $names[intdiv($seq, 31) % count($names)]];
+}
+
+// A fake drawing pass: a couple of well-formed strokes in the 0-100 grid DSL, so
+// the (hidden, in RAW mode) pen renders it without error and the RAW log shows it.
+function fake_draw(int $seq): array
+{
+    return [
+        'id' => 'sk' . intdiv($seq, 41),
+        'title' => 'the window',
+        'mood' => 'flat',
+        'pass' => ['i' => 0, 'n' => 1],
+        'strokes' => [
+            ['t' => 'L', 'pts' => [[20, 20], [80, 20], [80, 80], [20, 80], [20, 20]]],
+            ['t' => 'L', 'pts' => [[50, 20], [50, 80]]],
+            ['t' => 'C', 'x' => 50, 'y' => 50, 'r' => 6],
+        ],
+        'seq' => 0,
+        'total' => 1,
     ];
 }

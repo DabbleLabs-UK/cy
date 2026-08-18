@@ -36,6 +36,7 @@ import {
   options,
   letterPredict,
   amplifiedDirective,
+  styleDirective,
   pickForm,
   bansDirective,
   wingnoiseDirective,
@@ -478,7 +479,13 @@ async function main() {
   // the diagnostics readout needs (duty cycle, poll health, model/threads/ctx).
   // Guards on stats so an aborted/errored generation with no `done` line is a
   // no-op rather than a run of dashes.
-  function emitGen(r, mode) {
+  // `detail` (optional) carries the per-burst material the RAW debugging view
+  // renders: the three prompt zones (A fixed voice, B fed-back context, C volatile
+  // directives), the sampling options actually sent to ollama, the full post-warden
+  // output as one block, and the mode/form/style directives that shaped it. It is
+  // POST-WARDEN and prompt text is fine to publish (the repo is public). Absent for
+  // paths that do not assemble it - the RAW view simply shows less for those bursts.
+  function emitGen(r, mode, detail = {}) {
     const s = r && r.stats;
     if (!s) return;
     const ns = (x) => (typeof x === 'number' && x > 0 ? x : 0);
@@ -486,6 +493,7 @@ async function main() {
       ? (s.prompt_eval_count || 0) / (s.prompt_eval_duration / 1e9)
       : 0;
     const genTokS = ns(s.eval_duration) ? (s.eval_count || 0) / (s.eval_duration / 1e9) : 0;
+    const o = detail.opts || {};
     emit({
       kind: 'gen',
       payload: {
@@ -505,6 +513,20 @@ async function main() {
         inbox_ok: client.lastInboxOk,
         tempo_ok: client.lastTempoOk,
         last_error: client.lastError || null,
+        // ---- RAW debugging view: the prompt that produced this burst ----
+        zone_a: detail.zoneA != null ? String(detail.zoneA) : null,
+        zone_b: detail.zoneB != null ? String(detail.zoneB) : null,
+        zone_c: detail.zoneC != null ? String(detail.zoneC) : null,
+        // the full generated output for this burst, post-warden, as one block
+        output: detail.output != null ? String(detail.output) : (r.full || null),
+        // the active form and which style directives fired, for the burst detail
+        form: detail.form != null ? String(detail.form) : null,
+        styles: detail.styles != null ? String(detail.styles) : null,
+        // sampling actually sent to ollama
+        temperature: typeof o.temperature === 'number' ? o.temperature : null,
+        top_p: typeof o.top_p === 'number' ? o.top_p : null,
+        repeat_penalty: typeof o.repeat_penalty === 'number' ? o.repeat_penalty : null,
+        num_predict: typeof o.num_predict === 'number' ? o.num_predict : null,
       },
     });
   }
@@ -619,6 +641,10 @@ async function main() {
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
+      // A redaction marker for the RAW debugging view: category + how many chars
+      // were dropped, but NEVER the blocked content itself. This is the only
+      // record of a warden drop that reaches any viewer, and it stays post-warden.
+      emit({ kind: 'warden', payload: { category: res.reason, chars: chunk.length, mode } });
       await warden.logBlock(res.reason, chunk, tsNow());
       return; // dropped: boundary/repeat state is untouched, carries to next chunk
     }
@@ -851,11 +877,20 @@ async function main() {
     if (recog) ctx.visitor = recog;
 
     const directives = buildDirectives(vitals, 'letter', ctx);
-    const prompt = buildPrompt(contextText(), 'postcard', pc, directives);
+    const letterTail = contextText();
+    const prompt = buildPrompt(letterTail, 'postcard', pc, directives);
     const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(pc.body) });
     await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
     const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter' });
-    emitGen(r, 'letter');
+    emitGen(r, 'letter', {
+      zoneA: ZONE_A,
+      zoneB: letterTail,
+      zoneC: directives,
+      form: ctx.form || null,
+      styles: styleDirective(vitals),
+      opts,
+      output: r.full,
+    });
 
     // the public, streamed record of Cy's reply (kept as postcard_out)
     const reply = (r.full || '').trim();
@@ -1533,11 +1568,13 @@ async function main() {
       const bans = bansDirective(vitals.recentOpeners);
       noiseThisBurst = false;
       let directives;
+      let burstForm = null; // the selected form directive, surfaced to the RAW view
       {
         const ctx = buildCtx();
         ctx.bans = bans;
         ctx.regime = regimeDirective(mins);
         ctx.form = pickForm(vitals, { relations: vitals.relations });
+        burstForm = ctx.form || null;
         ctx.incidents = incidentsDirective(vitals.ledger, {
           relations: vitals.relations,
           mailWaitMs: Date.now() - (vitals.lastMailMs || Date.now()),
@@ -1558,6 +1595,8 @@ async function main() {
       let produced = false;
       let lastFull = '';
       let lastResult = null;
+      let lastTail = ''; // Zone B and the sampling actually used on the winning try,
+      let lastOpts = null; // captured for the RAW view's per-burst detail
       for (;;) {
         const tail = contextText();
         const prompt = buildPrompt(tail, mode, null, directives);
@@ -1573,6 +1612,8 @@ async function main() {
           produced = !!(r.full && r.full.trim());
           lastFull = r.full || '';
           lastResult = r;
+          lastTail = tail;
+          lastOpts = opts;
           break;
         }
         // near-repeat: discard, bump randomness + repeat penalty, trim context
@@ -1586,7 +1627,17 @@ async function main() {
       const burstMs = Date.now() - burstStart;
       // live diagnostics: publish this burst's generation telemetry (no-op if the
       // burst errored before ollama returned a `done` line with counters).
-      if (lastResult) emitGen(lastResult, mode);
+      if (lastResult) {
+        emitGen(lastResult, mode, {
+          zoneA: ZONE_A,
+          zoneB: lastTail,
+          zoneC: directives,
+          form: burstForm,
+          styles: styleDirective(vitals),
+          opts: lastOpts,
+          output: lastFull,
+        });
+      }
       // remember this burst's opening word so the next prompt can forbid it -
       // the last-5-openers ban that keeps him off the same starting word.
       if (produced) {

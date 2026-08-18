@@ -6,6 +6,12 @@ declare(strict_types=1);
 $useTest = isset($_GET['stream']) && $_GET['stream'] === 'test';
 $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
 
+// The RAW debugging view is gated behind the ?111 query flag (deliberate light
+// obscurity, agreed with the owner - NOT a login). Only when present does the
+// HANDWRITTEN | RAW toggle appear and the raw client load; without it the page
+// is the ordinary paper sheet and raw.js is never even fetched.
+$rawEnabled = array_key_exists('111', $_GET);
+
 // Cache-busting: append the asset's own modification time as ?v=, so every
 // deploy serves fresh JS/CSS and browsers never run a stale cached copy on top
 // of newly-deployed files. Automatic - no manual version bumping.
@@ -29,7 +35,8 @@ window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
   postPostcard: 'api/post-postcard.php',
   openverseSearch: 'api/openverse-search.php',
-  tempo: 'api/tempo.php'
+  tempo: 'api/tempo.php',
+  raw: <?= $rawEnabled ? 'true' : 'false' ?>
 };
 </script>
 </head>
@@ -60,6 +67,11 @@ window.CY = {
 
   <section class="col col-paper">
     <div id="paper" class="paper"></div>
+    <?php if ($rawEnabled): ?>
+    <!-- RAW debugging view: built and driven by raw.js, hidden until selected. It
+         replaces the paper sheet in place (the instrument panels stay). -->
+    <div id="raw" class="raw" hidden></div>
+    <?php endif; ?>
   </section>
 
   <aside class="col col-side">
@@ -138,5 +150,8 @@ window.CY = {
 </main>
 
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/app.js'), ENT_QUOTES) ?>"></script>
+<?php if ($rawEnabled): ?>
+<script type="module" src="<?= htmlspecialchars(cy_asset('assets/raw.js'), ENT_QUOTES) ?>"></script>
+<?php endif; ?>
 </body>
 </html>
