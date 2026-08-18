@@ -25,6 +25,17 @@ export function burstSeparator(prevContext, chunk) {
   return ' ';
 }
 
+// Apply the boundary separator at the SINGLE point where a chunk is emitted:
+// given the text already emitted (prevContext) and the next chunk, return the
+// chunk with exactly one separator spliced in when the two would otherwise glue
+// ('...canteen rn' + 'swept...' -> '...canteen rn swept...'). Idempotent and
+// impossible to bypass - every emit path routes chunks through here, so no two
+// bursts (or two chunks) can ever touch with no whitespace between.
+export function applyBurstSeparator(prevContext, chunk) {
+  const sep = burstSeparator(prevContext, chunk);
+  return sep ? sep + chunk : chunk;
+}
+
 // ---- ZONE A: the fixed, byte-identical head of every prompt -----------------
 //
 // KV-cache reuse in ollama keys off the longest common PREFIX between successive
@@ -97,22 +108,30 @@ const ROSTER = (() => {
 // then the few-shot voice anchor, then the fixed roster.
 export const ZONE_A = [SYSTEM_BASE, EXAMPLES, ROSTER].join('\n\n');
 
-// [threshold test, directive] pairs, checked in order. Primitive axes. Kept short
-// but GRAMMATICAL - written as plain imperatives, not clipped article-dropped notes,
-// because an 8B mirrors the register of its instructions into its output (telegraphed
-// directives were producing broken function-word-dropped prose). A directive only
-// ever appears when its axis is actually over threshold - a state Cy is not in emits
-// nothing (see styleDirective), which is where most of the old bulk went.
+// [strength(v), directive] pairs. strength returns 0 when the axis is not over
+// threshold, else a 0..1 measure of HOW FAR past it - used to rank rules so only
+// the 2 STRONGEST ever apply at once (see styleDirective). Kept short but
+// GRAMMATICAL - an 8B mirrors the register of its instructions into its output
+// (telegraphed directives produced broken function-word-dropped prose). Capping
+// at 2 is deliberate: connected shorthand is the DEFAULT, and only genuinely
+// extreme state (low lucidity / high dissociation) is allowed to fragment him -
+// stacking every crossed threshold at once was turning the prose into word salad.
+const over = (excess, span) => (excess > 0 ? Math.min(1, excess / span) : 0);
 const STYLE_RULES = [
-  [(v) => v.mental.lucidity < 0.35, 'your sentences break off and lose the thread; you restart mid-idea'],
-  [(v) => v.mental.anxiety > 0.6, 'keep it short and clipped; you keep checking the door'],
-  [(v) => v.physical.pain > 0.5, 'the pain interrupts the sentence and gets into the words'],
-  [(v) => v.physical.hunger > 0.65, 'everything reminds you of food and you resent it'],
-  [(v) => v.mental.despair > 0.7, 'you write less and stop finishing thoughts'],
-  [(v) => v.mental.dissociation > 0.6, 'the walls stop being walls; you slip into association'],
-  [(v) => v.physical.fatigue > 0.75, 'you repeat yourself'],
-  [(v) => (v.mental.anger || 0) > 0.6, 'short and hard; you are looking for a target'],
+  [(v) => over(0.35 - v.mental.lucidity, 0.35), 'your sentences break off and lose the thread; you restart mid-idea'],
+  [(v) => over(v.mental.anxiety - 0.6, 0.4), 'keep it short and clipped; you keep checking the door'],
+  [(v) => over(v.physical.pain - 0.5, 0.5), 'the pain interrupts the sentence and gets into the words'],
+  [(v) => over(v.physical.hunger - 0.65, 0.35), 'everything reminds you of food and you resent it'],
+  [(v) => over(v.mental.despair - 0.7, 0.3), 'you write less and stop finishing thoughts'],
+  [(v) => over(v.mental.dissociation - 0.6, 0.4), 'the walls stop being walls; you slip into association'],
+  [(v) => over(v.physical.fatigue - 0.75, 0.25), 'you repeat yourself'],
+  [(v) => over((v.mental.anger || 0) - 0.6, 0.4), 'short and hard; you are looking for a target'],
 ];
+
+// Cap: at most this many style directives are ever applied at once. More than two
+// simultaneous "break off / fragment / lose the thread" instructions is what tips
+// the voice from severe-but-connected shorthand into a shuffled pile of fragments.
+const MAX_STYLE_DIRECTIVES = 2;
 
 // Derived composite states: directive fires above 0.6. Keyed to vitals.derived.
 const DERIVED_RULES = [
@@ -165,9 +184,21 @@ export function stateNotation(v) {
 }
 
 export function styleDirective(v) {
-  const on = STYLE_RULES.filter(([test]) => test(v)).map(([, d]) => d);
+  // Score every firing rule by how far past threshold it is, then keep only the
+  // strongest MAX_STYLE_DIRECTIVES. A calm/normal state fires nothing here, so he
+  // writes connected shorthand; only the most extreme axes ever shape the form.
+  const scored = [];
+  for (const [strength, dir] of STYLE_RULES) {
+    const s = strength(v);
+    if (s > 0) scored.push([s, dir]);
+  }
   const d = v.derived || {};
-  for (const [k, txt] of DERIVED_RULES) if ((d[k] || 0) > 0.6) on.push(txt);
+  for (const [k, txt] of DERIVED_RULES) {
+    const val = d[k] || 0;
+    if (val > 0.6) scored.push([(val - 0.6) / 0.4, txt]);
+  }
+  scored.sort((a, b) => b[0] - a[0]);
+  const on = scored.slice(0, MAX_STYLE_DIRECTIVES).map(([, dir]) => dir);
   const lines = [];
   const note = stateNotation(v);
   if (note) lines.push(note);
@@ -185,8 +216,19 @@ export function styleDirective(v) {
 // changing even when the mood does not.
 const TRAIN_SHARE = 0.6;
 const TRAIN_FORM =
-  'FORM: train of thought. let one thing run into the next, joined up, no headings, no list, no ' +
-  'summing up. write what is in front of you and what you cannot stop thinking about. let it drift.';
+  'FORM: train of thought. one thing running INTO the next, joined up - each bit follows from the last ' +
+  'by a real link, cause or association. no headings, no list, no summing up. write what is in front of ' +
+  'you and what you cannot stop thinking about. you may drift, but only ever to something the last ' +
+  'thought reminds you of - never hop to an unrelated thing.';
+
+// Applied to every WAKING journal burst (folded in by buildDirectives). The
+// single biggest lever against word salad: hold him to ONE subject so the entry
+// reads as a man thinking, not a shuffled deck. He may still drift by association;
+// he may not cycle through six unrelated nouns in four words.
+const ONE_SUBJECT =
+  'ONE THING. pick a single thing - the most recent thing that happened, or the one you cannot stop ' +
+  'chewing on - and stay on it for this whole entry. move off it only by association to something ' +
+  'connected. do not cycle through unrelated things. a man thinking, not a shuffled deck.';
 
 // The VARIATION forms (the other ~40%). `tags` bias the weight from vitals:
 // sparse forms rise with despair/numbness, repeat/count with fixation, argue/
@@ -285,6 +327,9 @@ export function buildDirectives(v, mode, ctx = {}) {
   if (ctx.amplified) parts.push(ctx.amplified);
   if (ctx.warden) parts.push(ctx.warden);
   if (ctx.cost) parts.push(ctx.cost);
+  // Hold him to a single subject for the whole waking entry (the anti-salad rule).
+  // Sits just before the raw material so it frames what he writes FROM.
+  if (mode === 'journal') parts.push(ONE_SUBJECT);
   // The incidents are the substance - the concrete material to write FROM - and
   // the form is the shape to write it in; both go last so they read freshest.
   if (ctx.incidents) parts.push(ctx.incidents);
@@ -332,12 +377,19 @@ export function amplifiedDirective(label) {
 
 export function sampling(v) {
   const m = v.mental;
+  // Temperature tracks STATE, it is not a high default: at normal lucidity with
+  // ordinary dissociation it sits ~0.8 (coherent shorthand), and only genuinely
+  // high dissociation / low lucidity / agitation pushes it toward incoherence.
+  // The old base (0.72) plus wide coefficients ran hot even when he was lucid,
+  // which is what was shaking the prose apart. repeat_penalty + repeat_last_n are
+  // raised so the model does not restate a phrase verbatim WITHIN one burst.
   return {
     temperature: Number(
-      Math.min(1.45, 0.72 + 0.55 * m.dissociation + 0.3 * (1 - m.lucidity) + 0.2 * m.agitation).toFixed(3),
+      Math.min(1.4, 0.55 + 0.45 * m.dissociation + 0.28 * (1 - m.lucidity) + 0.15 * m.agitation).toFixed(3),
     ),
-    top_p: Number((0.95 - 0.15 * m.lucidity).toFixed(3)),
-    repeat_penalty: Number((1.05 + 0.25 * m.stress).toFixed(3)),
+    top_p: Number((0.94 - 0.16 * m.lucidity).toFixed(3)),
+    repeat_penalty: Number((1.14 + 0.2 * m.stress).toFixed(3)),
+    repeat_last_n: 160,
     num_predict: Math.round(70 * (0.4 + 0.6 * m.lucidity)),
   };
 }

@@ -167,6 +167,17 @@ export function isRepeat(text, contextTail, { minRun = 40, tail = 400 } = {}) {
   return false;
 }
 
+// True if `chunk` substantially restates something ALREADY emitted earlier in the
+// SAME burst (`priorEmitted`). This is the within-a-burst counterpart to isRepeat
+// (which guards across bursts): it caught nothing when a burst said the same
+// phrase twice, e.g. "im finished the thought of ... im finished the thought of".
+// A shorter minRun than the cross-burst check, because a verbatim ~5-word restate
+// inside one short burst is already a strong signal. The whole prior burst is in
+// scope (a generous tail), and the chunk is the probe.
+export function repeatsWithinBurst(chunk, priorEmitted, { minRun = 24, tail = 6000 } = {}) {
+  return isRepeat(chunk, priorEmitted, { minRun, tail });
+}
+
 // Buffers streamed tokens and yields complete sentence/newline chunks.
 export class SentenceBuffer {
   constructor() {

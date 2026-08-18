@@ -29,7 +29,7 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { ZONE_A, buildDirectives, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, burstSeparator, NUM_CTX } from './prompt.js';
+import { ZONE_A, buildDirectives, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, applyBurstSeparator, NUM_CTX } from './prompt.js';
 import {
   parseStrokes,
   splitPasses,
@@ -70,7 +70,7 @@ import {
   BY_KEY,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
-import { createWarden, sanitize, stripScaffold, isRepeat } from './warden.js';
+import { createWarden, sanitize, stripScaffold, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs } from './tempo.js';
 
@@ -523,32 +523,45 @@ async function main() {
   }
   probeOllama(); // prime a baseline now so the first host tick can show a delta
 
-  // Set true at the start of every generation, consumed on its FIRST emitted
-  // chunk: the burst-boundary guard so consecutive bursts do not run together
-  // ('...rings rn' + 'swept...' -> 'rings rnswept'). Only the first emitted chunk
-  // of a burst can carry the separator, so no leading whitespace lands on every
-  // event.
-  let needBoundary = false;
+  // Per-burst emit state, reset at the start of every generation (streamGenerate).
+  // `burstEmitted` is the text emitted so far in THIS burst, used to catch a burst
+  // restating its own phrase; `burstAllowRepeat` exempts the forms that repeat by
+  // design (the repeat form, "you repeat yourself", sleep) from that guard.
+  let burstEmitted = '';
+  let burstAllowRepeat = false;
+  let burstStopped = false; // set once the within-burst repeat guard cuts the burst
 
   // ---- one emitted chunk: screen, then text-event or in-world lost-thought ----
+  // THE single choke point every generation path funnels chunks through. Two
+  // defensive normalisations live here so no code path can bypass them:
+  //   1. BURST BOUNDARY - splice exactly one separator whenever this chunk would
+  //      glue onto the already-emitted text with no whitespace between, so two
+  //      bursts (or two chunks) can never touch ('...canteen rn' + 'swept...').
+  //      The SAME separated chunk goes to both the emitted event and the fed-back
+  //      Zone B context (contextBuf), so the stream and the context never drift.
+  //   2. WITHIN-BURST REPEAT - if this chunk restates a phrase already emitted in
+  //      this same burst, drop it and cut the burst short, so a burst cannot loop
+  //      the same line twice ("im finished the thought of ... im finished ...").
   async function onChunk(rawChunk, mode) {
+    if (burstStopped) return; // the repeat guard already ended this burst
     let chunk = stripScaffold(sanitize(rawChunk));
     if (!chunk.trim()) return; // was nothing but control tokens / scaffold
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
       await warden.logBlock(res.reason, chunk, tsNow());
-      return; // dropped: boundary is NOT consumed, it carries to the next chunk
+      return; // dropped: boundary/repeat state is untouched, carries to next chunk
     }
-    if (needBoundary) {
-      needBoundary = false;
-      // splice exactly one separator when this burst would glue onto the previous
-      // one. The same separated chunk goes to BOTH the emitted event and the
-      // fed-back Zone B context, so the two never drift apart.
-      const sep = burstSeparator(contextBuf, chunk);
-      if (sep) chunk = sep + chunk;
+    // (1) boundary - checked against the full emitted context, applied every chunk
+    chunk = applyBurstSeparator(contextBuf, chunk);
+    // (2) within-burst repeat - drop the restated chunk and stop the burst here
+    if (!burstAllowRepeat && repeatsWithinBurst(chunk, burstEmitted)) {
+      burstStopped = true;
+      if (currentAbort) currentAbort.abort();
+      return;
     }
     emit({ kind: 'text', payload: { s: chunk, mode } });
+    burstEmitted += chunk;
     await appendContext(chunk);
   }
 
@@ -559,8 +572,10 @@ async function main() {
   // discarded (nothing emitted) and { repeat:true } is returned for the caller
   // to retry. Postcard/warden replies pass no contextTail and stream straight
   // through. Either way every chunk is scaffold-stripped before it is emitted.
-  async function streamGenerate({ system, prompt, opts, mode, contextTail }) {
-    needBoundary = true; // fresh generation: guard the burst boundary on first emit
+  async function streamGenerate({ system, prompt, opts, mode, contextTail, allowRepeat = false }) {
+    burstEmitted = ''; // fresh generation: nothing emitted yet this burst
+    burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
+    burstStopped = false;
     const ac = new AbortController();
     currentAbort = ac;
     const buffer = warden.newBuffer();
@@ -1297,6 +1312,11 @@ async function main() {
         directives = buildDirectives(vitals, 'journal', ctx);
       }
       const baseOpts = options(vitals, config.threads, mode);
+      // Forms that restate a phrase on purpose (the repeat form, "you repeat
+      // yourself" from fatigue) and the fragmentary sleep drift opt out of the
+      // within-burst repeat guard, so a deliberate refrain is not cut short.
+      const allowRepeat =
+        mode === 'sleep' || /say it again|cannot get past|you repeat yourself/.test(directives);
 
       const burstStart = Date.now();
       let discards = 0;
@@ -1314,7 +1334,7 @@ async function main() {
           repeat_penalty: Number(Math.min(1.6, baseOpts.repeat_penalty + penBump).toFixed(3)),
         };
         await logPrompt(mode, ZONE_A + '\n\n---PROMPT---\n' + prompt);
-        const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode, contextTail: tail });
+        const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode, contextTail: tail, allowRepeat });
         if (r.error) break; // ollama already backed off; move on
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());

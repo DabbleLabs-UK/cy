@@ -65,6 +65,7 @@ export class Power {
         </div>
       </div>`;
     this.costEl = this.root.querySelector('#pw-cost');
+    this.curEl = this.root.querySelector('.pw-cur');
     this.rateEl = this.root.querySelector('#pw-rate');
     this.wattsEl = this.root.querySelector('#pw-watts');
     this.kwhEl = this.root.querySelector('#pw-kwh');
@@ -99,8 +100,15 @@ export class Power {
     if (!pts.length) return;
     const last = pts[pts.length - 1];
 
-    // headline figures
-    this.costEl.textContent = last.cost.toFixed(2);
+    // headline figures. cost_total and kwh_total are CUMULATIVE running totals the
+    // runner already computes - we DISPLAY THE LATEST value, never accumulate,
+    // sum or integrate client-side, so identical replayed events never grow them.
+    const money = formatCost(last.cost);
+    this.costEl.textContent = money.text;
+    if (this.curEl) {
+      this.curEl.textContent = money.cur;
+      this.curEl.style.display = money.cur ? '' : 'none';
+    }
     this.rateEl.textContent = (last.cph * 100).toFixed(1) + ' p/h';
     this.wattsEl.textContent = Math.round(last.w) + ' W';
     this.kwhEl.textContent = last.kwh.toFixed(3) + ' kWh';
@@ -137,4 +145,16 @@ function num(x) {
   if (typeof x === 'number' && Number.isFinite(x)) return x;
   if (typeof x === 'string' && x.trim() !== '' && Number.isFinite(+x)) return +x;
   return null;
+}
+
+// Format the running total for the headline: pence under GBP 1 (e.g. "3.0p" for
+// 0.0302), pounds at or above it (e.g. "1.50"), switching automatically - at
+// these magnitudes "GBP 0.03" reads badly. Returns { text, cur }, where `cur` is
+// the currency prefix to show alongside ("GBP" for pounds, "" for pence, since
+// "3.0p" carries its own unit). Pure and side-effect free, so it is unit-testable
+// headlessly without a DOM.
+export function formatCost(cost) {
+  const c = Number.isFinite(cost) ? cost : 0;
+  if (c < 1) return { text: (c * 100).toFixed(1) + 'p', cur: '' };
+  return { text: c.toFixed(2), cur: 'GBP' };
 }
