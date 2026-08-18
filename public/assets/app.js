@@ -450,7 +450,7 @@ function initAdmin() {
   let pending = null; // { target:boolean } while awaiting the runner's acknowledgement
   let failed = false; // last command did not reach/land - surfaced until the next tap
   let failTimer = null;
-  const ACK_TIMEOUT_MS = 8000; // a generous few seconds for the runner to acknowledge
+  const ACK_TIMEOUT_MS = 15000; // safety margin; the runner now cuts the burst and acks within a poll, so this should almost never be hit
 
   const render = () => {
     const isPaused = confirmed === true;

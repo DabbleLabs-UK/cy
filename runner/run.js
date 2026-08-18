@@ -1295,6 +1295,35 @@ async function main() {
     if (interrupt && currentAbort) currentAbort.abort(); // cut the current thought mid-word
   };
 
+  // ---- operator pause: interrupt the in-flight burst and acknowledge at once ----
+  // The pause flag rides on the tempo poll (client.paused). Waiting for the top of
+  // the generation loop to notice it is too slow: the check is only reached once the
+  // current 30-60s burst finishes, so CPU falls ~30s late and the mode->paused event
+  // lands long after the admin control's ack window (the control then reports it did
+  // not acknowledge). Instead act the moment the poll sees the flag flip. Pausing
+  // cuts the in-flight generation with the SAME abort machinery an arriving postcard
+  // uses - any partial text already streamed stays, and the Zone B context window is
+  // untouched (onChunk appended it as it streamed) - then emits the transition and
+  // priority-flushes so the control confirms within a poll. Resume is the mirror.
+  client.onPause = () => {
+    if (currentMode !== 'paused') {
+      emit({ kind: 'mode', payload: { from: currentMode, to: 'paused' } });
+      currentMode = 'paused';
+      client.kick(); // priority flush: the admin control is waiting on this
+    }
+    if (currentAbort) currentAbort.abort(); // cut the burst mid-word, exactly like a postcard
+  };
+  client.onResume = () => {
+    if (currentMode !== 'paused') return;
+    // pick the waking target the same way the loop does: dream in the sleep window,
+    // the ruled-paper journal otherwise. The loop continues from here without
+    // re-announcing (dreamState is always initialised, so dreamStep is safe).
+    const to = isAsleep(londonParts().mins) ? 'dream' : 'journal';
+    emit({ kind: 'mode', payload: { from: 'paused', to } });
+    currentMode = to;
+    client.kick(); // priority flush: the admin control is waiting on this
+  };
+
   // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
   // it was a trivial thing landing under high amplification, arm the "this is the
   // day" cue. Returns the amp that was applied.

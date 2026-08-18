@@ -52,6 +52,11 @@ export class Client {
     this.backoff = 0;
     this.onInbox = null;
     this.onTempo = null;
+    // Fired from pollTempo the moment the operator pause flag TRANSITIONS, so the
+    // runner can cut the in-flight burst and confirm the pause/resume at once
+    // rather than at the end of the current 30-60s generation.
+    this.onPause = null;
+    this.onResume = null;
     // last known tempo. Defaults to 100 (continuous, the old behaviour) so an
     // endpoint that is unreachable at startup never stalls or throttles blindly;
     // the first successful poll replaces it.
@@ -271,10 +276,23 @@ export class Client {
         return; // transient; keep last known
       }
     }
-    // Pause rides on the same poll (it lives on the tempo row). Update it even if
-    // speed is somehow absent, so a resume/pause is honoured promptly and cannot
-    // be stranded by a malformed tempo body.
-    if (data && typeof data.paused !== 'undefined') this.paused = !!data.paused;
+    // Pause rides on the same poll (it lives on the tempo row). Detect the
+    // TRANSITION here and fire onPause/onResume at once, so the runner can cut the
+    // in-flight burst and confirm the operator's action immediately - not at the
+    // end of the current 30-60s generation. Handled before the speed early-return
+    // below, so a resume/pause is honoured even if speed is somehow absent and
+    // cannot be stranded by a malformed tempo body.
+    if (data && typeof data.paused !== 'undefined') {
+      const next = !!data.paused;
+      if (next !== this.paused) {
+        this.paused = next;
+        if (next) {
+          if (this.onPause) this.onPause();
+        } else if (this.onResume) {
+          this.onResume();
+        }
+      }
+    }
     if (!data || data.speed == null) return;
     const next = {
       speed: clampSpeed(data.speed),
