@@ -93,13 +93,26 @@ import {
   CAST,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
-import { createWarden, sanitize, stripScaffold, narrationHits, isRepeat, repeatsWithinBurst } from './warden.js';
+import { createWarden, sanitize, stripScaffold, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs } from './tempo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// HARD CAP on consecutive near-repeat discards in one burst. Past this many the
+// journal loop STOPS discarding and forces the text out anyway (see genLoop): a
+// context full of near-identical phrasing makes every retry overlap and be
+// discarded, so without a cap he writes constantly and publishes nothing while
+// pinning the CPU. 2 is enough - slightly repetitive prose beats total silence.
+const MAX_DISCARDS = 2;
+
+// WATCHDOG. If no text event has been emitted for this long while awake, not
+// paused and not in a deliberate/throttle silence, something is wedged: log
+// loudly and force a full context reset (the manual recovery, automated). This
+// is the backstop that makes the silent-deadlock failure impossible to repeat.
+const WATCHDOG_MS = 4 * 60 * 1000;
 
 // ---- abortable ollama stream reader ---------------------------------------
 //
@@ -500,6 +513,19 @@ async function main() {
       /* never crash on debug logging */
     }
   }
+  // The near-repeat guard hit its HARD CAP: log LOUDLY (console.error) so the
+  // forced escape is visible in the log rather than a silent CPU spin. The loop
+  // then emits the burst anyway (repetitive prose beats silence).
+  async function logCapHit(mode, n) {
+    const line = `[cy] WARNING near-repeat cap hit (${mode}) after ${n} discards - forcing the text out anyway`;
+    console.error(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
   // The introspect deltas, logged so the state->text link is observable: a mental
   // move that lands here is attributable to a specific feature of what he wrote.
   // Narration/assistant-frame drops, logged so we can see how often the second-
@@ -507,6 +533,20 @@ async function main() {
   async function logNarration(hits, mode) {
     if (!hits || !hits.length) return;
     const line = `[cy] narration-drop (${mode}): ${hits.join(' | ')}`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+  // State-notation drops, logged like the narration drops: the compressed vitals
+  // notation ('agit .70 stress .85 ...') copied out of the prompt block as prose,
+  // stripped by warden.stripScaffold before it can reach the page or Zone B.
+  async function logStateNotation(hits, mode) {
+    if (!hits || !hits.length) return;
+    const line = `[cy] state-notation-drop (${mode}): ${hits.join(' | ')}`;
     console.warn(line);
     try {
       const { appendFile } = await import('node:fs/promises');
@@ -609,6 +649,11 @@ async function main() {
   let currentAbort = null; // AbortController for the in-flight generation
   let tokenCount = 0; // tokens this vitals-tick window (broca)
   let brocaLevel = 0; // decaying live-output level driving the Broca readout
+  // WATCHDOG bookkeeping. lastTextMs stamps every real text event; watchdogQuietUntil
+  // is pushed forward whenever a LEGITIMATE quiet begins (a deliberate silence, a
+  // tempo throttle) so those never trip the watchdog. Both read on the vitals tick.
+  let lastTextMs = Date.now();
+  let watchdogQuietUntil = 0;
   const pendingPostcards = [];
   const pendingWarden = [];
   const pendingDrawRequests = []; // postcards that asked him to draw something
@@ -852,9 +897,11 @@ async function main() {
     if (burstStopped) return; // the repeat guard already ended this burst
     const cleaned = sanitize(rawChunk);
     const nHits = narrationHits(cleaned); // log narration/assistant-frame drops
+    const sHits = stateNotationHits(cleaned); // log vitals-notation drops
     let chunk = stripScaffold(cleaned);
     if (nHits.length) await logNarration(nHits, mode);
-    if (!chunk.trim()) return; // was nothing but control tokens / scaffold / narration
+    if (sHits.length) await logStateNotation(sHits, mode);
+    if (!chunk.trim()) return; // was nothing but control tokens / scaffold / narration / state notation
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
@@ -874,6 +921,7 @@ async function main() {
       return;
     }
     emit({ kind: 'text', payload: { s: chunk, mode } });
+    lastTextMs = Date.now(); // real output: reset the watchdog clock
     burstEmitted += chunk;
     await appendContext(chunk);
   }
@@ -1555,6 +1603,41 @@ async function main() {
     // fast 1s sampler (see powerTimer below) so bursts that switch within seconds
     // are not aliased away by a 5s/30s sample.
 
+    // WATCHDOG: he must never again go silent for minutes while awake without it
+    // being noticed. If no text event has landed for WATCHDOG_MS while awake, not
+    // paused, not dreaming, and not inside a deliberate/throttle silence, something
+    // is wedged (a near-repeat spin, a stuck generation): log LOUDLY and force a
+    // full context reset - the same manual recovery (clearing the fed-back context)
+    // that freed him before, done automatically. Runs on this independent timer so
+    // it fires even if the generation loop itself is hung.
+    if (
+      running &&
+      !client.paused &&
+      !asleep &&
+      currentMode !== 'paused' &&
+      currentMode !== 'dream' &&
+      now > watchdogQuietUntil &&
+      now - lastTextMs > WATCHDOG_MS
+    ) {
+      const silentS = Math.round((now - lastTextMs) / 1000);
+      const line = `[cy] WATCHDOG no text for ${silentS}s while awake - forcing a context reset`;
+      console.error(line);
+      try {
+        const { appendFile } = await import('node:fs/promises');
+        await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+      } catch {
+        /* never crash on watchdog logging */
+      }
+      contextBuf = ''; // drop the (repetitive) fed-back context entirely
+      try {
+        await saveContext(contextPath, contextBuf);
+      } catch {
+        /* keep going */
+      }
+      if (currentAbort) currentAbort.abort(); // break any wedged in-flight generation
+      lastTextMs = now; // fresh window after the reset so it does not re-fire at once
+    }
+
     try {
       await saveVitals(vitalsPath, vitals);
     } catch {
@@ -1690,6 +1773,7 @@ async function main() {
     const payload = { s: chunk + ' ', mode: 'dream' };
     if (lucid) payload.lucid = true;
     emit({ kind: 'text', payload });
+    lastTextMs = Date.now(); // a murmur/night-line is real output too
   }
 
   // Keep one properly punctuated sentence from a night-waking generation.
@@ -1880,6 +1964,9 @@ async function main() {
       const sil = silenceDecision(vitals, false, sinceIncident);
       if (sil.silent) {
         emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
+        // a deliberate silence is legitimate quiet - hold the watchdog off for its
+        // full length plus a margin so it never mistakes chosen stillness for a wedge
+        watchdogQuietUntil = Date.now() + sil.seconds * 1000 + 30000;
         await idleSilently(sil.seconds * 1000);
         continue;
       }
@@ -1940,6 +2027,12 @@ async function main() {
       let lastTail = ''; // Zone B and the sampling actually used on the winning try,
       let lastOpts = null; // captured for the RAW view's per-burst detail
       for (;;) {
+        // Past the hard cap we STOP discarding and force the burst OUT: stream with
+        // NO near-repeat guard (contextTail undefined, so nothing is held back or
+        // discarded) so whatever is generated is emitted. Repetitive prose beats
+        // total silence, and a man going over the same ground is truthful.
+        const forceEmit = discards >= MAX_DISCARDS;
+        if (forceEmit) await logCapHit(mode, discards);
         const tail = contextText();
         const prompt = buildPrompt(tail, mode, null, directives);
         const opts = {
@@ -1948,7 +2041,14 @@ async function main() {
           repeat_penalty: Number(Math.min(1.6, baseOpts.repeat_penalty + penBump).toFixed(3)),
         };
         await logPrompt(mode, ZONE_A + '\n\n---PROMPT---\n' + prompt);
-        const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode, contextTail: tail, allowRepeat });
+        const r = await streamGenerate({
+          system: ZONE_A,
+          prompt,
+          opts,
+          mode,
+          contextTail: forceEmit ? undefined : tail,
+          allowRepeat: allowRepeat || forceEmit,
+        });
         if (r.error) break; // ollama already backed off; move on
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
@@ -1958,13 +2058,18 @@ async function main() {
           lastOpts = opts;
           break;
         }
-        // near-repeat: discard, bump randomness + repeat penalty, trim context
+        // near-repeat: discard, then ESCALATE THE ESCAPE. The remaining context is
+        // just as repetitive as the part removed, so bump randomness MEANINGFULLY
+        // and, on the 2nd discard, trim away nearly all of the context (not just
+        // half). A discard is real evidence he is stuck in a loop, so raise the
+        // fixation pressure (via stress, which fixation reads) rather than hiding
+        // it - his being stuck shows in the vitals instead of vanishing.
         discards++;
         await logDiscard(mode, r.full, discards);
-        tempBump += 0.2;
+        tempBump += 0.35;
         penBump += 0.12;
-        trimContext(discards >= 2 ? 0.5 : 0.25);
-        if (discards >= 2) break; // dropped oldest half - move on to a fresh gen
+        applyDeltas(vitals, { stress: +0.06 }, 1); // fixation = f(stress, monotony)
+        trimContext(discards >= 2 ? 0.9 : 0.5);
       }
       const burstMs = Date.now() - burstStart;
       // live diagnostics: publish this burst's generation telemetry (no-op if the
@@ -2007,7 +2112,11 @@ async function main() {
       if (produced) {
         await sleep(150); // the small breather between bursts, as before
         const idleMs = tempoIdleMs(burstMs, client.tempo.speed);
-        if (idleMs > 0) await idleSilently(idleMs);
+        if (idleMs > 0) {
+          // a throttle idle is machine-imposed quiet, not a wedge - hold the watchdog
+          watchdogQuietUntil = Date.now() + idleMs + 30000;
+          await idleSilently(idleMs);
+        }
       } else {
         await sleep(700);
       }

@@ -175,6 +175,19 @@ const NARRATION = [
   /\bi\s+apologi[sz]e\b[^\n]*/gi,
 ];
 
+// STATE-NOTATION LEAK. The compressed vitals notation from the volatile prompt
+// block ('agit .70 stress .85 despair .80 hunger 2.00 fatigue 3.0') copied out as
+// if it were prose to continue - the same imitate-what-sits-nearest failure mode
+// as the old 'Dear friend' regression. Signature: a RUN of 2+ 'word .dd' pairs,
+// optionally led by the bare inmate number and a 'day Nth' stamp or a 'STATE:'
+// label. A DECIMAL is required in every value (stateNotation always renders values
+// via fmt2, so they are always '.82'-shaped) - so ordinary prose with a stray whole
+// number ('47 tiles', '3rd day') is never eaten; it takes two decimal pairs in a
+// row, which prose does not do.
+const STATE_NOTATION = [
+  /(?:\b7734\b[\s,]*)?(?:day\s+\d+(?:st|nd|rd|th)?[\s,]*)?(?:\bstate\s*:?\s*)?(?:[a-z]{2,12}\s+\d*\.\d+\s*[|,]?\s*){2,}/gi,
+];
+
 // The NARRATION fragments present in `s`, for logging how often the filter fires.
 // Non-mutating; global regexes are reset so lastIndex never leaks between calls.
 export function narrationHits(s) {
@@ -188,10 +201,24 @@ export function narrationHits(s) {
   return hits;
 }
 
+// The STATE-NOTATION fragments present in `s`, for logging state-notation drops
+// exactly like the narration drops. Non-mutating; lastIndex reset per call.
+export function stateNotationHits(s) {
+  const t = s || '';
+  const hits = [];
+  for (const re of STATE_NOTATION) {
+    re.lastIndex = 0;
+    const m = t.match(re);
+    if (m) for (const x of m) hits.push(x.trim().replace(/\s+/g, ' ').slice(0, 80));
+  }
+  return hits;
+}
+
 export function stripScaffold(s) {
   let out = s || '';
   for (const re of SCAFFOLD) out = out.replace(re, ' ');
   for (const re of NARRATION) out = out.replace(re, ' ');
+  for (const re of STATE_NOTATION) out = out.replace(re, ' '); // vitals-notation leak
   out = out.replace(/^[ \t]*["']+[ \t]*/, ''); // stray opening quote left at the head
   return out.replace(/[ \t]{2,}/g, ' ');
 }
