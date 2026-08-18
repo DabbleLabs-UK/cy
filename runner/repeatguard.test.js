@@ -19,7 +19,7 @@ const ok = (msg) => { n++; console.log('  ok - ' + msg); };
 
 // ---- 1. the exact live leak is stripped, lead-in and all ----
 const leak = 'cos bill swapped ur meal tray 7734 day 1st agit .70 stress .85 despair .80 hunger 2.00 fatigue 3.0';
-assert.equal(stateNotationHits(leak).length, 1, 'the notation run is detected as one hit');
+assert.ok(stateNotationHits(leak).length >= 1, 'the notation run is detected (one or more overlapping patterns)');
 const strippedLeak = stripScaffold(leak);
 assert.ok(!/\d\.\d/.test(strippedLeak), 'no decimal pairs survive');
 assert.ok(!/agit|despair|fatigue/.test(strippedLeak), 'the notation tokens are gone');
@@ -40,6 +40,22 @@ for (const p of [
   assert.equal(stripScaffold(p), p, 'unchanged: ' + p);
 }
 ok('ordinary prose (whole numbers, a single decimal) survives untouched');
+
+// ---- 3b. BARE state-axis LABEL runs (no decimals) are caught; single labels in
+// real prose survive. A run of 2+ axis labels adjacent with nothing but
+// whitespace/commas between them is the signature (' hope fatig ...'). ----
+assert.ok(stateNotationHits('hope fatig').length >= 1, 'a bare two-label run is detected');
+assert.equal(stripScaffold('hope fatig').trim(), '', 'a bare two-label run is stripped');
+assert.equal(stripScaffold('anx stress despair').trim(), '', 'a longer bare-label run is stripped');
+for (const p of [
+  'no hope left',                       // single label wrapped in prose
+  'i felt a pain today',                // single label
+  'there is no hope and no anger here', // two labels but real prose ("and") between
+]) {
+  assert.equal(stripScaffold(p), p, 'single labels in prose survive: ' + p);
+  assert.equal(stateNotationHits(p).length, 0, 'no false hit: ' + p);
+}
+ok('bare state-axis label runs are caught; single labels in real prose survive');
 
 // ---- 4. a chunk that is ONLY state notation collapses to whitespace ----
 // (onChunk drops it entirely via the `!chunk.trim()` guard, so nothing is emitted

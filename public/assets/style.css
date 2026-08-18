@@ -569,12 +569,61 @@ body.cy-paused::after {
 .hp-gk { font-size: 10px; color: var(--tel-dim); letter-spacing: 0.04em; }
 .hp-gv { font-size: 11px; color: #dfe7ee; font-variant-numeric: tabular-nums; text-align: right; }
 .hp-gv.warm { color: var(--tel-hot, #d8863a); }
+.hp-gv.good { color: var(--good, #5fd08a); }
 .hp-modelrow, .hp-errrow {
   display: flex; justify-content: space-between; gap: 8px; margin-top: 6px;
   font-size: 10px; align-items: baseline;
 }
 .hp-model { color: var(--tel); font-size: 10px; text-align: right; word-break: break-all; }
 .hp-err { color: var(--tel-hot, #d8863a); font-size: 10px; text-align: right; word-break: break-all; }
+
+/* the LIVE section heading picks up a faint pulse tint so it reads as "moving" */
+.hp-sec-live { color: var(--tel, #8fb7d8); }
+
+/* ---- cycle outcomes (last N generation cycles) ---- */
+.hp-cycles {
+  margin: 9px 0; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 4px; background: #0b0e13;
+}
+.hp-cyc-head {
+  font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--tel-dim); margin-bottom: 5px; display: flex; align-items: baseline; gap: 6px;
+}
+.hp-cyc-note { color: var(--line); letter-spacing: 0.06em; }
+.hp-cyc-stall {
+  margin-left: auto; color: #0b0e13; background: var(--tel-hot, #d8863a);
+  font-weight: 700; letter-spacing: 0.12em; padding: 0 5px; border-radius: 3px;
+}
+.hp-cyc-grid {
+  display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 2px 8px; align-items: baseline;
+}
+.hp-cyc-k { font-size: 10px; color: var(--tel-dim); letter-spacing: 0.02em; }
+.hp-cyc-v {
+  font-size: 11px; color: #dfe7ee; font-variant-numeric: tabular-nums; text-align: right;
+}
+.hp-cyc-v.good { color: var(--good, #5fd08a); }
+.hp-cyc-v.warm { color: var(--tel-hot, #d8863a); }
+.hp-cyc-zero { color: var(--line); }
+/* a stall (nothing emitted across the whole window) lights the whole box */
+.hp-cycles.stall { border-color: var(--tel-hot, #d8863a); box-shadow: 0 0 0 1px var(--tel-hot, #d8863a) inset; }
+
+/* ---- LAST GENERATION snapshot: fades + marks stale as its age climbs ---- */
+.hp-snap { transition: opacity 0.8s ease; position: relative; }
+.hp-snap-head { display: flex; align-items: baseline; gap: 8px; }
+.hp-snap-age {
+  margin-left: auto; font-size: 10px; letter-spacing: 0.04em;
+  color: var(--tel, #8fb7d8); font-variant-numeric: tabular-nums; text-transform: none;
+}
+.hp-snap-when {
+  font-size: 9.5px; color: var(--tel-dim); margin: 1px 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+/* past a couple of minutes: a plain STALE marker so old data never reads as live */
+.hp-snap.stale .hp-snap-age { color: var(--tel-hot, #d8863a); }
+.hp-snap.stale .hp-snap-head::after {
+  content: 'STALE'; margin-left: 8px; font-size: 8.5px; letter-spacing: 0.14em;
+  color: #0b0e13; background: var(--tel-hot, #d8863a); padding: 0 4px; border-radius: 3px;
+}
 
 /* ================= FORMS ================= */
 .cell-form { display: flex; flex-direction: column; gap: 8px; }

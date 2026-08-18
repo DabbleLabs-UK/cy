@@ -542,6 +542,25 @@ async function main() {
       /* never crash on debug logging */
     }
   }
+  // A drawing that failed to render - logged as its OWN thing, never as a near-repeat
+  // discard. `why` is 'empty' (the DSL pass returned nothing usable - the model can
+  // legitimately emit its END stop first) or 'unusable' (parsed, but too few strokes
+  // to be a drawing). Drawing is a garnish: a failure here is noted and skipped, the
+  // decision line still stands, and the main stream is never starved of a cycle.
+  async function logDrawFail(why, text) {
+    const snippet = (text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const line =
+      why === 'empty'
+        ? '[cy] draw failed: DSL pass returned empty - skipping the drawing (garnish, stream unaffected)'
+        : `[cy] draw failed: too few usable strokes, skipping: "${snippet}"`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
   // State-notation drops, logged like the narration drops: the compressed vitals
   // notation ('agit .70 stress .85 ...') copied out of the prompt block as prose,
   // stripped by warden.stripScaffold before it can reach the page or Zone B.
@@ -668,8 +687,46 @@ async function main() {
   // WATCHDOG bookkeeping. lastTextMs stamps every real text event; watchdogQuietUntil
   // is pushed forward whenever a LEGITIMATE quiet begins (a deliberate silence, a
   // tempo throttle) so those never trip the watchdog. Both read on the vitals tick.
+  // watchdogStep escalates the remedy: 0 -> fresh generation, 1 -> partial trim,
+  // 2+ -> full wipe. Reset to 0 whenever real text flows (see onChunk/emitDreamText).
   let lastTextMs = Date.now();
   let watchdogQuietUntil = 0;
+  let watchdogStep = 0;
+
+  // ---- CYCLE OUTCOME ACCOUNTING ----------------------------------------------
+  // Every generation cycle must end in exactly ONE recorded outcome so a stall is
+  // never invisible: emitted / discarded-repeat / empty / blocked-by-warden /
+  // aborted / deliberate-silence / throttled. A rolling ring of the last N holds
+  // the recent picture (published in the vitals payload - which ticks even during
+  // a stall, unlike `gen`), and a cumulative total is kept for the whole run.
+  const OUTCOME_KINDS = [
+    'emitted', 'discarded-repeat', 'empty', 'blocked-by-warden', 'aborted', 'deliberate-silence', 'throttled',
+  ];
+  const OUTCOME_WINDOW = 20;
+  const recentOutcomes = []; // ring of the last OUTCOME_WINDOW outcome strings
+  const outcomeTotals = Object.fromEntries(OUTCOME_KINDS.map((k) => [k, 0]));
+  // warden drops seen in the in-flight generation, so a burst that emitted nothing
+  // because the warden ate all of it is recorded as blocked-by-warden, not empty.
+  let wardenBlocksInGen = 0;
+  async function recordOutcome(kind) {
+    recentOutcomes.push(kind);
+    while (recentOutcomes.length > OUTCOME_WINDOW) recentOutcomes.shift();
+    if (kind in outcomeTotals) outcomeTotals[kind]++;
+    const line = `[cy] cycle outcome: ${kind}`;
+    console.log(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on outcome logging */
+    }
+  }
+  // Tally the ring into { kind: count } over the last window, for the vitals payload.
+  function outcomeWindow() {
+    const win = Object.fromEntries(OUTCOME_KINDS.map((k) => [k, 0]));
+    for (const k of recentOutcomes) if (k in win) win[k]++;
+    return win;
+  }
   const pendingPostcards = [];
   const pendingWarden = [];
   const pendingDrawRequests = []; // postcards that asked him to draw something
@@ -926,6 +983,7 @@ async function main() {
       // record of a warden drop that reaches any viewer, and it stays post-warden.
       emit({ kind: 'warden', payload: { category: res.reason, chars: chunk.length, mode } });
       await warden.logBlock(res.reason, chunk, tsNow());
+      wardenBlocksInGen++; // so a burst the warden ate whole records as blocked-by-warden
       return; // dropped: boundary/repeat state is untouched, carries to next chunk
     }
     // (1) boundary - checked against the full emitted context, applied every chunk
@@ -958,6 +1016,7 @@ async function main() {
     }
     emit({ kind: 'text', payload: { s: payloadS, mode, ...(shoutSpans ? { shout: shoutSpans } : {}) } });
     lastTextMs = Date.now(); // real output: reset the watchdog clock
+    watchdogStep = 0; // text is flowing again: de-escalate the watchdog remedy
     burstEmitted += chunk; // original text: repeat guard reads what he actually wrote
     await appendContext(chunk); // ORIGINAL to Zone B - never the shouted form
   }
@@ -973,6 +1032,7 @@ async function main() {
     burstEmitted = ''; // fresh generation: nothing emitted yet this burst
     burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
     burstStopped = false;
+    wardenBlocksInGen = 0; // fresh generation: reset the warden-drop count
     const ac = new AbortController();
     currentAbort = ac;
     const buffer = warden.newBuffer();
@@ -1280,8 +1340,11 @@ async function main() {
     o1.stop = [...o1.stop, '\n']; // one line only
     await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
     const r1 = await streamGenerate({ system: ZONE_A, prompt: p1, opts: o1, mode: 'journal' });
-    if (r1.aborted) return; // an interrupt landed - let the loop handle it, try drawing again later
+    if (r1.aborted) return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
     const line = (r1.full || '').trim();
+    // the decision line is itself real journal text; whether the DSL below renders or
+    // not, a cycle that put a line on the page counts as emitted, never empty.
+    const decisionEmitted = !!line;
 
     // what he is actually drawing
     let subject;
@@ -1305,12 +1368,24 @@ async function main() {
     await logPrompt('draw-dsl', sys2 + '\n---\n' + pr2);
     const raw = await rawGenerate({ system: sys2, prompt: pr2, opts: o2 });
 
+    // AN EMPTY DSL PASS IS A FAILURE, NOT A REPEAT. The DSL-only generation with its
+    // hard stop can return nothing usable (the model emits END first, or is cut off),
+    // and it must NEVER go through the near-repeat discard path - an empty string is
+    // not a repeat of anything. Log it as its own failure, skip the garnish, and move
+    // on; the decision line already stands so the stream is never starved.
+    if (!raw || !raw.trim()) {
+      await logDrawFail('empty', raw);
+      vitals.lastDrawMs = now; // counts as an attempt so he does not hammer the DSL pass
+      return decisionEmitted ? 'emitted' : 'empty';
+    }
+
     const { strokes } = parseStrokes(raw);
     if (strokes.length < 3) {
-      // not enough to be a drawing - discard it; the decision line stands.
-      await logDiscard('draw', raw, 0);
+      // parsed, but too few usable strokes to be a drawing - skip the garnish (NOT a
+      // near-repeat); the decision line stands.
+      await logDrawFail('unusable', raw);
       vitals.lastDrawMs = now; // still counts as an attempt so he does not hammer
-      return;
+      return decisionEmitted ? 'emitted' : 'empty';
     }
 
     const passes = splitPasses(strokes);
@@ -1342,6 +1417,7 @@ async function main() {
     vitals.lastDrawMs = now;
     vitals.lastDrawSubject = subject;
     vitals.monotony = clamp((vitals.monotony || 0) - 0.15); // drawing is something happening
+    return 'emitted';
   }
 
   // ---- inbox: postcards interrupt; news just colours the state ----
@@ -1639,6 +1715,10 @@ async function main() {
         // and expression.
         expressed: Number((vitals.expressed || 0).toFixed(3)),
         relations: vitals.relations,
+        // CYCLE OUTCOMES: the tally over the last window of generation cycles, so a
+        // stall is visible in the panel (and here, on the 5s tick, even when `gen`
+        // events have stopped firing - which is exactly what a stall looks like).
+        cycles: { window: OUTCOME_WINDOW, counts: outcomeWindow(), totals: { ...outcomeTotals } },
       },
     });
 
@@ -1663,7 +1743,29 @@ async function main() {
       now - lastTextMs > WATCHDOG_MS
     ) {
       const silentS = Math.round((now - lastTextMs) / 1000);
-      const line = `[cy] WATCHDOG no text for ${silentS}s while awake - forcing a context reset`;
+      // ESCALATE GENTLY. A full context wipe destroys Zone B and with it the KV
+      // cache, so the next burst is maximally slow - the old remedy made the symptom
+      // worse. Climb one rung per WATCHDOG_MS the silence persists, preserving the
+      // cache as long as possible, and only wipe as a last resort:
+      //   step 0 -> just break the wedged generation and let a FRESH one start, KV
+      //             prefix (Zone A + B) fully intact.
+      //   step 1 -> a PARTIAL trim of the fed-back context (halve it), a small,
+      //             deliberate cache break to jolt him off a repeated passage.
+      //   step 2+ -> the full wipe, last resort only.
+      // watchdogStep resets to 0 the moment real text flows again (see onChunk).
+      let action;
+      if (watchdogStep === 0) {
+        action = 'step 1/3: breaking the wedged generation, starting fresh (context kept, cache intact)';
+      } else if (watchdogStep === 1) {
+        trimContext(0.5); // partial cache break - drop the older half of the context
+        try { await saveContext(contextPath, contextBuf); } catch { /* keep going */ }
+        action = 'step 2/3: partial context trim (older half dropped)';
+      } else {
+        contextBuf = ''; // last resort: drop the (repetitive) fed-back context entirely
+        try { await saveContext(contextPath, contextBuf); } catch { /* keep going */ }
+        action = 'step 3/3: full context wipe (last resort)';
+      }
+      const line = `[cy] WATCHDOG no text for ${silentS}s while awake - ${action}`;
       console.error(line);
       try {
         const { appendFile } = await import('node:fs/promises');
@@ -1671,14 +1773,9 @@ async function main() {
       } catch {
         /* never crash on watchdog logging */
       }
-      contextBuf = ''; // drop the (repetitive) fed-back context entirely
-      try {
-        await saveContext(contextPath, contextBuf);
-      } catch {
-        /* keep going */
-      }
       if (currentAbort) currentAbort.abort(); // break any wedged in-flight generation
-      lastTextMs = now; // fresh window after the reset so it does not re-fire at once
+      watchdogStep++; // next fire (if the silence persists) escalates one rung
+      lastTextMs = now; // fresh window after the action so it does not re-fire at once
     }
 
     try {
@@ -1720,6 +1817,17 @@ async function main() {
         nodeMB, // MEASURED: runner's own RSS
         ollamaProcs: cyProc.ollamaProcs,
         gpu: null,
+        // ---- LIVE continuous readings, for the diagnostics LIVE group ----
+        // These are sampled now, not snapshotted per burst - the panel groups them
+        // apart from the LAST GENERATION figures so the two are never confused.
+        watts: Number((powerMeter.watts || 0).toFixed(1)),
+        viewers: client.tempo.viewers,
+        duty: client.tempo.speed,
+        inferPhase, // 'eval' | 'gen' | 'idle' - the live inference phase
+        // CYCLE OUTCOMES: the tally over the last window of generation cycles, on the
+        // host channel because it ticks every 10s even during a stall (when `gen`
+        // events have stopped), so a stall shows in the panel, not just the log.
+        cycles: { window: OUTCOME_WINDOW, counts: outcomeWindow(), totals: { ...outcomeTotals } },
       },
     });
   }, 10000);
@@ -1817,6 +1925,7 @@ async function main() {
     if (lucid) payload.lucid = true;
     emit({ kind: 'text', payload });
     lastTextMs = Date.now(); // a murmur/night-line is real output too
+    watchdogStep = 0; // dream output counts as text flowing: de-escalate the watchdog
   }
 
   // Keep one properly punctuated sentence from a night-waking generation.
@@ -2007,6 +2116,7 @@ async function main() {
       const sil = silenceDecision(vitals, false, sinceIncident);
       if (sil.silent) {
         emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
+        await recordOutcome('deliberate-silence');
         // a deliberate silence is legitimate quiet - hold the watchdog off for its
         // full length plus a margin so it never mistakes chosen stillness for a wedge
         watchdogQuietUntil = Date.now() + sil.seconds * 1000 + 30000;
@@ -2027,7 +2137,7 @@ async function main() {
           hasRequestPending: pendingDrawRequests.length > 0,
         });
         if (dd.draw) {
-          await doDraw();
+          await recordOutcome((await doDraw()) || 'empty');
           continue;
         }
       }
@@ -2065,6 +2175,7 @@ async function main() {
       let tempBump = 0;
       let penBump = 0;
       let produced = false;
+      let errored = false; // ollama unreachable / bad HTTP broke the burst
       let lastFull = '';
       let lastResult = null;
       let lastTail = ''; // Zone B and the sampling actually used on the winning try,
@@ -2092,7 +2203,7 @@ async function main() {
           contextTail: forceEmit ? undefined : tail,
           allowRepeat: allowRepeat || forceEmit,
         });
-        if (r.error) break; // ollama already backed off; move on
+        if (r.error) { errored = true; break; } // ollama already backed off; move on
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
           lastFull = r.full || '';
@@ -2109,12 +2220,23 @@ async function main() {
         // it - his being stuck shows in the vitals instead of vanishing.
         discards++;
         await logDiscard(mode, r.full, discards);
+        await recordOutcome('discarded-repeat'); // each discard is a visible outcome
         tempBump += 0.35;
         penBump += 0.12;
         applyDeltas(vitals, { stress: +0.06 }, 1); // fixation = f(stress, monotony)
         trimContext(discards >= 2 ? 0.9 : 0.5);
       }
       const burstMs = Date.now() - burstStart;
+      // CYCLE OUTCOME: exactly one terminal outcome for the burst, on top of any
+      // per-discard 'discarded-repeat' records above - so no cycle ever vanishes.
+      // `burstEmitted` (original text that actually reached the page) is the honest
+      // test of "did anything come out": r.full can be non-empty while the warden ate
+      // every chunk, which must read as blocked, not emitted.
+      if (errored) await recordOutcome('aborted'); // ollama unreachable / bad HTTP
+      else if (burstEmitted.trim()) await recordOutcome('emitted');
+      else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
+      else if (wardenBlocksInGen > 0) await recordOutcome('blocked-by-warden');
+      else await recordOutcome('empty');
       // live diagnostics: publish this burst's generation telemetry (no-op if the
       // burst errored before ollama returned a `done` line with counters).
       if (lastResult) {
@@ -2156,6 +2278,7 @@ async function main() {
         await sleep(150); // the small breather between bursts, as before
         const idleMs = tempoIdleMs(burstMs, client.tempo.speed);
         if (idleMs > 0) {
+          await recordOutcome('throttled'); // duty-cycle quiet, a distinct machine-imposed gap
           // a throttle idle is machine-imposed quiet, not a wedge - hold the watchdog
           watchdogQuietUntil = Date.now() + idleMs + 30000;
           await idleSilently(idleMs);

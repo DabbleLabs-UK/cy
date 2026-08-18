@@ -184,8 +184,28 @@ const NARRATION = [
 // via fmt2, so they are always '.82'-shaped) - so ordinary prose with a stray whole
 // number ('47 tiles', '3rd day') is never eaten; it takes two decimal pairs in a
 // row, which prose does not do.
+// The state axes by their prompt-block LABELS (long forms and the abbreviations
+// stateNotation renders). Longest-first among shared prefixes (anxiety before anx,
+// agitation before agit, etc.) so the alternation matches the whole word.
+const STATE_AXIS_LABELS =
+  'anxiety|agitation|dissociation|lucidity|fatigue|longing|despair|stress|hunger|anger|hope|pain|anx|agit|diss|luci|fatig';
+// An optional numeric value after a label: a decimal ('.94', '0.99', '3.0') or a
+// bare integer ('2'), signed or not. stateNotation renders decimals; the raw leak
+// ' hope fatig ...' carries no numbers at all - both must be caught.
+const STATE_NUM = '(?:\\s+-?(?:\\d+(?:\\.\\d+)?|\\.\\d+))?';
 const STATE_NOTATION = [
+  // (1) the decimal-valued notation run, optionally led by the inmate number, a
+  // 'day Nth' stamp or a 'STATE:' label. Two+ 'word .dd' pairs in a row.
   /(?:\b7734\b[\s,]*)?(?:day\s+\d+(?:st|nd|rd|th)?[\s,]*)?(?:\bstate\s*:?\s*)?(?:[a-z]{2,12}\s+\d*\.\d+\s*[|,]?\s*){2,}/gi,
+  // (2) a RUN of 2+ bare state-axis LABELS in a row, with or without numbers, and
+  // NOTHING but whitespace/commas/pipes between them - the signature of the axis
+  // labels copied out of the prompt block (' hope fatig ...'). The separator class
+  // admits no letters, so a single label wrapped in real prose ('no hope left')
+  // never matches: it takes two labels adjacent with no ordinary word between.
+  new RegExp(
+    `\\b(?:${STATE_AXIS_LABELS})\\b${STATE_NUM}(?:[\\s,|]+\\b(?:${STATE_AXIS_LABELS})\\b${STATE_NUM})+`,
+    'gi',
+  ),
 ];
 
 // The NARRATION fragments present in `s`, for logging how often the filter fires.

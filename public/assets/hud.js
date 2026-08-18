@@ -45,6 +45,18 @@ const TIP = {
   anger: 'How angry he FEELS right now (0-1): fast to rise on a slight, slow to sulk back down.',
   expressed:
     'How much anger actually reaches the PAGE as shouting (0-1). It trails the felt anger through a lag - quick to rise, much slower to fall - so the shouting appears a beat after the feeling and the comedown outlasts the flare.',
+  // LIVE group (continuously sampled - never a per-burst snapshot)
+  live: 'LIVE readings, sampled continuously - not tied to any one generation. They keep moving between bursts and during a stall.',
+  watts: 'Measured. The machine\'s instantaneous power draw right now, in watts.',
+  viewers: 'How many people are watching live right now. More viewers speed the duty cycle up.',
+  phase: 'What the model is doing this instant: reading its briefing (eval), writing (gen), or nothing (idle).',
+  form: 'The form/shape directive that steered this burst (train of thought, list, a refrain, a reply, and so on).',
+  // LAST GENERATION snapshot group
+  snap: 'A SNAPSHOT frozen at the moment the last generation finished. It does NOT update between bursts - the age below counts up so you can see how stale it is.',
+  age: 'How long ago the snapshot below was captured, counting up live. Past a couple of minutes the whole group fades and is marked STALE so old numbers never read as current.',
+  when: 'The wall-clock time the snapshot below was taken.',
+  cycles:
+    'The outcome of each of the last N generation cycles, so a stall is visible here and not only in the log. emitted = text reached the page; discarded = a near-repeat was thrown away; empty = nothing usable came back; blocked = the warden ate it; silent = a deliberate pause; throttled = duty-cycle quiet; aborted = interrupted or unreachable. All emitted at 0 with the rest climbing is a stall.',
 };
 
 const esc = (s) =>
@@ -100,32 +112,55 @@ export class Hud {
       <details class="hp-diag">
         <summary>diagnostics</summary>
         <div class="hp-diag-body">
-          <div class="hp-peval" title="${esc(TIP.peval)}">
-            <div class="hp-peval-k">prompt_eval_count</div>
-            <div class="hp-peval-v" id="hp-peval">--</div>
-            <div class="hp-peval-note" id="hp-peval-note">waiting for a burst...</div>
-          </div>
-          <div class="hp-kvnote" title="${esc(TIP.kv)}">${esc(TIP.kv)}</div>
+
+          <div class="hp-sec hp-sec-live" title="${esc(TIP.live)}">LIVE <span class="hp-sec-note">continuously sampled</span></div>
           <div class="hp-grid">
-            <span class="hp-gk" title="${esc(TIP.tin)}">tokens in</span><span class="hp-gv" id="hp-tin" title="${esc(TIP.tin)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.tout)}">tokens out</span><span class="hp-gv" id="hp-tout" title="${esc(TIP.tout)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.ptoks)}">prompt tok/s</span><span class="hp-gv" id="hp-ptoks" title="${esc(TIP.ptoks)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.gtoks)}">gen tok/s</span><span class="hp-gv" id="hp-gtoks" title="${esc(TIP.gtoks)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.ttft)}">time to 1st tok</span><span class="hp-gv" id="hp-ttft" title="${esc(TIP.ttft)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.total)}">total time</span><span class="hp-gv" id="hp-total" title="${esc(TIP.total)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.ctx)}">context</span><span class="hp-gv" id="hp-ctx" title="${esc(TIP.ctx)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.duty)}">duty cycle</span><span class="hp-gv" id="hp-duty" title="${esc(TIP.duty)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.mode)}">mode</span><span class="hp-gv" id="hp-genmode" title="${esc(TIP.mode)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.anger)}">anger felt</span><span class="hp-gv" id="hp-anger" title="${esc(TIP.anger)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.expressed)}">expressed</span><span class="hp-gv" id="hp-expressed" title="${esc(TIP.expressed)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.threads)}">threads</span><span class="hp-gv" id="hp-threads" title="${esc(TIP.threads)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.nctx)}">num_ctx</span><span class="hp-gv" id="hp-nctx" title="${esc(TIP.nctx)}">--</span>
-            <span class="hp-gk" title="${esc(TIP.poll)}">polls</span><span class="hp-gv" id="hp-poll" title="${esc(TIP.poll)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.syscpu)}">cpu</span><span class="hp-gv" id="hp-live-cpu" title="${esc(TIP.syscpu)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.sysmem)}">memory</span><span class="hp-gv" id="hp-live-mem" title="${esc(TIP.sysmem)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.watts)}">watts</span><span class="hp-gv" id="hp-live-watts" title="${esc(TIP.watts)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.viewers)}">viewers</span><span class="hp-gv" id="hp-live-viewers" title="${esc(TIP.viewers)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.duty)}">duty cycle</span><span class="hp-gv" id="hp-live-duty" title="${esc(TIP.duty)}">--</span>
+            <span class="hp-gk" title="${esc(TIP.phase)}">inference</span><span class="hp-gv" id="hp-live-phase" title="${esc(TIP.phase)}">--</span>
           </div>
-          <div class="hp-modelrow" title="${esc(TIP.model)}"><span class="hp-gk">model</span>
-            <span class="hp-model" id="hp-model">--</span></div>
-          <div class="hp-errrow" id="hp-errrow" title="${esc(TIP.err)}" hidden><span class="hp-gk">last error</span>
-            <span class="hp-err" id="hp-err"></span></div>
+
+          <div class="hp-cycles" id="hp-cycles" title="${esc(TIP.cycles)}">
+            <div class="hp-cyc-head">cycle outcomes <span class="hp-cyc-note">last <span id="hp-cyc-n">--</span></span>
+              <span class="hp-cyc-stall" id="hp-cyc-stall" hidden>STALL</span></div>
+            <div class="hp-cyc-grid" id="hp-cyc-grid"></div>
+          </div>
+
+          <div class="hp-snap" id="hp-snap">
+            <div class="hp-sec hp-snap-head" title="${esc(TIP.snap)}">LAST GENERATION
+              <span class="hp-snap-age" id="hp-genage" title="${esc(TIP.age)}">--</span></div>
+            <div class="hp-snap-when" id="hp-genwhen" title="${esc(TIP.when)}">no burst captured yet</div>
+
+            <div class="hp-peval" title="${esc(TIP.peval)}">
+              <div class="hp-peval-k">prompt_eval_count</div>
+              <div class="hp-peval-v" id="hp-peval">--</div>
+              <div class="hp-peval-note" id="hp-peval-note">waiting for a burst...</div>
+            </div>
+            <div class="hp-kvnote" title="${esc(TIP.kv)}">${esc(TIP.kv)}</div>
+            <div class="hp-grid">
+              <span class="hp-gk" title="${esc(TIP.tin)}">tokens in</span><span class="hp-gv" id="hp-tin" title="${esc(TIP.tin)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.tout)}">tokens out</span><span class="hp-gv" id="hp-tout" title="${esc(TIP.tout)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.ptoks)}">prompt tok/s</span><span class="hp-gv" id="hp-ptoks" title="${esc(TIP.ptoks)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.gtoks)}">gen tok/s</span><span class="hp-gv" id="hp-gtoks" title="${esc(TIP.gtoks)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.ttft)}">time to 1st tok</span><span class="hp-gv" id="hp-ttft" title="${esc(TIP.ttft)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.total)}">total time</span><span class="hp-gv" id="hp-total" title="${esc(TIP.total)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.mode)}">mode</span><span class="hp-gv" id="hp-genmode" title="${esc(TIP.mode)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.form)}">form</span><span class="hp-gv" id="hp-genform" title="${esc(TIP.form)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.anger)}">anger felt</span><span class="hp-gv" id="hp-anger" title="${esc(TIP.anger)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.expressed)}">expressed</span><span class="hp-gv" id="hp-expressed" title="${esc(TIP.expressed)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.ctx)}">context</span><span class="hp-gv" id="hp-ctx" title="${esc(TIP.ctx)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.threads)}">threads</span><span class="hp-gv" id="hp-threads" title="${esc(TIP.threads)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.nctx)}">num_ctx</span><span class="hp-gv" id="hp-nctx" title="${esc(TIP.nctx)}">--</span>
+              <span class="hp-gk" title="${esc(TIP.poll)}">polls</span><span class="hp-gv" id="hp-poll" title="${esc(TIP.poll)}">--</span>
+            </div>
+            <div class="hp-modelrow" title="${esc(TIP.model)}"><span class="hp-gk">model</span>
+              <span class="hp-model" id="hp-model">--</span></div>
+            <div class="hp-errrow" id="hp-errrow" title="${esc(TIP.err)}" hidden><span class="hp-gk">last error</span>
+              <span class="hp-err" id="hp-err"></span></div>
+          </div>
         </div>
       </details>`;
     this.cpu = this.hostEl.querySelector('#hp-cpu');
@@ -146,10 +181,71 @@ export class Hud {
     this.g = {};
     for (const id of [
       'peval', 'peval-note', 'tin', 'tout', 'ptoks', 'gtoks', 'ttft', 'total',
-      'ctx', 'duty', 'genmode', 'anger', 'expressed', 'threads', 'nctx', 'poll', 'model', 'err', 'errrow',
+      'ctx', 'genmode', 'genform', 'anger', 'expressed', 'threads', 'nctx', 'poll', 'model', 'err', 'errrow',
+      // LIVE group
+      'live-cpu', 'live-mem', 'live-watts', 'live-viewers', 'live-duty', 'live-phase',
+      // LAST GENERATION snapshot: age + wall-clock
+      'genage', 'genwhen',
+      // cycle outcomes
+      'cyc-n', 'cyc-grid', 'cyc-stall',
     ]) {
       this.g[id] = this.hostEl.querySelector('#hp-' + id);
     }
+    this.snap = this.hostEl.querySelector('#hp-snap');
+    this.cyclesBox = this.hostEl.querySelector('#hp-cycles');
+    // the frozen snapshot's capture time (ms) and a 1s ticker that ages it live so
+    // an owner can see at a glance how stale the LAST GENERATION figures are.
+    this._genAt = null;
+    this._ageTimer = setInterval(() => this._tickAge(), 1000);
+  }
+
+  // ---- LAST GENERATION snapshot age: count up live, fade when stale ----------
+  // The main thing the owner asked for: it must be obvious at a glance how old the
+  // snapshot is. Runs every second off the capture time stamped in setGen.
+  _tickAge() {
+    if (this._genAt == null || !this.g.genage) return;
+    const age = Date.now() - this._genAt;
+    this.g.genage.textContent = fmtAge(age) + ' ago';
+    if (!this.snap) return;
+    // past a couple of minutes the group is STALE - mark it and fade it so the old
+    // numbers can never be mistaken for current readings. A gentle progressive fade
+    // begins earlier and bottoms out at 0.45 so it stays just readable.
+    const stale = age > 120000;
+    this.snap.classList.toggle('stale', stale);
+    const op = Math.max(0.45, 1 - Math.max(0, age - 15000) / 240000);
+    this.snap.style.opacity = op.toFixed(2);
+  }
+
+  // Render the cycle-outcome tally (from the continuous host channel, so it updates
+  // even while `gen` events have stopped - which is exactly what a stall is).
+  _setCycles(c) {
+    if (!c || !this.g['cyc-grid']) return;
+    const counts = c.counts || {};
+    if (this.g['cyc-n']) this.g['cyc-n'].textContent = String(c.window ?? '--');
+    // priority order + short labels; the five the owner named first, then the rest.
+    const ROWS = [
+      ['emitted', 'emitted', 'good'],
+      ['discarded-repeat', 'discarded', 'warm'],
+      ['empty', 'empty', 'warm'],
+      ['blocked-by-warden', 'blocked', 'warm'],
+      ['deliberate-silence', 'silent', ''],
+      ['throttled', 'throttled', ''],
+      ['aborted', 'aborted', 'warm'],
+    ];
+    let html = '';
+    for (const [key, label, cls] of ROWS) {
+      const n = counts[key] || 0;
+      const dim = n === 0 ? ' hp-cyc-zero' : '';
+      const tone = n > 0 && cls ? ' ' + cls : '';
+      html += `<span class="hp-cyc-k${dim}">${label}</span>` +
+        `<span class="hp-cyc-v${tone}${dim}">${n}</span>`;
+    }
+    this.g['cyc-grid'].innerHTML = html;
+    // STALL: over the whole window nothing emitted while other cycles happened.
+    const others = Object.keys(counts).reduce((a, k) => a + (k === 'emitted' ? 0 : (counts[k] || 0)), 0);
+    const stall = (counts.emitted || 0) === 0 && others > 0;
+    if (this.g['cyc-stall']) this.g['cyc-stall'].hidden = !stall;
+    if (this.cyclesBox) this.cyclesBox.classList.toggle('stall', stall);
   }
 
   setHost(p) {
@@ -222,6 +318,24 @@ export class Hud {
           : null;
       this.otherMb.textContent = om != null ? Math.round(om).toLocaleString() + ' MB' : '-- MB';
     }
+
+    // ---- LIVE diagnostics group (continuously sampled, not a snapshot) ----
+    const g = this.g;
+    setTxt(g['live-cpu'], cpu, (v) => v.toFixed(0) + '%');
+    setTxt(g['live-mem'], memPct, (v) => v.toFixed(0) + '%');
+    setTxt(g['live-watts'], num(p.watts), (v) => v.toFixed(0) + ' W');
+    setTxt(g['live-viewers'], num(p.viewers), (v) => String(Math.round(v)));
+    setTxt(g['live-duty'], num(p.duty), (v) => Math.round(v) + '%');
+    if (g['live-phase'] && p.inferPhase != null) {
+      const ph = String(p.inferPhase);
+      g['live-phase'].textContent = ph;
+      // eval = reading (amber), gen = writing (green), idle = nothing (dim)
+      g['live-phase'].classList.toggle('good', ph === 'gen');
+      g['live-phase'].classList.toggle('warm', ph === 'eval');
+      g['live-phase'].classList.toggle('hp-cyc-zero', ph === 'idle');
+    }
+    // cycle outcomes ride the host channel so they keep updating during a stall
+    if (p.cycles) this._setCycles(p.cycles);
   }
 
   // Live generation telemetry from the `gen` event. prompt_eval_count is given
@@ -230,6 +344,20 @@ export class Hud {
   setGen(p) {
     if (!p) return;
     const g = this.g;
+    // FREEZE THE SNAPSHOT CLOCK. A `gen` event arrives when a burst completes, so
+    // stamp now as the capture time; the 1s ticker ages it live from here and the
+    // wall-clock is shown alongside so staleness is obvious at a glance.
+    this._genAt = Date.now();
+    const d = new Date(this._genAt);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    if (g.genwhen) g.genwhen.textContent = `taken ${hh}:${mm}:${ss}`;
+    if (this.snap) {
+      this.snap.classList.remove('stale'); // fresh: clear any prior stale marking
+      this.snap.style.opacity = '1';
+    }
+    if (g.genage) g.genage.textContent = '0m 00s ago';
     const tin = num(p.tokens_in ?? p.prompt_eval_count);
     if (tin != null) {
       g.peval.textContent = tin.toLocaleString();
@@ -249,8 +377,9 @@ export class Hud {
     setTxt(g.ttft, num(p.ttft_ms), (v) => Math.round(v).toLocaleString() + ' ms');
     setTxt(g.total, num(p.total_ms), (v) => Math.round(v).toLocaleString() + ' ms');
     setTxt(g.ctx, num(p.ctx_chars), (v) => Math.round(v).toLocaleString() + ' ch');
-    setTxt(g.duty, num(p.duty), (v) => Math.round(v) + '%');
     if (p.mode) g.genmode.textContent = String(p.mode);
+    // the form directive that shaped this burst - trimmed to a short label
+    if (g.genform && p.form != null) g.genform.textContent = shortForm(String(p.form));
     // felt anger vs the outward expressed value - the gap between them is the lag.
     setTxt(g.anger, num(p.anger), (v) => v.toFixed(2));
     setTxt(g.expressed, num(p.expressed), (v) => v.toFixed(2));
@@ -347,4 +476,22 @@ function shortModel(m) {
   let s = m.split('/').pop() || m; // drop any hf.co/org/ path
   s = s.replace(/-GGUF/i, '').replace(/\.gguf$/i, '');
   return s;
+}
+// A live-counting age: 'h m s' over an hour, 'm s' under it. Seconds always
+// zero-padded so the readout does not jitter in width as it counts up.
+function fmtAge(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const ss = String(sec).padStart(2, '0');
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${ss}s`;
+  return `${m}m ${ss}s`;
+}
+// The form directive is a whole sentence ('FORM: a train of thought...'); keep a
+// short readable label - drop the 'FORM:' lead and clip to the first clause.
+function shortForm(f) {
+  let s = f.replace(/^\s*FORM:\s*/i, '').trim();
+  s = s.split(/[.;\n]/)[0].trim();
+  return s.length > 40 ? s.slice(0, 39) + '...' : s || '--';
 }
