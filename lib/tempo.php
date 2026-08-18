@@ -103,7 +103,8 @@ function captive_tempo_set_paused(PDO $db, bool $paused): void
         'INSERT INTO tempo (id, paused, updated_at) VALUES (1, :p1, NOW())
          ON DUPLICATE KEY UPDATE paused = :p2, updated_at = NOW()'
     );
-    $stmt->bindValue(':p', $paused ? 1 : 0, PDO::PARAM_INT);
+    $stmt->bindValue(':p1', $paused ? 1 : 0, PDO::PARAM_INT);
+    $stmt->bindValue(":p2", $paused ? 1 : 0, PDO::PARAM_INT);
     $stmt->execute();
 }
 
