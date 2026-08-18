@@ -204,6 +204,7 @@ export class Pen {
 
     // ---- layout state ----
     this.marginX = 34;
+    this.marginRight = 46; // a touch more room than the left, so nothing clips
     this.marginTop = 40;
     this.lineGap = 1.62; // multiple of size
     this.x = this.marginX;
@@ -215,28 +216,50 @@ export class Pen {
     this.jobs = []; // pending render jobs {type, ...}
     this.running = false;
     this.abortFlag = false;
-    this.glyphNodes = []; // for pruning
+    this.glyphNodes = []; // ink groups, for pruning
+    this.textNodes = []; // one invisible <text> per rendered line, for pruning
+    this._line = null; // the line currently being written into the text layer
+    this.lang = 'en';
     this._sketchBoxes = new Map(); // drawing id -> its reserved box, across passes
 
     this._buildSvg();
+    this._buildLiveRegion();
   }
 
   _buildSvg() {
     const svg = document.createElementNS(SVGNS, 'svg');
     svg.setAttribute('class', 'ink-svg');
     svg.setAttribute('preserveAspectRatio', 'xMinYMin slice');
+    svg.setAttribute('lang', this.lang);
     this.svg = svg;
 
-    // ink layer (translated to scroll old lines up out of view)
+    // scroll group: ink + text move together, so the invisible text layer
+    // tracks the ink exactly, including when old lines scroll up out of view.
+    this.scrollG = document.createElementNS(SVGNS, 'g');
+    this.scrollG.setAttribute('class', 'scroll-layer');
+    svg.appendChild(this.scrollG);
+
+    // ink layer - the visible handwriting strokes. Pure decoration painted on
+    // top of the text layer; it is not the hit target (see style.css) and is
+    // hidden from assistive tech, which reads the real text instead.
     this.ink = document.createElementNS(SVGNS, 'g');
     this.ink.setAttribute('class', 'ink-layer');
-    svg.appendChild(this.ink);
+    this.ink.setAttribute('aria-hidden', 'true');
+    this.scrollG.appendChild(this.ink);
+
+    // text layer - one real <text> node per rendered line, transparent-filled,
+    // per-character positioned to sit under the ink. This is what the browser
+    // selects, copies, searches and reads aloud (the PDF-viewer technique).
+    this.textLayer = document.createElementNS(SVGNS, 'g');
+    this.textLayer.setAttribute('class', 'text-layer');
+    this.scrollG.appendChild(this.textLayer);
 
     // nib layer sits in the SVG root user space (never translated), so a point
     // mapped through path.getCTM() lands correctly over the ink without any
     // scroll correction.
     this.nibLayer = document.createElementNS(SVGNS, 'g');
     this.nibLayer.setAttribute('class', 'nib-layer');
+    this.nibLayer.setAttribute('aria-hidden', 'true');
     this.nib = document.createElementNS(SVGNS, 'circle');
     this.nib.setAttribute('r', '1.9');
     this.nib.setAttribute('class', 'pen-nib');
@@ -246,17 +269,64 @@ export class Pen {
 
     this.root.appendChild(svg);
     this._resize();
-    window.addEventListener('resize', () => this._resize());
+    window.addEventListener('resize', () => {
+      if (this._resize()) this._scroll();
+    });
+    // The viewBox width must match the rendered width, and the wrap point is
+    // derived from that same width. When the instrument panels lay out after
+    // load, the sheet resizes; without this the coordinate space would keep the
+    // stale width and glyphs would be drawn (and wrapped) past the visible edge.
+    if (typeof ResizeObserver !== 'undefined') {
+      this._ro = new ResizeObserver(() => {
+        if (this._resize()) this._scroll();
+      });
+      this._ro.observe(this.root);
+    }
   }
 
+  // Recompute the coordinate space from the live sheet size. Returns true when
+  // the size actually changed so callers can re-flow (rescroll) only then.
   _resize() {
     const r = this.root.getBoundingClientRect();
-    this.w = Math.max(200, r.width);
-    this.h = Math.max(200, r.height);
-    this.svg.setAttribute('viewBox', `0 0 ${this.w} ${this.h}`);
-    this.svg.setAttribute('width', this.w);
-    this.svg.setAttribute('height', this.h);
-    this.maxX = this.w - this.marginX;
+    const w = Math.max(200, Math.round(r.width));
+    const h = Math.max(200, Math.round(r.height));
+    if (w === this.w && h === this.h) return false;
+    this.w = w;
+    this.h = h;
+    this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    this.svg.setAttribute('width', w);
+    this.svg.setAttribute('height', h);
+    // wrap point comes from the SAME width used for the viewBox above.
+    this.maxX = this.w - this.marginRight;
+    return true;
+  }
+
+  // ---- a11y: a polite live region announces completed passages -----------
+  //
+  // The <text> layer is real text an assistive tech user can browse, but a live
+  // region should not fire on every glyph. We announce a passage only once it
+  // is complete (a finished line, or the fragment left by an abort), so the
+  // reader hears whole thoughts, not a stutter of single characters.
+  _buildLiveRegion() {
+    const live = document.createElement('div');
+    live.className = 'ink-live';
+    live.setAttribute('role', 'log');
+    live.setAttribute('aria-live', 'polite');
+    live.setAttribute('aria-relevant', 'additions');
+    live.setAttribute('aria-atomic', 'false');
+    live.setAttribute('lang', this.lang);
+    this.root.appendChild(live);
+    this.live = live;
+  }
+
+  _announce(text) {
+    const t = (text || '').trim();
+    if (!this.live || !t) return;
+    const line = document.createElement('div');
+    line.textContent = t;
+    this.live.appendChild(line);
+    // cap the log so a day-long tab does not grow it without bound
+    while (this.live.childElementCount > 24) this.live.firstChild.remove();
   }
 
   // ---- vitals modulation ------------------------------------------------
@@ -391,6 +461,13 @@ export class Pen {
       }
       this._cur = null;
     }
+    // the fragment stays on the page and selectable; finalize its text node and
+    // let a screen reader hear what was written before the thought cut off.
+    if (this._line) {
+      const frag = this._line.chars.join('');
+      this._line = null;
+      this._announce(frag);
+    }
     this._hideNib();
   }
 
@@ -417,6 +494,7 @@ export class Pen {
           continue;
         }
         if (ch === ' ' || ch === '\t') {
+          this._recordChar(' '); // real space in the text, at its own x
           this.x += this._spaceAdvance();
           this.midWord = false;
           continue;
@@ -447,24 +525,67 @@ export class Pen {
   }
 
   _newline() {
+    this._flushLine();
     this.x = this.marginX;
     this.y += this.size * this.lineGap;
     this.midWord = false;
     this._scroll();
   }
 
-  // keep the current writing line comfortably in view by translating the ink
-  // layer up once we run past the bottom margin.
+  // keep the current writing line comfortably in view by translating the whole
+  // scroll group (ink + text together) up once we run past the bottom margin.
   _scroll() {
     const bottom = this.h - this.size * 1.4;
     const overflow = this.y - bottom;
     const dy = overflow > 0 ? -overflow : 0;
-    this.ink.setAttribute('transform', `translate(0, ${dy.toFixed(1)})`);
+    this.scrollG.setAttribute('transform', `translate(0, ${dy.toFixed(1)})`);
+  }
+
+  // ---- text layer: one real <text> node per rendered line ----------------
+  //
+  // As the pen lays out each glyph we already know its exact x and the line
+  // baseline y. We mirror that into a single <text> per line whose x attribute
+  // is the LIST of per-character x positions ("54 63 71 ...") so every glyph is
+  // placed individually - metric mismatch can only widen/narrow a highlight
+  // box, never drift the text off the ink. One node per line keeps the DOM
+  // light. The characters are the real reading-order text, spaces included.
+  _ensureLine() {
+    if (this._line) return this._line;
+    const node = document.createElementNS(SVGNS, 'text');
+    node.setAttribute('class', 'ink-text');
+    node.setAttribute('xml:space', 'preserve');
+    node.setAttribute('y', this.y.toFixed(2));
+    node.setAttribute('font-size', this.size.toFixed(2));
+    this.textLayer.appendChild(node);
+    this._trackTextNode(node);
+    this._line = { node, chars: [], xs: [], y: this.y, size: this.size };
+    return this._line;
+  }
+
+  _recordChar(ch) {
+    // skip spaces at the very start of a line so a copied line has no left pad
+    if (ch === ' ' && (!this._line || this._line.chars.length === 0)) return;
+    const line = this._ensureLine();
+    line.chars.push(ch);
+    line.xs.push(this.x);
+    line.node.setAttribute('x', line.xs.map((v) => v.toFixed(2)).join(' '));
+    line.node.textContent = line.chars.join('');
+  }
+
+  // Finish the current line: the node stays in the DOM (still selectable), we
+  // just stop appending to it and announce the completed passage.
+  _flushLine() {
+    if (!this._line) return;
+    const line = this._line;
+    this._line = null;
+    this._announce(line.chars.join(''));
   }
 
   async _drawChar(ch, instant) {
     const g = this._glyphFor(ch);
     if (!g) {
+      // no glyph for this codepoint: still keep it in the readable text
+      this._recordChar(ch);
       this.x += this._spaceAdvance();
       return;
     }
@@ -477,6 +598,10 @@ export class Pen {
       this._newline();
     }
     this.midWord = true;
+
+    // mirror this glyph into the text layer at its exact x on the current line
+    // (after any wrap above, so x/baseline are the values the ink will use).
+    this._recordChar(ch);
 
     // per-glyph human jitter
     const rot = (Math.random() * 2 - 1) * this.jitterRot;
@@ -807,5 +932,63 @@ export class Pen {
       const dead = this.glyphNodes.splice(0, this.glyphNodes.length - 1200);
       for (const n of dead) n.remove();
     }
+  }
+
+  // Text-node pruning is selection-aware: a user may be part-way through
+  // selecting a passage, and yanking a node out of the middle of the range
+  // would collapse their selection. So we never remove a node that intersects
+  // the current selection, and if that leaves us over the cap we defer the rest
+  // until the selection is cleared.
+  _trackTextNode(node) {
+    this.textNodes.push(node);
+    this._pruneText();
+  }
+
+  _pruneText() {
+    const CAP = 300; // lines kept; well past a screenful, bounds the DOM
+    if (this.textNodes.length <= CAP) return;
+    const sel = typeof window !== 'undefined' && window.getSelection ? window.getSelection() : null;
+    const hasSel = !!(sel && sel.rangeCount && !sel.isCollapsed);
+    let excess = this.textNodes.length - CAP;
+    const survivors = [];
+    let deferred = false;
+    for (const n of this.textNodes) {
+      if (excess > 0) {
+        if (hasSel && this._inSelection(sel, n)) {
+          survivors.push(n); // intersects the live selection - keep it
+          deferred = true;
+        } else {
+          n.remove();
+          excess--;
+        }
+      } else {
+        survivors.push(n);
+      }
+    }
+    this.textNodes = survivors;
+    if (deferred) this._armSelectionPrune();
+  }
+
+  _inSelection(sel, node) {
+    try {
+      return sel.containsNode(node, true); // true = partial containment counts
+    } catch {
+      return false;
+    }
+  }
+
+  // Re-run the deferred prune once the selection is gone, then unsubscribe.
+  _armSelectionPrune() {
+    if (this._selPruneArmed) return;
+    this._selPruneArmed = true;
+    const handler = () => {
+      const s = window.getSelection ? window.getSelection() : null;
+      if (!s || !s.rangeCount || s.isCollapsed) {
+        document.removeEventListener('selectionchange', handler);
+        this._selPruneArmed = false;
+        this._pruneText();
+      }
+    };
+    document.addEventListener('selectionchange', handler);
   }
 }

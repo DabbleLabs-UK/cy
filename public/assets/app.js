@@ -43,6 +43,12 @@ async function boot() {
 
   wireForms();
 
+  // test hook (only on the ?stream=test page): lets a headless check drive the
+  // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
+  if (document.body.dataset.test === '1') {
+    window.__CY_TEST__ = { pen, dispatch, ticker: () => $('#ticker') };
+  }
+
   // first load fills the page mid-stream, drawn instantly
   await firstLoad();
 
@@ -156,9 +162,11 @@ function dispatch(ev, bootstrap) {
       break;
 
     case 'abort':
-      // trail off the current stroke and leave the fragment as a scar
+      // Trail off the current stroke and leave the fragment as a scar. No toast,
+      // no flash: an abort is visible only as the ink trailing off and the
+      // fragment staying on the page - announcing the mechanism breaks the
+      // fiction.
       if (!bootstrap) pen.abort();
-      flashAbort(p.reason || p.cause);
       break;
 
     case 'silence': {
@@ -286,16 +294,6 @@ function setMode(mode, cause) {
     mode === 'letter' ? 'WRITING A LETTER' : mode === 'warden' ? 'READING A NOTICE' : mode === 'sleep' ? 'ASLEEP' : 'JOURNAL';
   el.textContent = label + (cause && (mode === 'letter' || mode === 'warden') ? ' - ' + cause : '');
   el.dataset.mode = mode;
-}
-
-function flashAbort(reason) {
-  const el = $('#paper');
-  if (!el) return;
-  el.classList.remove('abort-flash');
-  // reflow to restart the animation
-  void el.offsetWidth;
-  el.classList.add('abort-flash');
-  if (reason) pushTicker('thought cut off (' + reason + ')');
 }
 
 let tickerTimer = null;
