@@ -1,4 +1,4 @@
-// hud.js - DELL host telemetry panel + the delivered-mail side column.
+// hud.js - host telemetry panel + the delivered-mail side column.
 //
 // The host panel reads the `host` event (cpu %, memory % and MB) and renders it
 // like a machine readout. The mail column renders delivered inbound letters,
@@ -23,7 +23,7 @@ export class Hud {
   _buildHost() {
     this.hostEl.classList.add('hostpanel');
     this.hostEl.innerHTML = `
-      <div class="hp-title">DELL &middot; HOST</div>
+      <div class="hp-title">HMP ThinkPad &middot; Host</div>
       <div class="hp-row"><span class="hp-k">CPU</span>
         <span class="hp-bar"><i id="hp-cpu-bar"></i></span>
         <span class="hp-v" id="hp-cpu">--%</span></div>

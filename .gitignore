@@ -5,3 +5,6 @@
 # runner
 /runner/state/
 /runner/config.json
+
+# local front-end verification harness (puppeteer-core + Edge)
+/.verify/

@@ -5,6 +5,16 @@ declare(strict_types=1);
 // can be exercised with no database present.
 $useTest = isset($_GET['stream']) && $_GET['stream'] === 'test';
 $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
+
+// Cache-busting: append the asset's own modification time as ?v=, so every
+// deploy serves fresh JS/CSS and browsers never run a stale cached copy on top
+// of newly-deployed files. Automatic - no manual version bumping.
+function cy_asset(string $rel): string
+{
+    $full = __DIR__ . '/' . $rel;
+    $v = @filemtime($full) ?: 0;
+    return $rel . '?v=' . $v;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -13,7 +23,7 @@ $streamEndpoint = $useTest ? 'test-stream.php' : 'api/stream.php';
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CY &middot; inmate 7734, HMP ThinkPad</title>
 <meta name="description" content="Watch inmate 7734 of HMP ThinkPad write, in real time, by hand.">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/style.css'), ENT_QUOTES) ?>">
 <script>
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
@@ -127,6 +137,6 @@ window.CY = {
 
 </main>
 
-<script type="module" src="assets/app.js"></script>
+<script type="module" src="<?= htmlspecialchars(cy_asset('assets/app.js'), ENT_QUOTES) ?>"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-// inbox.php - DELL-only: atomically claim whatever mail is due at this drop.
+// inbox.php - runner-only: atomically claim whatever mail is due at this drop.
 //
 // Postcards (the merged letter+image feed) and news are marked delivered_at=NOW
 // under a row lock so the same item is never handed out twice. Each due postcard

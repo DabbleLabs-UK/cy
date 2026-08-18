@@ -20,6 +20,12 @@
 
 * { box-sizing: border-box; }
 
+/* Honour the [hidden] attribute even on elements whose class sets a display
+   value (flex/grid/etc). Without this, a class like `.pc-pic-preview{display:flex}`
+   overrides the UA `[hidden]{display:none}` and, e.g., the empty picture preview
+   renders a broken-image icon before any picture is chosen. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   background:

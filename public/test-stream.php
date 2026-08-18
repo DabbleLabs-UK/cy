@@ -80,6 +80,13 @@ function event_for_seq(int $seq): ?array
     if ($seq % 15 === 0) {
         return ['host', fake_host($seq)];
     }
+    // the electricity meter and the viewer-tempo control, on their own cadences
+    if ($seq % 10 === 0) {
+        return ['power', fake_power($seq)];
+    }
+    if ($seq % 14 === 0) {
+        return ['tempo', fake_tempo($seq)];
+    }
 
     // a postcard cycle: interrupt -> mode:letter -> postcard_in -> reply -> back
     $inCycle = $seq % 120;
@@ -195,6 +202,19 @@ function fake_vitals(int $seq): array
 
     $hr = (int)round(62 + 46 * $agitation + 30 * $anxiety + 22 * $pain);
 
+    // derived composite states the CORTICAL READOUT renders as bars. Real runs
+    // carry a full derived{} object; mirror its seven keys here so the panel can
+    // be exercised.
+    $derived = [
+        'confusion' => round($osc(0.5, 0.1, 0.8), 3),
+        'overwhelm' => round($osc(1.5, 0.15, 0.9), 3),
+        'numbness' => round($osc(2.5, 0.1, 0.7), 3),
+        'paranoia' => round($osc(3.5, 0.15, 0.85), 3),
+        'fixation' => round($osc(4.5, 0.2, 0.9), 3),
+        'resignation' => round($osc(5.5, 0.1, 0.75), 3),
+        'brittleness' => round($osc(0.9, 0.2, 0.8), 3),
+    ];
+
     return [
         'physical' => ['pain' => $pain, 'hunger' => $hunger, 'fatigue' => $fatigue],
         'mental' => [
@@ -202,11 +222,43 @@ function fake_vitals(int $seq): array
             'hope' => $hope, 'lucidity' => $lucidity, 'agitation' => $agitation,
             'dissociation' => $dissociation,
         ],
+        'derived' => $derived,
         'hr' => $hr,
         'brain' => $brain,
         'mode' => 'journal',
         'asleep' => false,
         'day' => 1 + intdiv($seq, 300),
+    ];
+}
+
+// A fake electricity-meter snapshot: a slowly climbing running total with a
+// live watts draw, priced at the same 0.245 GBP/kWh tariff the runner uses.
+function fake_power(int $seq): array
+{
+    $t = $seq / 10.0;
+    $watts = round(28 + 22 * (0.5 + 0.5 * sin($t / 4.0)), 1);
+    $kwh = round(8.0 + $seq * 0.012, 6); // life-of-project cumulative kWh
+    $cost = round($kwh * 0.245, 4);
+    $cph = round(($watts / 1000) * 0.245, 4);
+    return [
+        'watts' => $watts,
+        'kwh_total' => $kwh,
+        'cost_total' => $cost,
+        'cost_per_hour' => $cph,
+        'uptime_s' => 20000 + $seq * 30,
+    ];
+}
+
+// A fake tempo event: someone is watching (viewers 1), 30% duty cycle, with the
+// pence/hour anchors the cost-of-watching line interpolates between.
+function fake_tempo(int $seq): array
+{
+    return [
+        'speed' => 30,
+        'viewers' => 1,
+        'custom' => false,
+        'pph_idle' => 0.613,
+        'pph_load' => 1.347,
     ];
 }
 
