@@ -1,0 +1,140 @@
+/* timeseries-chart - shadow-root styles.
+ *
+ * Everything visual is driven by CSS custom properties so the component ships
+ * with NO app-specific styling. The defaults below are a neutral light theme;
+ * an explicit dark set of STEPS (not an inversion) follows under
+ * prefers-color-scheme. Override any property from the host to re-theme.
+ *
+ * There are deliberately NO transitions on anything that responds to input:
+ * the chart is a pure function of its viewport, redrawn each frame. Adding
+ * easing would make it feel wrong. */
+
+:host {
+  /* ---- surfaces + ink ---- */
+  --tsc-surface: #ffffff;      /* plot background + the 2px ribbon gaps */
+  --tsc-ink: #1b2330;          /* primary text (tooltip values fall back here) */
+  --tsc-ink-dim: #5c6b7a;      /* axis labels, secondary text */
+  --tsc-grid: #e7ecf1;         /* grid lines - recessive */
+  --tsc-axis: #c2ccd6;         /* the baseline + left axis - a touch stronger */
+  --tsc-area-alpha: 0.16;      /* line/area fill opacity */
+
+  /* ---- tooltip ---- */
+  --tsc-tooltip-bg: #ffffff;
+  --tsc-tooltip-border: #d8e0e8;
+  --tsc-tooltip-shadow: 0 4px 16px rgba(20, 30, 45, 0.14);
+  --tsc-hi: rgba(79, 156, 255, 0.14); /* highlighted tooltip row */
+
+  /* ---- focus ---- */
+  --tsc-focus: #4f9cff;
+
+  /* ---- type ---- */
+  --tsc-font: 11px ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  /* ---- categorical palette (fixed order, never cycled) ---- */
+  --tsc-series-1: #4f9cff;
+  --tsc-series-2: #ffb54f;
+  --tsc-series-3: #4fd08a;
+  --tsc-series-4: #ff6a80;
+  --tsc-series-5: #b58cff;
+  --tsc-series-6: #3fd0d0;
+  --tsc-series-7: #e0d24f;
+  --tsc-series-8: #ff8f4f;
+
+  display: block;
+  position: relative;
+  min-height: 120px;
+  outline: none;
+  color: var(--tsc-ink);
+  font: var(--tsc-font);
+  /* Vertical drag scrolls the page; horizontal is ours (no back-swipe). */
+  touch-action: pan-y;
+}
+
+:host(:focus-visible) { box-shadow: 0 0 0 2px var(--tsc-focus); border-radius: 4px; }
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --tsc-surface: #0e1116;
+    --tsc-ink: #d7e3ec;
+    --tsc-ink-dim: #8fa0b0;
+    --tsc-grid: #20262f;
+    --tsc-axis: #384252;
+    --tsc-tooltip-bg: #161b22;
+    --tsc-tooltip-border: #2a313d;
+    --tsc-tooltip-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    --tsc-hi: rgba(79, 156, 255, 0.2);
+  }
+}
+
+.tsc {
+  position: absolute;
+  inset: 0;
+  background: var(--tsc-surface);
+  overflow: hidden;
+}
+
+.plot {
+  position: absolute;
+  inset: 0;
+  display: block;
+  cursor: crosshair;
+}
+
+/* Legend - shown whenever there are >= 2 series. Text stays in normal ink;
+   the coloured key beside it carries identity. */
+.legend {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  pointer-events: none;
+  color: var(--tsc-ink-dim);
+}
+.legend[hidden] { display: none; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-key { width: 12px; height: 2px; border-radius: 1px; }
+.legend-label { color: var(--tsc-ink-dim); }
+
+/* Tooltip - a box beside the cursor. No labels are projected onto the axes. */
+.tooltip {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  background: var(--tsc-tooltip-bg);
+  border: 1px solid var(--tsc-tooltip-border);
+  border-radius: 6px;
+  box-shadow: var(--tsc-tooltip-shadow);
+  padding: 6px 8px;
+  min-width: 96px;
+  color: var(--tsc-ink);
+  white-space: nowrap;
+}
+.tooltip[hidden] { display: none; }
+.tt-time { color: var(--tsc-ink-dim); margin-bottom: 4px; letter-spacing: 0.02em; }
+.tt-table { display: table; border-collapse: collapse; }
+.tt-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+.tt-row.is-hi { background: var(--tsc-hi); }
+.tt-row.is-total { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--tsc-tooltip-border); }
+/* Row key: a short STROKE of the series colour, not a filled swatch. */
+.tt-key { flex: none; width: 10px; height: 2px; border-radius: 1px; align-self: center; }
+/* Value leads, label follows. Value is colour-matched; label stays normal ink. */
+.tt-val { font-variant-numeric: tabular-nums; }
+.tt-lbl { color: var(--tsc-ink-dim); }
+
+.live {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
+}

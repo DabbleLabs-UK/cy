@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>timeseries-chart - viewport-based scrubbing chart</title>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --panel: #12151b;
+    --panel-2: #1b2029;
+    --line: #2a313d;
+    --tel: #8fb2c9;
+    --tel-dim: #5c6b7a;
+    --ink: #d7e3ec;
+    --hot: #ff6a45;
+    --good: #4fd08a;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--tel); font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  a { color: #6fb2ff; }
+  .page { max-width: 900px; margin: 0 auto; padding: 28px 20px 80px; }
+  header h1 { color: var(--ink); letter-spacing: 0.03em; margin: 0 0 4px; font-size: 20px; }
+  header p { margin: 0 0 6px; color: var(--tel-dim); max-width: 76ch; font-size: 12px; }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; color: var(--ink); font-size: 0.92em; }
+  kbd { background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink); font-size: 0.85em; }
+
+  section { margin: 26px 0; }
+  section > h2 { color: var(--ink); font-size: 14px; margin: 0 0 2px; letter-spacing: 0.02em; }
+  section > .note { color: var(--tel-dim); font-size: 12px; margin: 0 0 10px; max-width: 78ch; }
+
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+  .card .chart-wrap { height: 260px; padding: 6px; }
+  .card.tall .chart-wrap { height: 320px; }
+
+  /* Theme the component for this dark page - the whole point is that it is all
+     custom properties. */
+  timeseries-chart {
+    --tsc-surface: var(--panel);
+    --tsc-ink: var(--ink);
+    --tsc-ink-dim: var(--tel-dim);
+    --tsc-grid: #1c222b;
+    --tsc-axis: #313a47;
+    --tsc-tooltip-bg: #161b22;
+    --tsc-tooltip-border: #2a313d;
+    width: 100%; height: 100%;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--panel-2); align-items: center; }
+  .controls .sp { flex: 1 1 auto; }
+  button, .seg {
+    font: inherit; font-size: 12px; color: var(--ink);
+    background: #222a35; border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { background: #2b3542; }
+  button.on { background: #2f4d6b; border-color: #3d6d97; color: #eaf3fb; }
+  .seg { display: inline-flex; padding: 0; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: 0; }
+  .tag { color: var(--tel-dim); font-size: 11px; margin-right: 4px; }
+
+  .how { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px; }
+  .how ul { margin: 6px 0 0; padding-left: 18px; }
+  .how li { margin: 3px 0; }
+  .how b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>timeseries-chart</h1>
+    <p>A scrubbing time-series chart whose entire display state is a viewport: <b>centre</b>, <b>span</b> (seconds) and <b>follow</b>. Every input writes that same state. No animation - the chart is a pure function of the viewport, nailed to the pointer.</p>
+    <p>This page is how you judge it. Try every input on every chart.</p>
+  </header>
+
+  <div class="how">
+    <b style="color:var(--ink)">Inputs (all of them work on every chart):</b>
+    <ul>
+      <li><b>Drag</b> horizontally to pan. Vertical drag scrolls the page - the axis locks after ~8px and never switches mid-drag.</li>
+      <li><b>Wheel</b> to zoom, anchored on the pointer. At the zoom limit the wheel is released back to the page, so you never get stuck scrolling a tall dashboard.</li>
+      <li><b>Trackpad</b>: pinch zooms (ctrl+wheel), two-finger scroll also zooms here.</li>
+      <li><b>Touch</b>: pinch to zoom on the centroid, drag to pan, touch-and-hold to read out.</li>
+      <li><b>Keyboard</b> (focus a chart first): <kbd>&larr;</kbd><kbd>&rarr;</kbd> pan, <kbd>+</kbd><kbd>-</kbd> zoom, <kbd>Home</kbd>/<kbd>End</kbd> to the extremes.</li>
+      <li><b>Presets</b> and <b>mode</b> below each chart are just more writers to the same viewport.</li>
+    </ul>
+  </div>
+
+  <!-- 1. single-series rate -->
+  <section>
+    <h2>1 &middot; Single series, rate mode (a level)</h2>
+    <p class="note">CPU load as a percentage - already a rate, so it is zoom-invariant: averaging it when zoomed out is honest. Line/area form. Dense, evenly sampled. Scrub to see the tooltip interpolate between samples.</p>
+    <div class="card">
+      <div class="chart-wrap"><timeseries-chart id="c1" mode="rate"></timeseries-chart></div>
+      <div class="controls" data-for="c1">
+        <span class="tag">span</span>
+        <button data-span="30">30s</button>
+        <button data-span="1800">30m</button>
+        <button data-span="21600">6h</button>
+        <span class="sp"></span>
+        <button data-follow class="on">follow: on</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. stacked multi-series cost -->
+  <section>
+    <h2>2 &middot; Stacked ribbons, model spend (accumulating -> rate)</h2>
+    <p class="note">Three DeepSeek model streams. Each event is a cost that accumulates, so we plot a <b>rate</b> - pounds per hour - which means the same thing at every zoom. Stacked so total height is total spend rate; a 2px surface gap separates ribbons. The tooltip is a table: only the bottom ribbon sits on the baseline, so it does the real work of reading band heights. Irregular gaps in the data.</p>
+    <div class="card tall">
+      <div class="chart-wrap"><timeseries-chart id="c2" mode="rate" form="stacked"></timeseries-chart></div>
+      <div class="controls" data-for="c2">
+        <span class="tag">span</span>
+        <button data-span="1800">30m</button>
+        <button data-span="21600">6h</button>
+        <button data-span="86400">1d</button>
+        <span class="tag" style="margin-left:10px">mode</span>
+        <span class="seg" data-mode>
+          <button data-m="rate" class="on">rate</button>
+          <button data-m="cumulative">cumulative</button>
+        </span>
+        <span class="sp"></span>
+        <button data-follow class="on">follow: on</button>
+      </div>
+    </div>
+    <p class="note">Switch to <b>cumulative</b>: the running total only ever climbs (total pounds spent since the start). Both views are zoom-invariant.</p>
+  </section>
+
+  <!-- 3. sparse + irregular single series, energy -->
+  <section>
+    <h2>3 &middot; Cumulative, energy from power (a level integrated)</h2>
+    <p class="note">Household power draw in kW, sparsely and irregularly sampled. In <b>rate</b> mode you read instantaneous kW; in <b>cumulative</b> mode the chart integrates it into kWh (energy) - the running total. This exercises rendering on sparse, gappy data.</p>
+    <div class="card">
+      <div class="chart-wrap"><timeseries-chart id="c3" mode="cumulative"></timeseries-chart></div>
+      <div class="controls" data-for="c3">
+        <span class="tag">mode</span>
+        <span class="seg" data-mode>
+          <button data-m="rate">rate (kW)</button>
+          <button data-m="cumulative" class="on">cumulative (kWh)</button>
+        </span>
+        <span class="sp"></span>
+        <button data-home>Home</button>
+        <button data-end>End</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. live tailing -->
+  <section>
+    <h2>4 &middot; Live-tailing (follow the newest data)</h2>
+    <p class="note">New samples arrive every 250ms. With <b>follow</b> on, the right edge stays pinned to the newest point. Pan or zoom away and follow releases; hit <b>End</b> (or pan back to the edge) to re-arm it. Two series, stacked.</p>
+    <div class="card">
+      <div class="chart-wrap"><timeseries-chart id="c4" mode="rate" form="stacked" span="120"></timeseries-chart></div>
+      <div class="controls" data-for="c4">
+        <button data-live class="on">streaming: on</button>
+        <span class="tag" style="margin-left:10px">span</span>
+        <button data-span="30">30s</button>
+        <button data-span="120">2m</button>
+        <span class="sp"></span>
+        <button data-end>End (re-follow)</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+import './timeseries-chart.js';
+
+// A tiny deterministic PRNG so the sample data is stable across reloads.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const now = Date.now();
+const HOUR = 3600e3, MIN = 60e3;
+
+// --- density helpers ---------------------------------------------------------
+// A smooth-ish level series, evenly and densely sampled.
+function levelSeries(seed, spanMs, stepMs, base, amp) {
+  const rnd = mulberry32(seed);
+  const out = [];
+  let v = base;
+  for (let t = now - spanMs; t <= now; t += stepMs) {
+    v += (rnd() - 0.5) * amp * 0.5;
+    v = Math.max(0, base + (v - base) * 0.9 + Math.sin(t / (spanMs / 6)) * amp * 0.4);
+    out.push({ t, v: Math.max(0, v) });
+  }
+  return out;
+}
+
+// Discrete cost events at irregular intervals, each an increment (delta).
+function deltaSeries(seed, spanMs, meanGapMs, meanAmt) {
+  const rnd = mulberry32(seed);
+  const out = [];
+  let t = now - spanMs;
+  while (t <= now) {
+    t += meanGapMs * (0.3 + 1.4 * rnd());
+    if (t > now) break;
+    // Occasional irregular quiet gap.
+    if (rnd() < 0.08) t += meanGapMs * 6 * rnd();
+    out.push({ t, v: meanAmt * (0.2 + 1.6 * rnd()) });
+  }
+  return out;
+}
+
+// Sparse, irregular level samples.
+function sparseLevel(seed, spanMs, count, base, amp) {
+  const rnd = mulberry32(seed);
+  const ts = [];
+  for (let i = 0; i < count; i++) ts.push(now - spanMs + rnd() * spanMs);
+  ts.sort((a, b) => a - b);
+  return ts.map((t) => ({ t, v: Math.max(0, base + Math.sin(t / (spanMs / 4)) * amp + (rnd() - 0.5) * amp) }));
+}
+
+// --- chart 1: single-series CPU (dense level) -------------------------------
+document.getElementById('c1').data = {
+  series: [{ id: 'cpu', name: 'CPU', kind: 'level', unit: '%', color: '#4f9cff',
+    samples: levelSeries(1, 6 * HOUR, 4e3, 38, 40) }],
+};
+
+// --- chart 2: stacked model spend (delta -> rate) ---------------------------
+document.getElementById('c2').data = {
+  series: [
+    { id: 'chat', name: 'deepseek-chat', kind: 'delta', unit: '£', rateLabel: '/h', samples: deltaSeries(11, 24 * HOUR, 40e3, 0.006) },
+    { id: 'coder', name: 'deepseek-coder', kind: 'delta', unit: '£', rateLabel: '/h', samples: deltaSeries(22, 24 * HOUR, 70e3, 0.011) },
+    { id: 'reason', name: 'deepseek-reasoner', kind: 'delta', unit: '£', rateLabel: '/h', samples: deltaSeries(33, 24 * HOUR, 120e3, 0.02) },
+  ],
+};
+
+// --- chart 3: energy (sparse level, cumulative) -----------------------------
+document.getElementById('c3').data = {
+  series: [{ id: 'power', name: 'Power', kind: 'level', unit: 'kW', color: '#ffb54f', ratePer: 3600,
+    samples: sparseLevel(7, 12 * HOUR, 60, 1.4, 1.2) }],
+};
+
+// --- chart 4: live-tailing (two stacked deltas) -----------------------------
+const c4 = document.getElementById('c4');
+c4.data = {
+  series: [
+    { id: 'a', name: 'ingest', kind: 'delta', unit: '£', rateLabel: '/h', samples: deltaSeries(41, 2 * MIN, 1500, 0.004) },
+    { id: 'b', name: 'egress', kind: 'delta', unit: '£', rateLabel: '/h', samples: deltaSeries(42, 2 * MIN, 2200, 0.007) },
+  ],
+};
+let liveOn = true;
+const liveRnd = mulberry32(99);
+setInterval(() => {
+  if (!liveOn) return;
+  const t = Date.now();
+  if (liveRnd() < 0.7) c4.push('a', { t, v: 0.004 * (0.2 + 1.8 * liveRnd()) });
+  if (liveRnd() < 0.5) c4.push('b', { t, v: 0.007 * (0.2 + 1.8 * liveRnd()) });
+}, 250);
+
+// --- wire up the demo controls (each is just a viewport / option writer) -----
+document.querySelectorAll('.controls').forEach((bar) => {
+  const chart = document.getElementById(bar.dataset.for);
+  bar.querySelectorAll('button[data-span]').forEach((b) => b.addEventListener('click', () => {
+    chart.setViewport({ span: parseFloat(b.dataset.span) });
+  }));
+  const followBtn = bar.querySelector('button[data-follow]');
+  if (followBtn) followBtn.addEventListener('click', () => {
+    const next = !chart.follow; chart.follow = next;
+    followBtn.classList.toggle('on', next); followBtn.textContent = 'follow: ' + (next ? 'on' : 'off');
+  });
+  const modeSeg = bar.querySelector('[data-mode]');
+  if (modeSeg) modeSeg.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    chart.mode = b.dataset.m;
+    modeSeg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  const home = bar.querySelector('button[data-home]');
+  if (home) home.addEventListener('click', () => chart.toStart());
+  const end = bar.querySelector('button[data-end]');
+  if (end) end.addEventListener('click', () => chart.toEnd());
+  const live = bar.querySelector('button[data-live]');
+  if (live) live.addEventListener('click', () => {
+    liveOn = !liveOn;
+    live.classList.toggle('on', liveOn); live.textContent = 'streaming: ' + (liveOn ? 'on' : 'off');
+  });
+});
+
+// Keep follow buttons honest when the user pans away by pointer.
+for (const id of ['c1', 'c2', 'c4']) {
+  const chart = document.getElementById(id);
+  const btn = document.querySelector(`.controls[data-for="${id}"] button[data-follow]`);
+  if (!btn) continue;
+  const sync = () => { const on = chart.follow; btn.classList.toggle('on', on); btn.textContent = 'follow: ' + (on ? 'on' : 'off'); };
+  chart.addEventListener('pointerup', () => requestAnimationFrame(sync));
+  chart.addEventListener('wheel', () => requestAnimationFrame(sync), { passive: true });
+}
+</script>
+</body>
+</html>
