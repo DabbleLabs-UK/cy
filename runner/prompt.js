@@ -11,6 +11,20 @@ import { BY_KEY, CAST, OFFICERS } from './cast.js';
 
 export const NUM_CTX = 3072;
 
+// BURST BOUNDARY. Consecutive generations are concatenated into both the emitted
+// text stream and the fed-back Zone B context. If the previous context ends
+// mid-word (no trailing whitespace) and the next burst's first chunk does not
+// lead with its own space, the two run together ('...bell rings rn' + 'swept...'
+// -> 'rings rnswept'). Return the single separator to splice in (' '), or '' when
+// a boundary already exists on either side (so it never doubles) or there is no
+// prior text (so the very first event carries no leading whitespace).
+export function burstSeparator(prevContext, chunk) {
+  if (!prevContext) return '';
+  if (/\s$/.test(prevContext)) return '';
+  if (/^\s/.test(chunk)) return '';
+  return ' ';
+}
+
 // ---- ZONE A: the fixed, byte-identical head of every prompt -----------------
 //
 // KV-cache reuse in ollama keys off the longest common PREFIX between successive
@@ -68,35 +82,80 @@ const ROSTER = (() => {
 // Zone A: assembled once at module load, identical on every request.
 export const ZONE_A = [SYSTEM_BASE, ROSTER].join('\n\n');
 
-// [threshold test, directive] pairs, checked in order. Primitive axes.
+// [threshold test, directive] pairs, checked in order. Primitive axes. Telegraphic
+// (imperative verbs + concrete nouns kept; articles/pronouns dropped). A directive
+// only ever appears when its axis is actually over threshold - a state Cy is not
+// in emits nothing (see styleDirective), which is where most of the old bulk went.
 const STYLE_RULES = [
-  [(v) => v.mental.lucidity < 0.35, 'sentences break off, you lose the thread, restart mid-idea'],
-  [(v) => v.mental.anxiety > 0.6, 'short. clipped. you keep checking the door'],
-  [(v) => v.physical.pain > 0.5, 'the pain interrupts the sentence, it gets into the words'],
-  [(v) => v.physical.hunger > 0.65, 'everything reminds you of food and you resent it'],
-  [(v) => v.mental.despair > 0.7, 'you write less, you stop finishing thoughts'],
-  [(v) => v.mental.dissociation > 0.6, 'the walls stop being walls, you slip into association'],
+  [(v) => v.mental.lucidity < 0.35, 'sentences break off, lose the thread, restart mid-idea'],
+  [(v) => v.mental.anxiety > 0.6, 'short, clipped, keep checking the door'],
+  [(v) => v.physical.pain > 0.5, 'pain interrupts the sentence, gets into the words'],
+  [(v) => v.physical.hunger > 0.65, 'everything reminds you of food, you resent it'],
+  [(v) => v.mental.despair > 0.7, 'write less, stop finishing thoughts'],
+  [(v) => v.mental.dissociation > 0.6, 'walls stop being walls, slip into association'],
   [(v) => v.physical.fatigue > 0.75, 'you repeat yourself'],
-  [(v) => (v.mental.anger || 0) > 0.6, 'short, hard, you are looking for a target'],
+  [(v) => (v.mental.anger || 0) > 0.6, 'short, hard, looking for a target'],
 ];
 
 // Derived composite states: directive fires above 0.6. Keyed to vitals.derived.
 const DERIVED_RULES = [
-  ['confusion', 'you lose track of which day, which thought, start a sentence twice'],
-  ['overwhelm', 'too much at once, you cannot rank what matters'],
-  ['numbness', 'you record events flatly, you do not react'],
-  ['paranoia', 'you re-read what people said, looking for the real meaning'],
-  ['fixation', 'you keep returning to the same small grievance'],
-  ['resignation', 'you have stopped expecting change, you just note it and move on'],
-  ['brittleness', 'the smallest thing sets you off'],
+  ['confusion', 'lose track of day, of thought, start a sentence twice'],
+  ['overwhelm', 'too much at once, cannot rank what matters'],
+  ['numbness', 'record events flat, no reaction'],
+  ['paranoia', 're-read what people said, hunt the real meaning'],
+  ['fixation', 'keep returning to the same small grievance'],
+  ['resignation', 'stopped expecting change, note it and move on'],
+  ['brittleness', 'smallest thing sets you off'],
 ];
+
+// Compact state notation. Only NOTABLE axes: a distress axis risen past 0.5, or
+// lucidity/hope fallen into their low band. Never the full list - a calm state
+// prints nothing at all. 'anx .82 | agit .70' gives the model the numbers cheaply
+// instead of a sentence per axis. Abbreviations are whole words clipped, not
+// txt-speak (which tends to tokenise into MORE pieces, not fewer).
+const NOTATION_M = [
+  ['anxiety', 'anx', 'hi', 0.5],
+  ['agitation', 'agit', 'hi', 0.5],
+  ['stress', 'stress', 'hi', 0.5],
+  ['despair', 'despair', 'hi', 0.5],
+  ['dissociation', 'dissoc', 'hi', 0.5],
+  ['anger', 'anger', 'hi', 0.5],
+  ['longing', 'longing', 'hi', 0.5],
+  ['lucidity', 'lucid', 'lo', 0.35],
+  ['hope', 'hope', 'lo', 0.25],
+];
+const NOTATION_P = [
+  ['pain', 'pain', 0.5],
+  ['hunger', 'hunger', 0.5],
+  ['fatigue', 'fatigue', 0.5],
+];
+const fmt2 = (x) => Number(x).toFixed(2).replace(/^0/, ''); // 0.82 -> '.82'
+
+export function stateNotation(v) {
+  const m = v.mental || {};
+  const p = v.physical || {};
+  const out = [];
+  for (const [k, ab, dir, thr] of NOTATION_M) {
+    const val = m[k];
+    if (typeof val !== 'number') continue;
+    if (dir === 'hi' ? val > thr : val < thr) out.push(`${ab} ${fmt2(val)}`);
+  }
+  for (const [k, ab, thr] of NOTATION_P) {
+    const val = p[k];
+    if (typeof val === 'number' && val > thr) out.push(`${ab} ${fmt2(val)}`);
+  }
+  return out.length ? 'STATE: ' + out.join(' | ') : '';
+}
 
 export function styleDirective(v) {
   const on = STYLE_RULES.filter(([test]) => test(v)).map(([, d]) => d);
   const d = v.derived || {};
   for (const [k, txt] of DERIVED_RULES) if ((d[k] || 0) > 0.6) on.push(txt);
-  if (!on.length) return '';
-  return 'RIGHT NOW: ' + on.join('; ') + '.';
+  const lines = [];
+  const note = stateNotation(v);
+  if (note) lines.push(note);
+  if (on.length) lines.push('RIGHT NOW: ' + on.join('; ') + '.');
+  return lines.join('\n');
 }
 
 // ---- FORM ROTATION --------------------------------------------------------
@@ -109,24 +168,23 @@ export function styleDirective(v) {
 // changing even when the mood does not.
 const TRAIN_SHARE = 0.6;
 const TRAIN_FORM =
-  'FORM: continuous train of thought. keep writing, one thing running into the next in the ' +
-  'order it comes to you, joined up, no headings, no list, no stopping to sum up. what is in ' +
-  'front of you and what you cannot stop thinking about, and let it drift where it drifts.';
+  'FORM: train of thought. one thing into the next, joined up, no headings, no list, no summing ' +
+  'up. what is in front of you and what you cannot stop thinking about. let it drift.';
 
 // The VARIATION forms (the other ~40%). `tags` bias the weight from vitals:
 // sparse forms rise with despair/numbness, repeat/count with fixation, argue/
 // complaint with anger, the connected/list forms with lucidity.
 const FORMS = [
-  { key: 'list', tags: ['lucid'], dir: 'FORM: a list. things one under another, no sentences joining them up.' },
-  { key: 'count', tags: ['fixation'], dir: 'FORM: count something and keep counting - tiles, days, footsteps, how many times it has happened. the number matters more than any sentence.' },
+  { key: 'list', tags: ['lucid'], dir: 'FORM: a list. things one under another, no joining sentences.' },
+  { key: 'count', tags: ['fixation'], dir: 'FORM: count something and keep counting - tiles, days, footsteps, times it has happened. the number matters more than any sentence.' },
   { key: 'oneline', tags: ['sparse'], dir: 'FORM: one short line. then stop. nothing else.' },
-  { key: 'argue', tags: ['anger'], dir: 'FORM: an argument with someone who is not in the room. answer back to what they said to you.' },
+  { key: 'argue', tags: ['anger'], dir: 'FORM: an argument with someone not in the room. answer back to what they said.' },
   { key: 'inventory', tags: ['lucid'], dir: 'FORM: an inventory of what you have in here. name the things, that is all.' },
   { key: 'marktime', tags: ['sparse'], dir: 'FORM: mark the time. a time, then three words. that is the whole entry.' },
-  { key: 'repeat', tags: ['fixation'], dir: 'FORM: one phrase you cannot get past. say it. say it again. you cannot leave it alone.' },
+  { key: 'repeat', tags: ['fixation'], dir: 'FORM: one phrase you cannot get past. say it. say it again. cannot leave it alone.' },
   { key: 'question', tags: ['sparse'], dir: 'FORM: a question asked to nobody. do not answer it.' },
   { key: 'wall', tags: [], dir: 'FORM: talk to <WHO> through the wall, low, so the screws do not hear.' },
-  { key: 'complaint', tags: ['anger'], dir: 'FORM: a complaint. start it formal, like an official form you have to fill in, and let it come apart halfway and end nothing like it began.' },
+  { key: 'complaint', tags: ['anger'], dir: 'FORM: a complaint. start formal, like an official form, let it come apart halfway and end nothing like it began.' },
   { key: 'detail', tags: ['sparse'], dir: 'FORM: notice one physical thing and stay on it. the crack, the cold, the light. do not move off it.' },
 ];
 
@@ -170,14 +228,11 @@ export function pickForm(v, { relations = {}, rnd = Math.random } = {}) {
 // no salutation. And he may not open with a word he has just opened with:
 // `recentOpeners` are the last few first-words, forbidden explicitly here.
 export function bansDirective(recentOpeners = []) {
-  const words = (recentOpeners || []).filter(Boolean).slice(-5);
-  const lines = [
-    'BANS. you are not writing to anyone - there is no reader, no correspondent. never begin with "Dear". ' +
-      'no greeting, no address to a reader, no sign-off. never open two entries with the same word.',
-  ];
-  if (words.length) {
-    lines.push('do NOT open this with any of these words: ' + words.map((x) => '"' + x + '"').join(', ') + '.');
-  }
+  // BANNED OPENERS as bare words, no explanation (last 3). The full no-reader tone
+  // ban lives in cached Zone A; Zone C only needs the one-line reminder + the ring.
+  const words = (recentOpeners || []).filter(Boolean).slice(-3);
+  const lines = ['BANS. no reader, no greeting, no sign-off. never open two entries same word.'];
+  if (words.length) lines.push('banned openers: ' + words.join(', ') + '.');
   return lines.join('\n');
 }
 

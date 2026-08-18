@@ -28,7 +28,7 @@ import {
   clamp,
   TRIVIAL_EVENTS,
 } from './vitals.js';
-import { ZONE_A, buildDirectives, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, NUM_CTX } from './prompt.js';
+import { ZONE_A, buildDirectives, buildPrompt, options, letterPredict, amplifiedDirective, pickForm, bansDirective, wingnoiseDirective, burstSeparator, NUM_CTX } from './prompt.js';
 import {
   parseStrokes,
   splitPasses,
@@ -153,7 +153,23 @@ function regimeDirective(mins) {
   const r = currentRegime(mins);
   const hh = String(Math.floor(mins / 60)).padStart(2, '0');
   const mm = String(mins % 60).padStart(2, '0');
-  return `THE REGIME right now (${hh}:${mm}): ${r.label} this is the shape of the day; little else moves.`;
+  return `REGIME ${hh}:${mm}: ${r.label}`;
+}
+
+// Is any standing charged enough that the volatile cast block earns its chars?
+// The fixed roster (names + blurbs) always sits in cached Zone A, so at true
+// baseline the Zone C standing block adds nothing the model does not already
+// have. Only surface it once a feud/warmth has actually moved past the start
+// values - conditional inclusion, the single biggest saving in the calm case.
+function castCharged(relations) {
+  for (const k in relations || {}) {
+    const r = relations[k];
+    if (!r) continue;
+    if ((r.grudge || 0) >= 0.35 || (r.suspicion || 0) >= 0.7 || (r.warmth || 0) >= 0.6 || (r.warmth || 0) <= 0.05) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Regime transitions that can go wrong, and the deviation each throws. Checked
@@ -405,15 +421,30 @@ async function main() {
   let prevDate = londonParts().date;
   let prevCpu = cpuSnapshot();
 
+  // Set true at the start of every generation, consumed on its FIRST emitted
+  // chunk: the burst-boundary guard so consecutive bursts do not run together
+  // ('...rings rn' + 'swept...' -> 'rings rnswept'). Only the first emitted chunk
+  // of a burst can carry the separator, so no leading whitespace lands on every
+  // event.
+  let needBoundary = false;
+
   // ---- one emitted chunk: screen, then text-event or in-world lost-thought ----
   async function onChunk(rawChunk, mode) {
-    const chunk = stripScaffold(sanitize(rawChunk));
+    let chunk = stripScaffold(sanitize(rawChunk));
     if (!chunk.trim()) return; // was nothing but control tokens / scaffold
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
       await warden.logBlock(res.reason, chunk, tsNow());
-      return;
+      return; // dropped: boundary is NOT consumed, it carries to the next chunk
+    }
+    if (needBoundary) {
+      needBoundary = false;
+      // splice exactly one separator when this burst would glue onto the previous
+      // one. The same separated chunk goes to BOTH the emitted event and the
+      // fed-back Zone B context, so the two never drift apart.
+      const sep = burstSeparator(contextBuf, chunk);
+      if (sep) chunk = sep + chunk;
     }
     emit({ kind: 'text', payload: { s: chunk, mode } });
     await appendContext(chunk);
@@ -427,6 +458,7 @@ async function main() {
   // to retry. Postcard/warden replies pass no contextTail and stream straight
   // through. Either way every chunk is scaffold-stripped before it is emitted.
   async function streamGenerate({ system, prompt, opts, mode, contextTail }) {
+    needBoundary = true; // fresh generation: guard the burst boundary on first emit
     const ac = new AbortController();
     currentAbort = ac;
     const buffer = warden.newBuffer();
@@ -550,9 +582,11 @@ async function main() {
   function buildCtx() {
     genCount++;
     const ctx = {
-      cast: castForPrompt(vitals.relations),
       grudge: grudgeDirective(vitals.relations),
     };
+    // cast standing block only when a relation is actually charged (roster itself
+    // is always in Zone A); keeps Zone C small on calm days.
+    if (castCharged(vitals.relations)) ctx.cast = castForPrompt(vitals.relations);
     if (amplifiedCue && Date.now() < amplifiedCue.until) {
       ctx.amplified = amplifiedDirective(amplifiedCue.label);
       amplifiedCue = null; // fire once
@@ -1136,6 +1170,7 @@ async function main() {
         ctx.incidents = incidentsDirective(vitals.ledger, {
           relations: vitals.relations,
           mailWaitMs: Date.now() - (vitals.lastMailMs || Date.now()),
+          rnd: () => 0, // LEDGER CAP: the 3 most recent only, not a random 3-5
         });
         directives = buildDirectives(vitals, 'journal', ctx);
       }
@@ -1238,14 +1273,15 @@ async function main() {
   // Observability: the character cost of each prompt zone. Zone A is fixed and
   // cached by ollama (paid once); Zone B grows append-only; Zone C is rebuilt
   // every burst (a representative sample from the current state is measured).
-  const sampleC = buildDirectives(vitals, 'journal', {
+  const sampleCtx = {
     bans: bansDirective(vitals.recentOpeners),
     regime: regimeDirective(londonParts().mins),
-    cast: castForPrompt(vitals.relations),
     grudge: grudgeDirective(vitals.relations),
     form: pickForm(vitals, { relations: vitals.relations }),
-    incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0 }),
-  });
+    incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0, rnd: () => 0 }),
+  };
+  if (castCharged(vitals.relations)) sampleCtx.cast = castForPrompt(vitals.relations);
+  const sampleC = buildDirectives(vitals, 'journal', sampleCtx);
   console.log(
     `[cy] prompt zones (chars): A(fixed,cached)=${ZONE_A.length} | ` +
       `B(context,append-only)=${contextBuf.length}/${CONTEXT_HARD} | C(volatile,sample)=${sampleC.length}`,
