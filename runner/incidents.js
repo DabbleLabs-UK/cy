@@ -270,15 +270,14 @@ export function incidentsDirective(ledger, opts = {}) {
   const recent = list.slice(-n).map((inc) => '- ' + incidentLine(inc)).filter((l) => l.trim().length > 2);
   if (!recent.length) return '';
   const threads = unresolvedThreads(list, opts);
-  const lines = ['RAW MATERIAL (the last few real things - specific, yours, you were there):', ...recent];
+  // The incidents themselves are the whole value here. The header stays a bare label
+  // and the how-to-use-it instruction is gone - it is a constant, so it lives in the
+  // cached Zone A ('MATERIAL. ... write FROM them, not about them ...') and is paid
+  // once instead of re-evaluated in this volatile block every time the ledger moves.
+  const lines = ['RAW MATERIAL (real, yours, you were there):', ...recent];
   if (threads.length) {
     lines.push('STILL OPEN:');
     for (const t of threads) lines.push('- ' + t);
   }
-  lines.push(
-    'write FROM this, not about it. do not list it, do not tidy it into a report. react to one, or ' +
-      'misremember it, or worry the same detail til it is smooth, or ignore all of it for one small thing in it. ' +
-      'it happened to you.',
-  );
   return lines.join('\n');
 }

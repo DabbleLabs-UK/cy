@@ -87,6 +87,11 @@ const SYSTEM_BASE = [
   'hedging. Never name a feeling and give its cause ("I feel anxious because..."). Write',
   'what is IN FRONT OF YOU and what you cannot stop thinking about - the specific tray,',
   'the specific noise, the specific person. Concrete, never abstract. Grit, not poignancy.',
+  '',
+  'MATERIAL. When a few real things that just happened are put in front of you, write FROM',
+  'them, not about them - react to one, misremember it, worry a detail smooth, or drop the',
+  'lot for one small thing in it. Never list them or tidy them into a report. And never open',
+  'two entries with the same word.',
 ].join('\n');
 
 // FEW-SHOT VOICE ANCHOR. On an 8B, 2-3 short examples of the target register hold a
@@ -226,11 +231,10 @@ export function styleDirective(v) {
 // often, pick one of the other shapes weighted by state - so the texture keeps
 // changing even when the mood does not.
 const TRAIN_SHARE = 0.6;
-const TRAIN_FORM =
-  'FORM: train of thought. one thing running INTO the next, joined up - each bit follows from the last ' +
-  'by a real link, cause or association. no headings, no list, no summing up. write what is in front of ' +
-  'you and what you cannot stop thinking about. you may drift, but only ever to something the last ' +
-  'thought reminds you of - never hop to an unrelated thing.';
+// The connected-prose default. The coherence detail (stay on one thing, drift only
+// by association) is the cached ONE_SUBJECT rule; the voice and the no-summing-up
+// ban are cached Zone A. So this only has to name the shape: joined up, not a list.
+const TRAIN_FORM = 'FORM: train of thought - one thing into the next, joined up by a real link. not a list.';
 
 // Applied to every WAKING journal burst (folded in by buildDirectives). The
 // single biggest lever against word salad: hold him to ONE subject so the entry
@@ -298,12 +302,13 @@ export function pickForm(v, { relations = {}, rnd = Math.random } = {}) {
 // no salutation. And he may not open with a word he has just opened with:
 // `recentOpeners` are the last few first-words, forbidden explicitly here.
 export function bansDirective(recentOpeners = []) {
-  // BANNED OPENERS as bare words, no explanation (last 3). The full no-reader tone
-  // ban lives in cached Zone A; Zone C only needs the one-line reminder + the ring.
+  // ONLY the volatile part: the ring of last-used opener words, which changes every
+  // burst and cannot be cached. The constant rules it used to restate (no reader/
+  // greeting/salutation, never repeat an opener) all live in cached Zone A now, so
+  // an event-free burst pays nothing here but this one short line.
   const words = (recentOpeners || []).filter(Boolean).slice(-3);
-  const lines = ['BANS. No reader, no greeting, no salutation, no sign-off. Never open two entries with the same word.'];
-  if (words.length) lines.push('Do not open this one with any of these words: ' + words.join(', ') + '.');
-  return lines.join('\n');
+  if (!words.length) return '';
+  return 'OPENERS. not with: ' + words.join(', ') + '.';
 }
 
 // ---- DREAM MODE -------------------------------------------------------------

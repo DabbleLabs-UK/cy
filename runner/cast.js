@@ -295,10 +295,8 @@ export function grudgeDirective(relations, threshold = 0.7) {
   const t = topGrudge(relations);
   if (!t || t.r.grudge < threshold) return '';
   const slight = t.r.lastSlight || 'did something you will not name';
-  return (
-    `THE GRUDGE. ${t.c.name} ${slight}. it is not nothing, not to you, not in here. ` +
-    `you keep coming back to ${t.c.name}, you cannot leave it alone. let it into what you write.`
-  );
+  // The concrete slight is the load-bearing part; keep it, cut the generic framing.
+  return `THE GRUDGE. ${t.c.name} ${slight}. you keep coming back to it, cannot leave it alone.`;
 }
 
 // Qualitative words for a standing, so the prompt reads human not numeric.
@@ -323,11 +321,14 @@ export function castForPrompt(relations, count = 3) {
     .sort((a, b) => salience(b.r) - salience(a.r) || a.i - b.i)
     .slice(0, count);
   if (!ranked.length) return '';
+  // Compact standing notation ONLY. The characterisations (blurbs) are already in
+  // the cached Zone A roster, so repeating them here just re-evaluates bytes the
+  // model has already read - name + current standing is all this volatile block owes.
   const lines = ranked.map(({ c, r }) => {
     const std = describe(r);
-    return `- ${c.name}: ${c.blurb}${std ? ' (' + std + ')' : ''}`;
+    return std ? `- ${c.name}: ${std}` : `- ${c.name}`;
   });
-  return ['ON THE SPUR with you (keep them real and consistent):', ...lines].join('\n');
+  return ['ON THE SPUR (standing right now):', ...lines].join('\n');
 }
 
 // ---- VISITORS -------------------------------------------------------------
