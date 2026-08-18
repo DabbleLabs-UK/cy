@@ -43,7 +43,7 @@ export class Power {
     this.root.innerHTML = `
       <div class="pw-headline">
         <div class="pw-money"><span class="pw-cur">GBP</span><span id="pw-cost">0.00</span></div>
-        <div class="pw-sub">spent on electricity since switch-on</div>
+        <div class="pw-sub">total electrical expenses due to incarceration</div>
       </div>
       <div class="pw-figs">
         <div class="pw-fig"><span class="pw-fk">RATE</span><span class="pw-fv" id="pw-rate">-- p/h</span></div>
