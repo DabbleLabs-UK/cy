@@ -1797,6 +1797,7 @@ async function main() {
         if (currentMode !== 'paused') {
           emit({ kind: 'mode', payload: { from: currentMode, to: 'paused' } });
           currentMode = 'paused';
+          client.kick(); // priority flush: the admin control is waiting on this
         }
         await sleep(1000);
         continue;
@@ -1819,8 +1820,10 @@ async function main() {
       // the waking coherence rules.
       if (asleep) {
         if (currentMode !== 'dream') {
+          const wasPaused = currentMode === 'paused';
           emit({ kind: 'mode', payload: { from: currentMode, to: 'dream' } });
           currentMode = 'dream';
+          if (wasPaused) client.kick(); // priority flush: the admin control is waiting on this
         }
         await dreamStep(mins);
         continue;
@@ -1836,6 +1839,7 @@ async function main() {
       // branch above emits its own paused->dream transition).
       if (currentMode === 'paused') {
         emit({ kind: 'mode', payload: { from: 'paused', to: 'journal' } });
+        client.kick(); // priority flush: the admin control is waiting on this
       }
       const mode = 'journal';
       currentMode = mode;
