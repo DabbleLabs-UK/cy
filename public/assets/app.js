@@ -33,6 +33,9 @@ const $ = (sel) => document.querySelector(sel);
 let pen, postcards, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
+// HISTORY MODE: while true the live poll is suspended (we are reading the past,
+// not following him now). Returning to live kicks an immediate catch-up poll.
+let historyMode = false;
 
 // ---- inference LED (public, everyone) -----------------------------------
 // A small dot next to the pause control that lights while the model is producing
@@ -137,6 +140,7 @@ async function boot() {
 
   wireForms();
   initViewSwitch();
+  initModeSwitch();
   initPauseControl();
   initLed(); // last, so the LED lands leftmost (before the selects)
 
@@ -189,6 +193,7 @@ const ANIMATE_TAIL = 25;
 
 async function poll() {
   if (polling) return; // never overlap
+  if (historyMode) return; // reading the past: do not follow the live edge
   polling = true;
   try {
     const data = await fetchStream(lastSeq);
@@ -547,6 +552,55 @@ function applyView(view) {
   // meaningless while it is display:none).
   if (window.__cyRaw) isRaw ? window.__cyRaw.start() : window.__cyRaw.stop();
   if (isPlain && window.__cyPlain && window.__cyPlain.reveal) window.__cyPlain.reveal();
+}
+
+// ---- LIVE vs HISTORY: the mode switch (LOCAL, instant) ------------------
+//
+// A two-option <async-select> in LOCAL mode: LIVE (watching him now) and HISTORY
+// (reading the past). It replaces the inert "live" indicator with a real control:
+// leaving live reveals the spine (window.__cySpine) and paints the page
+// unmistakably as the past (body.cy-history: sepia sheet, loud switch, the live
+// connection pill hidden). Returning to live hides the spine and resumes following
+// the stream - the suspended poll wakes and the existing catch-up path replays the
+// gap. The mode is client-only, so both options are `local` (no round trip). It is
+// public: anyone can read back, that is the whole point.
+let modeSelect = null;
+
+function initModeSwitch() {
+  const meta = document.querySelector('.topmeta');
+  if (!meta) return;
+
+  const sel = document.createElement('async-select');
+  sel.className = 'cy-select cy-mode-select';
+  sel.setAttribute('label', 'Mode');
+  meta.insertBefore(sel, $('#day') || null);
+  sel.options = [
+    { value: 'live', label: 'LIVE', description: 'watching him now', local: true },
+    { value: 'history', label: 'HISTORY', description: 'reading the past', local: true },
+  ];
+  sel.value = 'live';
+  modeSelect = sel;
+
+  sel.addEventListener('confirmed', (e) => applyMode(e.detail.value));
+
+  // Stage 3 will re-render the selected moment; for now, consume the spine's
+  // committed selection as a plain textual summary so the wiring is demonstrably
+  // live (and so the event contract stage 3 depends on is exercised).
+  document.addEventListener('cy:moment', (e) => {
+    window.__cyMoment = e.detail; // the clean handoff object for stage 3
+    const s = e.detail.summary || {};
+    const when = s.when || e.detail.ts || '';
+    const what = (s.lines && s.lines.length) ? s.lines.join(', ') : '';
+    pushTicker(`history: ${when}${what ? ' - ' + what : ''}`);
+  });
+}
+
+function applyMode(mode) {
+  const hist = mode === 'history';
+  historyMode = hist;
+  document.body.classList.toggle('cy-history', hist);
+  if (window.__cySpine) hist ? window.__cySpine.show() : window.__cySpine.hide();
+  if (!hist) poll(); // resume following: catch up on everything missed at once
 }
 
 // ---- operator pause/resume (ASYNC, admin only) --------------------------

@@ -56,12 +56,17 @@ function cy_asset(string $rel): string
 <title>CY &middot; inmate 7734, HMP ThinkPad</title>
 <meta name="description" content="Watch inmate 7734 of HMP ThinkPad write, in real time, by hand.">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/style.css'), ENT_QUOTES) ?>">
+<link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/spine.css'), ENT_QUOTES) ?>">
 <script>
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
   postPostcard: 'api/post-postcard.php',
   openverseSearch: 'api/openverse-search.php',
   tempo: 'api/tempo.php',
+  // HISTORY MODE (the spine): the aggregate day index it draws itself from, and
+  // the raw-event range endpoint it touches ONLY to resolve a chosen moment's seq.
+  history: 'api/history.php',
+  range: 'api/range.php',
   raw: <?= $rawEnabled ? 'true' : 'false' ?>,
   // Optional starting view from ?view= (handwritten|plain|raw), else null. The
   // view switch is a local async-select in app.js that otherwise remembers the
@@ -204,5 +209,9 @@ window.CY = {
      the first-load backlog. Always loaded now (the view switch reveals it); the
      component itself is registered by app.js's own import. -->
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/plain.js'), ENT_QUOTES) ?>"></script>
+<!-- HISTORY MODE navigation (the spine). Self-boots and registers window.__cySpine,
+     which app.js's LIVE/HISTORY switch drives. Loaded after app.js so the global is
+     present by the time boot() wires the switch (same pattern as plain.js). -->
+<script type="module" src="<?= htmlspecialchars(cy_asset('assets/spine.js'), ENT_QUOTES) ?>"></script>
 </body>
 </html>
