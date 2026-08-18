@@ -30,6 +30,59 @@ const $ = (sel) => document.querySelector(sel);
 let pen, postcards, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
+let adminCtl = null; // the pause control's state machine (wired in initAdmin)
+
+// ---- inference LED (public, everyone) -----------------------------------
+// A small dot next to the pause control that lights while the model is producing
+// text. It is driven by the runner's explicit `inference` boundary events (so it
+// is accurate, not guessed from text arriving), with a per-token fast path and a
+// watchdog so a missed 'idle' can never leave it stuck lit. Three states:
+//   gen  - bright: tokens are being produced right now
+//   eval - dim/amber: the model is reading its prompt (CPU pinned, nothing appears)
+//   idle - dark
+const led = {
+  el: null,
+  phase: 'idle',
+  watchdog: null,
+  set(phase) {
+    this.phase = phase;
+    if (!this.el) return;
+    this.el.classList.toggle('gen', phase === 'gen');
+    this.el.classList.toggle('eval', phase === 'eval');
+    this.el.title =
+      phase === 'gen'
+        ? 'Generating - the model is writing text right now.'
+        : phase === 'eval'
+          ? 'Reading the prompt - the CPU is busy but nothing has appeared yet.'
+          : 'Idle - the model is not generating right now.';
+  },
+  // an explicit boundary from the runner
+  signal(phase) {
+    this.set(phase);
+    clearTimeout(this.watchdog);
+    // safety net if an 'idle' is ever dropped: gen refreshes on every token below;
+    // eval can legitimately run several seconds on a cache reset, so give it slack.
+    if (phase !== 'idle') this.watchdog = setTimeout(() => this.set('idle'), phase === 'gen' ? 4000 : 15000);
+  },
+  // fast path: a streamed token IS active generation, so light immediately
+  activity() {
+    if (this.phase !== 'gen') this.set('gen');
+    clearTimeout(this.watchdog);
+    this.watchdog = setTimeout(() => this.set('idle'), 4000);
+  },
+};
+
+function initLed() {
+  const meta = document.querySelector('.topmeta');
+  if (!meta) return;
+  const el = document.createElement('span');
+  el.id = 'infer-led';
+  el.className = 'infer-led';
+  el.setAttribute('role', 'img');
+  meta.insertBefore(el, meta.firstChild); // left of day / mode / pause
+  led.el = el;
+  led.set('idle');
+}
 
 async function boot() {
   const font = await loadFont();
@@ -44,6 +97,7 @@ async function boot() {
   if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT);
 
   wireForms();
+  initLed();
   initAdmin();
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
@@ -154,6 +208,7 @@ function dispatch(ev, bootstrap) {
       // on the journal sheet. Everything else (journal, warden, dream murmurs -
       // p.mode 'dream' + p.lucid distinguishes a faint murmur from a lucid
       // night-waking line) is handwritten on the paper.
+      if (!bootstrap) led.activity(); // a live token means the model is generating now
       if (p.mode === 'letter') {
         postcards.write(p.s);
       } else {
@@ -247,6 +302,14 @@ function dispatch(ev, bootstrap) {
       if (tempo) tempo.update(p);
       break;
 
+    case 'inference':
+      // live generation indicator (public). Explicit boundary from the runner:
+      // eval (reading, nothing appears yet) / gen (writing) / idle. Live only - a
+      // backlog replay must not flash a stale phase; the LED starts idle and the
+      // continuous live stream lights it within a poll.
+      if (!bootstrap) led.signal(p.phase || 'idle');
+      break;
+
     case 'day':
       if (typeof p.n === 'number') setDay(p.n);
       break;
@@ -331,6 +394,11 @@ function setDay(n) {
 }
 
 function setMode(mode, cause) {
+  // paused is the runner's REAL state off the live stream. Make it unmistakable
+  // across the whole page (not just the pill), and feed it to the pause control so
+  // the button settles to confirmed reality rather than an optimistic guess.
+  document.body.classList.toggle('cy-paused', mode === 'paused');
+  if (adminCtl) adminCtl.syncMode(mode);
   const el = $('#mode');
   if (!el) return;
   const label =
@@ -359,58 +427,117 @@ function pushTicker(msg) {
 
 // ---- admin pause/resume (operator control, ?111 only) -------------------
 //
-// The button shows the COMMAND it will send: "PAUSE" while running, "RESUME"
-// while paused. It reflects the last commanded/confirmed state. The mode PILL,
-// by contrast, follows the ACTUAL runner state off the live stream (the runner
-// only stops at its next tempo poll, then emits mode:'paused'), so button =
-// command, pill = reality. Not dressed up in the fiction: this is an operator
-// control. No-op for an ordinary visitor (CFG.admin is null).
+// The control shows STATE, not a command: the label reads exactly 'ACTIVE' or
+// 'PAUSED', reflecting the RUNNER'S REAL state off the live stream (the mode goes
+// 'paused' only once the runner has actually stopped). The tooltip describes what a
+// tap will DO ('pause generation' / 'resume generation').
+//
+// A tap does not optimistically flip the label. It:
+//   1. gives immediate feedback - a disabled, pulsing PENDING look - so it never
+//      feels dead, while POSTing the command to admin.php;
+//   2. surfaces a POST failure at once (the command never reached/persisted);
+//   3. otherwise WAITS for the runner to acknowledge via the stream, then settles
+//      the label to the confirmed state;
+//   4. if no acknowledgement arrives within a few seconds, shows FAILED so the
+//      operator knows the runner did not act (and can tap again to retry).
+// No-op for an ordinary visitor (CFG.admin is null): the button is not rendered.
 function initAdmin() {
   const url = CFG.admin;
   const btn = $('#admin-pause');
   if (!url || !btn) return;
 
-  let paused = false;
+  let confirmed = null; // the runner's REAL paused state (from the stream). null = unknown
+  let pending = null; // { target:boolean } while awaiting the runner's acknowledgement
+  let failed = false; // last command did not reach/land - surfaced until the next tap
+  let failTimer = null;
+  const ACK_TIMEOUT_MS = 8000; // a generous few seconds for the runner to acknowledge
+
   const render = () => {
-    btn.textContent = paused ? 'RESUME' : 'PAUSE';
-    btn.classList.toggle('paused', paused);
-    btn.title = paused
-      ? 'Operator control: RESUME the LLM. It is currently paused - no generation, so CPU and the meter DRAW fall toward idle.'
-      : 'Operator control: PAUSE the LLM (not part of the fiction). Stops generation so idle CPU/memory/draw can be read.';
+    const isPaused = confirmed === true;
+    btn.textContent = isPaused ? 'PAUSED' : 'ACTIVE'; // STATE, nothing else
+    btn.classList.toggle('paused', isPaused);
+    btn.classList.toggle('pending', !!pending);
+    btn.classList.toggle('failed', failed);
+    btn.disabled = !!pending;
+    if (pending) {
+      btn.title = pending.target ? 'Pausing... waiting for the runner to stop.' : 'Resuming... waiting for the runner to start.';
+    } else if (failed) {
+      btn.title = 'The runner did not acknowledge - it may not have acted. Tap to try again.';
+    } else {
+      btn.title = isPaused ? 'resume generation' : 'pause generation';
+    }
   };
 
-  // reflect current server state on load
+  const clearFail = () => {
+    if (failTimer) clearTimeout(failTimer);
+    failTimer = null;
+  };
+
+  // the runner's real mode arriving on the stream - the only thing that settles a
+  // pending toggle. Matching target -> confirmed; a change we did not ask for still
+  // keeps the label honest.
+  const syncMode = (mode) => {
+    if (mode == null) return;
+    const nowPaused = mode === 'paused';
+    confirmed = nowPaused;
+    if (pending && pending.target === nowPaused) {
+      pending = null;
+      failed = false;
+      clearFail();
+    }
+    render();
+  };
+
+  // seed the label from the server's current flag so it is not blank before the
+  // first stream frame; the stream then keeps it honest (this is a hint only).
   fetch(url, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (d && typeof d.paused !== 'undefined') {
-        paused = !!d.paused;
+      if (d && typeof d.paused !== 'undefined' && confirmed === null) {
+        confirmed = !!d.paused;
         render();
       }
     })
     .catch(() => {});
 
   btn.addEventListener('click', async () => {
-    const action = paused ? 'resume' : 'pause';
-    btn.disabled = true;
+    if (pending) return; // already awaiting an acknowledgement
+    const target = !(confirmed === true); // paused -> resume, active/unknown -> pause
+    pending = { target };
+    failed = false;
+    render();
+    clearFail();
+    failTimer = setTimeout(() => {
+      if (pending) {
+        pending = null;
+        failed = true; // the runner never acknowledged within the window
+        render();
+      }
+    }, ACK_TIMEOUT_MS);
+
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: target ? 'pause' : 'resume' }),
       });
       const d = await res.json().catch(() => ({}));
-      if (res.ok && typeof d.paused !== 'undefined') {
-        paused = !!d.paused;
-        render();
+      if (!res.ok || (d && d.ok === false)) {
+        throw new Error((d && d.error) || 'HTTP ' + res.status);
       }
+      // command accepted + persisted. Do NOT flip the label here - wait for the
+      // runner's real acknowledgement via syncMode (or the fail timer).
     } catch (err) {
-      /* leave the button as-is; a failed toggle just does nothing */
-    } finally {
-      btn.disabled = false;
+      // the POST itself failed: the command did not land, so surface it now rather
+      // than waiting out the timeout.
+      pending = null;
+      failed = true;
+      clearFail();
+      render();
     }
   });
 
+  adminCtl = { syncMode };
   render();
 }
 

@@ -23,7 +23,12 @@ const FLUSH_MS = 2000;
 // seconds (instant delivery). It is a tiny, cheap query and must never block or
 // slow the generation loop; a failed poll retains the last known state.
 const INBOX_MS = 3000;
-const TEMPO_MS = 12000; // poll the viewer-driven tempo every ~12s
+// Poll the tempo row every ~3s. It carries not just the viewer-driven duty cycle
+// but the OPERATOR PAUSE flag, and the pause has to be picked up within a few
+// seconds so the pause control can confirm the runner's real state promptly (a
+// 12s poll made the button look like it had failed even on success). The query is
+// tiny and onTempo only fires on an actual change, so a faster poll is cheap.
+const TEMPO_MS = 3000;
 const MAX_BACKOFF_MS = 60000;
 
 // MariaDB DATETIME(3) string, e.g. "2026-08-17 19:30:00.123".
@@ -73,6 +78,16 @@ export class Client {
   enqueue(event) {
     if (!event.ts) event.ts = tsNow();
     this.batch.push(event);
+  }
+
+  // Priority flush for latency-sensitive events (the public inference LED). Sends
+  // the pending batch NOW instead of waiting up to FLUSH_MS, so a state the viewer
+  // is watching for lands within a poll rather than a batch window. If a flush is
+  // already in flight the guard inside flush() makes this a no-op and the event
+  // rides the next scheduled flush - still bounded by FLUSH_MS. Best-effort.
+  kick() {
+    if (this._stopped) return;
+    this.flush().catch(() => {});
   }
 
   start() {

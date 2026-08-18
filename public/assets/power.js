@@ -11,8 +11,11 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const ACCENT = '#e6b45e'; // warm amber - the colour of the money
-const MAX_POINTS = 720; // ~6h at one point per 30s
-const KEEP_MS = 6 * 3600 * 1000; // trim to the last 6 hours
+// The runner now emits a windowed sample every ~3s (min/max/mean watts) instead of
+// one instantaneous point every 30s, so bursts are preserved as real peaks. Keep a
+// larger buffer to still show a useful stretch of history at the finer cadence.
+const MAX_POINTS = 1200; // ~60min at one windowed point per 3s
+const KEEP_MS = 60 * 60 * 1000; // trim to the last hour
 
 // parse the runner's "YYYY-MM-DD HH:MM:SS.mmm" local timestamp to ms
 function parseTs(ts) {
@@ -56,6 +59,7 @@ export class Power {
             </linearGradient>
           </defs>
           <path id="pw-area" class="pw-area" d=""/>
+          <path id="pw-band" class="pw-band" d=""/>
           <path id="pw-line" class="pw-line" d=""/>
         </svg>
         <div class="pw-tip" id="pw-tip" hidden></div>
@@ -71,6 +75,7 @@ export class Power {
     this.wattsEl = this.root.querySelector('#pw-watts');
     this.kwhEl = this.root.querySelector('#pw-kwh');
     this.areaEl = this.root.querySelector('#pw-area');
+    this.bandEl = this.root.querySelector('#pw-band');
     this.lineEl = this.root.querySelector('#pw-line');
     this.yTopEl = this.root.querySelector('#pw-ytop');
     this.xSpanEl = this.root.querySelector('#pw-xspan');
@@ -120,14 +125,24 @@ export class Power {
     });
   }
 
-  // ingest one power event. tsMs optional (from the event's ts); falls back to now.
+  // ingest one power event. tsMs optional (from the event's ts); the payload's own
+  // measured-at t_ms is preferred so the chart lines up temporally with reality
+  // rather than with flush time. Each point carries the window's min/max/mean watts.
   push(p, tsMs) {
     if (!p) return;
-    const t = Number.isFinite(tsMs) ? tsMs : Date.now();
+    const tMeasured = num(p.t_ms);
+    const t = tMeasured != null ? tMeasured : Number.isFinite(tsMs) ? tsMs : Date.now();
     const w = num(p.watts);
+    const wv = w == null ? 0 : w; // mean over the window - the line + the cost area
+    const wmin = num(p.watts_min);
+    const wmax = num(p.watts_max);
+    const winst = num(p.watts_inst);
     this.points.push({
       t,
-      w: w == null ? 0 : w,
+      w: wv,
+      wmin: wmin == null ? wv : wmin,
+      wmax: wmax == null ? wv : wmax,
+      winst: winst == null ? wv : winst,
       cost: num(p.cost_total) ?? 0,
       cph: num(p.cost_per_hour) ?? 0,
       kwh: num(p.kwh_total) ?? 0,
@@ -155,12 +170,15 @@ export class Power {
       this.curEl.style.display = money.cur ? '' : 'none';
     }
     this.rateEl.textContent = (last.cph * 100).toFixed(1) + ' p/h';
-    this.wattsEl.textContent = Math.round(last.w) + ' W';
+    // DRAW shows the latest INSTANTANEOUS watts (the newest 1s sample), so the
+    // headline number tracks the real current draw, not a smeared mean.
+    this.wattsEl.textContent = Math.round(last.winst) + ' W';
     this.kwhEl.textContent = last.kwh.toFixed(3) + ' kWh';
 
-    // scales
+    // scales - the axis top must clear the highest PEAK (window max), not the mean,
+    // so a spike is never clipped off the top of the chart.
     let wMax = 60;
-    for (const q of pts) if (q.w > wMax) wMax = q.w;
+    for (const q of pts) if (q.wmax > wMax) wMax = q.wmax;
     wMax = Math.ceil(wMax / 10) * 10;
     this.yTopEl.textContent = wMax + ' W';
 
@@ -179,8 +197,20 @@ export class Power {
       line += (i === 0 ? 'M' : 'L') + x(pts[i].t).toFixed(1) + ' ' + y(pts[i].w).toFixed(1) + ' ';
     }
     const area = `M${x(t0).toFixed(1)} ${H} ` + pts.map((q) => `L${x(q.t).toFixed(1)} ${y(q.w).toFixed(1)}`).join(' ') + ` L${x(t1).toFixed(1)} ${H} Z`;
+
+    // min/max ENVELOPE: a ribbon from the peak line across, then back along the
+    // trough line. This is what stops the fast swings being smoothed away - the
+    // width of the band at any moment is the real range the load covered there.
+    const top = pts.map((q) => `${x(q.t).toFixed(1)} ${y(q.wmax).toFixed(1)}`);
+    const bot = pts
+      .slice()
+      .reverse()
+      .map((q) => `${x(q.t).toFixed(1)} ${y(q.wmin).toFixed(1)}`);
+    const band = 'M' + top.join(' L') + ' L' + bot.join(' L') + ' Z';
+
     this.lineEl.setAttribute('d', line.trim());
     this.areaEl.setAttribute('d', area);
+    this.bandEl.setAttribute('d', band);
 
     // x span label (only when we have a real time range)
     this.xSpanEl.textContent = span > 60000 ? fmtClock(t0) + ' - ' + fmtClock(t1) : '';

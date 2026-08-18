@@ -348,6 +348,23 @@ async function main() {
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
 
+  // ---- inference activity signal (public LED, everyone - not the ?111 gate) ----
+  // A live "is the model generating RIGHT NOW" flag, signalled by the runner at the
+  // real boundaries rather than inferred from text arriving. Three phases:
+  //   'eval' - request accepted, the model is READING the prompt: CPU pinned but
+  //            nothing appears yet (the phase that confuses people watching)
+  //   'gen'  - tokens are being produced
+  //   'idle' - nothing running
+  // Emitted only on CHANGE, and kicked out of the batch immediately (client.kick)
+  // so the dot updates promptly instead of waiting on the 2s flush.
+  let inferPhase = 'idle';
+  function setInfer(phase) {
+    if (phase === inferPhase) return;
+    inferPhase = phase;
+    emit({ kind: 'inference', payload: { phase, active: phase !== 'idle' } });
+    client.kick(); // priority flush: the LED must feel instantaneous
+  }
+
   // ---- electricity meter ----
   const powerMeter = new PowerMeter(config, join(STATE_DIR, 'power.json'));
   await powerMeter.load();
@@ -624,26 +641,38 @@ async function main() {
     if (process.platform !== 'win32') return; // Windows-only probe; leave nulls elsewhere
     if (probingOllama) return; // never overlap probes
     probingOllama = true;
-    // The model does NOT live in the small `ollama.exe` CLI/server stub - it runs
-    // in a CHILD runner process (`ollama_llama_server`, or on newer builds a second
-    // `ollama` process spawned as `runner`) that holds the weights (hundreds of MB
-    // up to GBs resident) and does the actual inference compute. Matching only the
-    // exact name `ollama` caught the stub, which is why OLM read ~19 MB and CY cpu
-    // ~0. So: match the whole `ollama*` family, DROP the `ollama app` tray GUI (not
-    // the model), then attribute the model to the runner - preferring a process
-    // named *server*/*runner*/*llama*, else falling back to the largest-resident of
-    // the rest (which is the runner once a model is loaded). Report ITS cpu-seconds
-    // and working set, plus the non-tray process count. NB `$host` is a reserved
-    // automatic variable in PowerShell - use `$t`.
-    const script =
-      "$p=Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue;" +
-      "$p=$p|Where-Object{$_.Name -ne 'ollama app'};" +
-      'if($p){$t=$p|Where-Object{$_.Name -match ' +
-      "'server|runner|llama'}|Sort-Object WorkingSet64 -Descending|Select-Object -First 1;" +
-      'if(-not $t){$t=$p|Sort-Object WorkingSet64 -Descending|Select-Object -First 1};' +
-      '$c=$t.CPU;$w=$t.WorkingSet64;$n=($p|Measure-Object).Count}' +
-      'else{$c=0;$w=0;$n=0};' +
-      "Write-Output ('{0}|{1}|{2}' -f $c,$w,$n)";
+    // ATTRIBUTION BY EVIDENCE, not by an assumed name. Two earlier attempts read
+    // CY cpu ~0 while ollama pinned the box, because the inference compute does NOT
+    // reliably live in a process called `ollama`: on this build the weights are
+    // memory-mapped and the compute runs in a CHILD the parent spawns, whose name
+    // ('ollama' running as `runner`, `ollama_llama_server`, or something else again)
+    // does not necessarily contain 'ollama'. So we STOP name-matching per process.
+    // Instead we (1) find ollama ROOTS by executable PATH (contains 'ollama') or
+    // name, dropping the `ollama app` tray GUI, then (2) INCLUDE THE WHOLE PROCESS
+    // TREE beneath them via Win32_Process ParentProcessId - so a differently-named
+    // compute child is still attributed. We sum the family's cumulative CPU-seconds
+    // and working set. The script ALSO reports the family members and the top
+    // processes by CPU so `state/cpu-attrib.json` can be inspected to confirm the
+    // attribution against ground truth. If Get-CimInstance is unavailable the tree
+    // step degrades to root-only (still catches the two known compute-child names).
+    const script = [
+      "$ErrorActionPreference='SilentlyContinue'",
+      '$ps=Get-Process',
+      '$cim=Get-CimInstance Win32_Process',
+      '$par=@{}',
+      'foreach($c in $cim){$par[[int]$c.ProcessId]=[int]$c.ParentProcessId}',
+      '$roots=@{}',
+      "foreach($p in $ps){$o=$false;if($p.Name -like 'ollama*' -and $p.Name -ne 'ollama app'){$o=$true}elseif($p.Path -and $p.Path -like '*ollama*'){$o=$true};if($o){$roots[[int]$p.Id]=$true}}",
+      '$mem=@{}',
+      'foreach($p in $ps){$id=[int]$p.Id;$c=$id;$d=0;while($c -and $d -lt 16){if($roots.ContainsKey($c)){$mem[$id]=$true;break};if($par.ContainsKey($c)){$c=$par[$c]}else{break};$d++}}',
+      '$sel=$ps|Where-Object{$mem.ContainsKey([int]$_.Id)}',
+      '$n=($sel|Measure-Object).Count',
+      '$cpu=($sel|Measure-Object -Property CPU -Sum).Sum;if(-not $cpu){$cpu=0}',
+      '$ws=($sel|Measure-Object -Property WorkingSet64 -Sum).Sum;if(-not $ws){$ws=0}',
+      "$mm=($sel|Sort-Object CPU -Descending|Select-Object -First 8|ForEach-Object{('{0}#{1}#{2}' -f $_.Name,$_.Id,[math]::Round([double]$_.CPU,2))}) -join ';'",
+      "$tt=($ps|Sort-Object CPU -Descending|Select-Object -First 8|ForEach-Object{('{0}#{1}#{2}' -f $_.Name,$_.Id,[math]::Round([double]$_.CPU,2))}) -join ';'",
+      "Write-Output ('{0}|{1}|{2}|{3}|{4}' -f $cpu,$ws,$n,$mm,$tt)",
+    ].join(';');
     let child;
     try {
       child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
@@ -664,15 +693,34 @@ async function main() {
       probingOllama = false;
       const parts = out.trim().split('|');
       if (parts.length < 3) return;
-      const cpuSec = Number(parts[0]); // cumulative CPU-seconds across ollama procs
+      const cpuSec = Number(parts[0]); // cumulative CPU-seconds across the ollama family
       const ws = Number(parts[1]); // summed working set (bytes)
-      const n = Number(parts[2]); // process count
+      const n = Number(parts[2]); // family process count
+      const membersStr = parts[3] || ''; // family members: name#pid#cpuSec;...
+      const topStr = parts[4] || ''; // top-by-CPU overall: name#pid#cpuSec;...
       const nowMs = Date.now();
+      // NO OLLAMA PROCESS AT ALL -> the figure is genuinely UNAVAILABLE, report
+      // null so the panel shows '--' (never a dishonest 0). Reset the baseline so a
+      // later reappearance does not compute a bogus delta across the gone period.
+      if (!(n > 0)) {
+        cyProc.ollamaCpu = null;
+        cyProc.ollamaMB = null;
+        cyProc.ollamaProcs = 0;
+        prevOllamaCpuSec = null;
+        prevOllamaProbeMs = null;
+        writeCpuAttrib({ cy: null, n: 0, cpuSec: null, members: membersStr, top: topStr });
+        return;
+      }
+      // CPU% = delta CPU-seconds / (wall seconds * logical processors) * 100 -
+      // exactly the SYSTEM normalisation, delta'd over the ~10s host-tick window so
+      // CY and SYSTEM are directly comparable and CY + OTHER reconciles to SYSTEM.
+      let cyPct = null;
       if (Number.isFinite(cpuSec) && prevOllamaCpuSec != null && prevOllamaProbeMs != null) {
         const dSec = cpuSec - prevOllamaCpuSec;
         const dWall = (nowMs - prevOllamaProbeMs) / 1000;
         if (dWall > 0 && dSec >= 0) {
-          cyProc.ollamaCpu = Number((clamp(dSec / dWall / NCPU) * 100).toFixed(1));
+          cyPct = Number((clamp(dSec / dWall / NCPU) * 100).toFixed(1));
+          cyProc.ollamaCpu = cyPct;
         }
       }
       if (Number.isFinite(cpuSec)) {
@@ -681,7 +729,46 @@ async function main() {
       }
       if (Number.isFinite(ws)) cyProc.ollamaMB = Math.round(ws / 1024 / 1024);
       if (Number.isFinite(n)) cyProc.ollamaProcs = n;
+      writeCpuAttrib({ cy: cyPct, n, cpuSec, members: membersStr, top: topStr });
     });
+  }
+
+  // INSTRUMENTATION: overwrite state/cpu-attrib.json with the latest attribution
+  // so ground truth is inspectable on the live box - the computed CY%, the ollama
+  // family it was summed from (name/pid/cumulative CPU-seconds), and the top
+  // processes overall by CPU. If the family list does not contain whatever the top
+  // list shows pinning the machine, the attribution is wrong and this file says so.
+  // Single overwrite (never grows); best-effort, never throws into the loop.
+  async function writeCpuAttrib(o) {
+    try {
+      const { writeFile } = await import('node:fs/promises');
+      const parseList = (s) =>
+        (s ? String(s).split(';').filter(Boolean) : []).map((x) => {
+          const i = x.lastIndexOf('#');
+          const j = x.lastIndexOf('#', i - 1);
+          return j < 0
+            ? { name: x, pid: null, cpu_s: null }
+            : { name: x.slice(0, j), pid: Number(x.slice(j + 1, i)), cpu_s: Number(x.slice(i + 1)) };
+        });
+      await writeFile(
+        join(STATE_DIR, 'cpu-attrib.json'),
+        JSON.stringify(
+          {
+            ts: tsNow(),
+            ncpu: NCPU,
+            cy_cpu_pct: o.cy,
+            ollama_procs: o.n,
+            ollama_cpu_seconds_cumulative: o.cpuSec ?? null,
+            ollama_family: parseList(o.members),
+            top_by_cpu_seconds: parseList(o.top),
+          },
+          null,
+          2,
+        ),
+      );
+    } catch {
+      /* never crash the loop on diagnostic I/O */
+    }
   }
   probeOllama(); // prime a baseline now so the first host tick can show a delta
 
@@ -849,6 +936,9 @@ async function main() {
       await sleep(1000);
       return { full, error: true };
     }
+    // request accepted: the model is now READING the prompt (CPU pinned, no output
+    // yet) until the first token flips this to 'gen' in onToken below.
+    setInfer('eval');
 
     const reader = res.body.getReader();
     // Per response token: stamp ttft, accumulate, and either hold+check the primed
@@ -857,7 +947,10 @@ async function main() {
     // `break outer`. All the loop state (head/primed/full/repeat/stats) lives in
     // this closure so the extracted reader stays a pure transport.
     const onToken = async (text) => {
-      if (ttftMs === null) ttftMs = Date.now() - t0; // first token out
+      if (ttftMs === null) {
+        ttftMs = Date.now() - t0; // first token out
+        setInfer('gen'); // tokens are now being produced (prompt-eval is over)
+      }
       full += text;
       tokenCount++;
       if (!primed) {
@@ -887,6 +980,7 @@ async function main() {
       return { full, error: true };
     } finally {
       if (currentAbort === ac) currentAbort = null;
+      setInfer('idle'); // generation has stopped (ended, aborted or errored)
     }
     // aborted mid-stream (an inbound postcard/notice cut the generation at once)
     if (streamRes && streamRes.aborted) {
@@ -908,6 +1002,10 @@ async function main() {
   async function rawGenerate({ system, prompt, opts }) {
     const ac = new AbortController();
     currentAbort = ac;
+    // a non-streamed generation is opaque to the viewer (nothing reaches the page),
+    // but the model IS working the whole time - light the LED so the pinned CPU is
+    // accounted for rather than looking like idle time.
+    setInfer('gen');
     try {
       const res = await fetch(`${config.ollamaUrl}/api/generate`, {
         method: 'POST',
@@ -922,6 +1020,7 @@ async function main() {
       return ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
       if (currentAbort === ac) currentAbort = null;
+      setInfer('idle');
     }
   }
 
@@ -1385,7 +1484,6 @@ async function main() {
   }
 
   // ---- vitals tick every tickMs ----
-  let powerTickN = 0;
   const tickTimer = setInterval(async () => {
     const now = Date.now();
     const { mins } = londonParts(new Date(now));
@@ -1424,18 +1522,9 @@ async function main() {
       },
     });
 
-    // integrate the electricity meter every tick; emit + persist every ~30s
-    powerMeter.integrate(now);
-    if (++powerTickN % 6 === 0) {
-      const snap = powerMeter.snapshot(now);
-      emit({ kind: 'power', payload: snap });
-      const pound = Math.floor(snap.cost_total);
-      if (pound > lastPound) {
-        lastPound = pound;
-        forceCost = true; // crossing a whole pound forces the next cost injection
-      }
-      powerMeter.save().catch(() => {});
-    }
+    // NB the electricity meter is NOT integrated here anymore - it runs on its own
+    // fast 1s sampler (see powerTimer below) so bursts that switch within seconds
+    // are not aliased away by a 5s/30s sample.
 
     try {
       await saveVitals(vitalsPath, vitals);
@@ -1479,6 +1568,62 @@ async function main() {
       },
     });
   }, 10000);
+
+  // ---- fast electricity sampler (defeats the aliasing) ----------------------
+  // The load flips between ~20% and ~95% within seconds; sampling every 30s
+  // smeared that into a flat ~50-85% band that lined up with nothing. So we SAMPLE
+  // CPU every 1s (os.cpus() deltas - a cheap, non-blocking read that never touches
+  // the generation loop) and integrate the meter over each 1s slice, so cost stays
+  // exact at fine granularity. Every POWER_EMIT_MS we emit ONE windowed `power`
+  // sample carrying min / max / mean watts over that window, so a burst inside the
+  // window is preserved as a real peak/trough instead of being averaged away. The
+  // sample is timestamped at the MOMENT OF MEASUREMENT (t_ms), not at flush time,
+  // so the chart lines up temporally with everything else the operator sees.
+  const POWER_SAMPLE_MS = 1000;
+  const POWER_EMIT_MS = 3000; // one windowed sample every 3s (10x finer than before)
+  const EMIT_EVERY = Math.max(1, Math.round(POWER_EMIT_MS / POWER_SAMPLE_MS));
+  let pwSampleN = 0;
+  let pwMsAccum = 0;
+  let pwWin = { min: Infinity, max: -Infinity, sum: 0, n: 0 };
+  const powerTimer = setInterval(() => {
+    const now = Date.now();
+    powerMeter.integrate(now); // 1s slice: refresh watts + integrate kWh finely
+    const w = powerMeter.watts;
+    if (w < pwWin.min) pwWin.min = w;
+    if (w > pwWin.max) pwWin.max = w;
+    pwWin.sum += w;
+    pwWin.n += 1;
+    if (++pwSampleN < EMIT_EVERY) return;
+    pwSampleN = 0;
+    const snap = powerMeter.snapshot(now);
+    const mean = pwWin.n ? pwWin.sum / pwWin.n : w;
+    const wMin = pwWin.min === Infinity ? w : pwWin.min;
+    const wMax = pwWin.max === -Infinity ? w : pwWin.max;
+    emit({
+      kind: 'power',
+      payload: {
+        ...snap,
+        watts: Number(mean.toFixed(1)), // the line + the cost area (mean over window)
+        watts_min: Number(wMin.toFixed(1)), // window trough - keeps the real dip
+        watts_max: Number(wMax.toFixed(1)), // window peak - keeps the real spike
+        watts_inst: Number(w.toFixed(1)), // latest instantaneous draw (the DRAW readout)
+        t_ms: now, // measured-at time, so the chart is temporally honest
+      },
+    });
+    pwWin = { min: Infinity, max: -Infinity, sum: 0, n: 0 };
+    // a whole-pound crossing still forces the next in-world cost injection
+    const pound = Math.floor(snap.cost_total);
+    if (pound > lastPound) {
+      lastPound = pound;
+      forceCost = true;
+    }
+    // persist roughly every ~30s so the life-of-project total survives a restart
+    pwMsAccum += EMIT_EVERY * POWER_SAMPLE_MS;
+    if (pwMsAccum >= 30000) {
+      pwMsAccum = 0;
+      powerMeter.save().catch(() => {});
+    }
+  }, POWER_SAMPLE_MS);
 
   // Interruptible idle: sit still for `ms`, but break early if a postcard or
   // notice lands (so a silence never swallows an interrupt) or on shutdown.
@@ -1846,6 +1991,7 @@ async function main() {
     if (currentAbort) currentAbort.abort();
     clearInterval(tickTimer);
     clearInterval(hostTimer);
+    clearInterval(powerTimer);
     try {
       powerMeter.integrate();
       await powerMeter.save();
