@@ -1,0 +1,281 @@
+/* async-select styling.
+ *
+ * Theme by overriding the --as-* custom properties on the element (they pierce
+ * the shadow boundary because custom properties inherit). Deeper structural
+ * theming is available through ::part(...). Defaults suit a dark instrument
+ * panel but assume nothing about the host page.
+ *
+ * The control reserves space in every state - there is no layout shift between
+ * idle, pending, confirmed, rejected and failed.
+ */
+
+:host {
+  /* --- palette ---------------------------------------------------------- */
+  --as-bg: #12151b;
+  --as-bg-raised: #1b2029;
+  --as-bg-hover: #232a35;
+  --as-border: #2a313d;
+  --as-border-strong: #3a4657;
+  --as-text: #d7e3ec;
+  --as-text-dim: #8fa3b3;
+  --as-text-faint: #5c6b7a;
+  --as-accent: #2b6f9f;
+  --as-good: #4fd08a;
+  --as-bad: #ff6a45;
+  --as-warn: #ffbf47;
+  --as-provisional: #ffbf47;   /* the "requested, not yet true" colour */
+  --as-focus-ring: #6fb2ff;
+  --as-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  /* --- metrics ---------------------------------------------------------- */
+  --as-radius: 6px;
+  --as-hit: 44px;              /* min touch target */
+  --as-min-width: 12rem;
+  --as-font: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --as-font-size: 14px;
+  --as-gap: 8px;
+  --as-motion: 140ms;
+
+  display: inline-block;
+  font-family: var(--as-font);
+  font-size: var(--as-font-size);
+  color: var(--as-text);
+  vertical-align: top;
+}
+
+:host([hidden]) { display: none; }
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+.wrap {
+  position: relative;
+  min-width: var(--as-min-width);
+}
+
+/* --- trigger ------------------------------------------------------------ */
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--as-gap);
+  width: 100%;
+  min-height: var(--as-hit);
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--as-text);
+  text-align: left;
+  background: var(--as-bg-raised);
+  border: 1px solid var(--as-border);
+  border-radius: var(--as-radius);
+  cursor: pointer;
+  transition: border-color var(--as-motion) ease, background var(--as-motion) ease;
+}
+
+.trigger:hover:not(:disabled) { background: var(--as-bg-hover); }
+
+/* Visible focus that never disappears. */
+.trigger:focus-visible {
+  outline: 2px solid var(--as-focus-ring);
+  outline-offset: 2px;
+  border-color: var(--as-border-strong);
+}
+/* Fallback for engines without :focus-visible on buttons. */
+.trigger:focus { border-color: var(--as-border-strong); }
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.face {
+  display: flex;
+  align-items: center;
+  gap: var(--as-gap);
+  min-width: 0;
+}
+
+.value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The provisional tag - an EXPLICIT label, never "just faded". */
+.provisional-tag {
+  flex: none;
+  padding: 1px 6px;
+  font-size: 0.72em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--as-bg);
+  background: var(--as-provisional);
+  border-radius: 3px;
+}
+:host([data-phase="failed"]) .provisional-tag { background: var(--as-bad); color: #fff; }
+
+/* While provisional, style the value itself as clearly not-yet-real. */
+.trigger.is-provisional .value {
+  font-style: italic;
+  text-decoration: underline dashed var(--as-provisional);
+  text-underline-offset: 3px;
+}
+
+.indicator {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--as-text-dim);
+  transition: transform var(--as-motion) ease;
+}
+.trigger[aria-expanded="true"] .indicator { transform: rotate(180deg); }
+
+/* --- status line (space always reserved) -------------------------------- */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.5em;      /* reserve the row so states never shift layout */
+  margin-top: 4px;
+  padding: 0 2px;
+  font-size: 0.82em;
+  line-height: 1.4;
+  color: var(--as-text-dim);
+}
+
+.status-icon { flex: none; width: 12px; height: 12px; display: inline-block; }
+.status-icon[data-icon=""] { visibility: hidden; }
+
+.status-icon[data-icon="spin"] {
+  border: 2px solid var(--as-border-strong);
+  border-top-color: var(--as-provisional);
+  border-radius: 50%;
+  animation: as-spin 0.7s linear infinite;
+}
+.status-icon[data-icon="ok"]::before {
+  content: "";
+  display: block;
+  width: 4px; height: 8px;
+  margin: -1px auto 0;
+  border: solid var(--as-good);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.status-icon[data-icon="bad"]::before {
+  content: "!";
+  display: block;
+  text-align: center;
+  font-weight: 700;
+  color: var(--as-bad);
+  line-height: 12px;
+}
+
+:host([data-phase="pending"]) .status { color: var(--as-provisional); }
+:host([data-phase="confirmed"]) .status { color: var(--as-good); }
+:host([data-phase="rejected"]) .status,
+:host([data-phase="failed"]) .status { color: var(--as-bad); }
+
+.retry {
+  margin-left: 4px;
+  padding: 2px 10px;
+  min-height: 28px;
+  font: inherit;
+  font-size: 0.92em;
+  color: var(--as-text);
+  background: var(--as-bg-raised);
+  border: 1px solid var(--as-border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.retry:hover { background: var(--as-bg-hover); }
+.retry:focus-visible { outline: 2px solid var(--as-focus-ring); outline-offset: 2px; }
+
+/* --- listbox popup ------------------------------------------------------ */
+.listbox {
+  position: absolute;
+  top: calc(var(--as-hit) + 2px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--as-bg);
+  border: 1px solid var(--as-border-strong);
+  border-radius: var(--as-radius);
+  box-shadow: var(--as-shadow);
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.option-main { display: flex; align-items: center; gap: 8px; }
+.option-label { color: var(--as-text); }
+.option-desc { font-size: 0.82em; color: var(--as-text-faint); }
+
+.option-tag {
+  padding: 1px 6px;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--as-accent);
+  border: 1px solid var(--as-accent);
+  border-radius: 3px;
+}
+
+.option.is-active { background: var(--as-bg-hover); }
+.option.is-confirmed .option-label { color: var(--as-good); font-weight: 600; }
+.option.is-confirmed .option-main::after {
+  content: "\2713";           /* check mark on the authoritative option */
+  margin-left: auto;
+  color: var(--as-good);
+}
+.option.is-requested .option-main::after {
+  content: "\00b7\00b7\00b7"; /* the requested-but-unconfirmed option */
+  margin-left: auto;
+  color: var(--as-provisional);
+}
+.option[aria-disabled="true"] {
+  color: var(--as-text-faint);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.option[aria-disabled="true"] .option-label { color: var(--as-text-faint); }
+
+/* --- accessible-only live regions --------------------------------------- */
+.live,
+.live-assertive {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes as-spin { to { transform: rotate(360deg); } }
+
+/* --- reduced motion ----------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .trigger,
+  .indicator { transition: none; }
+  .status-icon[data-icon="spin"] {
+    animation: none;
+    /* Non-animated but still clearly "in progress". */
+    border-top-color: var(--as-provisional);
+    border-right-color: var(--as-provisional);
+  }
+}

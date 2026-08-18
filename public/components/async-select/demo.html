@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>async-select - demo &amp; state gallery</title>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --panel: #12151b;
+    --panel-2: #1b2029;
+    --line: #2a313d;
+    --tel: #8fb2c9;
+    --tel-dim: #5c6b7a;
+    --ink: #d7e3ec;
+    --hot: #ff6a45;
+    --good: #4fd08a;
+    --warn: #ffbf47;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: radial-gradient(1200px 700px at 50% -10%, #171b22 0%, var(--bg) 70%);
+    color: var(--tel);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  a { color: #6fb2ff; }
+  .page { max-width: 900px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 { color: var(--ink); letter-spacing: 0.04em; margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0 0 6px; color: var(--tel-dim); max-width: 62ch; }
+  code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; color: var(--ink); }
+
+  .scenario {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    padding: 18px 18px 20px;
+    margin: 18px 0;
+  }
+  .scenario h2 { margin: 0 0 4px; font-size: 15px; color: var(--ink); letter-spacing: 0.02em; }
+  .scenario .what { margin: 0 0 14px; color: var(--tel-dim); max-width: 68ch; font-size: 13px; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button.act {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 12px; cursor: pointer;
+    min-height: 34px;
+  }
+  button.act:hover { background: #232a35; }
+  button.act:focus-visible { outline: 2px solid #6fb2ff; outline-offset: 2px; }
+
+  .log {
+    margin-top: 12px;
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+    font-size: 12px;
+    color: var(--tel-dim);
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .log b { color: var(--tel); }
+  .log .ev-confirmed { color: var(--good); }
+  .log .ev-rejected, .log .ev-failed { color: var(--hot); }
+  .log .ev-requested { color: var(--warn); }
+  .log .ev-superseded, .log .ev-externalchange { color: #6fb2ff; }
+
+  .note { font-size: 12px; color: var(--tel-dim); }
+  .hint { color: var(--warn); }
+  hr.sep { border: 0; border-top: 1px solid var(--line); margin: 28px 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: var(--tel-dim); }
+  .legend b { color: var(--tel); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>async-select</h1>
+    <p>A confirmation-aware select. A choice is a <b>request</b>, not a fact: the
+      control shows the requested value as explicitly provisional until the
+      server confirms it, and stays honest through rejection, failure, timeout,
+      superseding and external changes.</p>
+    <p class="note">Every control below shares one implementation. Use the
+      keyboard (Tab to it, then Down/Up/Home/End/Enter/Esc, or type to jump).
+      Watch the status line under each control and the event log.</p>
+  </header>
+
+  <div class="legend">
+    <span><b>solid</b> = confirmed / authoritative</span>
+    <span><b>dashed + tag</b> = requested, not yet true</span>
+    <span><b>&#10003;</b> = server value</span>
+    <span><b>&#183;&#183;&#183;</b> = in-flight request</span>
+  </div>
+
+  <hr class="sep">
+
+  <!-- 1. Instant -->
+  <section class="scenario" id="s-instant">
+    <h2>1. Instant success (&lt; 150 ms)</h2>
+    <p class="what">Below the latency threshold the control shows <b>no</b> pending
+      state at all - no spinner flash. It settles straight to a quiet tick.</p>
+    <div class="row"><async-select label="Instant"></async-select></div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 2. 800ms -->
+  <section class="scenario" id="s-800">
+    <h2>2. Slow success (800 ms)</h2>
+    <p class="what">Past the threshold, the requested value shows as provisional
+      (dashed, tagged <code>requested</code>) with a spinner and the current
+      authoritative value spelled out. On confirm it settles quietly.</p>
+    <div class="row"><async-select label="800 ms"></async-select></div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 3. 4s -->
+  <section class="scenario" id="s-4s">
+    <h2>3. Very slow success (4 s) - escalation</h2>
+    <p class="what">After ~3 s the message escalates to <b>"Still saving..."</b>
+      and the live region re-announces. The control is never blocked - you can
+      still open it and pick again.</p>
+    <div class="row"><async-select label="4 s"></async-select></div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 4. Rejection -->
+  <section class="scenario" id="s-reject">
+    <h2>4. Rejection with a reason</h2>
+    <p class="what">The server refuses. The control reverts to the authoritative
+      value and states <b>specifically why</b>. Try the disabled option too - it
+      is announced as unavailable and never requested.</p>
+    <div class="row"><async-select label="Rejects"></async-select></div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 5. Network failure -->
+  <section class="scenario" id="s-fail">
+    <h2>5. Network failure - recoverable</h2>
+    <p class="what">The request errors. The control <b>keeps the attempted value
+      visible</b> (tagged <code>unsaved</code>), never silently reverts, and
+      offers <b>Retry</b>. Retry here succeeds the second time.</p>
+    <div class="row"><async-select label="Flaky"></async-select></div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 6. Timeout -->
+  <section class="scenario" id="s-timeout">
+    <h2>6. Timeout</h2>
+    <p class="what">The commit never settles. After the configured timeout
+      (2 s here) the control gives up, explains it timed out, keeps the attempted
+      value, and offers Retry.</p>
+    <div class="row"><async-select label="Hangs" timeout="2000"></async-select></div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 7. Supersede -->
+  <section class="scenario" id="s-supersede">
+    <h2>7. Superseding change (change your mind mid-flight)</h2>
+    <p class="what">A slow (3 s) request is in flight when a newer choice is made.
+      The newer request wins; when the <b>stale</b> response lands it is ignored
+      (guarded by a request sequence number, not by ordering). Press the button,
+      or do it by hand: pick "Draft", then immediately pick "Published".</p>
+    <div class="row">
+      <async-select label="Supersede"></async-select>
+      <div class="controls">
+        <button class="act" data-supersede>Script it: request Draft, then Published</button>
+      </div>
+    </div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 8. External change -->
+  <section class="scenario" id="s-external">
+    <h2>8. External change mid-flight</h2>
+    <p class="what">While a 3 s request is in flight, the authoritative value
+      changes elsewhere (another tab / another user). The control reconciles the
+      baseline <b>without stealing focus</b> and <b>without discarding your
+      in-flight intent</b>. It announces the external change quietly.</p>
+    <div class="row">
+      <async-select label="External"></async-select>
+      <div class="controls">
+        <button class="act" data-ext-idle>External change while idle</button>
+        <button class="act" data-ext-inflight>Start request, then external change mid-flight</button>
+      </div>
+    </div>
+    <div class="log" data-log></div>
+  </section>
+
+  <!-- 9. Local + Unavailable -->
+  <section class="scenario" id="s-local">
+    <h2>9. Local (instant) options + disabled state</h2>
+    <p class="what">The same component also serves options that need <b>no</b>
+      server confirmation - marked <code>instant</code>, they apply immediately.
+      The toggle disables the whole control (UNAVAILABLE).</p>
+    <div class="row">
+      <async-select label="Mixed"></async-select>
+      <div class="controls">
+        <button class="act" data-toggle-disabled>Toggle disabled</button>
+      </div>
+    </div>
+    <div class="log" data-log></div>
+  </section>
+
+</div>
+
+<script type="module">
+  import { reject as AsyncSelectReject } from './async-select.js';
+
+  const wait = (ms, signal) => new Promise((res, rej) => {
+    const t = setTimeout(res, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('aborted', 'AbortError')); }, { once: true });
+  });
+
+  // --- tiny event logger attached to each scenario ------------------------
+  function attachLog(section) {
+    const el = section.querySelector('async-select');
+    const logEl = section.querySelector('[data-log]');
+    let n = 0;
+    const line = (type, detail) => {
+      n++;
+      const row = document.createElement('div');
+      row.className = `ev-${type}`;
+      const bits = [];
+      for (const k of ['value', 'requested', 'reason', 'previous', 'timeout', 'local', 'supersededValue', 'duringPending']) {
+        if (detail && k in detail && detail[k] !== undefined && typeof detail[k] !== 'object') bits.push(`${k}=${detail[k]}`);
+      }
+      row.innerHTML = `<b>${type}</b> ${bits.join(' ')}`;
+      logEl.prepend(row);
+      if (n > 30) logEl.lastChild && logEl.lastChild.remove();
+    };
+    for (const t of ['change-requested', 'confirmed', 'rejected', 'failed', 'superseded', 'externalchange']) {
+      el.addEventListener(t, (e) => line(t === 'change-requested' ? 'requested' : t, e.detail));
+    }
+    return el;
+  }
+
+  const OPTS = [
+    { value: 'draft', label: 'Draft', description: 'Only you can see it' },
+    { value: 'review', label: 'In review', description: 'Awaiting a second pair of eyes' },
+    { value: 'published', label: 'Published', description: 'Live for everyone' },
+    { value: 'archived', label: 'Archived', description: 'Hidden but kept' },
+  ];
+
+  // 1. instant
+  {
+    const el = attachLog(document.getElementById('s-instant'));
+    el.options = OPTS;
+    el.value = 'draft';
+    el.commit = async () => { /* resolves immediately -> confirmed */ };
+  }
+
+  // 2. 800ms
+  {
+    const el = attachLog(document.getElementById('s-800'));
+    el.options = OPTS;
+    el.value = 'draft';
+    el.commit = async (v, { signal }) => { await wait(800, signal); };
+  }
+
+  // 3. 4s
+  {
+    const el = attachLog(document.getElementById('s-4s'));
+    el.options = OPTS;
+    el.value = 'draft';
+    el.commit = async (v, { signal }) => { await wait(4000, signal); };
+  }
+
+  // 4. rejection with reason (+ a disabled option)
+  {
+    const el = attachLog(document.getElementById('s-reject'));
+    el.options = [
+      ...OPTS.slice(0, 3),
+      { value: 'deleted', label: 'Deleted', description: 'Not permitted here', disabled: true },
+    ];
+    el.value = 'draft';
+    el.commit = async (v, { signal }) => {
+      await wait(600, signal);
+      if (v === 'published') {
+        throw AsyncSelectReject('Needs an editor to approve before publishing.');
+      }
+      // Otherwise the server settles on a DIFFERENT value than requested:
+      if (v === 'archived') {
+        return { value: 'review', reason: 'Archiving is queued - moved to review.' };
+      }
+    };
+  }
+
+  // 5. network failure, retry succeeds
+  {
+    const el = attachLog(document.getElementById('s-fail'));
+    el.options = OPTS;
+    el.value = 'draft';
+    let attempts = 0;
+    el.commit = async (v, { signal }) => {
+      await wait(500, signal);
+      attempts++;
+      if (attempts % 2 === 1) throw new Error('fetch failed');
+      /* even attempt -> success */
+    };
+  }
+
+  // 6. timeout (never settles; control's own 2s timeout fires)
+  {
+    const el = attachLog(document.getElementById('s-timeout'));
+    el.options = OPTS;
+    el.value = 'draft';
+    el.commit = (v, { signal }) => new Promise((res, rej) => {
+      // Honour abort so a well-behaved commit stops work, but never resolve.
+      signal.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')), { once: true });
+    });
+  }
+
+  // 7. supersede
+  {
+    const section = document.getElementById('s-supersede');
+    const el = attachLog(section);
+    el.options = OPTS;
+    el.value = 'archived';
+    el.commit = async (v, { signal }) => {
+      // Draft is slow, everything else quick - so a later fast pick can beat it.
+      await wait(v === 'draft' ? 3000 : 500, signal);
+    };
+    section.querySelector('[data-supersede]').addEventListener('click', () => {
+      el.requestValue('draft');
+      setTimeout(() => el.requestValue('published'), 500);
+    });
+  }
+
+  // 8. external change
+  {
+    const section = document.getElementById('s-external');
+    const el = attachLog(section);
+    el.options = OPTS;
+    el.value = 'draft';
+    el.commit = async (v, { signal }) => { await wait(3000, signal); };
+    section.querySelector('[data-ext-idle]').addEventListener('click', () => {
+      el.setConfirmed(el.value === 'published' ? 'draft' : 'published');
+    });
+    section.querySelector('[data-ext-inflight]').addEventListener('click', () => {
+      el.requestValue('review');
+      setTimeout(() => el.setConfirmed('archived'), 700);
+    });
+  }
+
+  // 9. local + disabled
+  {
+    const section = document.getElementById('s-local');
+    const el = attachLog(section);
+    el.options = [
+      { value: 'off', label: 'Off', description: 'Applies instantly, no server', local: true },
+      { value: 'low', label: 'Low', description: 'Applies instantly, no server', local: true },
+      { value: 'sync', label: 'Synced (server)', description: 'Needs confirmation' },
+      { value: 'high', label: 'High', description: 'Applies instantly, no server', local: true },
+    ];
+    el.value = 'off';
+    el.commit = async (v, { signal }) => { await wait(700, signal); };
+    section.querySelector('[data-toggle-disabled]').addEventListener('click', () => {
+      el.disabled = !el.disabled;
+    });
+  }
+</script>
+</body>
+</html>
