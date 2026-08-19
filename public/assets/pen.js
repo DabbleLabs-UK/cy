@@ -19,6 +19,11 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const BASELINE = 22; // glyph-space baseline
+// Below this many CSS px the writing surface has not been laid out yet (it is the
+// hidden view, or we are in the same tick as its reveal). We never wrap against a
+// size this small - we defer and measure again once it is real. Kept low so a
+// legitimately narrow surface (a postcard's message area, ~150px) still counts.
+const MIN_SANE_PX = 24;
 
 // ---- glyph parsing --------------------------------------------------------
 
@@ -287,6 +292,22 @@ export class Pen {
     this.lang = 'en';
     this._sketchBoxes = new Map(); // drawing id -> its reserved box, across passes
 
+    // retained logical flow (chars/spaces/newlines/silences/drawings) so a width
+    // change can re-wrap EVERYTHING through the same layout path the live stream
+    // uses. Excludes dream murmurs (their surface is fixed and non-scrolling) and
+    // card pens (fixed objects that never reflow).
+    this.flow = [];
+    // the current word's already-drawn glyphs, so an overflow can move the whole
+    // word down to the next line (word-boundary wrap) instead of breaking it.
+    this._wordGlyphs = [];
+    this._wordAtMargin = true;
+    // layout gating: we only lay ink down once the surface has a real measured
+    // size, and a genuine width change re-wraps what is already there.
+    this._laidOut = false;
+    this._reflowRequested = false;
+    this._remeasureQueued = false;
+    this._remeasureTries = 0;
+
     this._buildSvg();
     this._buildLiveRegion();
   }
@@ -360,43 +381,132 @@ export class Pen {
     }
   }
 
-  // Recompute the coordinate space from the live sheet size. Returns true when
-  // the size actually changed so callers can re-flow (rescroll) only then.
-  _resize() {
-    const r = this.root.getBoundingClientRect();
-    // Size the coordinate space to the CONTENT box, not the border box.
-    // getBoundingClientRect().width is the border-box width - it includes the
-    // sheet's 1px border (and any padding). The SVG is CSS width:100%, so it
-    // actually renders at the content width; feeding the wider border-box width
-    // into the viewBox made 1 user unit slightly narrower than 1px and let the
-    // wrap point (maxX) sit a couple of px past the visible right edge. Subtract
-    // padding + border so the viewBox, the rendered width, and the wrap point all
-    // agree on ONE number.
-    const cs = typeof getComputedStyle !== 'undefined' ? getComputedStyle(this.root) : null;
+  // Measure the REAL rendered width of the writing surface, or return null when it
+  // is not laid out yet. The coordinate space must match the actually-rendered
+  // width (the SVG is CSS width:100%), so we size to the CONTENT box, not the
+  // border box: getBoundingClientRect().width includes the sheet's 1px border and
+  // any padding, and feeding that wider number into the viewBox made 1 user unit
+  // slightly narrower than 1px and let the wrap point sit past the visible edge.
+  // clientWidth excludes the border; we subtract padding too so the viewBox, the
+  // rendered width and the wrap point all agree on ONE number. A display:none
+  // surface (the hidden view) has no client rects and a 0 client size - we return
+  // null for that rather than inventing a width, which is what wrapped the
+  // re-rendered history at ~8 chars a line.
+  _measure() {
+    const el = this.root;
+    if (typeof el.getClientRects === 'function' && el.getClientRects().length === 0) return null;
+    const r = el.getBoundingClientRect();
+    const cs = typeof getComputedStyle !== 'undefined' ? getComputedStyle(el) : null;
     const padX = cs ? (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) : 0;
     const padY = cs ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) : 0;
-    const cw = (this.root.clientWidth || Math.round(r.width)) - padX; // clientWidth excludes border
-    const ch = (this.root.clientHeight || Math.round(r.height)) - padY;
-    const w = Math.max(200, Math.round(cw));
-    const h = Math.max(200, Math.round(ch));
-    if (w === this.w && h === this.h) return false;
-    this.w = w;
-    this.h = h;
-    this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    this.svg.setAttribute('width', w);
-    this.svg.setAttribute('height', h);
-    // wrap point comes from the SAME width used for the viewBox above.
+    const cw = (el.clientWidth || Math.round(r.width)) - padX;
+    const ch = (el.clientHeight || Math.round(r.height)) - padY;
+    const w = Math.round(cw);
+    const h = Math.round(ch);
+    if (w < MIN_SANE_PX || h < MIN_SANE_PX) return null; // 0 / implausibly small: not laid out
+    return { w, h };
+  }
+
+  // Recompute the coordinate space from the live, LAID-OUT sheet size. Returns true
+  // when the size actually changed so the resize/observer callers can rescroll.
+  // When there is no trustworthy box yet we defer and re-measure after layout,
+  // rather than adopting a fallback width and wrapping against it.
+  _resize() {
+    const m = this._measure();
+    if (!m) {
+      this._scheduleRemeasure();
+      return false;
+    }
+    const changed = m.w !== this.w || m.h !== this.h;
+    const widthChanged = m.w !== this.w;
+    this.w = m.w;
+    this.h = m.h;
+    this.svg.setAttribute('viewBox', `0 0 ${this.w} ${this.h}`);
+    this.svg.setAttribute('width', this.w);
+    this.svg.setAttribute('height', this.h);
+    // the wrap point comes from the SAME width used for the viewBox above.
     this.maxX = this.w - this.marginRight;
     if (this._debug) {
       // eslint-disable-next-line no-console
-      console.log('[pen] resize', {
-        clientWidth: this.root.clientWidth,
-        rectWidth: Math.round(r.width),
-        viewBoxW: w,
-        maxX: this.maxX,
-      });
+      console.log('[pen] resize', { clientWidth: this.root.clientWidth, viewBoxW: this.w, maxX: this.maxX, laidOut: this._laidOut });
     }
-    return true;
+    const firstLayout = !this._laidOut;
+    this._laidOut = true;
+    this._remeasureTries = 0;
+    if (firstLayout) {
+      // first real size: drain whatever queued while we had no width to wrap to.
+      this._pump();
+    } else if (widthChanged && !this.card && this._hasContent()) {
+      // a genuine width change (e.g. a window resize): re-wrap all existing text
+      // to the new width through the same layout path the live stream uses.
+      this._requestReflow();
+    }
+    return changed;
+  }
+
+  _hasContent() {
+    return this.flow.length > 0;
+  }
+
+  _requestReflow() {
+    this._reflowRequested = true;
+    this._pump();
+  }
+
+  // Re-measure on the next frame when the surface was not laid out yet (the reveal
+  // happens after the tick that switched to this view). Bounded so a permanently
+  // hidden view does not spin rAF forever - the ResizeObserver picks up the reveal.
+  _scheduleRemeasure() {
+    if (this._remeasureQueued || this._laidOut) return;
+    if ((this._remeasureTries | 0) > 240) return;
+    this._remeasureQueued = true;
+    this._remeasureTries = (this._remeasureTries | 0) + 1;
+    const again = () => {
+      this._remeasureQueued = false;
+      if (this._resize()) this._scroll();
+    };
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(again);
+    else if (typeof setTimeout !== 'undefined') setTimeout(again, 32);
+  }
+
+  // Wipe the rendered ink + text and re-lay the retained flow at the CURRENT width.
+  // This runs at a job boundary inside _pump (never concurrently with a live draw),
+  // and drives the SAME job queue -> _drawChar path the live stream uses, so the
+  // streamed case and this bulk re-render can never wrap differently.
+  _reflowReset() {
+    while (this.ink.firstChild) this.ink.removeChild(this.ink.firstChild);
+    while (this.textLayer.firstChild) this.textLayer.removeChild(this.textLayer.firstChild);
+    this.glyphNodes = [];
+    this.textNodes = [];
+    this._line = null;
+    this._sketchBoxes.clear();
+    this._wordGlyphs = [];
+    this.scrollG.setAttribute('transform', 'translate(0, 0)');
+    this.x = this.marginX;
+    this.y = this.marginTop + this.size;
+    this.midWord = false;
+
+    const items = this.flow;
+    this.flow = []; // rebuilt identically as the replay drains back through _pump
+    const replay = [];
+    for (const it of items) {
+      if (it.t === 'c') replay.push({ type: 'char', ch: it.ch, instant: true, dream: it.dream, shout: it.shout });
+      else if (it.t === 'sp') replay.push({ type: 'char', ch: ' ', instant: true, dream: it.dream });
+      else if (it.t === 'n') replay.push({ type: 'newline' });
+      else if (it.t === 'si') replay.push({ type: 'silence', seconds: it.seconds });
+      else if (it.t === 'd') replay.push({ type: 'draw', drawing: it.drawing, instant: true });
+    }
+    this.jobs = replay.concat(this.jobs);
+  }
+
+  // Retain one logical flow item so a later width change can reproduce it. Capped
+  // so an all-day tab does not grow it without bound (older lines have scrolled off
+  // and been pruned from the DOM anyway).
+  _recordFlow(item) {
+    if (this.card) return;
+    this.flow.push(item);
+    const CAP = 6000;
+    if (this.flow.length > CAP) this.flow.splice(0, this.flow.length - CAP);
   }
 
   // ---- a11y: a polite live region announces completed passages -----------
@@ -587,6 +697,15 @@ export class Pen {
   // no animation, the stillness is the point. For a long silence, arm a time
   // marker so writing resumes on a fresh dated line (see write()).
   silence(seconds, marker) {
+    const secs = Math.max(0, Number(seconds) || 0);
+    this._applyGap(secs);
+    if (secs >= 90 && marker) this._resumeMarker = String(marker);
+    this._recordFlow({ t: 'si', seconds: secs });
+  }
+
+  // The visible blank gap of a silence. Shared by the live path (silence()) and the
+  // reflow replay (a 'silence' job), so a re-render reproduces the gap identically.
+  _applyGap(seconds) {
     // close off the current line so the gap starts clean
     if (this.midWord || this.x > this.marginX) this._newline();
     const secs = Math.max(0, Number(seconds) || 0);
@@ -596,7 +715,6 @@ export class Pen {
     this.x = this.marginX;
     this.midWord = false;
     this._scroll();
-    if (secs >= 90 && marker) this._resumeMarker = String(marker);
   }
 
   // Backlog fill: lay down ink fully drawn (no per-stroke animation) so the
@@ -615,6 +733,9 @@ export class Pen {
   abort() {
     // drop everything not yet drawn for the aborted thought...
     this.jobs.length = 0;
+    // ...forget the in-progress word so a later line cannot try to relocate glyphs
+    // that belong to the abandoned thought...
+    this._wordGlyphs = [];
     // ...signal the glyph loop to stop after the current stroke...
     this.abortFlag = true;
     // ...and freeze the in-flight stroke where the pen currently is, so it
@@ -648,14 +769,35 @@ export class Pen {
     if (this.running) return;
     this.running = true;
     try {
-      while (this.jobs.length) {
+      while (true) {
+        // A pending reflow (a real width change) re-lays everything at the new
+        // width BEFORE we touch the queue further. Done here, at a job boundary,
+        // so it never runs concurrently with an in-flight stroke.
+        if (this._reflowRequested) {
+          this._reflowRequested = false;
+          this._reflowReset();
+          continue;
+        }
+        // Hold until the surface has a real, laid-out size. We never draw at a
+        // guessed width (that is what wrapped the history at ~8 chars); the first
+        // valid _resize() resumes us, and the ResizeObserver covers a later reveal.
+        if (!this._laidOut) break;
+        if (!this.jobs.length) break;
         const job = this.jobs.shift();
         if (job.type === 'newline') {
           this._newline();
+          this._recordFlow({ t: 'n' });
+          continue;
+        }
+        if (job.type === 'silence') {
+          // only ever enqueued by the reflow replay; live silences run immediately
+          this._applyGap(job.seconds);
+          this._recordFlow({ t: 'si', seconds: job.seconds });
           continue;
         }
         if (job.type === 'draw') {
           await this._drawSketch(job.drawing, job.instant);
+          this._recordFlow({ t: 'd', drawing: job.drawing });
           continue;
         }
         if (job.type === 'dreamdraw') {
@@ -666,12 +808,14 @@ export class Pen {
         const ch = job.ch;
         if (ch === '\n') {
           this._newline();
+          this._recordFlow({ t: 'n' });
           continue;
         }
         if (ch === ' ' || ch === '\t') {
           this._recordChar(' '); // real space in the text, at its own x
           this.x += this._spaceAdvance(job.dream);
           this.midWord = false;
+          this._recordFlow({ t: 'sp', dream: !!job.dream });
           continue;
         }
         await this._drawChar(ch, job.instant, job.dream, job.shout);
@@ -775,14 +919,63 @@ export class Pen {
     this._announce(line.chars.join(''));
   }
 
-  async _drawChar(ch, instant, dream, shout) {
-    const g = this._glyphFor(ch);
-    if (!g) {
-      // no glyph for this codepoint: still keep it in the readable text
-      this._recordChar(ch);
-      this.x += this._spaceAdvance(dream);
+  // The absolute transform that lands a glyph's local coordinate space at (x, y) on
+  // the sheet. Shared by the initial placement and by a word relocation, so a moved
+  // glyph keeps the exact hand (jitter rotation, per-glyph x-scale) it was drawn
+  // with - only its x and baseline change.
+  _glyphTransform(x, y, rot, sx, scale) {
+    return `translate(${x.toFixed(2)}, ${y.toFixed(2)}) rotate(${rot.toFixed(2)}) scale(${sx.toFixed(4)}, ${scale.toFixed(4)}) translate(0, ${-BASELINE})`;
+  }
+
+  // Word-boundary wrap: the current word (every glyph since the last space or line
+  // start) has run past the right edge, so move the WHOLE word down to a fresh line
+  // instead of breaking it. The already-drawn glyph groups are re-positioned and
+  // their characters are moved from the old text line onto the new one, so ink,
+  // selectable text and reading order all stay consistent.
+  _relocateWord() {
+    const glyphs = this._wordGlyphs;
+    const n = glyphs.length;
+    if (!n) {
+      this._newline();
       return;
     }
+    try {
+      // pull the word's characters off the current text line - they belong on the
+      // next line now.
+      const line = this._line;
+      if (line && line.chars.length >= n) {
+        line.chars.splice(line.chars.length - n, n);
+        line.xs.splice(line.xs.length - n, n);
+        if (line.chars.length) {
+          line.node.setAttribute('x', line.xs.map((v) => v.toFixed(2)).join(' '));
+          line.node.textContent = line.chars.join('');
+        } else {
+          // nothing was left before the word: drop the now-empty line node
+          line.node.remove();
+          const i = this.textNodes.indexOf(line.node);
+          if (i >= 0) this.textNodes.splice(i, 1);
+          this._line = null;
+        }
+      }
+      this._newline(); // announce/flush the (word-less) old line, start a fresh one
+      // re-lay each glyph of the word on the fresh line. A word wider than a whole
+      // line still breaks, but only after it has had a full line to itself.
+      for (const gi of glyphs) {
+        if (this.x + gi.advance > this.maxX && this.x > this.marginX) this._newline();
+        gi.grp.setAttribute('transform', this._glyphTransform(this.x, this.y + gi.dyBase, gi.rot, gi.sx, gi.scale));
+        this._recordChar(gi.ch);
+        this.x += gi.advance;
+      }
+      this._wordAtMargin = true; // the word now begins the fresh line
+    } catch {
+      // any inconsistency: fall back to a plain break so we never throw mid-stream
+      this._newline();
+      this._wordAtMargin = true;
+    }
+  }
+
+  async _drawChar(ch, instant, dream, shout) {
+    const g = this._glyphFor(ch);
     // a dream murmur renders smaller and fainter than waking prose
     const ds = dream ? dreamTextStyle() : null;
     // pen PRESSURE: a shouted glyph is pressed slightly larger and heavier, like
@@ -791,7 +984,24 @@ export class Pen {
     const pressed = shout && !ds;
     const size = (ds ? this.size * ds.sizeScale : this.size) * (pressed ? 1.12 : 1);
     const scale = size / 21;
+
+    if (!g) {
+      // no glyph for this codepoint: still keep it in the readable text
+      this._recordChar(ch);
+      this.x += this._spaceAdvance(dream);
+      this.midWord = true;
+      this._recordFlow({ t: 'c', ch, dream: !!dream, shout: !!shout });
+      return;
+    }
     const advance = g.o * 2 * scale;
+
+    // starting a new word? remember whether it begins at the left margin - a word
+    // that starts at the margin and STILL overflows is genuinely too long and may
+    // break mid-word; a word that started mid-line moves down whole instead.
+    if (!this.midWord) {
+      this._wordGlyphs = [];
+      this._wordAtMargin = this.x <= this.marginX + 0.5;
+    }
 
     if (this._debug && this.x + advance > this.maxX) {
       // eslint-disable-next-line no-console
@@ -801,16 +1011,21 @@ export class Pen {
         advance: +advance.toFixed(1),
         rightEdge: +(this.x + advance).toFixed(1),
         maxX: this.maxX,
-        midWord: this.midWord,
+        atMargin: this._wordAtMargin,
       });
     }
-    // word wrap: prefer wrapping at a word boundary (so whole words move down), but
-    // a single word too long to fit the line must ALSO break mid-word - otherwise
-    // its tail runs off the right edge and is cropped ('degre|es', 'smell|s',
-    // 'whisper|s'). Never wrap on the very first glyph of a line (x > marginX), which
-    // also guarantees a glyph wider than the whole line still lands rather than looping.
+    // word wrap: on overflow, move the whole in-progress word to the next line so
+    // words are never split ('to visit|ation', 'mr pro|ctor'). Only a word that
+    // began at the margin and is itself wider than a full line breaks mid-word
+    // ('degre|es' is fine when the word alone cannot fit). Never wrap on the very
+    // first glyph of a line (x > marginX), so an over-wide glyph still lands.
     if (this.x + advance > this.maxX && this.x > this.marginX) {
-      this._newline();
+      if (!this._wordAtMargin && this._wordGlyphs.length) {
+        this._relocateWord();
+      } else {
+        this._newline();
+        this._wordAtMargin = true;
+      }
     }
     this.midWord = true;
 
@@ -827,12 +1042,12 @@ export class Pen {
 
     const grp = document.createElementNS(SVGNS, 'g');
     grp.setAttribute('class', ds ? 'glyph dream' : 'glyph');
-    grp.setAttribute(
-      'transform',
-      `translate(${this.x.toFixed(2)}, ${(this.y + dyBase).toFixed(2)}) rotate(${rot.toFixed(2)}) scale(${sx.toFixed(4)}, ${scale.toFixed(4)}) translate(0, ${-BASELINE})`,
-    );
+    grp.setAttribute('transform', this._glyphTransform(this.x, this.y + dyBase, rot, sx, scale));
     this.ink.appendChild(grp);
     this._trackNode(grp);
+
+    // remember this glyph so a later overflow in the same word can relocate it
+    this._wordGlyphs.push({ grp, ch, advance, dyBase, rot, sx, scale });
 
     // draw each stroke sequentially
     for (const dPath of g.strokes) {
@@ -841,6 +1056,7 @@ export class Pen {
     }
 
     this.x += advance;
+    this._recordFlow({ t: 'c', ch, dream: !!dream, shout: !!shout });
   }
 
   _drawStroke(grp, dPath, sw, op, instant) {
