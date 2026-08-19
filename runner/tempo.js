@@ -31,6 +31,35 @@
 
 export const MAX_TEMPO_IDLE_MS = 15 * 60 * 1000; // 15 minutes - absolute safety cap
 
+// ---- reading-speed cap (backpressure, not a timer) -------------------------
+//
+// Tempo (above) throttles by DUTY CYCLE - at speed=100 it inserts zero idle, so a
+// burst runs as fast as the provider allows. On local ollama that was self-limiting
+// (~55s TTFT); on a fast provider (DeepSeek) it is not, and the client pen renderer
+// draws at a fixed stroke rate anyway, so anything generated far ahead of the reader
+// just queues up unseen - tokens spent on prose nobody has reached. This is a second,
+// independent throttle: keep the emitted prose from running more than a human can read
+// ahead of them, regardless of speed. It COMPOSES with the tempo idle (the runner sits
+// for the GREATER of the two), it never replaces it.
+//
+// READ_CHARS_PER_SEC is a comfortable reading rate: ~220 wpm at ~5 chars/word ~= 18
+// chars/sec. READ_BUFFER_CHARS is how much unread text is allowed to run ahead before
+// backpressure kicks in (~30s of reading at that rate) - a small lead so short bursts
+// are never throttled, only a sustained fast overrun is.
+export const READ_CHARS_PER_SEC = 18; // ~220 wpm at ~5 chars/word - a human reading rate
+export const READ_BUFFER_CHARS = 550; // ~30s of unread text allowed to run ahead before throttling
+
+// How long to idle so the reader catches back down to the buffer, given how far
+// ahead of the reading clock the emitted prose currently is. Pure function of
+// aheadChars (uses the module constants only) so it is unit-testable and the
+// client-side tempo preview can reuse the exact same maths. Returns whole ms >= 0;
+// 0 whenever we are within the buffer (or behind the reader).
+export function readingIdleMs(aheadChars) {
+  const over = (Number(aheadChars) || 0) - READ_BUFFER_CHARS;
+  if (over <= 0) return 0; // within the allowed lead (or behind the reader): no backpressure
+  return Math.round((over / READ_CHARS_PER_SEC) * 1000); // drain the excess at the reading rate
+}
+
 // The longest DELIBERATE idle allowed at a given speed, in ms. Anchors are on
 // speed (descending); values between anchors interpolate linearly. This is the
 // cap that turns the raw duty-cycle idle into a sane cadence.

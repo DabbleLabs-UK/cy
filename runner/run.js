@@ -104,7 +104,7 @@ import { SpendMeter } from './spend.js';
 import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } from './provider.js';
 import { createWarden, sanitize, stripScaffold, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
-import { tempoIdleMs } from './tempo.js';
+import { tempoIdleMs, readingIdleMs, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -369,6 +369,14 @@ async function main() {
   // slow drawing to a single occurrence.
   if (!Array.isArray(vitals.dreamPool)) vitals.dreamPool = [];
   if (typeof vitals.dreamDrawDate !== 'string') vitals.dreamDrawDate = '';
+  // READING-CAP backpressure clock (see tempo.js). readEpochMs anchors a monotonic
+  // wall clock and readCharsSinceEpoch counts emitted prose since that anchor; the
+  // two give how far the writing has run ahead of a human reading pace. It rides on
+  // the vitals object so it persists like everything else, but is RESET on every
+  // boot: carrying a stale surplus/deficit across a restart is meaningless (nobody
+  // was reading the gap), so the debt starts at zero.
+  vitals.readEpochMs = Date.now();
+  vitals.readCharsSinceEpoch = 0;
   if (typeof vitals.dreamPlanDate !== 'string') vitals.dreamPlanDate = '';
   if (typeof vitals.dreamStartMin !== 'number') vitals.dreamStartMin = 0;
 
@@ -746,6 +754,10 @@ async function main() {
         // than leaving the gap a mystery. Null on paths with no tempo throttle.
         next_idle_ms: detail.nextIdleMs != null ? Math.round(detail.nextIdleMs) : null,
         cadence_ms: detail.nextIdleMs != null ? Math.round((detail.burstMs || 0) + detail.nextIdleMs) : null,
+        // WHY the runner is about to idle - 'reading-cap' vs 'tempo' (null if no idle),
+        // and how far the prose had run ahead of the reading clock, for the RAW view.
+        idle_reason: detail.idleReason != null ? String(detail.idleReason) : null,
+        ahead_chars: detail.aheadChars != null ? Math.round(detail.aheadChars) : null,
         threads: config.threads,
         // the model that produced THIS burst (the active provider's model), and
         // the provider id, so the diagnostics show which model is running.
@@ -1126,6 +1138,12 @@ async function main() {
     watchdogStep = 0; // text is flowing again: de-escalate the watchdog remedy
     failedCyclesSinceEmit = 0; // text reached the page: not a stall, whatever the cycle outcome reads
     burstEmitted += chunk; // original text: repeat guard reads what he actually wrote
+    // READING-CAP: count only ACTUAL emitted prose toward the reading budget. By the
+    // time a chunk reaches here it has already survived scaffold/narration/state-
+    // notation stripping and the warden, and near-repeat discards never emit at all;
+    // drawings emit no text chunk; dream murmurs go through emitDreamText, not here.
+    // So `chunk` is exactly the prose a viewer has to read. Sleep/dream is excluded.
+    if (mode !== 'dream') vitals.readCharsSinceEpoch = (vitals.readCharsSinceEpoch || 0) + chunk.length;
     await appendContext(chunk); // ORIGINAL to Zone B - never the shouted form
   }
 
@@ -2487,7 +2505,34 @@ async function main() {
       // the gen event, so the diagnostics can show the next gap ('next burst in
       // ~Ns') rather than leaving it a mystery. Only a burst that produced prose is
       // throttled. Smooth the representative burst duration the tempo panel reads.
-      const idleMs = produced ? tempoIdleMs(burstMs, client.tempo.speed) : 0;
+      const tempoIdle = produced ? tempoIdleMs(burstMs, client.tempo.speed) : 0;
+      // READING-CAP backpressure: how far the emitted prose has run ahead of a human
+      // reading clock. A fast provider can outrun any reader even at speed=100 (where
+      // the tempo idle is zero), so this second throttle drains the overrun. Only a
+      // produced burst is measured; the reading clock is re-anchored the moment the
+      // reader has caught up, so no stale surplus/deficit accrues across quiet spells
+      // or a night's sleep (dream prose never counts toward the budget).
+      let aheadChars = 0;
+      let readIdle = 0;
+      if (produced) {
+        const nowB = Date.now();
+        const elapsedSec = Math.max(0, (nowB - (vitals.readEpochMs || nowB)) / 1000);
+        aheadChars = (vitals.readCharsSinceEpoch || 0) - elapsedSec * READ_CHARS_PER_SEC;
+        if (aheadChars <= 0) {
+          // reader is caught up: re-anchor the clock to now so the debt cannot drift
+          // hugely negative (which would then let a long unthrottled dump run later).
+          vitals.readEpochMs = nowB;
+          vitals.readCharsSinceEpoch = 0;
+          aheadChars = 0;
+        }
+        readIdle = readingIdleMs(aheadChars);
+      }
+      // COMPOSE, do not replace: sit for the GREATER of the tempo idle and the reading
+      // backpressure, still clamped by the absolute cap. So a fast overrun is throttled
+      // even at speed=100, and a low speed's long tempo gap is never shortened by it.
+      const idleMs = produced ? Math.min(MAX_TEMPO_IDLE_MS, Math.max(tempoIdle, readIdle)) : 0;
+      // why the runner is about to idle, for the RAW debug view: reading-cap vs tempo.
+      const idleReason = idleMs > 0 ? (readIdle > tempoIdle ? 'reading-cap' : 'tempo') : null;
       if (produced) recentBurstMs = Math.round(recentBurstMs * 0.6 + burstMs * 0.4);
       // live diagnostics: publish this burst's generation telemetry (no-op if the
       // burst errored before ollama returned a `done` line with counters).
@@ -2502,6 +2547,8 @@ async function main() {
           output: lastFull,
           burstMs,
           nextIdleMs: idleMs,
+          idleReason,
+          aheadChars: produced ? aheadChars : null,
         });
       }
       // remember this burst's opening word so the next prompt can forbid it -

@@ -348,7 +348,7 @@ function summaryFor(ev) {
     case 'text':
       return JSON.stringify(p.s ?? '') + (p.mode && p.mode !== 'journal' ? '  [' + p.mode + (p.lucid ? '/lucid' : '') + ']' : '');
     case 'gen':
-      return `${p.mode || '?'}  in=${p.tokens_in} out=${p.tokens_out}  ${p.gen_tok_s}tok/s  ttft=${p.ttft_ms}ms  total=${p.total_ms}ms  (click to expand)`;
+      return `${p.mode || '?'}  in=${p.tokens_in} out=${p.tokens_out}  ${p.gen_tok_s}tok/s  ttft=${p.ttft_ms}ms  total=${p.total_ms}ms${idleBadge(p)}  (click to expand)`;
     case 'silence':
       return `${p.seconds}s${p.reason ? '  (' + p.reason + ')' : ''}`;
     case 'mode':
@@ -386,6 +386,19 @@ function summaryFor(ev) {
     default:
       return JSON.stringify(p);
   }
+}
+
+// A terse idle badge for the gen summary line: WHY the runner is about to sit
+// still and for how long. Icon + short label, no prose: 'R read-cap' (the reading
+// backpressure won), 'T tempo' (the duty-cycle idle won). reading-cap also shows
+// how far ahead of the reader the prose had run. Empty string when there is no idle.
+function idleBadge(p) {
+  if (!p.next_idle_ms) return '';
+  const s = (p.next_idle_ms / 1000).toFixed(1) + 's';
+  const r = p.idle_reason === 'reading-cap'
+    ? 'R read-cap' + (p.ahead_chars != null ? ' +' + p.ahead_chars + 'c' : '')
+    : p.idle_reason === 'tempo' ? 'T tempo' : '';
+  return `  idle=${s}${r ? ' [' + r + ']' : ''}`;
 }
 
 // The expandable per-burst detail: the full prompt (zones A/B/C with char counts),
@@ -433,6 +446,9 @@ function burstDetail(ev, drops) {
     ['gen tok/s', p.gen_tok_s],
     ['time to first token', p.ttft_ms != null ? p.ttft_ms + ' ms' : null],
     ['total', p.total_ms != null ? p.total_ms + ' ms' : null],
+    ['next idle', p.next_idle_ms != null ? p.next_idle_ms + ' ms' : null],
+    ['idle reason', p.idle_reason || null],
+    ['ahead of reader', p.ahead_chars != null ? p.ahead_chars + ' chars' : null],
   ]));
   box.appendChild(tim);
 
@@ -565,6 +581,7 @@ function burstPlain(ev, drops) {
   L.push('');
   L.push('SAMPLING: ' + [`temperature=${p.temperature}`, `top_p=${p.top_p}`, `repeat_penalty=${p.repeat_penalty}`, `num_predict=${p.num_predict}`, `num_ctx=${p.num_ctx}`, `threads=${p.threads}`].join('  '));
   L.push('TIMINGS: ' + [`prompt_eval_count=${p.tokens_in}`, `prompt_tok/s=${p.prompt_tok_s}`, `eval_count=${p.tokens_out}`, `gen_tok/s=${p.gen_tok_s}`, `ttft=${p.ttft_ms}ms`, `total=${p.total_ms}ms`].join('  '));
+  L.push('IDLE: ' + [`next_idle=${p.next_idle_ms != null ? p.next_idle_ms + 'ms' : 'n/a'}`, `reason=${p.idle_reason || 'none'}`, `ahead=${p.ahead_chars != null ? p.ahead_chars + 'c' : 'n/a'}`].join('  '));
   L.push('FORM: ' + (p.form || '(default)'));
   L.push('STYLES: ' + (p.styles || '(none)'));
   if (drops && drops.length) L.push('WARDEN DROPS: ' + drops.map((d) => `[${d.category}:${d.chars}c]`).join(' '));
