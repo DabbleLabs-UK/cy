@@ -17,7 +17,9 @@ declare(strict_types=1);
 // SECURITY - this is a PUBLIC WRITE endpoint, so it is treated as hostile ground:
 //   - the requested regime is validated against the CY_REGIMES whitelist server-side
 //     (a forged/garbage value is 422'd, never written);
-//   - sets are rate-limited per visitor (captive_regime_rate_ok);
+//   - sets are rate-limited on the REAL TCP peer (captive_admin_client_ip), which an
+//     attacker cannot rotate per-request, so dropping the cookie no longer buys a
+//     fresh bucket; a per-visitor cookie limit stacks on top;
 //   - IDENTITY is taken ONLY from the signed, HMAC-verified visitor cookie
 //     (lib/visitor.php) or freshly minted server-side - NEVER from the request body.
 //     A forged or absent cookie therefore cannot impersonate another visitor, and
@@ -26,6 +28,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
+require __DIR__ . '/../../lib/admin.php';
 require __DIR__ . '/../../lib/visitor.php';
 require __DIR__ . '/../../lib/presence.php';
 require __DIR__ . '/../../lib/tempo.php';
@@ -45,24 +48,39 @@ try {
             captive_error_response("regime must be 'auto', 'day' or 'night'", 422);
         }
 
+        // BINDING rate limit: keyed on the real TCP peer. captive_admin_client_ip()
+        // honours CF-Connecting-IP ONLY when REMOTE_ADDR is inside a verified
+        // Cloudflare range (else it is the direct peer), so the key cannot be forged
+        // or rotated per-request. This is what actually binds - dropping the cookie
+        // no longer mints a brand-new bucket.
+        if (!captive_regime_rate_ok($db, 'ip:' . captive_admin_client_ip())) {
+            captive_error_response('too many regime changes, slow down', 429);
+        }
+
         // Identity: the signed visitor cookie, or a fresh server-minted id + cookie.
         // Nothing in the request body is trusted for identity (see header note).
-        $holder = captive_current_visitor_id();
+        $existingVisitor = captive_current_visitor_id();
+        $holder = $existingVisitor;
         if ($holder === null) {
             $holder = bin2hex(random_bytes(16));
             captive_set_visitor_cookie($holder);
         }
         $token = 'v:' . $holder;
 
-        // Per-visitor rate limit on this public write.
+        // Additional per-visitor rate limit (the IP limit above is the binding one).
         if (!captive_regime_rate_ok($db, $token)) {
             captive_error_response('too many regime changes, slow down', 429);
         }
 
-        // Setting a lease means the caller is, by definition, watching. Register the
-        // holder's presence now so the lease is not read as already-lapsed before
-        // their next stream poll writes the same row.
-        captive_presence_touch_token($db, $token);
+        // Register the holder's presence so the lease is not read as already-lapsed
+        // before their next stream poll writes the same row - but ONLY for a visitor
+        // whose signed cookie already verified. A brand-new anonymous setter must not
+        // create a `viewers` row or inflate the viewer count (which would drive the
+        // runner to generate more); their lease holds only once they are actually
+        // watching the stream and their next poll writes the presence row itself.
+        if ($existingVisitor !== null) {
+            captive_presence_touch_token($db, $token);
+        }
 
         $status = captive_tempo_public_set_regime($db, $regime, $holder);
         if ($status === 'admin_locked') {

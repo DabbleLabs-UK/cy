@@ -293,11 +293,21 @@ function captive_tempo_public_set_regime(PDO $db, string $regime, string $holder
     // Lapse any dead lease first so the guards below see a live truth.
     captive_tempo_regime($db);
 
-    $row = $db->query(
-        'SELECT regime_override AS regime, regime_source AS source, regime_holder AS holder,
-                (regime_expires_at IS NOT NULL AND regime_expires_at > NOW()) AS unexpired
-         FROM tempo WHERE id = 1'
-    )->fetch(PDO::FETCH_ASSOC);
+    try {
+        $row = $db->query(
+            'SELECT regime_override AS regime, regime_source AS source, regime_holder AS holder,
+                    (regime_expires_at IS NOT NULL AND regime_expires_at > NOW()) AS unexpired
+             FROM tempo WHERE id = 1'
+        )->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        // pre-008 deploy (no lease columns): there is no lease to reason about, so
+        // degrade to a plain owner-style override set rather than 500-ing (as the
+        // migration header promises). captive_tempo_set_regime itself falls back to
+        // the bare regime_override on pre-008, so the site keeps working without
+        // lease semantics.
+        captive_tempo_set_regime($db, $regime);
+        return 'ok';
+    }
     $curRegime = ($row && is_string($row['regime']) && in_array($row['regime'], CY_REGIMES, true)) ? $row['regime'] : 'auto';
     $curSource = ($row && ($row['source'] ?? 'admin') === 'public') ? 'public' : 'admin';
 
@@ -488,6 +498,24 @@ function captive_incarceration_day(PDO $db): int
     return $days + 1;
 }
 
+// Opportunistically prune expired rate_limits rows so the table cannot grow
+// unbounded (nothing else deletes from it, and neither counter can ever see a row
+// older than its window). Same 1-in-20 pattern as the presence sweep. Horizon is
+// the widest rate window, so a row still inside EITHER action's window is never
+// dropped. Best-effort: a hiccup here must never fail the write it rides on.
+function captive_rate_limits_sweep(PDO $db): void
+{
+    if (random_int(1, 20) !== 1) {
+        return;
+    }
+    $horizon = max((int)CY_TEMPO_RATE_WINDOW, (int)CY_REGIME_RATE_WINDOW);
+    try {
+        $db->exec("DELETE FROM rate_limits WHERE created_at < (NOW() - INTERVAL $horizon SECOND)");
+    } catch (Throwable $e) {
+        /* best-effort */
+    }
+}
+
 // Rate-limit custom tempo changes to CY_TEMPO_RATE_MAX per CY_TEMPO_RATE_WINDOW
 // seconds PER VIEWER. Reuses the generic rate_limits table with action='tempo',
 // keyed by a 16-byte md5 of the viewer token (fits the VARBINARY(16) column).
@@ -507,6 +535,7 @@ function captive_tempo_rate_ok(PDO $db, string $token): bool
     $ins = $db->prepare("INSERT INTO rate_limits (ip, action, created_at) VALUES (:k, 'tempo', NOW())");
     $ins->bindValue(':k', $key, PDO::PARAM_LOB);
     $ins->execute();
+    captive_rate_limits_sweep($db);
     return true;
 }
 
@@ -529,5 +558,6 @@ function captive_regime_rate_ok(PDO $db, string $token): bool
     $ins = $db->prepare("INSERT INTO rate_limits (ip, action, created_at) VALUES (:k, 'regime', NOW())");
     $ins->bindValue(':k', $key, PDO::PARAM_LOB);
     $ins->execute();
+    captive_rate_limits_sweep($db);
     return true;
 }
