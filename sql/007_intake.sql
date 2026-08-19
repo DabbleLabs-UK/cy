@@ -1,0 +1,21 @@
+-- 007_intake.sql - migration for an already-deployed database.
+--
+-- Adds the persisted intake timestamp to the single-row `tempo` table:
+--   intake_at - the authoritative earliest moment of the current stretch, used to
+--               compute the header "DAY N" pill (day 1 = the intake day itself,
+--               incrementing at local midnight). Set ONCE, on first read after
+--               this migration (lib/tempo.php: captive_tempo_resolve_intake_at),
+--               from the first event ever logged if one exists, else "now". It is
+--               never overwritten after that, so the count stays stable even once
+--               old `events` rows are pruned.
+--
+-- Idempotent on MariaDB (IF NOT EXISTS), so it is safe to re-run. Apply once
+-- against a live DB that predates the real day count:
+--
+--   mysql <db> < sql/007_intake.sql
+--
+-- The application degrades safely without it (lib/tempo.php treats the missing
+-- column as "not yet set" and falls back to day 1), so the site never 500s if
+-- this has not been applied yet - the pill just cannot count correctly until it is.
+
+ALTER TABLE tempo ADD COLUMN IF NOT EXISTS intake_at DATETIME NULL;

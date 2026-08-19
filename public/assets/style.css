@@ -237,10 +237,6 @@ html, body {
   .cy-menu-item.is-pending .cy-mark::after { animation: none; }
 }
 
-/* ---- compact model indicator (public): which provider is running ------------ */
-.model-indicator { color: var(--tel-dim); }
-.model-indicator.is-paid { color: #ffd08a; border-color: #6a5326; }
-
 /* ---- inference LED (public): lights while the model is producing text -------- */
 .infer-led {
   width: 9px;

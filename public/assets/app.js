@@ -33,6 +33,12 @@ const $ = (sel) => document.querySelector(sel);
 let pen, postcards, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
+// DAY N pill: seeded from the server's real count (see lib/tempo.php,
+// window.CY.day) so it is right from first paint, then advanced by exactly 1 on
+// each live day-rollover event. The runner's own reported day NUMBER is never
+// trusted for this - only the fact that a rollover happened, so a stale/drifted
+// counter on the runner side can never desync the pill from the true count.
+let dayCount = typeof CFG.day === 'number' ? CFG.day : 1;
 // HISTORY MODE: while true the live poll is suspended (we are reading the past,
 // not following him now). Returning to live kicks an immediate catch-up poll.
 let historyMode = false;
@@ -142,7 +148,6 @@ async function boot() {
   initViewSwitch();
   initHistoryControl();
   initGearMenu();        // admin only: pause + model provider
-  initModelIndicator();  // public: which model is running
   initLed(); // last, so the LED lands leftmost (before the selects)
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
@@ -183,7 +188,7 @@ async function firstLoad() {
   // The LED stays idle through the backlog fill; only inference events newer than
   // the load point may ever drive it, so replayed history can never light it.
   led.lastSeq = lastSeq;
-  setStatus('Show Live', false);
+  setStatus('Live', false);
 }
 
 // tokens beyond this many in one batch mean we fell behind (backgrounded tab,
@@ -204,7 +209,7 @@ async function poll() {
     // (after rendering, so it wins over any token fast-path in the same batch).
     driveLedFromBatch(events);
     if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
-    setStatus('Show Live', false);
+    setStatus('Live', false);
   } catch (e) {
     setStatus('reconnecting', true);
   } finally {
@@ -348,7 +353,6 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // the owner regime override rides the same tick: settle a pending force-day/
       // night once the runner confirms it has picked it up off its tempo poll.
       if (p.regime) syncRegimeState(p.regime);
-      if (typeof p.day === 'number') setDay(p.day);
       break;
 
     case 'capability':
@@ -384,7 +388,9 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       break;
 
     case 'day':
-      if (typeof p.n === 'number') setDay(p.n);
+      // A real local-midnight rollover happened - advance by exactly one from our
+      // own known-correct count rather than trusting the runner's reported number.
+      if (!bootstrap) setDay(++dayCount);
       break;
 
     case 'postcard_in':
@@ -645,7 +651,7 @@ function exitToLive() {
   const pill = $('#status');
   if (pill) {
     pill.classList.remove('is-history', 'bad');
-    pill.textContent = 'Show Live';
+    pill.textContent = 'Live';
     pill.title = 'Travel back - pick a moment';
     pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
   }
@@ -858,7 +864,7 @@ function initGearMenu() {
     .then((d) => {
       if (!d) return;
       if (typeof d.paused !== 'undefined') runnerCtl.confirmed = d.paused ? 'paused' : 'active';
-      if (d.provider) { providerCtl.confirmed = d.provider; setModelIndicator(d.provider); }
+      if (d.provider) providerCtl.confirmed = d.provider;
       if (typeof d.deepseek_available !== 'undefined') providerCtl.available = !!d.deepseek_available;
       if (d.regime) regimeCtl.confirmed = d.regime;
       renderGear();
@@ -1047,8 +1053,8 @@ function syncRunnerState(mode) {
 }
 
 // The runner's REAL active provider off the frequent `vitals` field (and the
-// `provider` event). Settles a pending model switch and keeps the compact chrome
-// indicator honest for everyone (admin or not).
+// `provider` event). Settles a pending model switch so the gear menu's Model
+// group stays honest.
 function syncProviderState(provider) {
   if (provider !== 'ollama' && provider !== 'deepseek') return;
   const c = providerCtl;
@@ -1058,7 +1064,6 @@ function syncProviderState(provider) {
     c.phase = 'idle';
     c.target = null;
   }
-  setModelIndicator(provider);
   renderGearIfPresent();
 }
 
@@ -1140,32 +1145,6 @@ function paintItem(el, c, val, unavail) {
   } else if (c.phase === 'pending') {
     el.disabled = true; // a change is in flight; hold the rest of the pair/group
   }
-}
-
-// ---- compact model indicator (public) -----------------------------------
-// Shows which provider is running without opening the menu. Understated; amber when
-// DeepSeek is active, because that is the one that costs money.
-let modelIndicatorEl = null;
-
-function initModelIndicator() {
-  const meta = document.querySelector('.topmeta');
-  if (!meta) return;
-  const el = document.createElement('span');
-  el.id = 'model-indicator';
-  el.className = 'pill model-indicator';
-  el.hidden = true; // until the first provider is known off the stream/seed
-  meta.insertBefore(el, $('#day') || null);
-  modelIndicatorEl = el;
-  if (providerCtl.confirmed) setModelIndicator(providerCtl.confirmed);
-}
-
-function setModelIndicator(provider) {
-  if (!modelIndicatorEl || (provider !== 'ollama' && provider !== 'deepseek')) return;
-  const paid = provider === 'deepseek';
-  modelIndicatorEl.hidden = false;
-  modelIndicatorEl.textContent = paid ? 'DeepSeek' : 'Ollama';
-  modelIndicatorEl.classList.toggle('is-paid', paid);
-  modelIndicatorEl.title = paid ? 'Running DeepSeek (paid API)' : 'Running Ollama on DELL (local)';
 }
 
 // ---- forms --------------------------------------------------------------

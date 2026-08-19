@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../lib/db.php';
 require __DIR__ . '/../lib/http.php';
 require __DIR__ . '/../lib/admin.php';
+require __DIR__ . '/../lib/tempo.php';
 
 // Point the viewer at the fake replay feed with ?stream=test so the renderer
 // can be exercised with no database present.
@@ -25,6 +26,15 @@ try {
     $isAdmin = array_key_exists('111', $_GET);
 }
 $rawEnabled = $isAdmin; // RAW view and the operator gear menu unlock together on admin
+
+// DAY N pill: day 1 is the intake day itself (see lib/tempo.php). Computed fresh
+// on every load so the number is right from first paint; falls back to day 1 if
+// the DB is unreachable, same defensive pattern as $isAdmin above.
+try {
+    $day = captive_incarceration_day(captive_db());
+} catch (Throwable $e) {
+    $day = 1;
+}
 
 // The view switch (handwritten / plain / raw) is a LOCAL async-select in app.js
 // that remembers the session's choice. ?view= is an optional deep-link that forces
@@ -68,6 +78,10 @@ window.CY = {
   history: 'api/history.php',
   range: 'api/range.php',
   raw: <?= $rawEnabled ? 'true' : 'false' ?>,
+  // Server-computed day count (see lib/tempo.php), so app.js has the correct
+  // baseline to increment from on a live day rollover without trusting the
+  // runner's own counter.
+  day: <?= json_encode($day) ?>,
   // Optional starting view from ?view= (handwritten|plain|raw), else null. The
   // view switch is a local async-select in app.js that otherwise remembers the
   // session's choice; this just lets a deep-link pick where it opens.
@@ -95,7 +109,7 @@ window.CY = {
          these pills. The gear menu is NOT part of the fiction: it pauses/resumes the
          LLM (so idle CPU/memory/draw can be read) and switches the model provider.
          Both actions settle only on the runner's real state off the event stream. -->
-    <span id="day" class="pill">DAY --</span>
+    <span id="day" class="pill">DAY <?= $day ?></span>
     <span id="mode" class="pill" data-mode="journal">JOURNAL</span>
     <span id="status" class="pill status">connecting</span>
   </div>

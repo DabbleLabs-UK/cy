@@ -237,6 +237,83 @@ function captive_tempo_state(PDO $db): array
     return $d;
 }
 
+// ---- incarceration day (public, derived from the same tempo row) -----------
+//
+// The header "DAY N" pill: day 1 is the intake day itself, incrementing at LOCAL
+// (Europe/London) midnight - never on a rolling 24h boundary. `intake_at` is the
+// authoritative earliest timestamp for the current stretch, persisted ONCE on the
+// single-row `tempo` table (same pattern as `paused`/`provider`/`regime_override`)
+// so the count stays stable even once old `events` rows are pruned. Both accessors
+// are defensive: on a database that has not run the 007_intake migration the
+// column is missing, so rather than 500 the caller falls back to day 1.
+function captive_tempo_intake_at(PDO $db): ?string
+{
+    try {
+        $v = $db->query('SELECT intake_at FROM tempo WHERE id = 1')->fetchColumn();
+        return ($v === false || $v === null) ? null : (string)$v;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+// Persist the intake timestamp once. Never overwrites an existing value (WHERE
+// intake_at IS NULL), so a slow request racing a faster one cannot clobber the
+// real earliest moment with a later one.
+function captive_tempo_set_intake_at(PDO $db, string $ts): void
+{
+    try {
+        $stmt = $db->prepare('UPDATE tempo SET intake_at = :ts WHERE id = 1 AND intake_at IS NULL');
+        $stmt->bindValue(':ts', $ts, PDO::PARAM_STR);
+        $stmt->execute();
+    } catch (Throwable $e) {
+        /* un-migrated deploy (no intake_at column) - degrade to no-op */
+    }
+}
+
+// Resolve the authoritative intake timestamp: the persisted value if already set,
+// else the first event ever logged (so an already-running deploy backfills a
+// sensible date instead of resetting to "today"), else - a genuinely fresh
+// install with no history at all - right now. Whichever it resolves to is
+// persisted immediately so it never moves again, even once early events age out.
+function captive_tempo_resolve_intake_at(PDO $db): string
+{
+    $intake = captive_tempo_intake_at($db);
+    if ($intake !== null) {
+        return $intake;
+    }
+    $earliest = null;
+    try {
+        $v = $db->query('SELECT MIN(ts) FROM events')->fetchColumn();
+        $earliest = ($v === false || $v === null) ? null : (string)$v;
+    } catch (Throwable $e) {
+        $earliest = null;
+    }
+    $seed = $earliest ?? date('Y-m-d H:i:s');
+    captive_tempo_set_intake_at($db, $seed);
+    // Read back rather than trust $seed directly: a concurrent request may have
+    // already won the race and persisted a different (earlier or equal) value.
+    return captive_tempo_intake_at($db) ?? $seed;
+}
+
+// Days into the current stretch. Day 1 = the intake day itself; the count steps up
+// exactly once per LOCAL (Europe/London) midnight crossed since then, matching the
+// runner's own day-rollover rule (date change, not a rolling 24h window).
+function captive_incarceration_day(PDO $db): int
+{
+    $intakeAt = captive_tempo_resolve_intake_at($db);
+    $tz = new DateTimeZone('Europe/London');
+    // Event timestamps are stored as already-local wall-clock strings (see
+    // lib/history.php) - read the date portion directly rather than reinterpreting
+    // it as UTC.
+    $intake = DateTime::createFromFormat('!Y-m-d', substr($intakeAt, 0, 10), $tz);
+    if ($intake === false) {
+        return 1;
+    }
+    $today = new DateTime('today', $tz);
+    $days = (int)$intake->diff($today)->days;
+    return $days + 1;
+}
+
 // Rate-limit custom tempo changes to CY_TEMPO_RATE_MAX per CY_TEMPO_RATE_WINDOW
 // seconds PER VIEWER. Reuses the generic rate_limits table with action='tempo',
 // keyed by a 16-byte md5 of the viewer token (fits the VARBINARY(16) column).
