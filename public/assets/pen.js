@@ -28,6 +28,11 @@ const WORD_SPACE_MULT = 2;
 // size this small - we defer and measure again once it is real. Kept low so a
 // legitimately narrow surface (a postcard's message area, ~150px) still counts.
 const MIN_SANE_PX = 24;
+// Extra vertical breathing room (in lines) dropped between two journal entries, so
+// a new thought starts clearly below the last one rather than continuing its line.
+const ENTRY_GAP = 0.9;
+// A per-entry timestamp is written in the same hand but smaller, as a dated lead-in.
+const TS_SCALE = 0.6;
 
 // ---- glyph parsing --------------------------------------------------------
 
@@ -301,6 +306,9 @@ export class Pen {
     // uses. Excludes dream murmurs (their surface is fixed and non-scrolling) and
     // card pens (fixed objects that never reflow).
     this.flow = [];
+    // true once at least one entry has been laid on the sheet, so the FIRST entry
+    // gets no leading gap while every subsequent one does (see _beginEntry).
+    this._hasRenderedEntry = false;
     // the current word's already-drawn glyphs, so an overflow can move the whole
     // word down to the next line (word-boundary wrap) instead of breaking it.
     this._wordGlyphs = [];
@@ -489,6 +497,7 @@ export class Pen {
     this.x = this.marginX;
     this.y = this.marginTop + this.size;
     this.midWord = false;
+    this._hasRenderedEntry = false; // the replay re-establishes it, first entry ungapped
 
     const items = this.flow;
     this.flow = []; // rebuilt identically as the replay drains back through _pump
@@ -497,6 +506,7 @@ export class Pen {
       if (it.t === 'c') replay.push({ type: 'char', ch: it.ch, instant: true, dream: it.dream, shout: it.shout });
       else if (it.t === 'sp') replay.push({ type: 'char', ch: ' ', instant: true, dream: it.dream });
       else if (it.t === 'n') replay.push({ type: 'newline' });
+      else if (it.t === 'e') replay.push({ type: 'entry', ts: it.ts, mode: it.mode });
       else if (it.t === 'si') replay.push({ type: 'silence', seconds: it.seconds });
       else if (it.t === 'd') replay.push({ type: 'draw', drawing: it.drawing, instant: true });
     }
@@ -658,14 +668,6 @@ export class Pen {
       for (const r of spans) if (i >= r[0] && i < r[1]) return true;
       return false;
     };
-    // resuming after a long silence: lay down the time marker on its own fresh
-    // line first, in the same hand, so the gap reads as "then, at HH:MM...".
-    if (this._resumeMarker) {
-      const mk = this._resumeMarker;
-      this._resumeMarker = null;
-      for (const ch of mk) this._enqueue({ type: 'char', ch, instant });
-      this._enqueue({ type: 'newline' });
-    }
     // index over the code UNITS of str, so the offsets line up with the runner's
     // character ranges (the transform only ever capitalises ASCII letters).
     let i = 0;
@@ -697,13 +699,14 @@ export class Pen {
 
   // ---- silence: a real gap, left blank -----------------------------------
   //
-  // He stopped. Leave visible empty space proportional to the duration - no ink,
-  // no animation, the stillness is the point. For a long silence, arm a time
-  // marker so writing resumes on a fresh dated line (see write()).
-  silence(seconds, marker) {
+  // He stopped. Leave visible empty space proportional to the duration - no ink on
+  // the page except a small hand-drawn mark scaled to the gap, so the passage of
+  // time is VISIBLE (a longer gap = more blank page + a heavier scratch). When
+  // writing resumes it opens a fresh dated entry (see app.js), so no separate resume
+  // marker is needed here.
+  silence(seconds) {
     const secs = Math.max(0, Number(seconds) || 0);
     this._applyGap(secs);
-    if (secs >= 90 && marker) this._resumeMarker = String(marker);
     this._recordFlow({ t: 'si', seconds: secs });
   }
 
@@ -715,10 +718,99 @@ export class Pen {
     const secs = Math.max(0, Number(seconds) || 0);
     // ~0.8 lines at 20s up to a capped ~6 lines for the long (asleep) gaps
     const gapLines = Math.max(0.8, Math.min(6, secs / 40));
-    this.y += this.size * this.lineGap * gapLines;
+    const gapPx = this.size * this.lineGap * gapLines;
+    // a small hand mark sits in the middle of the blank run - the physical trace of
+    // waiting. Drawn statically (no animation, survives reflow like the gap itself).
+    this._drawSilenceMark(secs, this.y + gapPx * 0.5);
+    this.y += gapPx;
     this.x = this.marginX;
     this.midWord = false;
     this._scroll();
+  }
+
+  // A quiet pen mark left in a silence: a short, hand-wobbled scratch centred on the
+  // page, its length growing with the duration, with a second fainter tick for a
+  // long gap. Faint, static, non-selectable - a mark on the page, not text.
+  _drawSilenceMark(secs, y) {
+    if (!this.ink || this.card) return;
+    const cx = (this.marginX + this.maxX) / 2;
+    const grow = Math.min(1, secs / 600); // 0..1 over ten minutes
+    const half = this.size * (0.35 + grow * 1.15);
+    const jig = this.size * 0.12;
+    const r = () => (Math.random() * 2 - 1) * jig;
+    const x0 = cx - half;
+    const x1 = cx + half;
+    const midx = cx + (Math.random() * 2 - 1) * half * 0.3;
+    const d = `M${x0.toFixed(2)},${(y + r() * 0.5).toFixed(2)} Q${midx.toFixed(2)},${(y + r()).toFixed(2)} ${x1.toFixed(2)},${(y + r() * 0.5).toFixed(2)}`;
+    this._appendSilenceStroke(d, 0.4, 1.3);
+    if (secs >= 240) {
+      const ty = y + this.size * 0.8;
+      const d2 = `M${(cx - half * 0.5).toFixed(2)},${ty.toFixed(2)} L${(cx + half * 0.5).toFixed(2)},${(ty + r()).toFixed(2)}`;
+      this._appendSilenceStroke(d2, 0.3, 1.1);
+    }
+  }
+
+  _appendSilenceStroke(d, op, sw) {
+    const path = document.createElementNS(SVGNS, 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('class', 'stroke silence-mark');
+    path.style.strokeWidth = String(sw);
+    path.style.opacity = String(op);
+    this.ink.appendChild(path);
+    this._trackNode(path);
+  }
+
+  // ---- journal entries: a break + a dated lead-in --------------------------
+  //
+  // Called (from app.js) when a NEW journal/dream entry begins - the same boundary
+  // the plain view uses to start a fresh block. It is queued as a job so it stays
+  // ordered with the surrounding text and is reproduced on a reflow.
+  beginEntry(ts, mode) {
+    this._enqueue({ type: 'entry', ts: ts || '', mode: mode || 'journal' });
+  }
+
+  // Drop onto a fresh line with a little air above (except before the very first
+  // entry), then write the timestamp small as a dated lead-in.
+  async _beginEntry(ts, mode) {
+    if (this.card) return; // a postcard pen never carries journal entries
+    if (this.midWord || this.x > this.marginX) this._newline();
+    if (this._hasRenderedEntry) {
+      this.y += this.size * this.lineGap * ENTRY_GAP;
+      this.x = this.marginX;
+      this.midWord = false;
+      this._scroll();
+    }
+    this._hasRenderedEntry = true;
+    if (ts) await this._drawTimestampLine(String(ts));
+  }
+
+  // The timestamp lead-in: the same hand, smaller and a touch fainter, on its own
+  // line. Laid down instantly (a header, not something drawn live) and NOT recorded
+  // as logical flow - the entry item carries the timestamp, so a reflow regenerates
+  // it. The glyphs still go into the real text layer, so the time is selectable.
+  async _drawTimestampLine(text) {
+    if (this.midWord || this.x > this.marginX) this._newline();
+    const savedSize = this.size;
+    const savedOp = this.inkOpacity;
+    this.size = Math.max(9, savedSize * TS_SCALE);
+    this.inkOpacity = savedOp * 0.75;
+    try {
+      for (const ch of text) {
+        if (this.abortFlag) break;
+        if (ch === ' ') {
+          this._recordChar(' ');
+          this.x += this._spaceAdvance(false);
+          this.midWord = false;
+          continue;
+        }
+        // instant (no per-stroke reveal), noFlow (regenerated from the entry item).
+        await this._drawChar(ch, true, false, false, true);
+      }
+    } finally {
+      this.size = savedSize;
+      this.inkOpacity = savedOp;
+    }
+    this._newline();
   }
 
   // Backlog fill: lay down ink fully drawn (no per-stroke animation) so the
@@ -788,6 +880,11 @@ export class Pen {
         if (!this._laidOut) break;
         if (!this.jobs.length) break;
         const job = this.jobs.shift();
+        if (job.type === 'entry') {
+          await this._beginEntry(job.ts, job.mode);
+          this._recordFlow({ t: 'e', ts: job.ts, mode: job.mode });
+          continue;
+        }
         if (job.type === 'newline') {
           this._newline();
           this._recordFlow({ t: 'n' });
@@ -978,7 +1075,11 @@ export class Pen {
     }
   }
 
-  async _drawChar(ch, instant, dream, shout) {
+  // `noFlow` suppresses the logical-flow record for this glyph (used by the
+  // timestamp lead-in, whose glyphs are regenerated from the entry item on reflow).
+  // It is a parameter, not instance state, so it can never leak across the pump's
+  // suspended awaits and swallow an unrelated _recordFlow (e.g. a live silence).
+  async _drawChar(ch, instant, dream, shout, noFlow) {
     const g = this._glyphFor(ch);
     // a dream murmur renders smaller and fainter than waking prose
     const ds = dream ? dreamTextStyle() : null;
@@ -994,7 +1095,7 @@ export class Pen {
       this._recordChar(ch);
       this.x += this._spaceAdvance(dream);
       this.midWord = true;
-      this._recordFlow({ t: 'c', ch, dream: !!dream, shout: !!shout });
+      if (!noFlow) this._recordFlow({ t: 'c', ch, dream: !!dream, shout: !!shout });
       return;
     }
     const advance = g.o * 2 * scale;
@@ -1060,7 +1161,7 @@ export class Pen {
     }
 
     this.x += advance;
-    this._recordFlow({ t: 'c', ch, dream: !!dream, shout: !!shout });
+    if (!noFlow) this._recordFlow({ t: 'c', ch, dream: !!dream, shout: !!shout });
   }
 
   _drawStroke(grp, dPath, sw, op, instant) {

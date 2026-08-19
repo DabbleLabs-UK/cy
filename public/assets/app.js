@@ -259,6 +259,19 @@ async function fetchStream(since) {
 // ---- event dispatch -----------------------------------------------------
 
 let latestMode = 'journal';
+// Mirrors the plain view's block boundaries for the handwritten sheet: a journal/
+// dream entry is "open" while its burst streams, and CLOSES on the same signals
+// plain uses (a mode change, a burst end, a silence, a drawing, an abort). The next
+// journal/dream token then opens a fresh, dated entry on the paper. Same event
+// stream, no second data path - just the boundary the pen was never told about.
+let penEntryOpen = false;
+
+// HH:MM out of an event timestamp, for the entry lead-in (mirrors plain's clockOf).
+function clockOf(ts) {
+  if (!ts) return '';
+  const m = String(ts).match(/(\d{2}):(\d{2})/);
+  return m ? m[1] + ':' + m[2] : '';
+}
 
 function dispatch(ev, bootstrap, live = !bootstrap) {
   // PLAIN reading view (behind ?view=plain): forward the same event stream, backlog
@@ -276,6 +289,12 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       if (p.mode === 'letter') {
         postcards.write(p.s);
       } else {
+        // first token of a new entry: open it on a fresh, dated line (the break +
+        // timestamp the plain view shows, in the language of the notebook).
+        if (!penEntryOpen) {
+          pen.beginEntry(clockOf(ev.ts), p.mode);
+          penEntryOpen = true;
+        }
         pen.write(p.s, p.mode, p.lucid, p.shout);
       }
       break;
@@ -284,6 +303,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // a drawing pass: the same pen engine, fed strokes instead of glyphs. On
       // backlog fill pen.instant is set, so a drawing that finished before you
       // arrived lays down complete instead of re-animating from scratch.
+      penEntryOpen = false; // a drawing is its own thing; text after it is a new entry
       pen.draw(p);
       if (!bootstrap && p.dream) {
         // the night's slow dream drawing: mention it once, quietly, at its start
@@ -294,6 +314,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       break;
 
     case 'mode': {
+      penEntryOpen = false; // any mode flip ends the open entry (a card interrupts here)
       const to = p.to || latestMode;
       latestMode = to;
       setMode(to, p.cause); // header pill
@@ -317,20 +338,17 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // it cuts the journal thought on the sheet.
       if (!bootstrap) {
         if (latestMode === 'letter') postcards.abort();
-        else pen.abort();
+        else { pen.abort(); penEntryOpen = false; } // the cut-off thought ends the entry
       }
       break;
 
     case 'silence': {
-      // he stopped writing: leave a real blank gap on the page, no ink. For a
-      // longer silence, resume on a fresh line stamped with the time.
+      // he stopped writing: leave a real blank gap on the page, marked by a small
+      // hand scratch scaled to how long the stillness lasted. The next token opens a
+      // fresh dated entry, so the resumed line is stamped with its own time.
+      penEntryOpen = false;
       const secs = Number(p.seconds) || 0;
-      let marker = '';
-      if (secs >= 90 && ev.ts) {
-        const m = String(ev.ts).match(/(\d{2}):(\d{2})/);
-        if (m) marker = m[1] + ':' + m[2];
-      }
-      pen.silence(secs, marker);
+      pen.silence(secs);
       if (!bootstrap && secs >= 60) pushTicker(p.reason === 'under' ? 'asleep, gone still' : 'gone quiet');
       break;
     }
@@ -366,6 +384,9 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       break;
 
     case 'gen':
+      // a generation burst finished: close the open journal entry so the next burst
+      // opens its own, dated (a letter burst is closed by the mode flip, not here).
+      if (p.mode !== 'letter') penEntryOpen = false;
       hud.setGen(p);
       break;
 
