@@ -64,6 +64,14 @@ export class Client {
     // continue with the new provider, no restart.
     this.provider = 'ollama';
     this.onProviderChange = null;
+    // Owner regime override, owner-set via /api/admin.php and read off the same
+    // tempo poll below (it lives on the tempo row alongside `paused`/`provider`).
+    // 'auto' follows the clock (no override); 'day' forces awake; 'night' forces
+    // asleep. Defaults to 'auto' so a poll failure at startup never forces a state
+    // blindly. onRegimeChange fires the moment it transitions so the runner can cut
+    // the in-flight burst and re-evaluate the sleep state at once, no restart.
+    this.regime = 'auto';
+    this.onRegimeChange = null;
     // last known tempo. Defaults to 100 (continuous, the old behaviour) so an
     // endpoint that is unreachable at startup never stalls or throttles blindly;
     // the first successful poll replaces it.
@@ -309,6 +317,18 @@ export class Client {
       if (data.provider !== this.provider) {
         this.provider = data.provider;
         if (this.onProviderChange) this.onProviderChange(data.provider);
+      }
+    }
+    // The owner regime override rides the same tempo poll (it lives on the tempo
+    // row next to `paused`/`provider`). Detect the TRANSITION here and fire
+    // onRegimeChange so the runner can cut the in-flight burst and re-evaluate the
+    // sleep state immediately - forcing 'day' wakes him, 'night' puts him under.
+    // Handled before the speed early-return so it is honoured even if speed is
+    // somehow absent from a malformed tempo body.
+    if (data && typeof data.regime === 'string' && data.regime) {
+      if (data.regime !== this.regime) {
+        this.regime = data.regime;
+        if (this.onRegimeChange) this.onRegimeChange(data.regime);
       }
     }
     if (!data || data.speed == null) return;

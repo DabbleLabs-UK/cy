@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 // admin.php - the owner's pause/resume and model-provider control for the runner.
 //
-//   GET                                  -> current { ok, paused, provider, deepseek_available }
+//   GET                                  -> current { ok, paused, provider,
+//                                           deepseek_available, regime }
 //   POST { action:'pause' }              -> stop the LLM: sets the paused flag
 //   POST { action:'resume' }             -> resume generation
 //   POST { action:'provider', provider } -> switch the active model provider
 //                                           ('ollama' | 'deepseek')
+//   POST { action:'regime', regime }     -> force the day/night + sleep regime
+//                                           ('auto' | 'day' | 'night')
 //
 // The provider is persisted on the same single `tempo` row as the pause flag and
 // read by the runner through its existing tempo poll, so a switch takes effect
@@ -47,6 +50,7 @@ function admin_state(PDO $db): array
         'paused' => captive_tempo_paused($db),
         'provider' => captive_tempo_provider($db),
         'deepseek_available' => captive_tempo_deepseek_available($db),
+        'regime' => captive_tempo_regime($db),
     ];
 }
 
@@ -80,8 +84,17 @@ try {
             captive_json_response(admin_state($db));
         }
 
+        if ($action === 'regime') {
+            $regime = is_array($input) ? ($input['regime'] ?? null) : null;
+            if (!in_array($regime, CY_REGIMES, true)) {
+                captive_error_response("regime must be 'auto', 'day' or 'night'", 422);
+            }
+            captive_tempo_set_regime($db, $regime);
+            captive_json_response(admin_state($db));
+        }
+
         if ($action !== 'pause' && $action !== 'resume') {
-            captive_error_response("action must be 'pause', 'resume' or 'provider'", 422);
+            captive_error_response("action must be 'pause', 'resume', 'provider' or 'regime'", 422);
         }
         captive_tempo_set_paused($db, $action === 'pause');
         captive_json_response(admin_state($db));

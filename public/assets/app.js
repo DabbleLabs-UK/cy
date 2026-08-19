@@ -345,6 +345,9 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // the active model provider rides this frequent tick: settle a pending model
       // switch and keep the compact indicator honest (see initGearMenu).
       if (p.provider) syncProviderState(p.provider);
+      // the owner regime override rides the same tick: settle a pending force-day/
+      // night once the runner confirms it has picked it up off its tempo poll.
+      if (p.regime) syncRegimeState(p.regime);
       if (typeof p.day === 'number') setDay(p.day);
       break;
 
@@ -687,12 +690,17 @@ const CONFIRM_TIMEOUT_MS = 15000; // safety net past which "never acknowledged" 
 // target = what we asked for while pending; phase = idle | pending | failed.
 const runnerCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null };
 const providerCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null, available: false };
+// Owner regime override (auto | day | night) - the same little state machine as
+// the runner/provider controls: confirmed = the runner's real value, target = what
+// we asked for while pending, phase = idle | pending | failed.
+const regimeCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null };
 
 let gearBuilt = false;
 let gearBtn = null, gearMenu = null, gearWrap = null;
-let menuOpen = false, modelExpanded = false;
+let menuOpen = false, modelExpanded = false, regimeExpanded = false;
 let modelToggle = null, modelGroup = null;
-const gearItems = {}; // active, paused, ollama, deepseek, deepseekNote
+let regimeToggle = null, regimeGroup = null;
+const gearItems = {}; // active, paused, ollama, deepseek, deepseekNote, auto, day, night
 
 const GEAR_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
@@ -776,12 +784,46 @@ function initGearMenu() {
   modelGroup.appendChild(gearItems.ollama);
   modelGroup.appendChild(gearItems.deepseek);
 
+  // Regime submenu - the same shape as Model: a toggle that expands a group whose
+  // current item is greyed and inert, the others clickable (force day / force night).
+  const sep2 = document.createElement('div');
+  sep2.className = 'cy-menu-sep';
+  sep2.setAttribute('role', 'separator');
+
+  regimeToggle = document.createElement('button');
+  regimeToggle.type = 'button';
+  regimeToggle.className = 'cy-menu-item cy-menu-sub';
+  regimeToggle.setAttribute('role', 'menuitem');
+  regimeToggle.setAttribute('aria-haspopup', 'true');
+  regimeToggle.setAttribute('aria-expanded', 'false');
+  const rMark = document.createElement('span');
+  rMark.className = 'cy-mark';
+  rMark.setAttribute('aria-hidden', 'true');
+  const rLab = document.createElement('span');
+  rLab.className = 'cy-menu-lab';
+  rLab.textContent = 'Regime';
+  regimeToggle.appendChild(rMark);
+  regimeToggle.appendChild(rLab);
+
+  regimeGroup = document.createElement('div');
+  regimeGroup.className = 'cy-menu-group';
+  regimeGroup.hidden = true;
+  gearItems.auto = makeItem('regime', 'auto', 'Auto');
+  gearItems.day = makeItem('regime', 'day', 'Force Day');
+  gearItems.night = makeItem('regime', 'night', 'Force Night');
+  regimeGroup.appendChild(gearItems.auto);
+  regimeGroup.appendChild(gearItems.day);
+  regimeGroup.appendChild(gearItems.night);
+
   gearMenu.appendChild(capR);
   gearMenu.appendChild(gearItems.active);
   gearMenu.appendChild(gearItems.paused);
   gearMenu.appendChild(sep);
   gearMenu.appendChild(modelToggle);
   gearMenu.appendChild(modelGroup);
+  gearMenu.appendChild(sep2);
+  gearMenu.appendChild(regimeToggle);
+  gearMenu.appendChild(regimeGroup);
 
   gearWrap.appendChild(gearBtn);
   gearWrap.appendChild(gearMenu);
@@ -802,6 +844,10 @@ function initGearMenu() {
   gearItems.ollama.addEventListener('click', () => sendProvider('ollama'));
   gearItems.deepseek.addEventListener('click', () => sendProvider('deepseek'));
   modelToggle.addEventListener('click', () => (modelExpanded ? collapseModel() : expandModel()));
+  gearItems.auto.addEventListener('click', () => sendRegime('auto'));
+  gearItems.day.addEventListener('click', () => sendRegime('day'));
+  gearItems.night.addEventListener('click', () => sendRegime('night'));
+  regimeToggle.addEventListener('click', () => (regimeExpanded ? collapseRegime() : expandRegime()));
 
   renderGear();
 
@@ -814,6 +860,7 @@ function initGearMenu() {
       if (typeof d.paused !== 'undefined') runnerCtl.confirmed = d.paused ? 'paused' : 'active';
       if (d.provider) { providerCtl.confirmed = d.provider; setModelIndicator(d.provider); }
       if (typeof d.deepseek_available !== 'undefined') providerCtl.available = !!d.deepseek_available;
+      if (d.regime) regimeCtl.confirmed = d.regime;
       renderGear();
     })
     .catch(() => {});
@@ -821,8 +868,11 @@ function initGearMenu() {
 
 // The menu items reachable by arrow keys right now: visible, enabled, laid out.
 function focusableGearItems() {
-  return [gearItems.active, gearItems.paused, modelToggle, gearItems.ollama, gearItems.deepseek]
-    .filter((el) => el && !el.hidden && !el.disabled && el.offsetParent !== null);
+  return [
+    gearItems.active, gearItems.paused,
+    modelToggle, gearItems.ollama, gearItems.deepseek,
+    regimeToggle, gearItems.auto, gearItems.day, gearItems.night,
+  ].filter((el) => el && !el.hidden && !el.disabled && el.offsetParent !== null);
 }
 
 function openGear() {
@@ -840,6 +890,7 @@ function closeGear(focusGear) {
   menuOpen = false;
   gearMenu.hidden = true;
   collapseModel();
+  collapseRegime();
   gearBtn.setAttribute('aria-expanded', 'false');
   document.removeEventListener('pointerdown', onGearDocDown, true);
   if (focusGear) gearBtn.focus();
@@ -861,6 +912,22 @@ function collapseModel() {
   modelExpanded = false;
   if (modelGroup) modelGroup.hidden = true;
   if (modelToggle) modelToggle.setAttribute('aria-expanded', 'false');
+}
+
+function expandRegime() {
+  regimeExpanded = true;
+  regimeGroup.hidden = false;
+  regimeToggle.setAttribute('aria-expanded', 'true');
+  const first = focusableGearItems().find(
+    (el) => el === gearItems.auto || el === gearItems.day || el === gearItems.night
+  );
+  if (first) first.focus();
+}
+
+function collapseRegime() {
+  regimeExpanded = false;
+  if (regimeGroup) regimeGroup.hidden = true;
+  if (regimeToggle) regimeToggle.setAttribute('aria-expanded', 'false');
 }
 
 function onGearKeydown(e) {
@@ -885,6 +952,7 @@ function onGearKeydown(e) {
       break;
     case 'ArrowLeft':
       if (modelExpanded) { e.preventDefault(); collapseModel(); modelToggle.focus(); }
+      else if (regimeExpanded) { e.preventDefault(); collapseRegime(); regimeToggle.focus(); }
       break;
     case 'Escape':
       e.preventDefault();
@@ -923,6 +991,19 @@ function sendProvider(target) {
   c.timer = setTimeout(() => failCtl(c, 'Timed out - not saved yet.'), CONFIRM_TIMEOUT_MS);
   renderGear();
   postAdmin({ action: 'provider', provider: target }, c, target);
+}
+
+function sendRegime(target) {
+  const c = regimeCtl;
+  if (c.phase === 'pending') return;
+  if (c.confirmed === target && c.phase === 'idle') return; // already there
+  c.phase = 'pending';
+  c.target = target;
+  c.error = '';
+  clearTimeout(c.timer);
+  c.timer = setTimeout(() => failCtl(c, 'Timed out - not saved yet.'), CONFIRM_TIMEOUT_MS);
+  renderGear();
+  postAdmin({ action: 'regime', regime: target }, c, target);
 }
 
 function postAdmin(body, c, target) {
@@ -981,6 +1062,21 @@ function syncProviderState(provider) {
   renderGearIfPresent();
 }
 
+// The runner's REAL regime override off the frequent `vitals` field. Settles a
+// pending force-day/night once the runner reports it has picked the change up off
+// its tempo poll (the exact counterpart of syncProviderState).
+function syncRegimeState(regime) {
+  if (regime !== 'auto' && regime !== 'day' && regime !== 'night') return;
+  const c = regimeCtl;
+  c.confirmed = regime;
+  if (c.phase === 'pending' && c.target === regime) {
+    clearTimeout(c.timer);
+    c.phase = 'idle';
+    c.target = null;
+  }
+  renderGearIfPresent();
+}
+
 function syncCapability(deepseekAvailable) {
   providerCtl.available = !!deepseekAvailable;
   renderGearIfPresent();
@@ -1002,6 +1098,10 @@ function renderGear() {
     gearItems.deepseekNote.hidden = !dsUnavail;
     gearItems.deepseekNote.textContent = dsUnavail ? 'unavailable - no API key on the runner' : '';
   }
+
+  paintItem(gearItems.auto, regimeCtl, 'auto', false);
+  paintItem(gearItems.day, regimeCtl, 'day', false);
+  paintItem(gearItems.night, regimeCtl, 'night', false);
 
   // If the focused item just became inert, keep focus usable inside the open menu.
   if (menuOpen) {

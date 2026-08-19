@@ -146,6 +146,45 @@ function captive_tempo_set_provider(PDO $db, string $provider): void
     $stmt->execute();
 }
 
+// ---- owner regime override (owner-only, persisted on the same tempo row) -----
+//
+// Forces Cy's day/night + sleep state for testing, overriding the clock-based
+// lights-out window (22:30-06:30) the runner computes itself:
+//   'auto'  - the default: follow the clock (no override)
+//   'day'   - force awake (leave dream mode, resume the normal waking cadence)
+//   'night' - force asleep (dream mode) regardless of the hour
+// Owner-set via POST /api/admin.php; the runner reads it via its existing tempo
+// poll and switches mid-loop, no restart. Both accessors are defensive: on a
+// database that has not run the 006_regime migration the column is missing, so
+// rather than 500 the tempo endpoint they report/keep the safe default ('auto').
+const CY_REGIMES = ['auto', 'day', 'night'];
+
+function captive_tempo_regime(PDO $db): string
+{
+    try {
+        $v = $db->query('SELECT regime_override FROM tempo WHERE id = 1')->fetchColumn();
+    } catch (Throwable $e) {
+        return 'auto';
+    }
+    return (is_string($v) && in_array($v, CY_REGIMES, true)) ? $v : 'auto';
+}
+
+function captive_tempo_set_regime(PDO $db, string $regime): void
+{
+    if (!in_array($regime, CY_REGIMES, true)) {
+        $regime = 'auto';
+    }
+    // NB distinct placeholder names (:r1/:r2): PDO requires each named placeholder
+    // to appear exactly once in the statement.
+    $stmt = $db->prepare(
+        'INSERT INTO tempo (id, regime_override, updated_at) VALUES (1, :r1, NOW())
+         ON DUPLICATE KEY UPDATE regime_override = :r2, updated_at = NOW()'
+    );
+    $stmt->bindValue(':r1', $regime, PDO::PARAM_STR);
+    $stmt->bindValue(':r2', $regime, PDO::PARAM_STR);
+    $stmt->execute();
+}
+
 // Whether the runner currently has a DeepSeek key (reported by the runner via a
 // capability event). Defensive: a missing column reads as "not available", so an
 // un-migrated deploy simply cannot select DeepSeek.
@@ -192,6 +231,9 @@ function captive_tempo_state(PDO $db): array
     $d['paused'] = captive_tempo_paused($db);
     // the active model provider rides the same row; the runner reads it here.
     $d['provider'] = captive_tempo_provider($db);
+    // the owner regime override rides the same row too; the runner reads it here
+    // off its existing poll and forces day/night without a restart.
+    $d['regime'] = captive_tempo_regime($db);
     return $d;
 }
 

@@ -1648,7 +1648,7 @@ async function main() {
     // pick the waking target the same way the loop does: dream in the sleep window,
     // the ruled-paper journal otherwise. The loop continues from here without
     // re-announcing (dreamState is always initialised, so dreamStep is safe).
-    const to = isAsleep(londonParts().mins) ? 'dream' : 'journal';
+    const to = effectiveAsleep(londonParts().mins) ? 'dream' : 'journal';
     emit({ kind: 'mode', payload: { from: 'paused', to } });
     currentMode = to;
     client.kick(); // priority flush: the admin control is waiting on this
@@ -1680,6 +1680,32 @@ async function main() {
     emit({ kind: 'event', payload: { name: 'provider', from, to: id, model: target.model } });
     client.kick(); // priority flush: the admin control is waiting on this
     if (currentAbort) currentAbort.abort(); // clean cut; the next burst uses the new provider
+  };
+
+  // The EFFECTIVE sleep state: the clock-based lights-out window (isAsleep) is the
+  // FALLBACK, overridden by the owner regime override that rides the tempo poll
+  // (client.regime). 'day' forces awake, 'night' forces asleep, 'auto' (default)
+  // follows the clock. Everything that keys off asleep - the dream/journal decision,
+  // the incident cadence and the vitals (heart rate, brain regions) - reads this, so
+  // a forced wake/sleep is total and consistent, not just cosmetic.
+  function effectiveAsleep(mins) {
+    if (client.regime === 'day') return false;
+    if (client.regime === 'night') return true;
+    return isAsleep(mins);
+  }
+
+  // ---- owner regime override: force day/night mid-loop, no restart -------------
+  // The override rides the tempo poll (client.regime), owner-set via /api/admin.php.
+  // On a real transition cut the in-flight burst with the same abort machinery a
+  // pause/provider switch uses (partial text already streamed stays; Zone B is
+  // untouched), so the loop re-evaluates effectiveAsleep AT ONCE: forcing 'day'
+  // leaves dream mode and resumes the normal waking cadence, forcing 'night' drops
+  // him into dream mode - both within a poll, no restart. The mode transition itself
+  // is emitted by the loop (its dream<->journal branches), so this only needs to
+  // interrupt and priority-flush.
+  client.onRegimeChange = () => {
+    client.kick(); // priority flush: the admin control is waiting on this
+    if (currentAbort) currentAbort.abort(); // cut the burst; the loop re-decides asleep now
   };
 
   // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
@@ -1832,7 +1858,7 @@ async function main() {
     }
     prevMins = mins;
 
-    const asleep = isAsleep(mins);
+    const asleep = effectiveAsleep(mins);
     const phase = currentRegime(mins).phase;
     // wing noise: sparse texture, rate-limited (awake and asleep both routed here)
     maybeWingNoise(now, asleep, phase, mins);
@@ -1874,7 +1900,7 @@ async function main() {
   const tickTimer = setInterval(async () => {
     const now = Date.now();
     const { mins } = londonParts(new Date(now));
-    const asleep = isAsleep(mins);
+    const asleep = effectiveAsleep(mins);
     tick(vitals, { asleep, now });
     // live anger + expressed (the lagged, outward value that drives shouting).
     // Runs every tick so the lag is smooth and a spike sulks down between bursts.
@@ -1907,6 +1933,10 @@ async function main() {
         // the active model provider, so the UI can show which model is running on
         // the frequent tick (not just on a `gen` event).
         provider: activeProviderId,
+        // the owner regime override the runner is currently honouring, so the gear
+        // menu's regime control settles out-of-band once the runner picks it up off
+        // its tempo poll (exactly as `provider` above settles the model switch).
+        regime: client.regime,
         asleep,
         day: vitals.day,
         monotony: Number((vitals.monotony || 0).toFixed(3)),
@@ -2290,7 +2320,7 @@ async function main() {
         continue;
       }
       const { mins } = londonParts();
-      const asleep = isAsleep(mins);
+      const asleep = effectiveAsleep(mins);
 
       // ASLEEP: DREAM mode runs its own step - murmurs spaced far apart, one slow
       // abstract drawing accumulating through the small hours, and the rare night
