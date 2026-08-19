@@ -448,6 +448,13 @@ function handleAmbient(p) {
     pushTicker('model switched to ' + (p.to === 'deepseek' ? 'DeepSeek' : 'Ollama'));
     return;
   }
+  if (name === 'regime') {
+    // the runner picked up the regime override mid-loop: settle any pending
+    // select at once (the frequent vitals tick is the backstop if this is missed).
+    syncRegimeState(p.to);
+    pushTicker('regime forced to ' + (p.to === 'day' ? 'Day' : p.to === 'night' ? 'Night' : 'Auto'));
+    return;
+  }
   if (name === 'provider_refused') {
     // the runner refused a DeepSeek switch (no key). Reflect unavailability and
     // fail any in-flight request so the control shows a retryable failure.

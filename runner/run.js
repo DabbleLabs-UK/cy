@@ -1721,7 +1721,15 @@ async function main() {
   // him into dream mode - both within a poll, no restart. The mode transition itself
   // is emitted by the loop (its dream<->journal branches), so this only needs to
   // interrupt and priority-flush.
-  client.onRegimeChange = () => {
+  // Also emit a dedicated 'regime' event (the exact counterpart of 'provider' above)
+  // so the gear menu's async-select settles immediately instead of timing out - it
+  // used to only ride along as a field on the periodic vitals tick, which is too
+  // infrequent for the UI's confirm-timeout window.
+  let activeRegimeId = client.regime;
+  client.onRegimeChange = (to) => {
+    const from = activeRegimeId;
+    activeRegimeId = to;
+    emit({ kind: 'event', payload: { name: 'regime', from, to } });
     client.kick(); // priority flush: the admin control is waiting on this
     if (currentAbort) currentAbort.abort(); // cut the burst; the loop re-decides asleep now
   };
