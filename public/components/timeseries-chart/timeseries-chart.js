@@ -21,7 +21,10 @@
 // It takes an ARBITRARY list of named, coloured series; the categories
 // (energy, spend, CPU, ...) are never the component's business.
 
-const CSS_HREF = new URL('./timeseries-chart.css', import.meta.url).href;
+// Reuse this module's own URL query string (the host page's cache-busting
+// ?v=, applied via an import map - see index.php's cy_import_map()) so the
+// stylesheet is never served stale from a browser cache either.
+const CSS_HREF = new URL('./timeseries-chart.css' + new URL(import.meta.url).search, import.meta.url).href;
 
 // ---------------------------------------------------------------------------
 // Tunables - the cross-platform contract. These values (thresholds, min/max

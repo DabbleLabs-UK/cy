@@ -11,7 +11,10 @@
 // root, standard ARIA. Theme it with CSS custom properties (see async-select.css)
 // and ::part(). See README.md for the full API.
 
-const CSS_HREF = new URL('./async-select.css', import.meta.url).href;
+// Reuse this module's own URL query string (the host page's cache-busting
+// ?v=, applied via an import map - see index.php's cy_import_map()) so the
+// stylesheet is never served stale from a browser cache either.
+const CSS_HREF = new URL('./async-select.css' + new URL(import.meta.url).search, import.meta.url).href;
 
 // Thrown from a commit() to signal a business rejection (server refused) rather
 // than a transport failure. Carries a human reason and, optionally, the value

@@ -164,7 +164,7 @@ async function boot() {
 }
 
 async function loadFont() {
-  const res = await fetch('assets/hershey-cursive.json', { cache: 'force-cache' });
+  const res = await fetch(CFG.hershey || 'assets/hershey-cursive.json', { cache: 'force-cache' });
   if (!res.ok) throw new Error('font load failed: ' + res.status);
   return res.json();
 }

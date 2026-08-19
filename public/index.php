@@ -57,6 +57,52 @@ function cy_asset(string $rel): string
     $v = @filemtime($full) ?: 0;
     return $rel . '?v=' . $v;
 }
+
+// cy_asset() only cache-busts the entry-point <script src="...?v="> tags. Every
+// entry point (app.js) then statically `import`s further local modules
+// (./pen.js, ../components/async-select/async-select.js, ...) with no query
+// string of their own - the browser resolves those against the importing
+// module's own URL, so they sit at a bare, never-changing URL and can be
+// served stale from cache forever regardless of the entry point's ?v=.
+//
+// Fix: emit a JS import map (root-relative key -> same path + ?v=<mtime>) so
+// every local `import`/`import()` specifier is transparently rewritten to a
+// versioned URL, however deep the import chain goes. This needs no changes to
+// the import statements themselves and covers new imports automatically.
+// A .js file that has a same-named .css sibling (the shadow-DOM
+// components, which each `new URL('./x.css', import.meta.url)` their own
+// stylesheet) takes the newer of the two mtimes, so editing just the CSS
+// still bumps the JS's versioned URL and, through import.meta.url, the CSS
+// URL derived from it.
+function cy_import_map(): string
+{
+    $roots = ['assets', 'components'];
+    $imports = [];
+    foreach ($roots as $root) {
+        $base = __DIR__ . '/' . $root;
+        if (!is_dir($base)) {
+            continue;
+        }
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($it as $file) {
+            if (!$file->isFile() || $file->getExtension() !== 'js') {
+                continue;
+            }
+            $full = $file->getPathname();
+            $v = @filemtime($full) ?: 0;
+            $cssSibling = substr($full, 0, -3) . '.css';
+            if (is_file($cssSibling)) {
+                $v = max($v, @filemtime($cssSibling) ?: 0);
+            }
+            $rel = str_replace('\\', '/', substr($full, strlen(__DIR__) + 1));
+            $key = '/' . $rel;
+            $imports[$key] = $key . '?v=' . $v;
+        }
+    }
+    return json_encode(['imports' => $imports], JSON_UNESCAPED_SLASHES);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -77,6 +123,10 @@ window.CY = {
   // and the raw-event range endpoint it touches ONLY to resolve a chosen moment's seq.
   history: 'api/history.php',
   range: 'api/range.php',
+  // Hershey glyph data app.js fetches (not a JS import, so the import map below
+  // does not cover it) with `cache: 'force-cache'` - versioned the same way so
+  // an edit to the glyph set cannot be masked by that hard caching.
+  hershey: <?= json_encode(cy_asset('assets/hershey-cursive.json'), JSON_UNESCAPED_SLASHES) ?>,
   raw: <?= $rawEnabled ? 'true' : 'false' ?>,
   // Server-computed day count (see lib/tempo.php), so app.js has the correct
   // baseline to increment from on a live day rollover without trusting the
@@ -95,6 +145,10 @@ window.CY = {
   admin: <?= $isAdmin ? json_encode('api/admin.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>
 };
 </script>
+<!-- Must precede every module script: rewrites every local `import`/`import()`
+     specifier (however deep the chain - pen.js, the shadow-DOM components, ...)
+     to a cache-busted URL. See cy_import_map() above. -->
+<script type="importmap"><?= cy_import_map() ?></script>
 </head>
 <body<?= $useTest ? ' data-test="1"' : '' ?>>
 
