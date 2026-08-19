@@ -19,6 +19,10 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const BASELINE = 22; // glyph-space baseline
+// Multiplier on the space-character advance (inter-word gap only - letter spacing
+// within a word is untouched). Bumped up from the raw half-advance because words
+// were reading as run-together at 1x.
+const WORD_SPACE_MULT = 2;
 // Below this many CSS px the writing surface has not been laid out yet (it is the
 // hidden view, or we are in the same tick as its reveal). We never wrap against a
 // size this small - we defer and measure again once it is real. Kept low so a
@@ -828,7 +832,7 @@ export class Pen {
 
   _spaceAdvance(dream) {
     const size = dream ? this.size * dreamTextStyle().sizeScale : this.size;
-    return 6 * (size / 21); // ~ half advance of a mid-width glyph
+    return 6 * (size / 21) * WORD_SPACE_MULT; // ~ half advance of a mid-width glyph, widened
   }
 
   _glyphFor(ch) {
