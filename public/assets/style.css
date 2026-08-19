@@ -237,6 +237,24 @@ html, body {
   .cy-menu-item.is-pending .cy-mark::after { animation: none; }
 }
 
+/* Public regime lease: a compact clock + m:ss countdown riding the Regime toggle. */
+.cy-lease {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  margin-left: auto;                 /* push it to the toggle's right edge */
+  padding: 0 2px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: #ffbf47;
+}
+.cy-lease svg { width: 10px; height: 10px; display: block; fill: currentColor; }
+
+/* Owner is forcing the regime: the public items read as locked, not failed. */
+.cy-menu-item.is-locked { color: var(--tel-dim); opacity: 0.7; }
+.cy-menu-sub.is-locked .cy-mark::after { border-color: var(--tel-dim); }
+
 /* ---- inference LED (public): lights while the model is producing text -------- */
 .infer-led {
   width: 9px;

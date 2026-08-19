@@ -100,3 +100,34 @@ function captive_viewer_count(PDO $db): int
     $c = $db->query("SELECT COUNT(*) FROM viewers WHERE last_seen >= (NOW() - INTERVAL $w SECOND)")->fetchColumn();
     return (int)$c;
 }
+
+// Is one SPECIFIC viewer token present right now (seen within the window)? The
+// SQL counterpart of captive_is_present() for a single token, using the DB clock
+// to avoid PHP/DB skew. Used by the public regime lease (lib/tempo.php) to decide
+// whether the visitor who set it is still watching; the lease releases the moment
+// they are not.
+function captive_presence_has_token(PDO $db, string $token): bool
+{
+    $w = (int)CY_PRESENCE_WINDOW;
+    $stmt = $db->prepare(
+        "SELECT 1 FROM viewers WHERE token = :t AND last_seen >= (NOW() - INTERVAL $w SECOND) LIMIT 1"
+    );
+    $stmt->bindValue(':t', $token, PDO::PARAM_STR);
+    $stmt->execute();
+    return $stmt->fetchColumn() !== false;
+}
+
+// Mark one SPECIFIC token present now, unthrottled. captive_touch_presence()
+// records "whoever is calling"; this records a token we already know - used when a
+// visitor claims a regime lease so their 'v:'<id> presence row exists immediately
+// (before their next stream poll would write it), so the lease is not read as
+// already-lapsed on the very next request.
+function captive_presence_touch_token(PDO $db, string $token): void
+{
+    $up = $db->prepare(
+        'INSERT INTO viewers (token, last_seen) VALUES (:t, NOW())
+         ON DUPLICATE KEY UPDATE last_seen = NOW()'
+    );
+    $up->bindValue(':t', $token, PDO::PARAM_STR);
+    $up->execute();
+}

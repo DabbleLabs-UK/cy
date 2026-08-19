@@ -16,6 +16,12 @@ declare(strict_types=1);
 // from 30% again. captive_tempo_decide() is the pure heart of that rule and is
 // unit-tested without a database.
 
+// The regime accessors below reconcile a PUBLIC regime lease against live presence
+// (captive_presence_has_token), so this module depends on presence.php. It is also
+// a latent dependency already - captive_tempo_state() calls captive_viewer_count() -
+// so require it explicitly rather than relying on the caller's load order.
+require_once __DIR__ . '/presence.php';
+
 const CY_TEMPO_IDLE = 5;            // % - nobody watching
 const CY_TEMPO_WATCHING = 30;       // % - someone watching, no custom value
 const CY_TEMPO_RATE_MAX = 6;        // custom changes allowed...
@@ -146,43 +152,211 @@ function captive_tempo_set_provider(PDO $db, string $provider): void
     $stmt->execute();
 }
 
-// ---- owner regime override (owner-only, persisted on the same tempo row) -----
+// ---- regime override: an owner set (sticky) OR a public lease (self-releasing) --
 //
-// Forces Cy's day/night + sleep state for testing, overriding the clock-based
-// lights-out window (22:30-06:30) the runner computes itself:
+// Forces Cy's day/night + sleep state, overriding the clock-based lights-out window
+// (22:30-06:30) the runner computes itself:
 //   'auto'  - the default: follow the clock (no override)
 //   'day'   - force awake (leave dream mode, resume the normal waking cadence)
 //   'night' - force asleep (dream mode) regardless of the hour
-// Owner-set via POST /api/admin.php; the runner reads it via its existing tempo
-// poll and switches mid-loop, no restart. Both accessors are defensive: on a
-// database that has not run the 006_regime migration the column is missing, so
-// rather than 500 the tempo endpoint they report/keep the safe default ('auto').
+// The runner reads it via its existing tempo poll and switches mid-loop, no restart.
+//
+// TWO kinds of set share the same regime_override column, distinguished by
+// regime_source:
+//   'admin'  - the OWNER's set (via /api/admin.php). STICKY: it never lapses on its
+//              own; only the owner changes it. This is exactly the 006 behaviour.
+//   'public' - a VISITOR's set (via /api/regime.php). A short LEASE: it holds for at
+//              most CY_REGIME_LEASE_SECONDS, and releases EARLY the instant the
+//              visitor who set it (regime_holder) is no longer present. Expiry is on
+//              READ, never on a timer: captive_tempo_regime() returns 'auto' and
+//              clears the lease the first time it reads one that has expired or whose
+//              holder has left. A public set can never override an admin set that is
+//              forcing a non-'auto' regime.
+//
+// All accessors are defensive: on a database that has not run the 006/008 migrations
+// the columns are missing, so rather than 500 the tempo endpoint they fall back to
+// the safe default ('auto', treated as an admin set with no lease).
 const CY_REGIMES = ['auto', 'day', 'night'];
+const CY_REGIME_LEASE_SECONDS = 300;   // 5 min: hard ceiling on a public regime lease
+const CY_REGIME_RATE_MAX = 8;          // public regime sets allowed...
+const CY_REGIME_RATE_WINDOW = 60;      // ...per this many seconds, per visitor
 
+// The effective regime, reconciling a public lease against live presence. A public
+// lease that has expired OR whose holder is no longer watching is treated as lapsed:
+// this returns 'auto' and opportunistically clears the row (no cron, expiry on read).
 function captive_tempo_regime(PDO $db): string
 {
     try {
-        $v = $db->query('SELECT regime_override FROM tempo WHERE id = 1')->fetchColumn();
+        $row = $db->query(
+            'SELECT regime_override AS regime, regime_source AS source, regime_holder AS holder,
+                    (regime_expires_at IS NOT NULL AND regime_expires_at > NOW()) AS unexpired
+             FROM tempo WHERE id = 1'
+        )->fetch(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
+        // Pre-008 (no lease columns): fall back to the plain override; pre-006 -> auto.
+        try {
+            $v = $db->query('SELECT regime_override FROM tempo WHERE id = 1')->fetchColumn();
+            return (is_string($v) && in_array($v, CY_REGIMES, true)) ? $v : 'auto';
+        } catch (Throwable $e2) {
+            return 'auto';
+        }
+    }
+    if (!$row) {
         return 'auto';
     }
-    return (is_string($v) && in_array($v, CY_REGIMES, true)) ? $v : 'auto';
+    $regime = (is_string($row['regime']) && in_array($row['regime'], CY_REGIMES, true)) ? $row['regime'] : 'auto';
+    if ($regime === 'auto') {
+        return 'auto'; // nothing to lease/expire
+    }
+    // An owner set is sticky - it holds until the owner changes it.
+    if (($row['source'] ?? 'admin') !== 'public') {
+        return $regime;
+    }
+    // A public lease holds only while UNEXPIRED and its holder is still present.
+    $unexpired = (int)($row['unexpired'] ?? 0) === 1;
+    $holderPresent = is_string($row['holder']) && $row['holder'] !== ''
+        && captive_presence_has_token($db, 'v:' . $row['holder']);
+    if ($unexpired && $holderPresent) {
+        return $regime;
+    }
+    // Lapsed: revert to 'auto' and clear the lease on the spot (expiry on read).
+    captive_tempo_clear_regime_lease($db);
+    return 'auto';
 }
 
+// Revert the regime to the default and drop any public lease. Also used by an
+// owner 'auto' set. Defensive: a pre-008 deploy has no lease columns to clear.
+function captive_tempo_clear_regime_lease(PDO $db): void
+{
+    try {
+        $db->exec(
+            "UPDATE tempo
+                SET regime_override = 'auto', regime_source = 'admin',
+                    regime_holder = NULL, regime_expires_at = NULL, updated_at = NOW()
+              WHERE id = 1"
+        );
+    } catch (Throwable $e) {
+        // pre-008 deploy (no lease columns) - fall back to the plain override reset.
+        try {
+            $db->exec("UPDATE tempo SET regime_override = 'auto', updated_at = NOW() WHERE id = 1");
+        } catch (Throwable $e2) {
+            /* pre-006 too - nothing to clear */
+        }
+    }
+}
+
+// The OWNER's sticky regime set (via /api/admin.php). Marks the source 'admin' and
+// clears any public lease, so an owner set always wins and never lapses. Falls back
+// to the plain override on a pre-008 deploy so the owner control still works.
 function captive_tempo_set_regime(PDO $db, string $regime): void
 {
     if (!in_array($regime, CY_REGIMES, true)) {
         $regime = 'auto';
     }
-    // NB distinct placeholder names (:r1/:r2): PDO requires each named placeholder
-    // to appear exactly once in the statement.
+    try {
+        $stmt = $db->prepare(
+            "INSERT INTO tempo (id, regime_override, regime_source, regime_holder, regime_expires_at, updated_at)
+             VALUES (1, :r1, 'admin', NULL, NULL, NOW())
+             ON DUPLICATE KEY UPDATE regime_override = :r2, regime_source = 'admin',
+                regime_holder = NULL, regime_expires_at = NULL, updated_at = NOW()"
+        );
+        $stmt->bindValue(':r1', $regime, PDO::PARAM_STR);
+        $stmt->bindValue(':r2', $regime, PDO::PARAM_STR);
+        $stmt->execute();
+    } catch (Throwable $e) {
+        // pre-008 deploy (no lease columns): set the plain override alone.
+        // NB distinct placeholder names (:p1/:p2): PDO requires each named
+        // placeholder to appear exactly once in the statement.
+        $stmt = $db->prepare(
+            'INSERT INTO tempo (id, regime_override, updated_at) VALUES (1, :p1, NOW())
+             ON DUPLICATE KEY UPDATE regime_override = :p2, updated_at = NOW()'
+        );
+        $stmt->bindValue(':p1', $regime, PDO::PARAM_STR);
+        $stmt->bindValue(':p2', $regime, PDO::PARAM_STR);
+        $stmt->execute();
+    }
+}
+
+// A PUBLIC visitor's regime lease (via /api/regime.php). $holder is the caller's
+// server-verified signed visitor id (NEVER anything client-supplied) and $regime is
+// already whitelisted by the caller. Returns one of:
+//   'ok'           - lease set (or, for 'auto', the visitor's own lease released)
+//   'admin_locked' - the owner is forcing a non-'auto' regime; a public set is refused
+//   'held'         - another present visitor holds a live lease; it cannot be stolen
+// The guards read the CURRENT row (after lapsing any dead lease first) so a public
+// set can neither override an owner force nor take over a live lease it does not own.
+function captive_tempo_public_set_regime(PDO $db, string $regime, string $holder): string
+{
+    if (!in_array($regime, CY_REGIMES, true)) {
+        $regime = 'auto';
+    }
+    // Lapse any dead lease first so the guards below see a live truth.
+    captive_tempo_regime($db);
+
+    $row = $db->query(
+        'SELECT regime_override AS regime, regime_source AS source, regime_holder AS holder,
+                (regime_expires_at IS NOT NULL AND regime_expires_at > NOW()) AS unexpired
+         FROM tempo WHERE id = 1'
+    )->fetch(PDO::FETCH_ASSOC);
+    $curRegime = ($row && is_string($row['regime']) && in_array($row['regime'], CY_REGIMES, true)) ? $row['regime'] : 'auto';
+    $curSource = ($row && ($row['source'] ?? 'admin') === 'public') ? 'public' : 'admin';
+
+    // An owner force outranks any public set.
+    if ($curSource === 'admin' && $curRegime !== 'auto') {
+        return 'admin_locked';
+    }
+    // A live lease held by a DIFFERENT present visitor must not be stolen.
+    if ($curSource === 'public' && $curRegime !== 'auto' && (int)($row['unexpired'] ?? 0) === 1) {
+        $curHolder = is_string($row['holder']) ? $row['holder'] : '';
+        if ($curHolder !== '' && $curHolder !== $holder && captive_presence_has_token($db, 'v:' . $curHolder)) {
+            return 'held';
+        }
+    }
+
+    // 'auto' from the holder releases their own lease; otherwise set/renew the lease.
+    if ($regime === 'auto') {
+        captive_tempo_clear_regime_lease($db);
+        return 'ok';
+    }
+    $lease = (int)CY_REGIME_LEASE_SECONDS;
     $stmt = $db->prepare(
-        'INSERT INTO tempo (id, regime_override, updated_at) VALUES (1, :r1, NOW())
-         ON DUPLICATE KEY UPDATE regime_override = :r2, updated_at = NOW()'
+        "UPDATE tempo
+            SET regime_override = :r, regime_source = 'public', regime_holder = :h,
+                regime_expires_at = (NOW() + INTERVAL $lease SECOND), updated_at = NOW()
+          WHERE id = 1"
     );
-    $stmt->bindValue(':r1', $regime, PDO::PARAM_STR);
-    $stmt->bindValue(':r2', $regime, PDO::PARAM_STR);
+    $stmt->bindValue(':r', $regime, PDO::PARAM_STR);
+    $stmt->bindValue(':h', $holder, PDO::PARAM_STR);
     $stmt->execute();
+    return 'ok';
+}
+
+// The regime plus the lease facts the endpoints/UI need: the effective regime (dead
+// leases already lapsed by captive_tempo_regime), who set it, the seconds left on a
+// public lease, and whether an owner force locks the public control.
+//   returns ['regime'=>string, 'source'=>'admin'|'public', 'lease_remaining'=>int, 'locked'=>bool]
+function captive_tempo_regime_state(PDO $db): array
+{
+    $regime = captive_tempo_regime($db); // lapses a dead lease first
+    $out = ['regime' => $regime, 'source' => 'admin', 'lease_remaining' => 0, 'locked' => false];
+    try {
+        $row = $db->query(
+            'SELECT regime_source AS source,
+                    GREATEST(0, TIMESTAMPDIFF(SECOND, NOW(), regime_expires_at)) AS remaining
+             FROM tempo WHERE id = 1'
+        )->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return $out; // pre-008: no lease, owner source
+    }
+    if (!$row) {
+        return $out;
+    }
+    $out['source'] = (($row['source'] ?? 'admin') === 'public') ? 'public' : 'admin';
+    if ($out['source'] === 'public' && $regime !== 'auto') {
+        $out['lease_remaining'] = (int)$row['remaining'];
+    }
+    $out['locked'] = ($out['source'] === 'admin' && $regime !== 'auto');
+    return $out;
 }
 
 // Whether the runner currently has a DeepSeek key (reported by the runner via a
@@ -331,6 +505,28 @@ function captive_tempo_rate_ok(PDO $db, string $token): bool
         return false;
     }
     $ins = $db->prepare("INSERT INTO rate_limits (ip, action, created_at) VALUES (:k, 'tempo', NOW())");
+    $ins->bindValue(':k', $key, PDO::PARAM_LOB);
+    $ins->execute();
+    return true;
+}
+
+// Rate-limit public regime sets to CY_REGIME_RATE_MAX per CY_REGIME_RATE_WINDOW
+// seconds PER VISITOR. Same shape as captive_tempo_rate_ok (the regime endpoint is
+// the other public write), keyed by a 16-byte md5 of the viewer token with a
+// distinct action='regime'. Returns true and logs the set if allowed; false if over.
+function captive_regime_rate_ok(PDO $db, string $token): bool
+{
+    $key = md5($token, true); // 16 raw bytes
+    $win = (int)CY_REGIME_RATE_WINDOW;
+    $sel = $db->prepare(
+        "SELECT COUNT(*) FROM rate_limits WHERE ip = :k AND action = 'regime' AND created_at > (NOW() - INTERVAL $win SECOND)"
+    );
+    $sel->bindValue(':k', $key, PDO::PARAM_LOB);
+    $sel->execute();
+    if ((int)$sel->fetchColumn() >= CY_REGIME_RATE_MAX) {
+        return false;
+    }
+    $ins = $db->prepare("INSERT INTO rate_limits (ip, action, created_at) VALUES (:k, 'regime', NOW())");
     $ins->bindValue(':k', $key, PDO::PARAM_LOB);
     $ins->execute();
     return true;

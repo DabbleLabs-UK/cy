@@ -142,7 +142,11 @@ window.CY = {
   // When admin came from same-network detection the plain URL is enough (admin.php
   // re-checks the network server-side); when it came from ?111 we carry the flag
   // through so admin.php still recognises it off-network.
-  admin: <?= $isAdmin ? json_encode('api/admin.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>
+  admin: <?= $isAdmin ? json_encode('api/admin.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>,
+  // PUBLIC regime control endpoint - always wired, for everyone. The gear menu
+  // renders for all visitors but only its Regime group is public; a public regime
+  // set is a short self-releasing lease (api/regime.php), not the owner's sticky set.
+  regime: <?= json_encode('api/regime.php', JSON_UNESCAPED_SLASHES) ?>
 };
 </script>
 <!-- Must precede every module script: rewrites every local `import`/`import()`

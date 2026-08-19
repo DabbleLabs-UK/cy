@@ -11,7 +11,9 @@ declare(strict_types=1);
 // Exits non-zero if any assertion fails.
 
 require __DIR__ . '/../lib/tempo.php';
-require __DIR__ . '/../lib/presence.php'; // for captive_is_present + presence constants
+require_once __DIR__ . '/../lib/presence.php'; // for captive_is_present + presence constants
+// NB require_once: tempo.php now pulls in presence.php itself (the regime lease
+// reconciles against presence), so a plain require here would redeclare it.
 
 $pass = 0;
 $fail = 0;
@@ -90,6 +92,12 @@ echo "\n==== RATE-LIMIT / PRESENCE CONSTANTS ====\n";
 check('6 changes per minute per viewer', CY_TEMPO_RATE_MAX === 6 && CY_TEMPO_RATE_WINDOW === 60);
 check('present-within-15s window', CY_PRESENCE_WINDOW === 15);
 check('presence writes throttled to <=1 / 5s', CY_PRESENCE_THROTTLE === 5);
+
+echo "\n==== REGIME WHITELIST + PUBLIC LEASE CONSTANTS ====\n";
+// The public regime endpoint validates against this exact whitelist server-side.
+check('regimes are exactly auto/day/night', CY_REGIMES === ['auto', 'day', 'night']);
+check('public regime lease caps at 5 minutes', CY_REGIME_LEASE_SECONDS === 300);
+check('public regime sets rate-limited to 8 / 60s per visitor', CY_REGIME_RATE_MAX === 8 && CY_REGIME_RATE_WINDOW === 60);
 
 echo "\n" . ($fail === 0 ? "ALL PASS ($pass)\n" : "$fail FAILED, $pass passed\n");
 exit($fail === 0 ? 0 : 1);

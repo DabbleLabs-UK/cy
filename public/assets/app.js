@@ -702,42 +702,56 @@ function showHistoryPill(detail) {
   pill.setAttribute('aria-label', `Viewing ${when}. Activate to return to live.`);
 }
 
-// ---- operator gear menu (ASYNC, admin only) -----------------------------
+// ---- operator gear menu (ASYNC) -----------------------------------------
 //
-// Replaces the old ACTIVE/PAUSED select with a small gear that opens a menu:
-//   - a RUNNER pair (Active / Paused) where the CURRENT state is greyed and inert
-//     and only the OTHER item is clickable - the action you can take;
-//   - a MODEL submenu (Ollama (DELL) / DeepSeek) showing which is active, with
-//     DeepSeek shown as unavailable (with a reason) when the runner holds no key.
+// A small gear that opens a menu. The gear itself renders for EVERYONE, but its
+// contents are gated:
+//   - REGIME (Auto / Force Day / Force Night) is PUBLIC - the only group an
+//     ordinary visitor sees;
+//   - the RUNNER pair (Active / Paused) and the MODEL submenu (Ollama / DeepSeek)
+//     are OWNER-ONLY and are not even built for a non-admin (CFG.admin is null).
+// In every group the CURRENT state is greyed and inert and only the OTHER item is
+// clickable - the action you can take.
 //
-// Both the pause and the model switch are genuinely ASYNCHRONOUS: the click POSTs to
-// admin.php but the item only SETTLES when the runner's REAL state confirms OUT OF
-// BAND on the event stream (pause via setMode's `mode`; provider via the frequent
-// `vitals` provider field and the `provider` event). Until then the item shows a
-// pending spinner; a POST failure or a confirmation that never arrives (own timeout)
-// drops it into a retryable FAILED state. The UI never claims a change happened
-// before the runner confirms it. No-op for an ordinary visitor (CFG.admin is null);
-// admin.php enforces the gate server-side regardless.
+// Every set is genuinely ASYNCHRONOUS: the click POSTs but the item only SETTLES
+// when the runner's REAL state confirms OUT OF BAND on the event stream (pause via
+// setMode's `mode`; provider + regime via the frequent `vitals` fields and their
+// events). Until then the item shows a pending spinner; a POST failure or a
+// confirmation that never arrives (own timeout) drops it into a retryable FAILED
+// state. The UI never claims a change happened before the runner confirms it.
+//
+// REGIME is special in two ways for the public. An owner set is sticky; a PUBLIC set
+// is a short LEASE (api/regime.php) that self-releases after 5 min or the moment the
+// setter stops watching. When a lease is active the remaining time shows as a compact
+// countdown; when it lapses the runner echoes 'auto' on the stream and the select
+// settles back to Auto via the same external-change path. And when the OWNER is
+// forcing the regime, the public control is shown LOCKED rather than failing silently.
+// The endpoints enforce all of this server-side regardless of the UI.
 const CONFIRM_TIMEOUT_MS = 15000; // safety net past which "never acknowledged" -> retryable FAILED
 
-// Two independent little state machines. confirmed = the runner's real value;
+// Independent little state machines. confirmed = the runner's real value;
 // target = what we asked for while pending; phase = idle | pending | failed.
 const runnerCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null };
 const providerCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null, available: false };
-// Owner regime override (auto | day | night) - the same little state machine as
-// the runner/provider controls: confirmed = the runner's real value, target = what
-// we asked for while pending, phase = idle | pending | failed.
-const regimeCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null };
+// Regime (auto | day | night) - same machine, plus `locked` when the OWNER is forcing
+// it (a public set is refused and the control is shown locked, not failed).
+const regimeCtl = { confirmed: null, target: null, phase: 'idle', error: '', timer: null, locked: false };
 
 let gearBuilt = false;
+let gearAdmin = false; // true when the owner controls (runner + model) are present
 let gearBtn = null, gearMenu = null, gearWrap = null;
 let menuOpen = false, modelExpanded = false, regimeExpanded = false;
 let modelToggle = null, modelGroup = null;
 let regimeToggle = null, regimeGroup = null;
-const gearItems = {}; // active, paused, ollama, deepseek, deepseekNote, auto, day, night
+let leaseTimerId = null; // ticking countdown for an active public regime lease
+const gearItems = {}; // active, paused, ollama, deepseek, deepseekNote, auto, day, night, leaseBadge, leaseTime
 
 const GEAR_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
+
+// A tiny clock for the public regime lease countdown badge.
+const CLOCK_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm.5-13H11v6l5.2 3.1.8-1.3-4.5-2.7V7z"/></svg>';
 
 function makeItem(kind, val, label) {
   const b = document.createElement('button');
@@ -758,9 +772,12 @@ function makeItem(kind, val, label) {
 }
 
 function initGearMenu() {
-  const url = CFG.admin;
   const meta = document.querySelector('.topmeta');
-  if (!url || !meta) return;
+  if (!meta) return;
+  gearAdmin = !!CFG.admin;
+  // The gear renders for everyone as long as there is at least a public regime
+  // endpoint to drive; owner controls additionally need CFG.admin.
+  if (!CFG.regime && !gearAdmin) return;
 
   gearWrap = document.createElement('div');
   gearWrap.className = 'cy-gear';
@@ -770,60 +787,74 @@ function initGearMenu() {
   gearBtn.className = 'cy-gear-btn';
   gearBtn.setAttribute('aria-haspopup', 'menu');
   gearBtn.setAttribute('aria-expanded', 'false');
-  gearBtn.setAttribute('aria-label', 'Operator settings');
-  gearBtn.title = 'Operator settings';
+  gearBtn.setAttribute('aria-label', 'Settings');
+  gearBtn.title = 'Settings';
   gearBtn.innerHTML = GEAR_SVG;
 
   gearMenu = document.createElement('div');
   gearMenu.className = 'cy-menu';
   gearMenu.setAttribute('role', 'menu');
-  gearMenu.setAttribute('aria-label', 'Operator settings');
+  gearMenu.setAttribute('aria-label', 'Settings');
   gearMenu.hidden = true;
 
-  const capR = document.createElement('span');
-  capR.className = 'cy-menu-cap';
-  capR.textContent = 'Runner';
-  gearItems.active = makeItem('runner', 'active', 'Active');
-  gearItems.paused = makeItem('runner', 'paused', 'Paused');
+  // ---- OWNER-ONLY groups: Runner pair + Model submenu -------------------------
+  // Built ONLY for an admin, so a non-admin's menu holds nothing but Regime (these
+  // controls do not render at all, not merely disabled).
+  if (gearAdmin) {
+    const capR = document.createElement('span');
+    capR.className = 'cy-menu-cap';
+    capR.textContent = 'Runner';
+    gearItems.active = makeItem('runner', 'active', 'Active');
+    gearItems.paused = makeItem('runner', 'paused', 'Paused');
 
-  const sep = document.createElement('div');
-  sep.className = 'cy-menu-sep';
-  sep.setAttribute('role', 'separator');
+    const sep = document.createElement('div');
+    sep.className = 'cy-menu-sep';
+    sep.setAttribute('role', 'separator');
 
-  modelToggle = document.createElement('button');
-  modelToggle.type = 'button';
-  modelToggle.className = 'cy-menu-item cy-menu-sub';
-  modelToggle.setAttribute('role', 'menuitem');
-  modelToggle.setAttribute('aria-haspopup', 'true');
-  modelToggle.setAttribute('aria-expanded', 'false');
-  const mMark = document.createElement('span');
-  mMark.className = 'cy-mark';
-  mMark.setAttribute('aria-hidden', 'true');
-  const mLab = document.createElement('span');
-  mLab.className = 'cy-menu-lab';
-  mLab.textContent = 'Model';
-  modelToggle.appendChild(mMark);
-  modelToggle.appendChild(mLab);
+    modelToggle = document.createElement('button');
+    modelToggle.type = 'button';
+    modelToggle.className = 'cy-menu-item cy-menu-sub';
+    modelToggle.setAttribute('role', 'menuitem');
+    modelToggle.setAttribute('aria-haspopup', 'true');
+    modelToggle.setAttribute('aria-expanded', 'false');
+    const mMark = document.createElement('span');
+    mMark.className = 'cy-mark';
+    mMark.setAttribute('aria-hidden', 'true');
+    const mLab = document.createElement('span');
+    mLab.className = 'cy-menu-lab';
+    mLab.textContent = 'Model';
+    modelToggle.appendChild(mMark);
+    modelToggle.appendChild(mLab);
 
-  modelGroup = document.createElement('div');
-  modelGroup.className = 'cy-menu-group';
-  modelGroup.hidden = true;
-  gearItems.ollama = makeItem('provider', 'ollama', 'Ollama (DELL)');
-  gearItems.deepseek = makeItem('provider', 'deepseek', 'DeepSeek');
-  const dsNote = document.createElement('span');
-  dsNote.className = 'cy-menu-note';
-  dsNote.hidden = true;
-  gearItems.deepseek.appendChild(dsNote);
-  gearItems.deepseekNote = dsNote;
-  modelGroup.appendChild(gearItems.ollama);
-  modelGroup.appendChild(gearItems.deepseek);
+    modelGroup = document.createElement('div');
+    modelGroup.className = 'cy-menu-group';
+    modelGroup.hidden = true;
+    gearItems.ollama = makeItem('provider', 'ollama', 'Ollama (DELL)');
+    gearItems.deepseek = makeItem('provider', 'deepseek', 'DeepSeek');
+    const dsNote = document.createElement('span');
+    dsNote.className = 'cy-menu-note';
+    dsNote.hidden = true;
+    gearItems.deepseek.appendChild(dsNote);
+    gearItems.deepseekNote = dsNote;
+    modelGroup.appendChild(gearItems.ollama);
+    modelGroup.appendChild(gearItems.deepseek);
 
-  // Regime submenu - the same shape as Model: a toggle that expands a group whose
-  // current item is greyed and inert, the others clickable (force day / force night).
-  const sep2 = document.createElement('div');
-  sep2.className = 'cy-menu-sep';
-  sep2.setAttribute('role', 'separator');
+    const sep2 = document.createElement('div');
+    sep2.className = 'cy-menu-sep';
+    sep2.setAttribute('role', 'separator');
 
+    gearMenu.appendChild(capR);
+    gearMenu.appendChild(gearItems.active);
+    gearMenu.appendChild(gearItems.paused);
+    gearMenu.appendChild(sep);
+    gearMenu.appendChild(modelToggle);
+    gearMenu.appendChild(modelGroup);
+    gearMenu.appendChild(sep2);
+  }
+
+  // ---- Regime submenu: PUBLIC, rendered for everyone --------------------------
+  // A toggle that expands a group whose current item is greyed and inert, the others
+  // clickable (force day / force night). A compact lease countdown rides the toggle.
   regimeToggle = document.createElement('button');
   regimeToggle.type = 'button';
   regimeToggle.className = 'cy-menu-item cy-menu-sub';
@@ -838,6 +869,17 @@ function initGearMenu() {
   rLab.textContent = 'Regime';
   regimeToggle.appendChild(rMark);
   regimeToggle.appendChild(rLab);
+  // Compact lease countdown (clock icon + m:ss), hidden until a public lease is live.
+  const leaseBadge = document.createElement('span');
+  leaseBadge.className = 'cy-lease';
+  leaseBadge.hidden = true;
+  leaseBadge.innerHTML = CLOCK_SVG;
+  const leaseTime = document.createElement('span');
+  leaseTime.className = 'cy-lease-t';
+  leaseBadge.appendChild(leaseTime);
+  regimeToggle.appendChild(leaseBadge);
+  gearItems.leaseBadge = leaseBadge;
+  gearItems.leaseTime = leaseTime;
 
   regimeGroup = document.createElement('div');
   regimeGroup.className = 'cy-menu-group';
@@ -849,13 +891,6 @@ function initGearMenu() {
   regimeGroup.appendChild(gearItems.day);
   regimeGroup.appendChild(gearItems.night);
 
-  gearMenu.appendChild(capR);
-  gearMenu.appendChild(gearItems.active);
-  gearMenu.appendChild(gearItems.paused);
-  gearMenu.appendChild(sep);
-  gearMenu.appendChild(modelToggle);
-  gearMenu.appendChild(modelGroup);
-  gearMenu.appendChild(sep2);
   gearMenu.appendChild(regimeToggle);
   gearMenu.appendChild(regimeGroup);
 
@@ -873,11 +908,13 @@ function initGearMenu() {
   });
   gearMenu.addEventListener('keydown', onGearKeydown);
 
-  gearItems.active.addEventListener('click', () => sendRunner('active'));
-  gearItems.paused.addEventListener('click', () => sendRunner('paused'));
-  gearItems.ollama.addEventListener('click', () => sendProvider('ollama'));
-  gearItems.deepseek.addEventListener('click', () => sendProvider('deepseek'));
-  modelToggle.addEventListener('click', () => (modelExpanded ? collapseModel() : expandModel()));
+  if (gearAdmin) {
+    gearItems.active.addEventListener('click', () => sendRunner('active'));
+    gearItems.paused.addEventListener('click', () => sendRunner('paused'));
+    gearItems.ollama.addEventListener('click', () => sendProvider('ollama'));
+    gearItems.deepseek.addEventListener('click', () => sendProvider('deepseek'));
+    modelToggle.addEventListener('click', () => (modelExpanded ? collapseModel() : expandModel()));
+  }
   gearItems.auto.addEventListener('click', () => sendRegime('auto'));
   gearItems.day.addEventListener('click', () => sendRegime('day'));
   gearItems.night.addEventListener('click', () => sendRegime('night'));
@@ -887,17 +924,29 @@ function initGearMenu() {
 
   // seed from the server's current truth so the menu is not a guess before the
   // first stream frame; the stream then keeps it honest.
-  fetch(url, { cache: 'no-store' })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((d) => {
-      if (!d) return;
-      if (typeof d.paused !== 'undefined') runnerCtl.confirmed = d.paused ? 'paused' : 'active';
-      if (d.provider) providerCtl.confirmed = d.provider;
-      if (typeof d.deepseek_available !== 'undefined') providerCtl.available = !!d.deepseek_available;
-      if (d.regime) regimeCtl.confirmed = d.regime;
-      renderGear();
-    })
-    .catch(() => {});
+  if (gearAdmin) {
+    fetch(CFG.admin, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        if (typeof d.paused !== 'undefined') runnerCtl.confirmed = d.paused ? 'paused' : 'active';
+        if (d.provider) providerCtl.confirmed = d.provider;
+        if (typeof d.deepseek_available !== 'undefined') providerCtl.available = !!d.deepseek_available;
+        if (d.regime) regimeCtl.confirmed = d.regime;
+        renderGear();
+      })
+      .catch(() => {});
+  } else {
+    // Public seed: the current regime + whether a lease is live / an owner lock holds.
+    fetch(CFG.regime, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        if (d.regime) regimeCtl.confirmed = d.regime;
+        applyRegimeMeta(d);
+      })
+      .catch(() => {});
+  }
 }
 
 // The menu items reachable by arrow keys right now: visible, enabled, laid out.
@@ -1030,6 +1079,7 @@ function sendProvider(target) {
 function sendRegime(target) {
   const c = regimeCtl;
   if (c.phase === 'pending') return;
+  if (c.locked) return; // the owner is forcing the regime; the control is shown locked
   if (c.confirmed === target && c.phase === 'idle') return; // already there
   c.phase = 'pending';
   c.target = target;
@@ -1037,7 +1087,90 @@ function sendRegime(target) {
   clearTimeout(c.timer);
   c.timer = setTimeout(() => failCtl(c, 'Timed out - not saved yet.'), CONFIRM_TIMEOUT_MS);
   renderGear();
-  postAdmin({ action: 'regime', regime: target }, c, target);
+  // Owner set = sticky (admin.php); public set = a lease (regime.php). Either way the
+  // item settles only when the runner echoes the new regime on the stream.
+  if (gearAdmin) postAdmin({ action: 'regime', regime: target }, c, target);
+  else postRegime(target);
+}
+
+// The PUBLIC regime lease POST. On success starts the compact countdown from the
+// server's remaining time; a 403 with { locked:true } means the owner is forcing the
+// regime, so we show the control LOCKED rather than as a failure.
+function postRegime(target) {
+  const c = regimeCtl;
+  fetch(CFG.regime, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regime: target }),
+  })
+    .then(async (res) => {
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 403 && d && d.locked) {
+        if (c.phase === 'pending' && c.target === target) {
+          clearTimeout(c.timer);
+          c.phase = 'idle';
+          c.target = null;
+        }
+        applyRegimeMeta(d); // reflect the lock; not a failure
+        return;
+      }
+      if (!res.ok || (d && d.ok === false)) throw new Error((d && d.error) || 'HTTP ' + res.status);
+      // accepted + leased: begin the countdown now; the select still settles only
+      // when the runner echoes the new regime on the stream (syncRegimeState).
+      applyRegimeMeta(d);
+    })
+    .catch((err) => {
+      if (c.phase === 'pending' && c.target === target) failCtl(c, String((err && err.message) || err));
+    });
+}
+
+// Fold a regime.php response's lease/lock facts into the control: whether the owner
+// is forcing it (locked), and how long a live PUBLIC lease has left (countdown).
+function applyRegimeMeta(d) {
+  if (!d) return;
+  regimeCtl.locked = !!d.locked;
+  const rem = typeof d.lease_remaining === 'number' ? d.lease_remaining : 0;
+  if (d.source === 'public' && rem > 0) startLease(rem);
+  else stopLease();
+  renderGearIfPresent();
+}
+
+function fmtLease(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+function stopLease() {
+  if (leaseTimerId) {
+    clearInterval(leaseTimerId);
+    leaseTimerId = null;
+  }
+  if (gearItems.leaseBadge) gearItems.leaseBadge.hidden = true;
+}
+
+// Show + tick down the compact lease countdown. Purely a display; the authoritative
+// value always comes from the stream, so when it reaches 0 we just hide it and let
+// the external-change path settle the select back to Auto.
+function startLease(seconds) {
+  if (!gearItems.leaseBadge || !(seconds > 0)) {
+    stopLease();
+    return;
+  }
+  const until = Date.now() + seconds * 1000;
+  const tick = () => {
+    const left = Math.max(0, Math.round((until - Date.now()) / 1000));
+    if (left <= 0) {
+      stopLease();
+      return;
+    }
+    gearItems.leaseTime.textContent = fmtLease(left);
+    gearItems.leaseBadge.hidden = false;
+    gearItems.leaseBadge.title = 'Public regime lease: ' + fmtLease(left) + ' left';
+  };
+  if (leaseTimerId) clearInterval(leaseTimerId);
+  tick();
+  leaseTimerId = setInterval(tick, 1000);
 }
 
 function postAdmin(body, c, target) {
@@ -1107,6 +1240,12 @@ function syncRegimeState(regime) {
     c.phase = 'idle';
     c.target = null;
   }
+  // 'auto' off the stream means the lease lapsed (or the owner released): the select
+  // settles back to Auto via this external-change path, so drop any countdown + lock.
+  if (regime === 'auto') {
+    c.locked = false;
+    stopLease();
+  }
   renderGearIfPresent();
 }
 
@@ -1135,6 +1274,20 @@ function renderGear() {
   paintItem(gearItems.auto, regimeCtl, 'auto', false);
   paintItem(gearItems.day, regimeCtl, 'day', false);
   paintItem(gearItems.night, regimeCtl, 'night', false);
+  // When the OWNER is forcing the regime, the public control is LOCKED, not silently
+  // failing: disable all three and mark them so the lock reads clearly.
+  const regimeItems = [gearItems.auto, gearItems.day, gearItems.night];
+  if (regimeCtl.locked) {
+    for (const el of regimeItems) {
+      if (!el) continue;
+      el.disabled = true;
+      el.classList.add('is-locked');
+      el.title = 'Locked - the owner has set the regime';
+    }
+    if (regimeToggle) regimeToggle.classList.add('is-locked');
+  } else if (regimeToggle) {
+    regimeToggle.classList.remove('is-locked');
+  }
 
   // If the focused item just became inert, keep focus usable inside the open menu.
   if (menuOpen) {
@@ -1150,7 +1303,7 @@ function renderGear() {
 // reason-titled state (DeepSeek with no key on the runner).
 function paintItem(el, c, val, unavail) {
   if (!el) return;
-  el.classList.remove('is-current', 'is-pending', 'is-failed', 'is-unavail');
+  el.classList.remove('is-current', 'is-pending', 'is-failed', 'is-unavail', 'is-locked');
   el.disabled = false;
   el.removeAttribute('title');
 
