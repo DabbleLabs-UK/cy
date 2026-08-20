@@ -234,13 +234,37 @@ export function stateNotationHits(s) {
   return hits;
 }
 
-export function stripScaffold(s) {
+// Strip the three scaffold banks AND report how many non-whitespace characters
+// EACH bank removed, so a caller can attribute an annihilation (a chunk reduced
+// to nothing) to the responsible bank - scaffold vs narration vs state-notation -
+// instead of only knowing that stripping happened. The banks run in the SAME
+// order as stripScaffold, which delegates here, so the plain and accounted paths
+// can never drift. `removed` counts MEANINGFUL (non-whitespace) chars each bank
+// ate: a match is replaced by a single space, so measuring the non-whitespace
+// delta ignores that substitution and reflects the real content removed. The
+// trailing leading-quote strip and whitespace collapse are not attributed to any
+// bank (they are cosmetic), matching stripScaffold's output byte-for-byte.
+export function stripScaffoldAccounted(s) {
+  const nonWs = (t) => (t.match(/\S/g) || []).length;
   let out = s || '';
-  for (const re of SCAFFOLD) out = out.replace(re, ' ');
-  for (const re of NARRATION) out = out.replace(re, ' ');
-  for (const re of STATE_NOTATION) out = out.replace(re, ' '); // vitals-notation leak
+  const removed = { scaffold: 0, narration: 0, stateNotation: 0 };
+  const banks = [
+    ['scaffold', SCAFFOLD],
+    ['narration', NARRATION],
+    ['stateNotation', STATE_NOTATION],
+  ];
+  for (const [name, bank] of banks) {
+    const before = nonWs(out);
+    for (const re of bank) out = out.replace(re, ' ');
+    removed[name] = Math.max(0, before - nonWs(out));
+  }
   out = out.replace(/^[ \t]*["']+[ \t]*/, ''); // stray opening quote left at the head
-  return out.replace(/[ \t]{2,}/g, ' ');
+  out = out.replace(/[ \t]{2,}/g, ' ');
+  return { out, removed };
+}
+
+export function stripScaffold(s) {
+  return stripScaffoldAccounted(s).out;
 }
 
 // Normalise to lowercase alphanumeric words for verbatim-overlap comparison.

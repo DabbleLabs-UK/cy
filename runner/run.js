@@ -102,7 +102,7 @@ import {
 import { PowerMeter, costInjection } from './power.js';
 import { SpendMeter } from './spend.js';
 import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } from './provider.js';
-import { createWarden, sanitize, stripScaffold, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
+import { createWarden, sanitize, stripScaffold, stripScaffoldAccounted, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 
@@ -695,6 +695,84 @@ async function main() {
       /* never crash on debug logging */
     }
   }
+  // A chunk arrived with real content and a strip bank ANNIHILATED it - reduced it
+  // to nothing before it could reach the page. This was the invisible drop: a pure
+  // SCAFFOLD strip logged nothing at all, so a burst could be billed in full and
+  // read as 'empty' with no trace of why. Attribute it to the bank that ate the
+  // most, and carry the pre-strip text (trimmed) as the evidence of the cause.
+  async function logAnnihilated(bank, cleaned, mode) {
+    const snippet = (cleaned || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const line = `[cy] annihilated (${mode}) by ${bank}: "${snippet}"`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+  // The within-burst repeat guard cut the burst because this chunk restated a
+  // phrase already emitted this burst. It USED to abort with no log at all, so a
+  // burst that stopped itself looked identical to one the model simply ended.
+  async function logWithinBurstRepeat(chunk, mode) {
+    const snippet = (chunk || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const line = `[cy] within-burst repeat (${mode}) - cutting the burst: "${snippet}"`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+  // The near-repeat holdback discarded the primed opening (a verbatim replay of the
+  // context tail): the whole held head is thrown away and the generation aborted.
+  // The burst-level 'discarded-repeat' is recorded by the caller; this logs the
+  // holdback's own discard at the point it happens, with the discarded text.
+  async function logHoldbackDiscard(head, mode) {
+    const snippet = (head || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const line = `[cy] near-repeat holdback (${mode}) - discarding held opening: "${snippet}"`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+  // RAW-VS-SURVIVING accounting at the natural end of a burst: the true provider
+  // char count (BEFORE any stripping), the chars that survived stripScaffold, and
+  // the chars that actually reached the page (burstEmitted). When NOTHING survived
+  // a billed completion, log the first ~200 chars of the RAW text - that is the
+  // evidence that identifies which bank is eating the output. Server-side only
+  // (run.out.log / console): the public feed never carries pre-strip text.
+  async function logBurstStrip(rawFull, mode) {
+    const rawChars = (rawFull || '').length;
+    if (rawChars === 0) return; // provider genuinely returned nothing - not a strip story
+    const surviving = stripScaffold(sanitize(rawFull || '')).length;
+    const emitted = burstEmitted.length;
+    const ann = burstAnnihilated;
+    const annTotal = ann.scaffold + ann.narration + ann.stateNotation;
+    const parts = [
+      `raw=${rawChars}`,
+      `surviving=${surviving}`,
+      `emitted=${emitted}`,
+      `annihilated=${annTotal}[scaffold ${ann.scaffold}|narration ${ann.narration}|state ${ann.stateNotation}]`,
+      `trimmed=${burstTrimmed}`,
+    ];
+    let line = `[cy] burst-strip (${mode}) ${parts.join(' ')}`;
+    if (emitted === 0) {
+      const head = (rawFull || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      line += ` RAW[0..200]="${head}"`;
+    }
+    (emitted === 0 ? console.warn : console.log)(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
   async function logIntrospect(ins) {
     const sig = (ins && ins.signals) || [];
     if (!sig.length) return;
@@ -806,6 +884,21 @@ async function main() {
         top_p: typeof o.top_p === 'number' ? o.top_p : null,
         repeat_penalty: typeof o.repeat_penalty === 'number' ? o.repeat_penalty : null,
         num_predict: typeof o.num_predict === 'number' ? o.num_predict : null,
+        // ---- STRIP ACCOUNTING (raw-vs-surviving) for the ?111 raw view ----
+        // Safe aggregates only - NO pre-strip text ever reaches the feed (the raw
+        // head sample is server-log only). raw_chars = true provider length before
+        // any stripping; surviving_chars = what came through stripScaffold;
+        // emitted_chars = what reached the page; annihilated/removed are per-bank.
+        strip: detail.strip
+          ? {
+              raw_chars: detail.strip.rawChars,
+              surviving_chars: detail.strip.survivingChars,
+              emitted_chars: detail.strip.emittedChars,
+              trimmed: detail.strip.trimmed,
+              annihilated: detail.strip.annihilated, // { scaffold, narration, stateNotation }
+              removed: detail.strip.removed, // per-bank non-whitespace chars removed
+            }
+          : null,
       },
     });
   }
@@ -853,8 +946,12 @@ async function main() {
   // aborted / deliberate-silence / throttled. A rolling ring of the last N holds
   // the recent picture (published in the vitals payload - which ticks even during
   // a stall, unlike `gen`), and a cumulative total is kept for the whole run.
+  // 'empty' is split into two honest causes: 'empty-provider' (the provider
+  // returned no text at all) and 'empty-stripped' (text arrived but filtering
+  // removed all of it). The bare 'empty' key is retained because the drawing path
+  // still uses it for a DSL pass that produced nothing (see doDraw fallback).
   const OUTCOME_KINDS = [
-    'emitted', 'discarded-repeat', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
+    'emitted', 'discarded-repeat', 'empty-provider', 'empty-stripped', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
   ];
   const OUTCOME_WINDOW = 20;
   const recentOutcomes = []; // ring of the last OUTCOME_WINDOW outcome strings
@@ -871,7 +968,7 @@ async function main() {
     // tempo throttle are legitimate quiet - they neither add to nor clear it. The
     // clear happens where real text actually flows (onChunk/emitDreamText), which
     // also covers the letter/dream paths that emit without a terminal 'emitted'.
-    if (kind === 'empty' || kind === 'blocked-by-warden' || kind === 'refused' || kind === 'aborted') {
+    if (kind === 'empty' || kind === 'empty-provider' || kind === 'empty-stripped' || kind === 'blocked-by-warden' || kind === 'refused' || kind === 'aborted') {
       failedCyclesSinceEmit++;
     } else if (kind === 'emitted') {
       failedCyclesSinceEmit = 0; // a produced burst (incl. a drawing, which emits no text chunk)
@@ -1118,6 +1215,27 @@ async function main() {
   let burstEmitted = '';
   let burstAllowRepeat = false;
   let burstStopped = false; // set once the within-burst repeat guard cuts the burst
+  // ---- PER-BURST STRIP ACCOUNTING (instrumentation) --------------------------
+  // The prose-discard path was invisible: a full billed completion could arrive
+  // and the cycle still record 'empty' because stripScaffold's banks annihilated
+  // every chunk before it reached burstEmitted. These per-burst counters make the
+  // annihilation OBSERVABLE. `burstStripRemoved` sums the non-whitespace chars each
+  // bank ate across the burst; `burstAnnihilated` counts CHUNKS a bank reduced to
+  // nothing (a chunk that arrived with content and left with none); `burstTrimmed`
+  // counts chunks that SURVIVED but shorter. Reset at the top of streamGenerate.
+  let burstStripRemoved = { scaffold: 0, narration: 0, stateNotation: 0 };
+  let burstAnnihilated = { scaffold: 0, narration: 0, stateNotation: 0 };
+  let burstTrimmed = 0;
+  // Dominant bank of a per-chunk `removed` tally, for annihilation attribution.
+  // Ties and all-zero fall back to 'scaffold' (the first bank to run).
+  const dominantBank = (removed) => {
+    const ranked = [
+      ['scaffold', removed.scaffold],
+      ['narration', removed.narration],
+      ['state-notation', removed.stateNotation],
+    ].sort((a, b) => b[1] - a[1]);
+    return ranked[0][1] > 0 ? ranked[0][0] : 'scaffold';
+  };
 
   // ---- one emitted chunk: screen, then text-event or in-world lost-thought ----
   // THE single choke point every generation path funnels chunks through. Two
@@ -1135,10 +1253,35 @@ async function main() {
     const cleaned = sanitize(rawChunk);
     const nHits = narrationHits(cleaned); // log narration/assistant-frame drops
     const sHits = stateNotationHits(cleaned); // log vitals-notation drops
-    let chunk = stripScaffold(cleaned);
+    const { out: strippedChunk, removed } = stripScaffoldAccounted(cleaned);
+    let chunk = strippedChunk;
+    // accumulate this chunk's per-bank removals into the burst totals, so the
+    // burst-level accounting can report how much each bank ate.
+    burstStripRemoved.scaffold += removed.scaffold;
+    burstStripRemoved.narration += removed.narration;
+    burstStripRemoved.stateNotation += removed.stateNotation;
     if (nHits.length) await logNarration(nHits, mode);
     if (sHits.length) await logStateNotation(sHits, mode);
-    if (!chunk.trim()) return; // was nothing but control tokens / scaffold / narration / state notation
+    const hadContent = cleaned.trim().length > 0; // did anything real arrive?
+    const removedAny = removed.scaffold + removed.narration + removed.stateNotation > 0;
+    if (!chunk.trim()) {
+      // ANNIHILATED vs an empty/whitespace chunk. If real content ARRIVED and a
+      // strip bank reduced it to nothing, that is the invisible drop this whole
+      // change is about - count it and attribute it to the bank that ate the most.
+      // A chunk that was already whitespace/control tokens on arrival is not an
+      // annihilation (nothing was there), so it is not counted or logged.
+      if (hadContent && removedAny) {
+        const bank = dominantBank(removed);
+        if (bank === 'narration') burstAnnihilated.narration++;
+        else if (bank === 'state-notation') burstAnnihilated.stateNotation++;
+        else burstAnnihilated.scaffold++;
+        await logAnnihilated(bank, cleaned, mode);
+      }
+      return; // was nothing but control tokens / scaffold / narration / state notation
+    }
+    // TRIMMED: the chunk survived but a bank shortened it. Distinct from an
+    // annihilation (above) - the log could not tell these apart before.
+    if (hadContent && removedAny) burstTrimmed++;
     const res = warden.screenOut(chunk);
     if (!res.ok) {
       emit({ kind: 'abort', payload: { cause: 'warden', reason: res.reason } });
@@ -1155,6 +1298,7 @@ async function main() {
     // (2) within-burst repeat - drop the restated chunk and stop the burst here
     if (!burstAllowRepeat && repeatsWithinBurst(chunk, burstEmitted)) {
       burstStopped = true;
+      await logWithinBurstRepeat(chunk, mode);
       if (currentAbort) currentAbort.abort();
       return;
     }
@@ -1213,6 +1357,9 @@ async function main() {
     burstEmitted = ''; // fresh generation: nothing emitted yet this burst
     burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
     burstStopped = false;
+    burstStripRemoved = { scaffold: 0, narration: 0, stateNotation: 0 }; // fresh strip accounting
+    burstAnnihilated = { scaffold: 0, narration: 0, stateNotation: 0 };
+    burstTrimmed = 0;
     wardenBlocksInGen = 0; // fresh generation: reset the warden-drop count
     const provider = activeProvider();
     const screenRefusal = provider.screensContent; // DeepSeek: hold+screen the opening
@@ -1234,6 +1381,19 @@ async function main() {
     let ttftMs = null;
     let stats = null;
     const cleanedFull = () => stripScaffold(sanitize(full));
+    // The per-burst strip accounting as a plain snapshot, carried on the returned
+    // result so the caller can (a) classify an 'empty' cycle honestly (provider vs
+    // stripped) and (b) surface the accounting in the ?111 raw view. rawChars is
+    // the TRUE provider length before any stripping; survivingChars is what came
+    // through stripScaffold; emittedChars is what reached the page.
+    const stripSnapshot = (rawFull) => ({
+      rawChars: (rawFull || '').length,
+      survivingChars: stripScaffold(sanitize(rawFull || '')).length,
+      emittedChars: burstEmitted.length,
+      removed: { ...burstStripRemoved },
+      annihilated: { ...burstAnnihilated },
+      trimmed: burstTrimmed,
+    });
 
     // Decide the held opening: discard on a refusal or a replay, else release it.
     const commitHead = async () => {
@@ -1246,6 +1406,7 @@ async function main() {
       }
       if (contextTail && cleaned.trim() && isRepeat(cleaned, contextTail)) {
         repeat = true;
+        await logHoldbackDiscard(head, mode); // the held opening is thrown away here
         ac.abort();
         return;
       }
@@ -1328,13 +1489,17 @@ async function main() {
     if (repeat) return { full: cleanedFull(), repeat: true };
     // natural end: flush trailing partial thought
     for (const chunk of buffer.flush()) await onChunk(chunk, mode);
+    // RAW-VS-SURVIVING accounting: log the true provider char count, what survived
+    // the strip banks, and what actually reached the page - plus the RAW head when
+    // nothing survived (the evidence for WHICH bank ate a billed completion).
+    await logBurstStrip(full, mode);
     // paid-provider spend: fold this call's usage/cost into the meter and emit a
     // raw 'spend' impulse. A no-op for ollama (no usage in stats). `burstEmitted` is
     // the prose that actually reached the page this burst; empty here means the call
     // paid its full prompt cost and produced nothing (warden ate it, or it was empty)
     // - recorded as non-emitting so the wasted spend is visible.
     await recordSpend(stats, mode, !!burstEmitted.trim());
-    return { full: cleanedFull(), aborted: false, stats, ttftMs };
+    return { full: cleanedFull(), aborted: false, stats, ttftMs, strip: stripSnapshot(full) };
 
     // A refusal discards everything - the refusal text is NEVER emitted. Log it so
     // it is visible, and return the distinct { refused } shape for the caller to
@@ -2560,7 +2725,29 @@ async function main() {
       else if (burstEmitted.trim()) await recordOutcome('emitted');
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
       else if (wardenBlocksInGen > 0) await recordOutcome('blocked-by-warden');
-      else await recordOutcome('empty');
+      else {
+        // HONEST 'empty' CLASSIFICATION. Nothing reached the page, it was not
+        // aborted/blocked/refused: split the old single 'empty' by ACTUAL cause.
+        // The strip snapshot on the winning result carries the true provider char
+        // count (before any stripping). rawChars === 0 means the provider genuinely
+        // returned no text ('empty-provider'); rawChars > 0 means text arrived and
+        // filtering removed all of it ('empty-stripped') - the ~45% DeepSeek case.
+        // Attribute the stripped case to the bank that annihilated the most, in the
+        // log, so the responsible bank is named without exploding the outcome tally.
+        const strip = lastResult && lastResult.strip;
+        if (strip && strip.rawChars > 0) {
+          const a = strip.annihilated || {};
+          const bank = dominantBank({
+            scaffold: a.scaffold || 0,
+            narration: a.narration || 0,
+            stateNotation: a.stateNotation || 0,
+          });
+          console.warn(`[cy] empty-stripped (${mode}): raw=${strip.rawChars} surviving=${strip.survivingChars} - filtering removed all of it (dominant bank: ${bank})`);
+          await recordOutcome('empty-stripped');
+        } else {
+          await recordOutcome('empty-provider');
+        }
+      }
       // METERED BACKOFF classification. A genuine non-emitting FAILURE is a cycle that
       // paid and put nothing on the page AND was not cut by an inbound interrupt: an
       // interrupt-driven abort (lastResult.aborted - a postcard/notice/provider-switch/
@@ -2635,6 +2822,7 @@ async function main() {
           nextIdleMs: idleMs,
           idleReason,
           aheadChars: produced ? aheadChars : null,
+          strip: lastResult.strip || null, // raw-vs-surviving strip accounting
         });
       }
       // remember this burst's opening word so the next prompt can forbid it -

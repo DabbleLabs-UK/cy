@@ -56,7 +56,7 @@ const TIP = {
   age: 'How long ago the snapshot below was captured, counting up live. Past a couple of minutes the whole group fades and is marked STALE so old numbers never read as current.',
   when: 'The wall-clock time the snapshot below was taken.',
   cycles:
-    'The outcome of each of the last N generation cycles, so a stall is visible here and not only in the log. emitted = text reached the page; discarded = a near-repeat was thrown away; empty = nothing usable came back; blocked = the warden ate it; silent = a deliberate pause; throttled = duty-cycle quiet; aborted = interrupted or unreachable. All emitted at 0 with the rest climbing is a stall.',
+    'The outcome of each of the last N generation cycles, so a stall is visible here and not only in the log. emitted = text reached the page; discarded = a near-repeat was thrown away; empty (provider) = the provider returned no text at all; empty (stripped) = text arrived but the strip banks removed all of it; empty (draw) = a drawing pass produced nothing; blocked = the warden ate it; silent = a deliberate pause; throttled = duty-cycle quiet; aborted = interrupted or unreachable. All emitted at 0 with the rest climbing is a stall.',
 };
 
 const esc = (s) =>
@@ -226,7 +226,9 @@ export class Hud {
     const ROWS = [
       ['emitted', 'emitted', 'good'],
       ['discarded-repeat', 'discarded', 'warm'],
-      ['empty', 'empty', 'warm'],
+      ['empty-provider', 'empty (provider)', 'warm'],
+      ['empty-stripped', 'empty (stripped)', 'warm'],
+      ['empty', 'empty (draw)', 'warm'],
       ['blocked-by-warden', 'blocked', 'warm'],
       ['deliberate-silence', 'silent', ''],
       ['throttled', 'throttled', ''],

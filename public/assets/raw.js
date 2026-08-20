@@ -348,7 +348,7 @@ function summaryFor(ev) {
     case 'text':
       return JSON.stringify(p.s ?? '') + (p.mode && p.mode !== 'journal' ? '  [' + p.mode + (p.lucid ? '/lucid' : '') + ']' : '');
     case 'gen':
-      return `${p.mode || '?'}  in=${p.tokens_in} out=${p.tokens_out}  ${p.gen_tok_s}tok/s  ttft=${p.ttft_ms}ms  total=${p.total_ms}ms${idleBadge(p)}  (click to expand)`;
+      return `${p.mode || '?'}  in=${p.tokens_in} out=${p.tokens_out}  ${p.gen_tok_s}tok/s  ttft=${p.ttft_ms}ms  total=${p.total_ms}ms${idleBadge(p)}${stripBadge(p)}  (click to expand)`;
     case 'silence':
       return `${p.seconds}s${p.reason ? '  (' + p.reason + ')' : ''}`;
     case 'mode':
@@ -401,6 +401,35 @@ function idleBadge(p) {
   return `  idle=${s}${r ? ' [' + r + ']' : ''}`;
 }
 
+// A terse strip badge for the gen summary: how the raw completion fared through
+// the strip banks. Icon-led, consistent with idleBadge. Shows raw->emitted chars,
+// and - the load-bearing signal - a scissors count when a bank ANNIHILATED chunks
+// (reduced them to nothing), which is the prose-discard this instrumentation hunts.
+// Empty string when no strip accounting rode this burst.
+function stripBadge(p) {
+  const s = p.strip;
+  if (!s) return '';
+  const raw = s.raw_chars || 0;
+  const emit = s.emitted_chars || 0;
+  const a = s.annihilated || {};
+  const annTotal = (a.scaffold || 0) + (a.narration || 0) + (a.stateNotation || 0);
+  // the eye-catch: a billed completion that put nothing on the page
+  const dead = raw > 0 && emit === 0 ? ' !dead' : '';
+  const sc = annTotal > 0 ? `  x${annTotal}[${dominantBankLabel(a)}]` : '';
+  return `  strip=${raw}->${emit}c${sc}${dead}`;
+}
+
+// Short label for the bank that annihilated the most chunks: s/n/v (scaffold /
+// narration / state-notation), so the summary stays a single glyph.
+function dominantBankLabel(a) {
+  const ranked = [
+    ['s', a.scaffold || 0],
+    ['n', a.narration || 0],
+    ['v', a.stateNotation || 0],
+  ].sort((x, y) => y[1] - x[1]);
+  return ranked[0][1] > 0 ? ranked[0][0] : 's';
+}
+
 // The expandable per-burst detail: the full prompt (zones A/B/C with char counts),
 // the full post-warden output as one copyable block, sampling params, timings, the
 // mode/form/style directives, and anything the warden dropped this burst.
@@ -424,6 +453,36 @@ function burstDetail(ev, drops) {
   outSec.appendChild(meta(`${(p.output || '').length} chars`));
   outSec.appendChild(out);
   box.appendChild(outSec);
+
+  // --- STRIP ACCOUNTING (raw -> surviving -> emitted) ---
+  // The prose-discard path made observable: how many chars the provider actually
+  // returned (BEFORE any stripping), how many survived the strip banks, how many
+  // reached the page, and the annihilation count by bank. A billed completion that
+  // put nothing on the page reads here as raw>0, emitted=0 - the invisible drop.
+  if (p.strip) {
+    const s = p.strip;
+    const a = s.annihilated || {};
+    const rm = s.removed || {};
+    const annTotal = (a.scaffold || 0) + (a.narration || 0) + (a.stateNotation || 0);
+    const strip = section('STRIP ACCOUNTING  (raw -> surviving -> emitted)');
+    if (s.raw_chars > 0 && s.emitted_chars === 0) {
+      strip.appendChild(meta('nothing reached the page - a billed completion filtering removed in full'));
+    }
+    strip.appendChild(kvGrid([
+      ['raw chars (pre-strip)', s.raw_chars],
+      ['surviving stripScaffold', s.surviving_chars],
+      ['emitted to page', s.emitted_chars],
+      ['chunks trimmed', s.trimmed],
+      ['chunks annihilated', annTotal],
+      ['  by scaffold', a.scaffold || 0],
+      ['  by narration', a.narration || 0],
+      ['  by state-notation', a.stateNotation || 0],
+      ['chars eaten: scaffold', rm.scaffold || 0],
+      ['chars eaten: narration', rm.narration || 0],
+      ['chars eaten: state-notation', rm.stateNotation || 0],
+    ]));
+    box.appendChild(strip);
+  }
 
   // --- SAMPLING ---
   const samp = section('SAMPLING');
@@ -582,6 +641,11 @@ function burstPlain(ev, drops) {
   L.push('SAMPLING: ' + [`temperature=${p.temperature}`, `top_p=${p.top_p}`, `repeat_penalty=${p.repeat_penalty}`, `num_predict=${p.num_predict}`, `num_ctx=${p.num_ctx}`, `threads=${p.threads}`].join('  '));
   L.push('TIMINGS: ' + [`prompt_eval_count=${p.tokens_in}`, `prompt_tok/s=${p.prompt_tok_s}`, `eval_count=${p.tokens_out}`, `gen_tok/s=${p.gen_tok_s}`, `ttft=${p.ttft_ms}ms`, `total=${p.total_ms}ms`].join('  '));
   L.push('IDLE: ' + [`next_idle=${p.next_idle_ms != null ? p.next_idle_ms + 'ms' : 'n/a'}`, `reason=${p.idle_reason || 'none'}`, `ahead=${p.ahead_chars != null ? p.ahead_chars + 'c' : 'n/a'}`].join('  '));
+  if (p.strip) {
+    const s = p.strip;
+    const a = s.annihilated || {};
+    L.push('STRIP: ' + [`raw=${s.raw_chars}`, `surviving=${s.surviving_chars}`, `emitted=${s.emitted_chars}`, `trimmed=${s.trimmed}`, `annihilated=[scaffold ${a.scaffold || 0}|narration ${a.narration || 0}|state ${a.stateNotation || 0}]`].join('  '));
+  }
   L.push('FORM: ' + (p.form || '(default)'));
   L.push('STYLES: ' + (p.styles || '(none)'));
   if (drops && drops.length) L.push('WARDEN DROPS: ' + drops.map((d) => `[${d.category}:${d.chars}c]`).join(' '));
