@@ -6,8 +6,8 @@
 // that state so persistence stays small and the model of what CY "is"
 // stays in one place.
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readFile, writeFile, mkdir, copyFile, access } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 export const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
 
@@ -225,24 +225,174 @@ export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
   return r;
 }
 
-export async function loadVitals(path) {
+// ---------------------------------------------------------------------------
+// ZONE SPLIT (SOMA build, step 0). The single `vitals` grab-bag is split into
+// three zones with three lifecycles:
+//   - soma        : inner state. Persisted to state/vitals.json. The only zone
+//                   a state circuit may write.
+//   - signals     : derived outputs (currently `derived`), recomputed every
+//                   tick, read-only downstream, NEVER persisted.
+//   - bookkeeping : render/prompt scaffolding. Persisted separately to
+//                   state/bookkeeping.json; never read by a state circuit.
+//
+// For this build the split is INTERNAL only: loadVitals returns a proxy that
+// exposes every old flat path (vitals.mental.anxiety, vitals.derived.numbness,
+// vitals.recentOpeners, ...) routed onto the right zone, so not one call site
+// has to change. Later steps migrate call sites onto the zones one at a time.
+// ---------------------------------------------------------------------------
+
+// Which zone owns each top-level field. Anything not listed defaults to soma,
+// so a field we failed to enumerate is still persisted (in soma) rather than
+// silently dropped.
+const ZONE_OF = new Map([
+  // signals - recomputed each tick, not persisted
+  ['derived', 'signals'],
+  // bookkeeping - render/prompt scaffolding, persisted separately
+  ['recentOpeners', 'bookkeeping'],
+  ['introspectPrev', 'bookkeeping'],
+  ['readEpochMs', 'bookkeeping'],
+  ['readCharsSinceEpoch', 'bookkeeping'],
+  // everything else is soma (physical, mental, imageRecall, hopeComedownUntil,
+  // monotony, expressed, lastBurstAnger, relations, ledger, dreamPool, the
+  // last*Ms clocks, dream* dates, day, ...)
+]);
+
+const zoneFor = (key) => ZONE_OF.get(key) || 'soma';
+
+// Retrieve the raw zone objects off a proxy (used by saveVitals). Non-string so
+// it never collides with a real field name and stays out of enumeration.
+const ZONES = Symbol('somaZones');
+
+// Build the flat-facing proxy over the three zone objects. Reads and writes to
+// any old flat path route to the owning zone; nested objects (physical, mental,
+// derived, relations) are returned by reference so in-place mutation
+// (vitals.mental.anxiety = x, vitals.recentOpeners.push(...)) works unchanged.
+function makeVitals(soma, signals, bookkeeping) {
+  const zones = { soma, signals, bookkeeping };
+  const flatKeys = () =>
+    [...new Set([...Object.keys(soma), ...Object.keys(signals), ...Object.keys(bookkeeping)])];
+  return new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        if (prop === ZONES) return zones;
+        if (typeof prop === 'symbol') return undefined;
+        return zones[zoneFor(prop)][prop];
+      },
+      set(_t, prop, value) {
+        if (typeof prop === 'symbol') return false;
+        zones[zoneFor(prop)][prop] = value;
+        return true;
+      },
+      has(_t, prop) {
+        if (typeof prop === 'symbol') return false;
+        return prop in zones[zoneFor(prop)];
+      },
+      deleteProperty(_t, prop) {
+        if (typeof prop === 'symbol') return false;
+        delete zones[zoneFor(prop)][prop];
+        return true;
+      },
+      ownKeys() {
+        return flatKeys();
+      },
+      getOwnPropertyDescriptor(_t, prop) {
+        if (typeof prop === 'symbol') return undefined;
+        const z = zones[zoneFor(prop)];
+        if (!(prop in z)) return undefined;
+        return { value: z[prop], writable: true, enumerable: true, configurable: true };
+      },
+    },
+  );
+}
+
+const fileExists = async (p) => {
   try {
-    const raw = await readFile(path, 'utf8');
-    const v = JSON.parse(raw);
-    // Merge over defaults so a partial/old file still boots.
-    const base = initialVitals();
-    return {
-      ...base,
-      ...v,
-      physical: { ...base.physical, ...(v.physical || {}) },
-      mental: { ...base.mental, ...(v.mental || {}) },
-    };
+    await access(p);
+    return true;
   } catch {
-    return initialVitals();
+    return false;
   }
+};
+
+export async function loadVitals(path) {
+  const bookPath = join(dirname(path), 'bookkeeping.json');
+
+  let raw = null;
+  try {
+    raw = JSON.parse(await readFile(path, 'utf8'));
+  } catch {
+    raw = null;
+  }
+
+  let book = null;
+  try {
+    book = JSON.parse(await readFile(bookPath, 'utf8'));
+  } catch {
+    book = null;
+  }
+
+  // One-time backup of the pre-split state file, before it is ever rewritten in
+  // the new (soma-only) shape. Detected by the presence of a field that moves
+  // zone or stops being persisted; guarded so we back up exactly once.
+  if (raw && ('derived' in raw || 'recentOpeners' in raw || 'introspectPrev' in raw)) {
+    const bak = path + '.pre-soma.bak';
+    if (!(await fileExists(bak))) {
+      try {
+        await copyFile(path, bak);
+      } catch {
+        /* best-effort backup; never block boot on it */
+      }
+    }
+  }
+
+  // Merge the old flat file over defaults, exactly as before, so a partial/old
+  // file still boots with every default filled in.
+  const base = initialVitals();
+  const merged = raw
+    ? {
+        ...base,
+        ...raw,
+        physical: { ...base.physical, ...(raw.physical || {}) },
+        mental: { ...base.mental, ...(raw.mental || {}) },
+      }
+    : base;
+
+  // Split the merged flat object into zones by ownership.
+  const soma = {};
+  const signals = {};
+  const bookkeeping = {};
+  const zones = { soma, signals, bookkeeping };
+  for (const [k, v] of Object.entries(merged)) {
+    zones[zoneFor(k)][k] = v;
+  }
+  // A dedicated bookkeeping.json (written by this build) is authoritative for
+  // bookkeeping fields over whatever an old vitals.json happened to carry.
+  if (book && typeof book === 'object') Object.assign(bookkeeping, book);
+
+  // `derived` is a signal: recomputable, never authoritative on disk. When we
+  // booted from a persisted file, reconstruct it from the loaded soma so it is
+  // present for the first burst just as the old persisted snapshot was. This is
+  // deterministic, so it reproduces that snapshot exactly on a migration boot
+  // (empty before/after diff) and fills it in on later soma-only boots, where
+  // `derived` is no longer written to disk. A fresh boot with no file keeps the
+  // initialVitals default ({}) until the first tick, matching the old code.
+  if (raw !== null) signals.derived = computeDerived(soma);
+
+  return makeVitals(soma, signals, bookkeeping);
 }
 
 export async function saveVitals(path, v) {
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(v, null, 2));
+  const zones = v && v[ZONES];
+  if (zones) {
+    // soma -> vitals.json (signals are never persisted), bookkeeping -> its own
+    // file. Two writes, but each zone stays small and independently lifecycled.
+    await writeFile(path, JSON.stringify(zones.soma, null, 2));
+    await writeFile(join(dirname(path), 'bookkeeping.json'), JSON.stringify(zones.bookkeeping, null, 2));
+  } else {
+    // Fallback: a plain object (e.g. a test built from initialVitals) still
+    // saves wholesale as before.
+    await writeFile(path, JSON.stringify(v, null, 2));
+  }
 }
