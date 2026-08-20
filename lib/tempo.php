@@ -7,14 +7,21 @@ declare(strict_types=1);
 // continuously; lower values insert proportional idle between bursts. The
 // effective tempo is DERIVED from live presence and one optional custom value:
 //
-//   nobody watching                 -> 5%   (and any custom value is discarded)
+//   nobody watching                 -> 5%   (custom value PRESERVED through a grace period)
 //   someone watching, no custom      -> 30%
 //   someone watching, a custom value -> that value (1..100)
 //
-// So the custom value only ever applies while at least one viewer is present; the
-// moment the last viewer leaves it is thrown away and a returning viewer starts
-// from 30% again. captive_tempo_decide() is the pure heart of that rule and is
-// unit-tested without a database.
+// The custom value only ever applies while at least one viewer is present, but it is
+// no longer thrown away the INSTANT the last viewer leaves. Presence is derived from
+// stream polling, so a backgrounded tab, a dropped poll, or a brief network blip can
+// read as zero viewers for a moment; discarding on that blip permanently destroyed the
+// setting (a viewer set 100, looked away, came back to 5%). Instead the moment viewers
+// hit zero is recorded (zero_since, migration 009) and the custom value SURVIVES until
+// viewers have been CONTINUOUSLY zero for CY_TEMPO_GRACE_SECONDS; a returning viewer
+// clears the marker and the stored value is restored untouched. The effective speed
+// still drops to idle (5%) while nobody watches - that saves power and is correct; only
+// the DISCARD waits for grace. captive_tempo_decide() is the pure heart of that rule
+// and is unit-tested without a database.
 
 // The regime accessors below reconcile a PUBLIC regime lease against live presence
 // (captive_presence_has_token), so this module depends on presence.php. It is also
@@ -26,16 +33,26 @@ const CY_TEMPO_IDLE = 5;            // % - nobody watching
 const CY_TEMPO_WATCHING = 30;       // % - someone watching, no custom value
 const CY_TEMPO_RATE_MAX = 6;        // custom changes allowed...
 const CY_TEMPO_RATE_WINDOW = 60;    // ...per this many seconds, per viewer
+const CY_TEMPO_GRACE_SECONDS = 90;  // sec viewers must be CONTINUOUSLY zero before a custom value is discarded
 
-// Pure: given the count of present viewers and the stored custom value (null if
-// none), decide the effective tempo and whether the stored custom should now be
-// discarded. No I/O so it can be tested directly.
+// Pure: given the count of present viewers, the stored custom value (null if none),
+// and how many seconds viewers have been CONTINUOUSLY zero, decide the effective tempo
+// and whether the stored custom should now be discarded. No I/O so it can be tested
+// directly. $zeroForSeconds is only consulted when nobody is watching; it defaults to
+// 0 ("just hit zero / unknown") so a caller without grace info never discards - the
+// safe direction, preserving the custom value.
 //   returns ['speed'=>int, 'viewers'=>int, 'custom'=>bool, 'discard'=>bool]
-function captive_tempo_decide(int $count, ?int $custom): array
+function captive_tempo_decide(int $count, ?int $custom, int $zeroForSeconds = 0): array
 {
     if ($count <= 0) {
-        // last viewer gone: revert to 5% and throw any custom value away
-        return ['speed' => CY_TEMPO_IDLE, 'viewers' => 0, 'custom' => false, 'discard' => $custom !== null];
+        // Last viewer gone: the EFFECTIVE speed drops to idle (5%) - correct, it saves
+        // power while nobody watches - but the stored custom value SURVIVES a grace
+        // period rather than being thrown away on the spot. A momentary zero (a
+        // backgrounded tab, a dropped poll, a network blip) no longer destroys the
+        // setting; only once viewers have been continuously zero for the whole grace
+        // window is the custom value genuinely discarded.
+        $graceLapsed = $zeroForSeconds >= CY_TEMPO_GRACE_SECONDS;
+        return ['speed' => CY_TEMPO_IDLE, 'viewers' => 0, 'custom' => false, 'discard' => $graceLapsed && $custom !== null];
     }
     if ($custom !== null) {
         return ['speed' => $custom, 'viewers' => $count, 'custom' => true, 'discard' => false];
@@ -81,6 +98,39 @@ function captive_tempo_set_custom(PDO $db, int $speed): void
 function captive_tempo_discard_custom(PDO $db): void
 {
     $db->prepare('UPDATE tempo SET custom_speed = NULL, updated_at = NOW() WHERE id = 1')->execute();
+}
+
+// ---- grace marker for the custom value (zero_since, migration 009) ----------
+//
+// The moment viewers FIRST hit zero in the current empty stretch, so the custom value
+// can be preserved through a momentary drop rather than discarded on a blip (see the
+// module header). All three accessors are defensive: on a pre-009 deploy the column is
+// missing, so rather than 500 the tempo endpoint they degrade to "no marker / grace
+// never lapses", which simply PRESERVES the custom value while nobody watches.
+
+// Record the first-zero moment (only if not already recorded, so a later read never
+// pushes it forward) and return how many seconds viewers have been continuously zero.
+// Returns 0 on a pre-009 deploy, so grace never lapses there (the custom value is kept).
+function captive_tempo_zero_since_age(PDO $db): int
+{
+    try {
+        $db->exec('UPDATE tempo SET zero_since = NOW() WHERE id = 1 AND zero_since IS NULL');
+        $v = $db->query('SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, zero_since, NOW())) FROM tempo WHERE id = 1')->fetchColumn();
+        return ($v === false || $v === null) ? 0 : (int)$v;
+    } catch (Throwable $e) {
+        return 0; // pre-009 (no zero_since column): grace never lapses, custom preserved
+    }
+}
+
+// Clear the first-zero marker the instant a viewer returns (so the grace clock always
+// measures a CONTINUOUS empty stretch, never a stale one), and after a genuine discard.
+function captive_tempo_clear_zero_since(PDO $db): void
+{
+    try {
+        $db->exec('UPDATE tempo SET zero_since = NULL WHERE id = 1 AND zero_since IS NOT NULL');
+    } catch (Throwable $e) {
+        /* pre-009 deploy (no zero_since column) - nothing to clear */
+    }
 }
 
 // ---- operator pause flag (owner-only, persisted on the same tempo row) ------
@@ -407,9 +457,21 @@ function captive_tempo_state(PDO $db): array
 {
     $count = captive_viewer_count($db);
     $custom = captive_tempo_custom($db);
-    $d = captive_tempo_decide($count, $custom);
+    // GRACE: while nobody is watching the effective speed still drops to idle, but the
+    // stored custom value is NOT discarded immediately - a momentary zero (backgrounded
+    // tab, dropped poll, blip) would otherwise strand the slider at 5%. Record the
+    // moment viewers hit zero and only discard once they have been CONTINUOUSLY zero for
+    // CY_TEMPO_GRACE_SECONDS; a present viewer clears the marker, so the value survives.
+    if ($count > 0) {
+        captive_tempo_clear_zero_since($db); // a viewer is here: reset the grace clock
+        $zeroFor = 0;
+    } else {
+        $zeroFor = captive_tempo_zero_since_age($db); // seconds continuously at zero
+    }
+    $d = captive_tempo_decide($count, $custom, $zeroFor);
     if ($d['discard']) {
         captive_tempo_discard_custom($db);
+        captive_tempo_clear_zero_since($db); // marker has done its job
     }
     unset($d['discard']);
     $d['paused'] = captive_tempo_paused($db);

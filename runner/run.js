@@ -104,7 +104,7 @@ import { SpendMeter } from './spend.js';
 import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } from './provider.js';
 import { createWarden, sanitize, stripScaffold, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
-import { tempoIdleMs, readingIdleMs, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
+import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -2535,12 +2535,25 @@ async function main() {
         }
         readIdle = readingIdleMs(aheadChars);
       }
-      // COMPOSE, do not replace: sit for the GREATER of the tempo idle and the reading
-      // backpressure, still clamped by the absolute cap. So a fast overrun is throttled
-      // even at speed=100, and a low speed's long tempo gap is never shortened by it.
-      const idleMs = produced ? Math.min(MAX_TEMPO_IDLE_MS, Math.max(tempoIdle, readIdle)) : 0;
+      // FULL-TILT BYPASS: speed 100 means FLAT OUT - continuous, CPU-saturated, back-to-
+      // back inferences with no deliberate idle whatsoever. The reading-cap backpressure
+      // is a SUB-100 feature: it keeps a fast provider from drawing prose faster than a
+      // human can read WHILE the tempo is throttling. At 100 the operator has explicitly
+      // asked for maximum output, so the cap is bypassed ENTIRELY here in the composition
+      // step - readingIdleMs itself stays pure and untouched (still measured above so the
+      // reading clock re-anchors honestly). This is deliberate, not a fallthrough: below
+      // 100 the reading cap composes exactly as before.
+      const fullTilt = clampSpeed(client.tempo.speed) >= 100;
+      const effReadIdle = fullTilt ? 0 : readIdle;
+      // COMPOSE, do not replace: sit for the GREATER of the tempo idle and the (at 100,
+      // bypassed) reading backpressure, still clamped by the absolute cap. So a fast
+      // overrun is throttled below 100, a low speed's long tempo gap is never shortened
+      // by it, and at 100 both terms are 0 so the runner runs flat out.
+      const idleMs = produced ? Math.min(MAX_TEMPO_IDLE_MS, Math.max(tempoIdle, effReadIdle)) : 0;
       // why the runner is about to idle, for the RAW debug view: reading-cap vs tempo.
-      const idleReason = idleMs > 0 ? (readIdle > tempoIdle ? 'reading-cap' : 'tempo') : null;
+      // At 100 both terms are 0, so idleMs is 0 and this is null - honest: neither the
+      // reading cap nor the tempo is inserting any idle.
+      const idleReason = idleMs > 0 ? (effReadIdle > tempoIdle ? 'reading-cap' : 'tempo') : null;
       if (produced) recentBurstMs = Math.round(recentBurstMs * 0.6 + burstMs * 0.4);
       // live diagnostics: publish this burst's generation telemetry (no-op if the
       // burst errored before ollama returned a `done` line with counters).

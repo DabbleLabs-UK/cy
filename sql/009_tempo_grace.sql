@@ -1,0 +1,29 @@
+-- 009_tempo_grace.sql - migration for an already-deployed database.
+--
+-- Gives the viewer-set custom tempo a GRACE PERIOD before it is discarded, so a
+-- momentary drop to zero viewers no longer destroys the setting. Presence is derived
+-- from stream polling, so a backgrounded tab, a dropped poll, or a brief network blip
+-- can read as zero viewers for a moment; the old rule threw the custom value away the
+-- INSTANT that happened, stranding a viewer who set 100 back at 5%.
+--
+-- One nullable column on the single-row `tempo` table:
+--   zero_since - the moment viewers FIRST hit zero in the current empty stretch (set
+--                once, WHERE zero_since IS NULL, so a later read never pushes it
+--                forward), or NULL whenever at least one viewer is present. The custom
+--                value is only discarded once viewers have been CONTINUOUSLY zero for
+--                CY_TEMPO_GRACE_SECONDS (see lib/tempo.php); a returning viewer clears
+--                this marker, and the stored custom value is restored untouched.
+--
+-- The effective speed still drops to idle (5%) while nobody is watching - that saves
+-- power and is correct. Only the DISCARD of the stored custom value waits for grace.
+--
+-- Idempotent on MariaDB (IF NOT EXISTS), so it is safe to re-run. Apply once against a
+-- live DB that predates the grace period:
+--
+--   mysql <db> < sql/009_tempo_grace.sql
+--
+-- The application degrades safely without it (lib/tempo.php treats the missing column
+-- as "grace never lapses", i.e. the custom value is simply preserved while nobody
+-- watches rather than 500-ing), so the site never breaks if this has not been applied.
+
+ALTER TABLE tempo ADD COLUMN IF NOT EXISTS zero_since DATETIME NULL;

@@ -39,8 +39,10 @@ export const MAX_TEMPO_IDLE_MS = 15 * 60 * 1000; // 15 minutes - absolute safety
 // draws at a fixed stroke rate anyway, so anything generated far ahead of the reader
 // just queues up unseen - tokens spent on prose nobody has reached. This is a second,
 // independent throttle: keep the emitted prose from running more than a human can read
-// ahead of them, regardless of speed. It COMPOSES with the tempo idle (the runner sits
-// for the GREATER of the two), it never replaces it.
+// ahead of them at any speed BELOW 100. It COMPOSES with the tempo idle (the runner sits
+// for the GREATER of the two), it never replaces it. At speed 100 - flat out - the
+// composition step in run.js bypasses this cap entirely (the operator has asked for
+// maximum output); this function itself stays pure and speed-agnostic.
 //
 // READ_CHARS_PER_SEC is a comfortable reading rate: ~220 wpm at ~5 chars/word ~= 18
 // chars/sec. READ_BUFFER_CHARS is how much unread text is allowed to run ahead before
