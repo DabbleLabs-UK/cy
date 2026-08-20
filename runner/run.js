@@ -434,13 +434,19 @@ async function main() {
   // running cumulative total; the chart converts impulses to a rate, so nothing is
   // pre-bucketed or smoothed here - just the raw facts with an accurate timestamp.
   let spendSaveAccum = 0;
-  async function recordSpend(stats, mode) {
+  // `productive` = did this paid call actually put prose on the page? When false, the
+  // same cost is folded into the meter's non-emitting series too, so a burst that paid
+  // full prompt price and emitted nothing is attributed as waste (see spend.js). The
+  // spend event carries both the grand cumulative and the non-emitting cumulative, plus
+  // this call's own productive flag, so the RAW diagnostics can show the burn directly.
+  async function recordSpend(stats, mode, productive = true) {
     if (!stats || !stats.usage) return; // ollama / no-usage: not a paid call
     const rec = spendMeter.record({
       provider: stats.provider || activeProviderId,
       model: stats.model || activeProvider().model,
       usage: stats.usage,
       cost: stats.cost,
+      productive,
     });
     emit({
       kind: 'spend',
@@ -455,6 +461,12 @@ async function main() {
         cost_usd: rec.costUsd,
         total_gbp: rec.totalGbp,
         total_usd: rec.totalUsd,
+        productive: rec.productive,
+        // cumulative spend that produced NOTHING on the page - surfaced so the wasted
+        // burn is on screen, not something to infer from a bill.
+        nonemit_gbp: rec.nonEmitGbp,
+        nonemit_usd: rec.nonEmitUsd,
+        nonemit_calls: rec.nonEmitCalls,
         mode,
         t_ms: Date.now(),
       },
@@ -615,6 +627,19 @@ async function main() {
   async function logCapHit(mode, n) {
     const line = `[cy] WARNING near-repeat cap hit (${mode}) after ${n} discards - forcing the text out anyway`;
     console.error(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
+  // A metered-backoff wait: logged LOUDLY (console + run.out.log) so the paced-down
+  // retry is visible rather than looking like a hang, with the streak length and the
+  // wait so the exponential ramp is legible in the log.
+  async function logBackoff(streak, ms) {
+    const line = `[cy] metered backoff: ${streak} non-emitting cycle(s) in a row - waiting ${Math.round(ms / 1000)}s before the next attempt`;
+    console.warn(line);
     try {
       const { appendFile } = await import('node:fs/promises');
       await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
@@ -801,6 +826,26 @@ async function main() {
   let lastTextMs = Date.now();
   let failedCyclesSinceEmit = 0;
   let watchdogStep = 0;
+
+  // ---- METERED BACKOFF -------------------------------------------------------
+  // A cycle that pays a metered provider's full prompt cost (~1500 tokens) and puts
+  // NO prose on the page - empty, warden-blocked, refused, or provider-errored - is
+  // pure waste, and with nothing between it and the next attempt the loop retries in
+  // ~2s: the exact DeepSeek token-rinse this guards. `nonEmittingStreak` counts
+  // CONSECUTIVE such failures; the runner then sits an exponential 2s, 4s, 8s ...
+  // capped at 60s before the next attempt, and the streak resets to 0 the instant a
+  // cycle emits (in onChunk / emitDreamText, where real text flows). It is a SEPARATE
+  // counter from the watchdog's failedCyclesSinceEmit so the two never reset each
+  // other - the backoff paces spend, the watchdog escalates context resets, and they
+  // run independently. It NEVER fires for: a local (ollama) cycle (generation is its
+  // own brake and costs no API money), a deliberate silence (a legitimate outcome,
+  // handled earlier with its own `continue`), or an interrupt-driven abort (a postcard/
+  // notice/provider-switch cut the stream - that hands off to real work and must stay
+  // responsive). The backoff sleep itself uses idleSilently, so an inbound postcard
+  // still breaks it early.
+  const BACKOFF_BASE_MS = 2000; // first failure: 2s
+  const BACKOFF_CAP_MS = 60000; // never wait longer than a minute
+  let nonEmittingStreak = 0;
 
   // ---- CYCLE OUTCOME ACCOUNTING ----------------------------------------------
   // Every generation cycle must end in exactly ONE recorded outcome so a stall is
@@ -1137,6 +1182,7 @@ async function main() {
     lastTextMs = Date.now(); // real output: reset the watchdog clock
     watchdogStep = 0; // text is flowing again: de-escalate the watchdog remedy
     failedCyclesSinceEmit = 0; // text reached the page: not a stall, whatever the cycle outcome reads
+    nonEmittingStreak = 0; // prose emitted: clear the metered-backoff streak
     burstEmitted += chunk; // original text: repeat guard reads what he actually wrote
     // READING-CAP: count only ACTUAL emitted prose toward the reading budget. By the
     // time a chunk reaches here it has already survived scaffold/narration/state-
@@ -1283,8 +1329,11 @@ async function main() {
     // natural end: flush trailing partial thought
     for (const chunk of buffer.flush()) await onChunk(chunk, mode);
     // paid-provider spend: fold this call's usage/cost into the meter and emit a
-    // raw 'spend' impulse. A no-op for ollama (no usage in stats).
-    await recordSpend(stats, mode);
+    // raw 'spend' impulse. A no-op for ollama (no usage in stats). `burstEmitted` is
+    // the prose that actually reached the page this burst; empty here means the call
+    // paid its full prompt cost and produced nothing (warden ate it, or it was empty)
+    // - recorded as non-emitting so the wasted spend is visible.
+    await recordSpend(stats, mode, !!burstEmitted.trim());
     return { full: cleanedFull(), aborted: false, stats, ttftMs };
 
     // A refusal discards everything - the refusal text is NEVER emitted. Log it so
@@ -1309,8 +1358,10 @@ async function main() {
     try {
       const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal });
       if (!out.ok) return '';
-      // paid-provider spend still counts for the (non-streamed) drawing DSL call.
-      await recordSpend(out.stats, 'draw');
+      // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
+      // DSL pass that returned text is productive (it will attempt to render); an empty
+      // return paid for nothing, so it lands in the non-emitting series.
+      await recordSpend(out.stats, 'draw', !!(out.text && out.text.trim()));
       return out.text || '';
     } catch {
       return ''; // aborted, unreachable, or bad body - caller treats as no drawing
@@ -2196,6 +2247,7 @@ async function main() {
     lastTextMs = Date.now(); // a murmur/night-line is real output too
     watchdogStep = 0; // dream output counts as text flowing: de-escalate the watchdog
     failedCyclesSinceEmit = 0; // real output: not a stall
+    nonEmittingStreak = 0; // real output: clear the metered-backoff streak
   }
 
   // Keep one properly punctuated sentence from a night-waking generation.
@@ -2509,6 +2561,17 @@ async function main() {
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
       else if (wardenBlocksInGen > 0) await recordOutcome('blocked-by-warden');
       else await recordOutcome('empty');
+      // METERED BACKOFF classification. A genuine non-emitting FAILURE is a cycle that
+      // paid and put nothing on the page AND was not cut by an inbound interrupt: an
+      // interrupt-driven abort (lastResult.aborted - a postcard/notice/provider-switch/
+      // watchdog break) hands off to real work and must stay responsive, so it is NOT a
+      // failure. errored/refused set no lastResult, so interruptAbort is false for them;
+      // empty/blocked have lastResult.aborted === false. A burst that emitted anything
+      // already cleared the streak in onChunk. Increment only on a true failure; the
+      // exponential wait itself is applied at the tail of the cycle below.
+      const interruptAbort = !!(lastResult && lastResult.aborted);
+      const nonEmittingFailure = !burstEmitted.trim() && !interruptAbort;
+      if (nonEmittingFailure) nonEmittingStreak++;
       // TEMPO: compute the deliberate idle this burst will sit for BEFORE emitting
       // the gen event, so the diagnostics can show the next gap ('next burst in
       // ~Ns') rather than leaving it a mystery. Only a burst that produced prose is
@@ -2535,15 +2598,17 @@ async function main() {
         }
         readIdle = readingIdleMs(aheadChars);
       }
-      // FULL-TILT BYPASS: speed 100 means FLAT OUT - continuous, CPU-saturated, back-to-
-      // back inferences with no deliberate idle whatsoever. The reading-cap backpressure
-      // is a SUB-100 feature: it keeps a fast provider from drawing prose faster than a
-      // human can read WHILE the tempo is throttling. At 100 the operator has explicitly
-      // asked for maximum output, so the cap is bypassed ENTIRELY here in the composition
-      // step - readingIdleMs itself stays pure and untouched (still measured above so the
-      // reading clock re-anchors honestly). This is deliberate, not a fallthrough: below
-      // 100 the reading cap composes exactly as before.
-      const fullTilt = clampSpeed(client.tempo.speed) >= 100;
+      // FULL-TILT BYPASS - LOCAL ONLY. Speed 100 zeroes the reading cap so the runner
+      // runs flat out, back-to-back, with no deliberate idle - but ONLY when the active
+      // provider is the LOCAL one (ollama), where generation is itself the brake (~55s
+      // TTFT, ~4 tok/s) so 'no deliberate idle' is still a sane cadence. On any METERED/
+      // remote provider (DeepSeek answers in ~1-2s) there is NO such brake: bypassing the
+      // cap there fires an inference every couple of seconds, each paying ~1500 prompt
+      // tokens for prose nobody has reached - the exact token-rinse the cap exists to stop.
+      // So the reading cap ALWAYS binds on a metered provider, at every speed including 100.
+      // The gate is provider.local (see provider.js) so a future paid provider cannot
+      // silently inherit the bypass. DO NOT widen this to `>= 100` alone again.
+      const fullTilt = clampSpeed(client.tempo.speed) >= 100 && activeProvider().local;
       const effReadIdle = fullTilt ? 0 : readIdle;
       // COMPOSE, do not replace: sit for the GREATER of the tempo idle and the (at 100,
       // bypassed) reading backpressure, still clamped by the absolute cap. So a fast
@@ -2605,7 +2670,21 @@ async function main() {
           await idleSilently(idleMs);
         }
       } else {
-        await sleep(700);
+        // NON-PRODUCED cycle. On a METERED provider, a genuine non-emitting FAILURE
+        // (empty/blocked/refused/errored - NOT an interrupt-driven abort) backs off
+        // exponentially - 2s, 4s, 8s ... capped at 60s - so a fast paid API cannot be
+        // token-rinsed by instant retries; the streak resets to 0 the moment prose
+        // emits again. A local (ollama) cycle, or an interrupt-driven abort, just takes
+        // the small breather as before. idleSilently lets an inbound postcard cut the
+        // wait short, so responsiveness is preserved.
+        const metered = !activeProvider().local;
+        if (metered && nonEmittingFailure && nonEmittingStreak > 0) {
+          const backoff = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (nonEmittingStreak - 1));
+          await logBackoff(nonEmittingStreak, backoff);
+          await idleSilently(backoff);
+        } else {
+          await sleep(700);
+        }
       }
     }
   }

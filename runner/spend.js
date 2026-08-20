@@ -26,6 +26,19 @@ export class SpendMeter {
     this.tokensOut = 0;
     this.calls = 0;
     this.startTs = null; // life-of-project first-spend/switch-on time
+    // NON-EMITTING BURN. The subset of the totals above spent on cycles that paid the
+    // full prompt cost and produced NO prose on the page (a completed burst the warden
+    // ate whole, or otherwise empty output). This is money for nothing, so it is
+    // tracked as its OWN cumulative series alongside the grand total - never a parallel
+    // meter - so the diagnostics can show how much of the spend was wasted. NB it can
+    // only ever count cycles that COMPLETED (their usage arrived on the done line): a
+    // refusal/abort is cut before the counters land, so its (small, early-aborted) cost
+    // is unmeasurable here and shows instead in the 'refused'/'aborted' outcome counts.
+    this.nonEmitGbp = 0;
+    this.nonEmitUsd = 0;
+    this.nonEmitTokensIn = 0;
+    this.nonEmitTokensOut = 0;
+    this.nonEmitCalls = 0;
   }
 
   async load() {
@@ -37,6 +50,11 @@ export class SpendMeter {
       this.tokensOut = num(j.tokens_out);
       this.calls = num(j.calls);
       this.startTs = num(j.start_ts) || null;
+      this.nonEmitGbp = num(j.nonemit_gbp);
+      this.nonEmitUsd = num(j.nonemit_usd);
+      this.nonEmitTokensIn = num(j.nonemit_tokens_in);
+      this.nonEmitTokensOut = num(j.nonemit_tokens_out);
+      this.nonEmitCalls = num(j.nonemit_calls);
     } catch {
       /* first run - nothing persisted yet */
     }
@@ -45,8 +63,11 @@ export class SpendMeter {
 
   // Fold one paid generation into the running total. `usage` is the per-call token
   // usage and `cost` is the per-call { usd, gbp } the provider already computed.
-  // Returns the per-call facts plus the new cumulative totals, for the spend event.
-  record({ provider, model, usage, cost }) {
+  // `productive` (default true) is whether this call's generation actually put prose
+  // on the page; when false the same cost is ALSO added to the non-emitting series so
+  // the wasted spend is attributable. Returns the per-call facts plus the new
+  // cumulative totals (grand and non-emitting), for the spend event.
+  record({ provider, model, usage, cost, productive = true }) {
     const u = usage || {};
     const gbp = num(cost && cost.gbp);
     const usd = num(cost && cost.usd);
@@ -59,9 +80,17 @@ export class SpendMeter {
     this.tokensIn += tin;
     this.tokensOut += tout;
     this.calls += 1;
+    if (!productive) {
+      this.nonEmitGbp += gbp;
+      this.nonEmitUsd += usd;
+      this.nonEmitTokensIn += tin;
+      this.nonEmitTokensOut += tout;
+      this.nonEmitCalls += 1;
+    }
     return {
       provider,
       model,
+      productive: !!productive,
       tokensIn: tin,
       tokensOut: tout,
       cachedIn: cached,
@@ -70,6 +99,10 @@ export class SpendMeter {
       costGbp: Number(gbp.toFixed(8)),
       totalGbp: Number(this.totalGbp.toFixed(8)),
       totalUsd: Number(this.totalUsd.toFixed(8)),
+      // cumulative spend that produced nothing on the page - the burn made visible
+      nonEmitGbp: Number(this.nonEmitGbp.toFixed(8)),
+      nonEmitUsd: Number(this.nonEmitUsd.toFixed(8)),
+      nonEmitCalls: this.nonEmitCalls,
     };
   }
 
@@ -80,6 +113,12 @@ export class SpendMeter {
       tokens_in: this.tokensIn,
       tokens_out: this.tokensOut,
       calls: this.calls,
+      // the non-emitting (wasted) subset of the totals above
+      nonemit_gbp: Number(this.nonEmitGbp.toFixed(8)),
+      nonemit_usd: Number(this.nonEmitUsd.toFixed(8)),
+      nonemit_tokens_in: this.nonEmitTokensIn,
+      nonemit_tokens_out: this.nonEmitTokensOut,
+      nonemit_calls: this.nonEmitCalls,
     };
   }
 
@@ -95,6 +134,11 @@ export class SpendMeter {
           tokens_out: this.tokensOut,
           calls: this.calls,
           start_ts: this.startTs,
+          nonemit_gbp: this.nonEmitGbp,
+          nonemit_usd: this.nonEmitUsd,
+          nonemit_tokens_in: this.nonEmitTokensIn,
+          nonemit_tokens_out: this.nonEmitTokensOut,
+          nonemit_calls: this.nonEmitCalls,
         },
         null,
         2,

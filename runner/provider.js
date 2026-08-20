@@ -244,6 +244,16 @@ function makeOllama(config) {
   return {
     id: OLLAMA,
     costsMoney: false,
+    // LOCAL vs METERED. `local` is the load-bearing flag the runner reads to decide
+    // whether the full-tilt (speed 100) reading-cap bypass is allowed. It is true
+    // ONLY for the on-box model, where generation itself is the brake (~55s TTFT,
+    // ~4 tok/s) so 'no deliberate idle' is still a sane cadence. Any paid/remote
+    // provider MUST set local:false so the reading cap always binds and a fast API
+    // cannot be token-rinsed by back-to-back inferences. `metered` is the inverse,
+    // spelled out so both intents read plainly at the call site. Adding a future
+    // provider forces an explicit choice here rather than silently inheriting.
+    local: true,
+    metered: false,
     screensContent: false, // abliterated: no refusals to screen
     get model() {
       return config.model;
@@ -289,6 +299,12 @@ function makeDeepSeek(config, key) {
   return {
     id: DEEPSEEK,
     costsMoney: true,
+    // REMOTE + METERED: the API answers in ~1-2s, so there is NO generation brake.
+    // local:false means the runner NEVER bypasses the reading cap for DeepSeek, at
+    // any speed including 100 - see the full-tilt composition step in run.js. Do not
+    // flip this to true for any provider that costs money or answers fast.
+    local: false,
+    metered: true,
     screensContent: true, // DeepSeek can refuse - run.js screens the opening
     get model() {
       return ds.model;
