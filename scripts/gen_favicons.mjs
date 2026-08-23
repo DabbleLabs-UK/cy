@@ -4,7 +4,7 @@
 import sharp from 'sharp';
 import { writeFileSync } from 'fs';
 
-const SRC = 'assets/logo_tight_negative_hue_contrast.png';
+const SRC = 'assets/logo_tighter_square_negative_hue_contrast.png';
 const OUT = 'public/assets';
 const RADIUS_PCT = 0.22; // superellipse-ish app-icon corner
 
