@@ -49,7 +49,7 @@ html, body {
      can never collide with it, whatever the logo's rendered width. */
   padding: 10px 16px 10px 60px;
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, var(--chrome-2), var(--chrome-1));
+  background: #000;
   flex-wrap: wrap;
 }
 /* Corner logo: pinned flush to the top-left viewport edge, its bottom meeting the
