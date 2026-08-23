@@ -163,8 +163,11 @@ window.CY = {
 <body<?= $useTest ? ' data-test="1"' : '' ?>>
 
 <header id="topbar">
+  <!-- Corner logo: bleeds to the top-left viewport edge, its bottom meeting the
+       nav divider line (see .brand-logo in style.css). It overlays the reserved
+       left padding of #topbar rather than flowing as an inline nav item. -->
+  <img class="brand-logo" src="<?= htmlspecialchars(cy_asset('assets/logo-negative.png'), ENT_QUOTES) ?>" width="205" height="200" alt="CY">
   <div class="brand">
-    <span class="brand-mark">CY</span>
     <span class="brand-sub">inmate 7734 &middot; HMP ThinkPad</span>
   </div>
   <div class="topmeta">

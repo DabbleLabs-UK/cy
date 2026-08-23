@@ -39,22 +39,39 @@ html, body {
 
 /* ---- top bar ---- */
 #topbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
+  /* Extra left padding reserves a lane for the corner logo so nav content (the
+     subtitle, and the wrapped controls on mobile) always starts to its right and
+     can never collide with it, whatever the logo's rendered width. */
+  padding: 10px 16px 10px 60px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, var(--chrome-2), var(--chrome-1));
   flex-wrap: wrap;
 }
-.brand { display: flex; align-items: baseline; gap: 12px; }
-.brand-mark {
-  font-weight: 700;
-  letter-spacing: 0.34em;
-  color: #e8eef4;
-  font-size: 18px;
+/* Corner logo: pinned flush to the top-left viewport edge, its bottom meeting the
+   nav's bottom border (the divider). height:100% makes the bottom land exactly on
+   the divider on a single-row bar; max-height caps it so a wrapped (mobile) bar,
+   which grows taller, keeps the logo a modest corner mark instead of ballooning.
+   Being absolutely positioned it sits over the reserved #topbar left padding and
+   overflows the normal nav padding by design. Width scales from height (aspect
+   ~1.025); the 60px reserved lane keeps it clear of all other controls. */
+.brand-logo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  max-height: 44px;
+  width: auto;
+  display: block;
+  z-index: 3;
+  object-fit: contain;
+  object-position: left center;
 }
+.brand { display: flex; align-items: baseline; gap: 12px; }
 .brand-sub { color: var(--tel-dim); letter-spacing: 0.12em; font-size: 12px; }
 .topmeta { display: flex; gap: 8px; align-items: center; }
 .pill {
