@@ -1,0 +1,17 @@
+{
+    "_comment": "Single source of truth for Cy on dabblelabs.uk. Deployed verbatim to <docroot>/cy/manifest.json and read at render time by the shell (lib/display.php, dl_read_manifest). Schema: DABBLELABS_PORTFOLIO_SPEC.md. Cy lives on its own subdomain, so the card points off-site via external_url (validated against the shell's host allowlist); privacy_url/tos_url and logo are omitted because there is no on-site app page - the card links straight to cy.dabblelabs.uk.",
+    "schema_version": 1,
+    "id": "cy",
+    "name": "Cy",
+    "tagline": "My pet, interactive AI inmate, incarcerated on my laptop 24/7, pondering the essence of consciousness",
+    "description": "",
+    "feature_image": "feature.png",
+    "screenshots": [],
+    "external_url": "https://cy.dabblelabs.uk",
+    "os": [
+        "web"
+    ],
+    "experiment_id": "EXPERIMENT 012",
+    "status": "normal",
+    "section": "art"
+}
