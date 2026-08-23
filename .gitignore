@@ -15,3 +15,8 @@ runner/deepseek.key
 
 # environment-specific, gitignored per DabbleLabs convention
 /deploy.config.json
+
+# node tooling (one-off favicon generation via sharp) - not part of the PHP site
+/node_modules/
+/package.json
+/package-lock.json

@@ -111,6 +111,12 @@ function cy_import_map(): string
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>CY &middot; inmate 7734, HMP ThinkPad</title>
 <meta name="description" content="Watch inmate 7734 of HMP ThinkPad write, in real time, by hand.">
+<!-- Favicons: rounded stencil "CY" mark. Cache-busted via cy_asset() like the
+     stylesheets, so a re-deployed icon is never masked by a stale cached copy. -->
+<link rel="icon" type="image/png" sizes="32x32" href="<?= htmlspecialchars(cy_asset('assets/favicon-32.png'), ENT_QUOTES) ?>">
+<link rel="icon" type="image/png" sizes="16x16" href="<?= htmlspecialchars(cy_asset('assets/favicon-16.png'), ENT_QUOTES) ?>">
+<link rel="icon" type="image/x-icon" href="<?= htmlspecialchars(cy_asset('assets/favicon.ico'), ENT_QUOTES) ?>">
+<link rel="apple-touch-icon" sizes="180x180" href="<?= htmlspecialchars(cy_asset('assets/apple-touch-icon.png'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/style.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/timetravel.css'), ENT_QUOTES) ?>">
 <script>

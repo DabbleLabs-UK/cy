@@ -10,6 +10,7 @@
   --tel-dim: #5c6b7a;    /* dim labels */
   --tel-hot: #ff5b2e;    /* alarm */
   --tel-cool: #2b5f8f;   /* nominal */
+  --brand: #c8562a;      /* rust accent, sampled from the CY logo's spray dot */
   --good: #4fd08a;
   --paper: #f4ecd8;      /* warm cream */
   --paper-shadow: rgba(0,0,0,0.55);
@@ -131,10 +132,10 @@ html, body {
   color: var(--tel);
   cursor: pointer;
 }
-.cy-gear-btn:hover { background: var(--chrome-2); }
+.cy-gear-btn:hover { background: var(--chrome-2); border-color: var(--brand); }
 .cy-gear-btn:focus-visible { outline: 2px solid #6fb2ff; outline-offset: 1px; }
 .cy-gear-btn svg { width: 14px; height: 14px; display: block; fill: currentColor; }
-.cy-gear-btn[aria-expanded="true"] { background: var(--chrome-2); border-color: #3a4657; }
+.cy-gear-btn[aria-expanded="true"] { background: var(--chrome-2); border-color: var(--brand); }
 
 .cy-menu {
   position: absolute;
