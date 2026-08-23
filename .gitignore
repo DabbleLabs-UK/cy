@@ -12,3 +12,6 @@
 # API keys - never commit
 runner/deepseek.key
 *.key
+
+# environment-specific, gitignored per DabbleLabs convention
+/deploy.config.json
