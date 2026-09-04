@@ -74,6 +74,7 @@ const led = {
   lastSeq: -1, // highest inference-event seq applied; guards against stale/replayed phases
   set(phase) {
     this.phase = phase;
+    if (brain && brain.setInference) brain.setInference(phase);
     if (!this.el) return;
     this.el.classList.toggle('gen', phase === 'gen');
     this.el.classList.toggle('eval', phase === 'eval');
@@ -427,6 +428,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
 
     case 'vitals':
       pen.setVitals(p);
+      brain.setSoma(p.soma);
       brain.setBrain(p.brain);
       brain.setHeart(p.hr);
       brain.setMental(p.mental);

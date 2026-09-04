@@ -36,8 +36,6 @@ import {
   options,
   letterPredict,
   amplifiedDirective,
-  styleDirective,
-  pickForm,
   bansDirective,
   wingnoiseDirective,
   applyBurstSeparator,
@@ -48,9 +46,17 @@ import {
   dreamMurmurGapMs,
 } from './prompt.js';
 import {
+  reconcileSoma,
+  observeSoma,
+  tickSoma,
+  chooseSomaAction,
+  completeSomaAction,
+  somaDirective,
+  somaSnapshot,
+} from './soma.js';
+import {
   parseStrokes,
   moodSnapshot,
-  drawDecision,
   detectDrawRequest,
   resolveRequest,
   subjectFromLine,
@@ -69,7 +75,6 @@ import {
   isSmallHours,
   pickDreamStartMin,
 } from './draw.js';
-import { introspect, angerSignals } from './introspect.js';
 import { shout, updateAffect, grudgeNames } from './shout.js';
 import {
   reconcileLedger,
@@ -302,38 +307,6 @@ const isHostile = (body) => HOSTILE.test(body || '');
 const WARM = /\b(love|miss you|thinking of you|proud|hope you|stay strong|here for you|care|dear|hang in|take care|god bless|xx)\b/i;
 const isWarm = (body) => WARM.test(body || '');
 
-// ---- silence: real gaps where nothing is written --------------------------
-//
-// Probability of stopping rises with despair, numbness, resignation and sleep,
-// and falls with agitation and just after a fresh incident (something concrete
-// pulls him back to the page). Awake silences run ~20s to ~4min; asleep, much
-// longer. Returns { silent, seconds, reason }.
-function silenceDecision(v, asleep, sinceIncidentMs, rnd = Math.random) {
-  const m = v.mental || {};
-  const p = v.physical || {};
-  const d = v.derived || {};
-  let prob = 0.05 + 0.32 * (m.despair || 0) + 0.28 * (d.numbness || 0) + 0.22 * (d.resignation || 0);
-  if (asleep) prob += 0.42;
-  prob -= 0.4 * (m.agitation || 0);
-  if (sinceIncidentMs < 30000) prob -= 0.5; // a fresh incident pulls him back
-  prob = clamp(prob, asleep ? 0.05 : 0.02, asleep ? 0.9 : 0.55);
-  if (rnd() >= prob) return { silent: false };
-  const heavy = clamp(0.4 + 0.6 * (((m.despair || 0) + (d.resignation || 0)) / 2));
-  const seconds = asleep
-    ? 60 + Math.floor(rnd() * 300) + Math.floor(heavy * 180) // 60..~540s
-    : 20 + Math.floor(rnd() * 90) + Math.floor(heavy * 120); // 20..~230s
-  const reason = asleep
-    ? 'under'
-    : (d.numbness || 0) > 0.55
-      ? 'numb'
-      : (m.despair || 0) > 0.6
-        ? 'nothing to write'
-        : (p.fatigue || 0) > 0.7
-          ? 'too tired'
-          : 'staring at the wall';
-  return { silent: true, seconds, reason };
-}
-
 // First word of a generation, lowercased, for the opener ban ring.
 function firstWord(text) {
   const m = String(text || '').trim().match(/[A-Za-z0-9']+/);
@@ -349,6 +322,7 @@ async function main() {
   const blockedLogPath = join(STATE_DIR, 'blocked.log');
 
   const vitals = await loadVitals(vitalsPath);
+  vitals.cognition = reconcileSoma(vitals.cognition, { now: Date.now() });
   if (!vitals.lastMailMs) vitals.lastMailMs = Date.now();
   if (typeof vitals.monotony !== 'number') vitals.monotony = 0;
   // the cast + grudge map lives on the vitals object so it persists with state
@@ -421,6 +395,16 @@ async function main() {
   console.log(`[cy] providers: ollama ready; deepseek ${providers[DEEPSEEK].available() ? 'ready' : 'unavailable (no key file)'}`);
   let activeProviderId = OLLAMA;
   const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
+  observeSoma(
+    vitals.cognition,
+    {
+      name: 'runner_restart',
+      text: 'continuity resumed inside the machine; local inference became available again',
+      tags: ['restart', 'machine', 'continuity'],
+      ts: tsNow(),
+    },
+    { now: Date.now() },
+  );
   const spendMeter = new SpendMeter(config, join(STATE_DIR, 'spend.json'));
   await spendMeter.load();
   // Report DeepSeek availability to the server as a side-channel capability event,
@@ -543,6 +527,16 @@ async function main() {
     inc.ts = tsNow();
     pushIncident(vitals.ledger, inc);
     vitals.lastIncidentMs = Date.now();
+    observeSoma(
+      vitals.cognition,
+      {
+        name: kind,
+        text: incidentLine(inc),
+        tags: [kind, inc.sub, inc.verb].filter(Boolean),
+        ts: inc.ts,
+      },
+      { now: Date.now() },
+    );
     return inc;
   }
 
@@ -595,18 +589,40 @@ async function main() {
   const CONTEXT_SOFT = 3000;
   const CONTEXT_HARD = 4600;
   let contextBuf = await loadContext(contextPath);
-  if (contextBuf.length > CONTEXT_HARD) contextBuf = contextBuf.slice(-CONTEXT_SOFT);
+  if (contextBuf.length > CONTEXT_HARD) {
+    const removed = contextBuf.length - CONTEXT_SOFT;
+    contextBuf = contextBuf.slice(-CONTEXT_SOFT);
+    observeSoma(
+      vitals.cognition,
+      { name: 'context_trim', text: `${removed} characters of continuity were unavailable after restart`, tags: ['context', 'memory', 'machine'], ts: tsNow() },
+      { now: Date.now() },
+    );
+  }
   const contextText = () => contextBuf;
   async function appendContext(chunk) {
     contextBuf += chunk;
-    if (contextBuf.length > CONTEXT_HARD) contextBuf = contextBuf.slice(-CONTEXT_SOFT); // rare, large trim
+    if (contextBuf.length > CONTEXT_HARD) {
+      const removed = contextBuf.length - CONTEXT_SOFT;
+      contextBuf = contextBuf.slice(-CONTEXT_SOFT); // rare, large trim
+      observeSoma(
+        vitals.cognition,
+        { name: 'context_trim', text: `${removed} characters fell out of immediate language context`, tags: ['context', 'memory', 'machine'], ts: tsNow() },
+        { now: Date.now() },
+      );
+    }
     await saveContext(contextPath, contextBuf);
   }
   // Shrink the effective context tail (on a near-repeat, to jolt the model off
   // the passage it keeps copying) - a deliberate, one-off cache break.
   function trimContext(frac) {
+    const before = contextBuf.length;
     const keep = Math.max(0, contextBuf.length - Math.floor(contextBuf.length * frac));
     contextBuf = keep > 0 ? contextBuf.slice(-keep) : '';
+    observeSoma(
+      vitals.cognition,
+      { name: 'context_trim', text: `${before - contextBuf.length} characters were removed to break a repeated loop`, tags: ['context', 'memory', 'machine'], ts: tsNow() },
+      { now: Date.now() },
+    );
   }
   // Discards go to state/run.out.log so the loop is observable in the detached
   // process; console too, for a foreground run.
@@ -773,40 +789,6 @@ async function main() {
       /* never crash on debug logging */
     }
   }
-  async function logIntrospect(ins) {
-    const sig = (ins && ins.signals) || [];
-    if (!sig.length) return;
-    const line = `[cy] introspect: ${sig.join(' | ')}`;
-    console.log(line);
-    try {
-      const { appendFile } = await import('node:fs/promises');
-      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
-    } catch {
-      /* never crash on debug logging */
-    }
-  }
-  // Read Cy's just-finished burst and let his own text move the mental state
-  // (never a clock). Deltas apply WITHOUT amplification - a burst nudges, it does
-  // not swing - and relations nudges harden/soften standing toward whoever he
-  // named in a threatening or a kindly breath.
-  async function applyIntrospection(text) {
-    const ins = introspect(text, { prev: vitals.introspectPrev || '' });
-    vitals.introspectPrev = String(text || '').slice(-1200);
-    // feed the burst's own profanity/threat density into the live anger value: a
-    // spike here raises anger on the next tick, which raises `expressed` a beat
-    // later, which shows as shouting - and his shouting keeps the density high.
-    vitals.lastBurstAnger = angerSignals(text).intensity;
-    if (!ins) return;
-    applyDeltas(vitals, ins.deltas || {}, 1);
-    for (const [k, d] of Object.entries(ins.rel || {})) {
-      const r = vitals.relations[k];
-      if (!r) continue;
-      if (typeof d.suspicion === 'number') r.suspicion = clamp(r.suspicion + d.suspicion);
-      if (typeof d.warmth === 'number') r.warmth = clamp(r.warmth + d.warmth);
-    }
-    await logIntrospect(ins);
-  }
-
   // ---- generation telemetry: emit a `gen` event after a completed burst ----
   // Folds ollama's per-generation counters (prompt_eval_count, eval_count and the
   // nanosecond durations) into interpretable numbers, plus the live runner state
@@ -1543,6 +1525,7 @@ async function main() {
     genCount++;
     const ctx = {
       grudge: grudgeDirective(vitals.relations),
+      soma: somaDirective(vitals.cognition),
     };
     // cast standing block only when a relation is actually charged (roster itself
     // is always in Zone A); keeps Zone C small on calm days.
@@ -1583,6 +1566,16 @@ async function main() {
     const warm = isWarm(pc.body);
     const evName = hostile ? 'letter_hostile' : 'letter_arrives';
     fireEvent(evName, { from: pc.from_name || null });
+    observeSoma(
+      vitals.cognition,
+      {
+        name: pc.image_path ? 'postcard_with_image' : 'postcard',
+        text: [pc.body, pc.caption, pc.image_attrib].filter(Boolean).join(' | ') || 'a postcard arrived without words',
+        tags: ['mail', 'postcard', pc.image_path ? 'image' : 'text'],
+        ts: tsNow(),
+      },
+      { now: Date.now() },
+    );
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
     if (pc.image_path) {
@@ -1626,7 +1619,7 @@ async function main() {
       zoneB: letterTail,
       zoneC: directives,
       form: ctx.form || null,
-      styles: styleDirective(vitals),
+      styles: '',
       opts,
       output: r.full,
     });
@@ -1665,6 +1658,11 @@ async function main() {
     const a = ampOf(vitals);
     applyDeltas(vitals, { anxiety: +0.2, anger: +0.15, lucidity: +0.1 }, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.5);
+    observeSoma(
+      vitals.cognition,
+      { name: 'warden_notice', text: notice.text, tags: ['warden', 'officer', 'control'], ts: tsNow() },
+      { now: Date.now() },
+    );
     emit({ kind: 'event', payload: { name: 'warden', amp: Number(a.toFixed(3)), text: notice.text } });
 
     const directives = buildDirectives(vitals, 'journal', buildCtx());
@@ -1911,6 +1909,16 @@ async function main() {
     }
     const from = activeProviderId;
     activeProviderId = id;
+    observeSoma(
+      vitals.cognition,
+      {
+        name: 'provider_change',
+        text: `the process producing language changed from ${from} to ${id}`,
+        tags: ['provider', 'machine', 'continuity'],
+        ts: tsNow(),
+      },
+      { now: Date.now() },
+    );
     emit({ kind: 'event', payload: { name: 'provider', from, to: id, model: target.model } });
     client.kick(); // priority flush: the admin control is waiting on this
     if (currentAbort) currentAbort.abort(); // clean cut; the next burst uses the new provider
@@ -1945,6 +1953,16 @@ async function main() {
   client.onRegimeChange = (to) => {
     const from = activeRegimeId;
     activeRegimeId = to;
+    observeSoma(
+      vitals.cognition,
+      {
+        name: 'regime_change',
+        text: `the prison day was externally changed from ${from} to ${to}`,
+        tags: ['regime', 'control'],
+        ts: tsNow(),
+      },
+      { now: Date.now() },
+    );
     emit({ kind: 'event', payload: { name: 'regime', from, to } });
     client.kick(); // priority flush: the admin control is waiting on this
     if (currentAbort) currentAbort.abort(); // cut the burst; the loop re-decides asleep now
@@ -1956,6 +1974,20 @@ async function main() {
   function fireEvent(name, extra = {}) {
     const a = ampOf(vitals);
     applyEvent(vitals, name, { now: Date.now() });
+    const detail = Object.entries(extra)
+      .filter(([, value]) => value != null)
+      .map(([key, value]) => `${key} ${value}`)
+      .join(', ');
+    observeSoma(
+      vitals.cognition,
+      {
+        name,
+        text: detail ? `${name}: ${detail}` : name.replaceAll('_', ' '),
+        tags: [name, ...Object.keys(extra)],
+        ts: tsNow(),
+      },
+      { now: Date.now() },
+    );
     if (TRIVIAL_EVENTS.has(name) && a > 2.0) {
       amplifiedCue = { label: TRIVIAL_LABELS[name] || name, until: Date.now() + 3 * 60 * 1000 };
     }
@@ -2148,6 +2180,13 @@ async function main() {
     // Runs every tick so the lag is smooth and a spike sulks down between bursts.
     updateAffect(vitals, { amp: ampOf(vitals) });
     scheduler(now);
+    tickSoma(vitals.cognition, {
+      physical: vitals.physical,
+      monotony: vitals.monotony,
+      asleep,
+      lastMailMs: vitals.lastMailMs,
+      now,
+    });
 
     const winMs = config.tickMs > 0 ? config.tickMs : 5000;
     const rate = tokenCount / (winMs / 1000); // tok/s over the window
@@ -2160,6 +2199,9 @@ async function main() {
     brocaLevel = Math.max(brocaTarget, brocaLevel * 0.55);
     tokenCount = 0;
     const v1 = vitals.imageRecall > 0.05 ? clamp(0.3 + 0.6 * vitals.imageRecall) : 0;
+    // These legacy values remain in the payload for old viewers and diagnostics,
+    // but they are explicitly labelled below. They are theatrical mappings, not
+    // Soma state and not measurements of a biological brain or body.
     const brain = brainRegions(vitals, { broca: Number(brocaLevel.toFixed(3)), v1: Number(v1.toFixed(3)), asleep });
     const hr = heartRate(vitals, asleep);
 
@@ -2171,6 +2213,12 @@ async function main() {
         derived: vitals.derived,
         hr,
         brain,
+        soma: somaSnapshot(vitals.cognition),
+        legacy: {
+          status: 'placeholder',
+          reason: 'legacy dramatic mappings; not implemented Soma or measured physiology',
+          fields: ['physical', 'mental', 'derived', 'hr', 'brain', 'monotony', 'amp', 'expressed', 'relations'],
+        },
         mode: currentMode,
         // the active model provider, so the UI can show which model is running on
         // the frequent tick (not just on a `gen` event).
@@ -2364,6 +2412,16 @@ async function main() {
     if (pound > lastPound) {
       lastPound = pound;
       forceCost = true;
+      observeSoma(
+        vitals.cognition,
+        {
+          name: 'power_cost_crossing',
+          text: `the machine has now consumed ${pound} GBP of electricity while continuity was maintained`,
+          tags: ['power', 'machine', 'continuity'],
+          ts: tsNow(),
+        },
+        { now },
+      );
     }
     // persist roughly every ~30s so the life-of-project total survives a restart
     pwMsAccum += EMIT_EVERY * POWER_SAMPLE_MS;
@@ -2596,41 +2654,38 @@ async function main() {
       const mode = 'journal';
       currentMode = mode;
 
-      // REAL SILENCE: sometimes he just stops. Emit a silence event (no text),
-      // sit still for its duration - vitals keep ticking on their own timer, so
-      // the graphs stay alive while the page goes quiet - then loop.
-      const sinceIncident = Date.now() - (vitals.lastIncidentMs || 0);
-      const sil = silenceDecision(vitals, false, sinceIncident);
-      if (sil.silent) {
-        emit({ kind: 'silence', payload: { seconds: sil.seconds, reason: sil.reason } });
+      // Soma chooses the next waking action before language. A queued drawing
+      // request is an external demand and therefore wins; otherwise drawing is
+      // eligible only after a real cooldown so it cannot crowd out the journal.
+      const nowMs = Date.now();
+      const hasDrawRequest = pendingDrawRequests.length > 0;
+      const selectedAction = chooseSomaAction(vitals.cognition, {
+        asleep: false,
+        canDraw: hasDrawRequest || nowMs - (vitals.lastDrawMs || 0) > 45 * 60 * 1000,
+        forceDraw: hasDrawRequest,
+        now: nowMs,
+      });
+
+      // Silence is now a selected, inspectable action rather than a random result
+      // of legacy mood axes.
+      if (selectedAction.name === 'silence') {
+        const seconds = Math.round(45 + 180 * (vitals.cognition.drives.rest || 0));
+        emit({ kind: 'silence', payload: { seconds, reason: `soma: ${selectedAction.reason}` } });
         await recordOutcome('deliberate-silence');
-        // a deliberate silence is legitimate quiet: it feeds no failed cycle, so the
-        // stall counter is untouched and the watchdog cannot mistake it for a wedge.
-        await idleSilently(sil.seconds * 1000);
+        completeSomaAction(vitals.cognition, 'silence');
+        await idleSilently(seconds * 1000);
         continue;
       }
 
-      // DRAWING: occasionally he picks up the pen and draws instead of writing.
-      // Weighted by fixation/dissociation/longing, a fresh image, waiting on mail,
-      // or a queued request. doDraw does both stages and emits.
-      {
-        const nowMs = Date.now();
-        const dd = drawDecision(vitals, {
-          asleep: false,
-          sinceDrawMs: nowMs - (vitals.lastDrawMs || 0),
-          waiting: nowMs - (vitals.lastMailMs || nowMs) > 3 * 3600 * 1000,
-          recentImage: !!vitals.lastImageMs && nowMs - vitals.lastImageMs < 15 * 60 * 1000,
-          hasRequestPending: pendingDrawRequests.length > 0,
-        });
-        if (dd.draw) {
-          await recordOutcome((await doDraw()) || 'empty');
-          continue;
-        }
+      if (selectedAction.name === 'draw') {
+        await recordOutcome((await doDraw()) || 'empty');
+        completeSomaAction(vitals.cognition, 'draw');
+        continue;
       }
 
       // Zone A is the fixed ollama `system` (never rebuilt); the volatile Zone C
       // directives are assembled once per burst and folded into the prompt TAIL by
-      // buildPrompt so the KV-cache prefix survives. buildCtx/pickForm have
+      // buildPrompt so the KV-cache prefix survives. buildCtx has
       // fire-once side effects, so this must happen exactly once per burst - only
       // the sampling and the context tail vary across the repeat-retries below.
       const bans = bansDirective(vitals.recentOpeners);
@@ -2641,8 +2696,7 @@ async function main() {
         const ctx = buildCtx();
         ctx.bans = bans;
         ctx.regime = regimeDirective(mins);
-        ctx.form = pickForm(vitals, { relations: vitals.relations });
-        burstForm = ctx.form || null;
+        burstForm = selectedAction.name;
         ctx.incidents = incidentsDirective(vitals.ledger, {
           relations: vitals.relations,
           mailWaitMs: Date.now() - (vitals.lastMailMs || Date.now()),
@@ -2815,7 +2869,7 @@ async function main() {
           zoneB: lastTail,
           zoneC: directives,
           form: burstForm,
-          styles: styleDirective(vitals),
+          styles: '',
           opts: lastOpts,
           output: lastFull,
           burstMs,
@@ -2833,10 +2887,10 @@ async function main() {
           vitals.recentOpeners.push(w);
           while (vitals.recentOpeners.length > 5) vitals.recentOpeners.shift();
         }
-        // let his own text move the mental state. This path is waking only now -
-        // dream murmurs never reach here (they are handled in dreamStep) so a
-        // fragmentary murmur can never be read as a waking spiral.
-        await applyIntrospection(lastFull);
+        // Language is an expression of Soma, never an input to it. Completing
+        // the selected action changes only the associated drive; the generated
+        // wording cannot reward itself or rewrite memory, mood, or relations.
+        completeSomaAction(vitals.cognition, selectedAction.name);
       }
       // roll the "did this burst carry a wing noise" window for the no-drumbeat rule
       recentNoise = [recentNoise[1], noiseThisBurst];
@@ -2920,7 +2974,7 @@ async function main() {
     bans: bansDirective(vitals.recentOpeners),
     regime: regimeDirective(londonParts().mins),
     grudge: grudgeDirective(vitals.relations),
-    form: pickForm(vitals, { relations: vitals.relations }),
+    soma: somaDirective(vitals.cognition),
     incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0, rnd: () => 0 }),
   };
   if (castCharged(vitals.relations)) sampleCtx.cast = castForPrompt(vitals.relations);

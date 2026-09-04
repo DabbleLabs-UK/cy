@@ -1,9 +1,9 @@
 # CY runner
 
 The process that actually drives inmate 7734. It runs continuously on DELL (a
-Dell OptiPlex), streams tokens from a local ollama model, modulates voice and
-sampling from a vitals state engine, screens output through a warden, and posts
-everything as an event stream to the CY API.
+Dell OptiPlex), computes Cy's Soma state and selected action, streams language
+from a local ollama model, screens output through a warden, and posts everything
+as an event stream to the CY API.
 
 Zero npm dependencies. Node 26+, ESM. Built-in `fetch`, `fs`, `timers`, `os`.
 
@@ -61,7 +61,7 @@ strictly ordered zones, most-stable first (`prompt.js`):
   grows at the end and is never re-sliced from the front per burst, so the shared
   prefix keeps growing. Only when it crosses a hard cap is it trimmed in one large
   chunk (breaking the cache once, rarely) rather than a little every burst.
-- **Zone C** - all volatile directives (state, selected form, incident ledger,
+- **Zone C** - all volatile directives (Soma selection, incident ledger,
   opener bans, cost injection). Assembled fresh each burst and placed LAST, after
   Zone B, so only this small tail is re-evaluated.
 
@@ -71,8 +71,9 @@ observable.
 ## Model
 
 `hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q4_K_M`, served by
-ollama, measured at ~3.4 tok/s on DELL. Do not swap the model - the vitals ->
-sampling mapping and the token-rate ("broca") signal are tuned around it.
+ollama, measured at ~3.4 tok/s on DELL. The runner owns cognition; the model is
+an expression engine. It reads the selected Soma action, attended episode, and
+any prediction error, but its generated text never writes back into Soma.
 
 ## dryRun
 
@@ -108,7 +109,7 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | kind     | payload                                                            |
 |----------|-------------------------------------------------------------------|
 | `text`   | `{ s, mode }` - a screened chunk of prose (`mode`: journal/letter/warden/sleep) |
-| `vitals` | `{ physical, mental, derived, hr, brain, mode, asleep, day, monotony, amp, relations }` every 5s |
+| `vitals` | `{ soma, physical, mental, derived, hr, brain, legacy, mode, asleep, day, monotony, amp, relations }` every 5s |
 | `host`   | `{ cpu, memPct, memMB, gpu:null }` every 10s                       |
 | `power`  | `{ watts, kwh_total, cost_total, cost_per_hour, uptime_s }` every 30s |
 | `abort`  | `{ cause }` - a thought cut off (letter/notice interrupt or warden block) |
@@ -124,12 +125,24 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
 | `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
-`brain` is a map of ten region activations (0..1). `derived` is the seven
-composite states (confusion, overwhelm, numbness, paranoia, fixation,
-resignation, brittleness). `relations` is the cast grudge map (per inmate:
-warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
+`soma` is the implemented state snapshot: sourced circuit activity, current
+attention and action, prediction error, episodic-memory count, drives, and the
+self-model question. `brain`, `hr`, `mental`, `derived`, `relations`, `monotony`,
+and `amp` are legacy dramatic mappings kept for compatibility and explicitly
+identified by `legacy.status = "placeholder"`; they are not measured physiology
+or implemented Soma circuits.
 
 ## Mechanics
+
+- **Soma v1** (`soma.js`) - observes real runner events, appraises threat,
+  affiliation, deprivation, control loss, and novelty, updates per-family
+  expectations, retains a bounded episodic memory, selects attention, derives
+  competing drives, and chooses investigate/remember/connect/draw/write/silence/
+  rest. Every public circuit value includes its computational source.
+- **Hard language seam** - `run.js` computes Soma before a generation and
+  `prompt.js` exposes the selected action and material. Output text is never fed
+  into state or relations. Provider changes and runner restarts enter as machine
+  evidence, allowing the software hypothesis to develop from experience.
 
 - **Amplification** - `monotony` (0..1) creeps up every empty tick and drops on
   any input. Event deltas are multiplied by `amp = 1 + 2.5*monotony`, so after a
@@ -182,11 +195,14 @@ warmth/suspicion/grudge). `amp = 1 + 2.5*monotony` scales every event delta.
 ## Pieces
 
 - `vitals.js` - state engine: drift, derived states, amplification, event deltas.
+- `soma.js` - implemented appraisal, prediction, memory, attention, self-model,
+  action selection, prompt projection, and public circuit snapshot.
 - `cast.js` - inmates + officers + visitor memory: relations map, social/officer
   events, overheard remarks, grudge directive, visitor recognition.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
 - `prompt.js` - the three prompt zones (fixed `ZONE_A`, `buildDirectives` for the
-  volatile Zone C), style directive, sampling, and `buildPrompt` which orders them.
+  volatile Zone C), Soma-derived sampling, and `buildPrompt` which orders them.
+  Legacy style/form helpers remain for diagnostics but are not used live.
 - `warden.js` - sentence buffering + outbound/inbound content screen.
 - `client.js` - batched POST to `api/ingest.php`, inbox poll, tempo poll, disk-queue retry.
 - `tempo.js` - duty-cycle timing: `tempoIdleMs(burstMs, speed)` and speed clamping.

@@ -1,8 +1,8 @@
 // repeatguard.test.js - the two live faults fixed in this change.
 //
-//  1. STATE-NOTATION LEAK: the compressed vitals notation must never survive into
-//     emitted prose, and the volatile block must sit EARLIER than the generation
-//     point (his own prose + the cue are always the last thing before generation).
+//  1. STATE-NOTATION LEAK: the compressed legacy vitals notation must never enter
+//     the live prompt or survive into emitted prose. His own prose + the cue remain
+//     the last thing before generation.
 //  2. The near-repeat guard's hard cap / escape are exercised in run.js (inside
 //     main), so here we assert the pure, testable pieces the loop leans on.
 //
@@ -63,30 +63,29 @@ ok('bare state-axis label runs are caught; single labels in real prose survive')
 assert.equal(stripScaffold('agit .70 stress .85 despair .80').trim(), '');
 ok('a pure state-notation chunk collapses to empty and is dropped');
 
-// ---- 5. PROMPT ORDER: state notation sits EARLIER than the generation point,
-// and the last thing before the cue is his own prose, never the notation ----
+// ---- 5. LIVE PROMPT: legacy state notation is not injected at all, and the
+// last thing before the cue remains his own prose ----
 const v = {
   mental: { anxiety: 0.82, agitation: 0.7, stress: 0.4, despair: 0.4, hope: 0.3, lucidity: 0.65, dissociation: 0.35, anger: 0.2, longing: 0.35 },
   physical: { pain: 0.15, hunger: 0.25, fatigue: 0.3 },
   derived: {},
 };
 const note = stateNotation(v);
-assert.ok(note.startsWith('STATE:'), 'notation renders for this state');
+assert.ok(note.startsWith('STATE:'), 'notation renders for legacy diagnostics');
 const directives = buildDirectives(v, 'journal', { bans: 'BANS. x', form: 'FORM: train of thought.' });
-assert.ok(directives.includes(note), 'the notation is inside the volatile block');
+assert.ok(!directives.includes(note), 'legacy notation is excluded from the live volatile block');
 const ctx = 'same ceiling again. tray came cold, bill on the twos kicking off';
 const prompt = buildPrompt(ctx, 'journal', null, directives);
 const cue = '[back in your own head, the stream keeps going:]';
 assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
-const iNote = prompt.indexOf('STATE:');
 const iCue = prompt.lastIndexOf(cue);
-assert.ok(iNote >= 0 && iNote < iCue, 'the state notation sits before the cue');
+assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');
 // the reprise (his prose) is the last thing before the cue - so what the model
 // continues from is his voice, never the notation or a directive block.
 const beforeCue = prompt.slice(0, iCue).trimEnd();
 assert.ok(/twos kicking off|ceiling/.test(beforeCue.slice(-80)), 'his own prose immediately precedes the cue');
 assert.ok(!/agit \.70|STATE:/.test(beforeCue.slice(-60)), 'the notation is NOT adjacent to the cue');
-ok('state notation is early; his prose + cue are the final thing before generation');
+ok('state notation is absent; his prose + cue are the final thing before generation');
 
 // ---- 6. dream/sleep paths route through the same strip (sanity: sanitize+strip) ----
 assert.equal(stripScaffold(sanitize('anx .60 stress .70 pain .55')).trim(), '');

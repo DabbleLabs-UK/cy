@@ -2,9 +2,9 @@
 //
 // A single mutable state object is ticked every 5s and persisted to
 // state/vitals.json. Physical and mental scalars are all 0..1. Everything
-// derived (heart rate, brain-region activations) is computed on demand from
-// that state so persistence stays small and the model of what CY "is"
-// stays in one place.
+// derived (heart rate, old brain-region activations) is computed on demand.
+// These scalar mappings are legacy placeholders. Implemented cognition lives
+// in the nested `cognition` state managed by soma.js.
 
 import { readFile, writeFile, mkdir, copyFile, access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -17,8 +17,8 @@ const toward = (cur, target, step) =>
 
 // Per-5s-tick drift. PHYSICAL states are honestly time-based: pain eases, hunger
 // rises between meals, fatigue accumulates across the day - keep those. MENTAL
-// states must NOT move on a clock: they change only in response to something real
-// (an incident, or a deterministic read of Cy's own output - see introspect.js).
+// states must NOT move on a clock: they change only in response to something real.
+// The live runner no longer reads generated output back into state.
 // The only per-tick mental movement allowed is a very slow SETTLING back toward
 // baseline - an order of magnitude smaller than the old timer drift - so a spike
 // subsides over tens of minutes, not seconds, and otherwise a value just holds.
@@ -95,8 +95,7 @@ export function initialVitals() {
     // shout.updateAffect - so the shouting appears a beat after the feeling and
     // the comedown outlasts the flare. Never drive caps from anger directly.
     expressed: 0,
-    // lastBurstAnger (0..1): profanity/threat density of his most recent burst,
-    // set from introspect and decayed each tick; feeds the live anger target.
+    // Legacy placeholder retained for compatibility with the old affect renderer.
     lastBurstAnger: 0,
     // derived composite states, recomputed each tick from the primitives above.
     derived: {},
@@ -204,8 +203,10 @@ export function heartRate(v, asleep = false) {
   );
 }
 
-// Brain-region activations, all clamped 0..1. broca and v1 are live-signal
-// inputs the loop passes in (token rate; whether an image is driving output).
+// LEGACY PLACEHOLDER brain-region activations. These are synthetic mappings,
+// not physiology and not implemented Soma circuits. broca and v1 include live
+// inputs (token rate and image presence), but the anatomical labels remain an
+// analogy retained only for compatibility.
 export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
   const p = v.physical;
   const m = v.mental;
@@ -226,10 +227,10 @@ export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// ZONE SPLIT (SOMA build, step 0). The single `vitals` grab-bag is split into
+// LEGACY STORAGE ZONE SPLIT. The single `vitals` grab-bag is split into
 // three zones with three lifecycles:
-//   - soma        : inner state. Persisted to state/vitals.json. The only zone
-//                   a state circuit may write.
+//   - soma        : persisted legacy state plus the nested implemented
+//                   `cognition` object. The zone name predates soma.js.
 //   - signals     : derived outputs (currently `derived`), recomputed every
 //                   tick, read-only downstream, NEVER persisted.
 //   - bookkeeping : render/prompt scaffolding. Persisted separately to

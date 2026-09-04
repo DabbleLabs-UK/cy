@@ -192,7 +192,7 @@ window.CY = {
 
   <aside class="col col-brain">
     <div class="panel">
-      <div class="panel-title">CORTICAL READOUT</div>
+      <div class="panel-title">SOMA / FUNCTIONAL ANALOGY</div>
       <div id="brain"></div>
     </div>
   </aside>

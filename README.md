@@ -1,9 +1,8 @@
 # CY
 
 CY is a continuous LLM "prisoner" whose stream is watched live at
-cy.dabblelabs.uk. This repo is the web/API side only -- the model
-runner (the process that actually drives the LLM) lives under `runner/`
-and is not implemented yet.
+cy.dabblelabs.uk. This repo contains both the web/API side and the model
+runner under `runner/`.
 
 ## Architecture
 
@@ -14,6 +13,23 @@ monotonically increasing `seq`. There is no per-kind table for the live
 feed: `kind` + a JSON `payload` column is enough to describe anything the
 model does, and a single ordered log makes "what happened, in what order"
 trivial to reconstruct and replay.
+
+Cy's implemented inner-state layer is Soma v1 (`runner/soma.js`). Environment
+and body observations are appraised against learned expectations, stored as
+bounded episodic memory, competed for attention, and used to select an action.
+Only then is the selected material sent to the language model. Generated prose
+cannot write back into Soma. This keeps the model in the role of expression,
+not hidden author of the state that supposedly caused its own words.
+
+The left panel shows those implemented circuits and names the source of every
+dynamic value. Its brain-shaped rendering is explicitly a functional analogy,
+not a biological measurement. Older heartbeat, mood, composite, amplification,
+brain-region, and relationship figures are retained under a collapsed
+`PLACEHOLDERS - NOT SOMA` section so implementation status is unambiguous.
+
+The live paper retains the whole current London day and is vertically scrollable
+back to its start. The calendar loads a selected day's complete narrative event
+range on one click, then positions the reconstructed day at its beginning.
 
 Viewers never talk to DELL directly. They poll `api/stream.php?since=<seq>`,
 which returns any events newer than the seq they last saw (or, for a first
@@ -94,7 +110,7 @@ the model's real output rate. Each event is one colour-coded line
 (timestamp/seq/kind/payload) that expands to its raw JSON; each generation burst
 expands to the full prompt (Zone A/B/C with character counts), the full
 post-warden output, the sampling params, the timings/counters, and the
-mode/form/style directives that fired. A filter bar and free-text search scope
+selected Soma action and any legacy form/style fields. A filter bar and free-text search scope
 the stream, with per-burst and copy-visible copy buttons; the rendered window is
 capped to the most recent 1500 rows (older rows dropped, count shown) to stay
 fast over long runs. It is POST-WARDEN ONLY: text the warden blocked is never

@@ -1,363 +1,217 @@
-// brain.js - the internal readout beside the page.
+// brain.js - an honest view of Cy's implemented Soma state.
 //
-// A stylised lateral brain (hand-authored inline SVG, no external asset) whose
-// regions tint on a cool-to-hot ramp by their 0..1 activation, with a white
-// bloom above 0.9. Beside it a monospace strip prints each region's name, its
-// percentage and a state word. A heart-rate indicator pulses at the actual BPM
-// and a compact bar list shows the mental vitals.
-//
-//   const hud = new BrainHud(document.getElementById('brain'));
-//   hud.setBrain(vitals.brain);          // { amygdala:0.5, ... }
-//   hud.setHeart(vitals.hr);
-//   hud.setMental(vitals.mental);
+// The shaded anatomy is a functional analogy only. Every dynamic value comes
+// from a named Soma circuit and exposes its computational source. Legacy mood,
+// pulse, amplification, and relationship figures remain available below, but
+// are unmistakably labelled as placeholders rather than biological readings.
 
-const SVGNS = 'http://www.w3.org/2000/svg';
+export const CIRCUITS = [
+  { key: 'actionSelection', label: 'ACTION SELECTION', anatomy: 'frontoparietal', path: 'M48 69 C67 48 99 40 124 48 L129 91 C104 96 78 105 54 96 Z' },
+  { key: 'selfModel', label: 'SELF MODEL', anatomy: 'medial prefrontal', path: 'M64 105 C82 91 104 88 126 95 L132 121 C105 128 80 128 59 119 Z' },
+  { key: 'predictionError', label: 'PREDICTION ERROR', anatomy: 'cingulate', path: 'M119 67 C150 54 190 59 213 79 L202 91 C178 77 148 76 126 88 Z' },
+  { key: 'interoception', label: 'INTEROCEPTION', anatomy: 'insula', path: 'M129 112 C145 96 172 94 191 107 C184 129 158 141 136 132 Z' },
+  { key: 'threatAppraisal', label: 'THREAT APPRAISAL', anatomy: 'amygdala', path: 'M148 149 C158 139 174 140 183 151 C174 163 158 165 147 156 Z' },
+  { key: 'memoryRecall', label: 'MEMORY RECALL', anatomy: 'hippocampal', path: 'M170 162 C190 145 220 146 237 160 C223 158 210 163 199 173 C188 182 177 178 170 162 Z' },
+  { key: 'attention', label: 'ATTENTION', anatomy: 'parietal', path: 'M207 65 C235 57 271 68 288 91 L273 124 C248 112 225 102 202 94 Z' },
+  { key: 'affiliation', label: 'AFFILIATION', anatomy: 'temporal social', path: 'M218 125 C246 119 278 129 291 151 C276 174 244 184 213 176 C225 157 228 143 218 125 Z' },
+];
 
-// cool -> hot endpoints
-const COOL = [0x2b, 0x5f, 0x8f]; // #2b5f8f
-const HOT = [0xff, 0x5b, 0x2e]; // #ff5b2e
+const LEGACY_MENTAL = ['anxiety', 'stress', 'despair', 'hope', 'lucidity', 'agitation', 'dissociation', 'anger', 'longing'];
+const LEGACY_DERIVED = ['confusion', 'overwhelm', 'numbness', 'paranoia', 'fixation', 'resignation', 'brittleness'];
 
-function ramp(a) {
-  a = Math.max(0, Math.min(1, a));
-  const r = Math.round(COOL[0] + (HOT[0] - COOL[0]) * a);
-  const g = Math.round(COOL[1] + (HOT[1] - COOL[1]) * a);
-  const b = Math.round(COOL[2] + (HOT[2] - COOL[2]) * a);
-  return [r, g, b];
+function clampNum(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
 }
 
-// blend toward white for the >0.9 bloom
-function bloom(rgb, a) {
-  if (a <= 0.9) return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-  const t = (a - 0.9) / 0.1; // 0..1 across the top decile
-  const r = Math.round(rgb[0] + (255 - rgb[0]) * t * 0.85);
-  const g = Math.round(rgb[1] + (255 - rgb[1]) * t * 0.85);
-  const b = Math.round(rgb[2] + (255 - rgb[2]) * t * 0.85);
-  return `rgb(${r},${g},${b})`;
+function activityColor(value) {
+  const v = clampNum(value) || 0;
+  const stops = [[38, 58, 75], [47, 112, 135], [205, 146, 66], [240, 91, 54]];
+  const scaled = v * (stops.length - 1);
+  const index = Math.min(stops.length - 2, Math.floor(scaled));
+  const t = scaled - index;
+  const a = stops[index];
+  const b = stops[index + 1];
+  return `rgb(${a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(',')})`;
 }
 
-// Region geometry for a left-facing lateral brain (frontal lobe at the left).
-// Purely stylised; shapes are ellipses/paths positioned by eye.
-const REGIONS = [
-  { key: 'dmn', label: 'DEFAULT MODE', ell: [182, 112, 66, 34], faint: true },
-  { key: 'dlpfc', label: 'DLPFC', ell: [108, 82, 27, 21] },
-  { key: 'broca', label: 'BROCA', ell: [94, 132, 19, 15] },
-  { key: 'acc', label: 'ANT CINGULATE', ell: [150, 90, 23, 16] },
-  { key: 'insula', label: 'INSULA', ell: [166, 124, 21, 16] },
-  { key: 'thalamus', label: 'THALAMUS', ell: [188, 114, 16, 14] },
-  { key: 'hippocampus', label: 'HIPPOCAMPUS', ell: [178, 152, 17, 11] },
-  { key: 'amygdala', label: 'AMYGDALA', ell: [150, 152, 13, 11] },
-  { key: 'v1', label: 'VISUAL CTX', ell: [258, 120, 22, 18] },
-  { key: 'locusCoeruleus', label: 'LOCUS COER.', ell: [250, 168, 9, 12] },
-];
+function pct(value) {
+  const v = clampNum(value);
+  return v == null ? '--' : `${Math.round(v * 100)}%`;
+}
 
-const ORDER = [
-  'amygdala', 'acc', 'insula', 'hippocampus', 'dlpfc',
-  'broca', 'v1', 'locusCoeruleus', 'dmn', 'thalamus',
-];
-
-// derived composite states, in display order
-const DERIVED = ['confusion', 'overwhelm', 'numbness', 'paranoia', 'fixation', 'resignation', 'brittleness'];
-
-// the cast, in display order, with the name CY uses (viewer mirror of cast.js)
-const CAST_LABELS = [
-  ['root', 'ROOT'], ['reg', 'REG'], ['bill', 'BILL'], ['mark', 'MARK'],
-  ['nick', 'NICK'], ['fisher', 'FISHER'], ['ping', 'PING'], ['daemon', 'DAEMON'],
-];
-
-// the officers - a separate group, surnames + titles (mirror of cast.js OFFICERS)
-const OFFICER_LABELS = [
-  ['locke', 'MR LOCKE'], ['keyes', 'MR KEYES'], ['bailey', 'MISS BAILEY'],
-  ['proctor', 'MR PROCTOR'], ['sweep', 'MR SWEEP'], ['trace', 'MISS TRACE'],
-];
+function listValues(obj, keys) {
+  if (!obj) return 'unavailable';
+  const present = keys
+    .filter((key) => clampNum(obj[key]) != null)
+    .map((key) => `${key} ${Math.round(clampNum(obj[key]) * 100)}`);
+  return present.length ? present.join(' / ') : 'unavailable';
+}
 
 export class BrainHud {
   constructor(root) {
     this.root = root;
-    this.nodes = {}; // key -> region svg element
-    this.overheatSince = {}; // key -> ts when it first crossed 0.9
-    this.rows = {}; // key -> readout row element
-    this.hr = 0;
+    this.regions = {};
+    this.rows = {};
     this._build();
   }
 
   _build() {
     this.root.classList.add('brainhud');
-    this.root.innerHTML = '';
-
-    // ---- brain svg ----
-    const svg = document.createElementNS(SVGNS, 'svg');
-    svg.setAttribute('viewBox', '0 0 320 240');
-    svg.setAttribute('class', 'brain-svg');
-
-    // outline
-    const outline = document.createElementNS(SVGNS, 'path');
-    outline.setAttribute(
-      'd',
-      'M42,142 C30,92 74,44 132,40 C184,36 236,46 274,72 C302,92 300,128 286,150 ' +
-        'C296,160 292,180 274,186 C256,192 242,180 236,182 C214,198 150,206 100,190 ' +
-        'C62,178 50,166 46,160 C40,156 36,150 42,142 Z',
-    );
-    outline.setAttribute('class', 'brain-outline');
-    svg.appendChild(outline);
-
-    // brainstem stub
-    const stem = document.createElementNS(SVGNS, 'path');
-    stem.setAttribute('d', 'M244,178 C248,196 250,210 246,222 C244,214 240,196 240,182 Z');
-    stem.setAttribute('class', 'brain-outline');
-    svg.appendChild(stem);
-
-    // sulci hint lines
-    const sulci = document.createElementNS(SVGNS, 'path');
-    sulci.setAttribute(
-      'd',
-      'M120,58 C150,86 150,120 128,150 M170,52 C186,96 182,140 168,176 M214,64 C224,110 220,150 206,182',
-    );
-    sulci.setAttribute('class', 'brain-sulci');
-    svg.appendChild(sulci);
-
-    for (const reg of REGIONS) {
-      const el = document.createElementNS(SVGNS, 'ellipse');
-      const [cx, cy, rx, ry] = reg.ell;
-      el.setAttribute('cx', cx);
-      el.setAttribute('cy', cy);
-      el.setAttribute('rx', rx);
-      el.setAttribute('ry', ry);
-      el.setAttribute('class', 'brain-region' + (reg.faint ? ' faint' : ''));
-      el.setAttribute('fill', `rgb(${COOL[0]},${COOL[1]},${COOL[2]})`);
-      svg.appendChild(el);
-      this.nodes[reg.key] = el;
-    }
-    this.root.appendChild(svg);
-
-    // ---- readout strip ----
-    const strip = document.createElement('div');
-    strip.className = 'brain-readout';
-    const labels = Object.fromEntries(REGIONS.map((r) => [r.key, r.label]));
-    for (const key of ORDER) {
-      const row = document.createElement('div');
-      row.className = 'readout-row';
-      row.innerHTML =
-        `<span class="rr-name">${labels[key]}</span>` +
-        `<span class="rr-pct">--%</span>` +
-        `<span class="rr-state">----</span>`;
-      strip.appendChild(row);
-      this.rows[key] = row;
-    }
-    this.root.appendChild(strip);
-
-    // ---- heart + mental vitals ----
-    const bio = document.createElement('div');
-    bio.className = 'bio';
-    bio.innerHTML = `
-      <div class="heart">
-        <div class="heart-icon" id="heart-icon">&#9829;</div>
-        <div class="heart-read"><span id="hr-bpm">--</span><small>BPM</small></div>
+    this.root.innerHTML = `
+      <div class="soma-head">
+        <span class="soma-badge">SOMA V1 - AWAITING STATE</span>
+        <span class="soma-live" aria-label="Soma state unavailable"></span>
       </div>
-      <div class="mental" id="mental"></div>`;
-    this.root.appendChild(bio);
-    this.heartIcon = bio.querySelector('#heart-icon');
-    this.hrBpm = bio.querySelector('#hr-bpm');
-    this.mentalEl = bio.querySelector('#mental');
-
-    const MENTAL = ['anxiety', 'stress', 'despair', 'hope', 'lucidity', 'agitation', 'dissociation', 'anger', 'longing'];
-    this.mentalBars = {};
-    for (const k of MENTAL) {
-      const row = document.createElement('div');
-      row.className = 'mrow';
-      row.innerHTML =
-        `<span class="mname">${k.slice(0, 4).toUpperCase()}</span>` +
-        `<span class="mbar"><i style="width:0%"></i></span>`;
-      this.mentalEl.appendChild(row);
-      this.mentalBars[k] = row.querySelector('i');
-    }
-
-    // ---- amplification meter ----
-    const amp = document.createElement('div');
-    amp.className = 'ampmeter';
-    amp.innerHTML = `
-      <div class="amp-top">
-        <span class="amp-k">MONOTONY</span>
-        <span class="amp-bar"><i id="amp-mono" style="width:0%"></i></span>
-        <span class="amp-x" id="amp-x">x1.0</span>
+      <p class="soma-caveat">Computed cognitive activity. Brain locations are functional analogies, not measured physiology.</p>
+      <div class="brain-figure">
+        <svg class="brain-svg" viewBox="0 0 340 230" role="img" aria-labelledby="brain-title brain-desc">
+          <title id="brain-title">Functional analogy of Cy's Soma circuits</title>
+          <desc id="brain-desc">An anatomically inspired lateral brain. Shaded regions map implemented computational circuits to rough functional analogies.</desc>
+          <path class="brain-shell" d="M34 128 C24 91 45 60 80 43 C105 20 147 19 178 31 C214 27 257 40 286 66 C309 86 316 116 303 139 C307 157 294 176 272 181 C252 198 212 204 179 196 C148 204 108 195 82 178 C55 172 38 154 34 128 Z"/>
+          <path class="brain-cerebellum" d="M235 164 C262 151 295 158 304 178 C296 197 264 205 235 189 C226 181 227 171 235 164 Z"/>
+          <path class="brain-stem" d="M213 178 C226 183 237 193 235 219 L218 219 C220 201 207 192 196 184 Z"/>
+          <path class="brain-folds" d="M54 83 C85 72 105 72 132 82 M46 111 C78 102 98 107 119 119 M82 50 C104 60 110 71 111 93 M143 40 C154 60 153 79 142 98 M184 39 C197 56 203 73 198 94 M230 48 C238 66 242 83 237 105 M273 73 C284 91 284 110 274 128 M236 132 C253 141 261 153 260 173 M94 146 C117 137 137 140 153 154"/>
+        </svg>
+        <div class="brain-key">ANATOMICAL ANALOGY</div>
       </div>
-      <div class="amp-hint">small things scale by the amp factor</div>`;
-    this.root.appendChild(amp);
-    this.monoBar = amp.querySelector('#amp-mono');
-    this.ampX = amp.querySelector('#amp-x');
+      <div class="inference-measured">
+        <span class="measure-dot"></span>
+        <span class="measure-label">MODEL INFERENCE</span>
+        <span class="measure-value">IDLE</span>
+        <span class="measure-kind">MEASURED</span>
+      </div>
+      <div class="soma-readout"></div>
+      <div class="soma-selection">
+        <div><span>ACTION</span><strong class="soma-action">waiting for state</strong></div>
+        <div><span>ATTENTION</span><strong class="soma-attention">nothing selected</strong></div>
+        <div><span>EPISODIC MEMORY</span><strong class="soma-memory">0 episodes</strong></div>
+        <div><span>SELF-QUESTION</span><strong class="soma-question">unavailable</strong></div>
+      </div>
+      <details class="legacy-box">
+        <summary>PLACEHOLDERS - NOT SOMA</summary>
+        <p>Legacy dramatic mappings retained for comparison. They are not observations, clinical measures, or implemented cognitive circuits.</p>
+        <dl>
+          <div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
+          <div><dt>mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
+          <div><dt>composites</dt><dd class="legacy-derived">unavailable</dd></div>
+          <div><dt>monotony amp</dt><dd class="legacy-amp">unavailable</dd></div>
+          <div><dt>brain-region map</dt><dd class="legacy-brain">unavailable</dd></div>
+          <div><dt>cast standing</dt><dd class="legacy-cast">unavailable</dd></div>
+        </dl>
+      </details>`;
 
-    // ---- derived composite states ----
-    const dwrap = document.createElement('div');
-    dwrap.className = 'derived';
-    dwrap.innerHTML = `<div class="sec-title">COMPOSITE STATES</div>`;
-    this.derivedEl = document.createElement('div');
-    this.derivedEl.className = 'dbars';
-    dwrap.appendChild(this.derivedEl);
-    this.root.appendChild(dwrap);
-    this.derivedBars = {};
-    for (const k of DERIVED) {
-      const row = document.createElement('div');
-      row.className = 'drow';
-      row.innerHTML =
-        `<span class="dname">${k.toUpperCase()}</span>` +
-        `<span class="dbar"><i style="width:0%"></i></span>` +
-        `<span class="dpct">--</span>`;
-      this.derivedEl.appendChild(row);
-      this.derivedBars[k] = { bar: row.querySelector('i'), pct: row.querySelector('.dpct'), row };
+    const svg = this.root.querySelector('.brain-svg');
+    for (const circuit of CIRCUITS) {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', circuit.path);
+      path.setAttribute('class', 'soma-region');
+      path.dataset.circuit = circuit.key;
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = `${circuit.label}: awaiting implemented state`;
+      path.appendChild(title);
+      svg.appendChild(path);
+      this.regions[circuit.key] = path;
     }
 
-    // ---- the cast + standing ----
-    const cwrap = document.createElement('div');
-    cwrap.className = 'castbox';
-    cwrap.innerHTML = `<div class="sec-title">ON THE SPUR</div>`;
-    this.castEl = document.createElement('div');
-    this.castEl.className = 'castlist';
-    cwrap.appendChild(this.castEl);
-    this.root.appendChild(cwrap);
-    this.castRows = {};
-    const addRow = (key, label) => {
+    const readout = this.root.querySelector('.soma-readout');
+    for (const circuit of CIRCUITS) {
       const row = document.createElement('div');
-      row.className = 'crow';
-      row.innerHTML =
-        `<span class="cname">${label}</span>` +
-        `<span class="cstd">` +
-        `<span class="cmini w"><i style="width:0%"></i></span>` +
-        `<span class="cmini s"><i style="width:0%"></i></span>` +
-        `<span class="cmini g"><i style="width:0%"></i></span>` +
-        `</span>`;
-      this.castEl.appendChild(row);
-      this.castRows[key] = {
-        row,
-        w: row.querySelector('.cmini.w i'),
-        s: row.querySelector('.cmini.s i'),
-        g: row.querySelector('.cmini.g i'),
-      };
+      row.className = 'soma-row';
+      row.innerHTML = `
+        <div class="soma-row-top">
+          <span class="soma-name">${circuit.label}</span>
+          <span class="soma-anatomy">${circuit.anatomy}</span>
+          <span class="soma-pct">--</span>
+        </div>
+        <span class="soma-bar"><i></i></span>
+        <span class="soma-source">awaiting source</span>`;
+      readout.appendChild(row);
+      this.rows[circuit.key] = row;
+    }
+
+    this.actionEl = this.root.querySelector('.soma-action');
+    this.attentionEl = this.root.querySelector('.soma-attention');
+    this.memoryEl = this.root.querySelector('.soma-memory');
+    this.questionEl = this.root.querySelector('.soma-question');
+    this.measure = {
+      root: this.root.querySelector('.inference-measured'),
+      value: this.root.querySelector('.measure-value'),
     };
-    for (const [key, label] of CAST_LABELS) addRow(key, label);
-    // officers - a separate labelled group under the same standing bars
-    const ohd = document.createElement('div');
-    ohd.className = 'cast-subhead';
-    ohd.textContent = 'THE OFFICERS';
-    this.castEl.appendChild(ohd);
-    for (const [key, label] of OFFICER_LABELS) addRow(key, label);
+    this.badgeEl = this.root.querySelector('.soma-badge');
+    this.liveEl = this.root.querySelector('.soma-live');
   }
 
-  // ---- amplification -----------------------------------------------------
+  setSoma(soma) {
+    if (!soma || soma.status !== 'implemented' || !soma.circuits) return;
+    this.badgeEl.textContent = `IMPLEMENTED SOMA V${soma.version || 1}`;
+    this.liveEl.classList.add('available');
+    this.liveEl.setAttribute('aria-label', 'Soma state available');
+    for (const circuit of CIRCUITS) {
+      const reading = soma.circuits[circuit.key];
+      if (!reading) continue;
+      const value = clampNum(reading.value);
+      const region = this.regions[circuit.key];
+      const row = this.rows[circuit.key];
+      if (value != null) {
+        const color = activityColor(value);
+        region.style.fill = color;
+        region.style.fillOpacity = String(0.28 + value * 0.72);
+        region.classList.toggle('active', value >= 0.65);
+        row.querySelector('.soma-bar i').style.width = `${Math.round(value * 100)}%`;
+        row.querySelector('.soma-bar i').style.backgroundColor = color;
+        row.querySelector('.soma-pct').textContent = pct(value);
+      }
+      const source = String(reading.source || 'implemented Soma state');
+      row.querySelector('.soma-source').textContent = `source: ${source}`;
+      region.querySelector('title').textContent = `${circuit.label}: ${pct(value)}; source: ${source}`;
+    }
+    const action = soma.action || {};
+    this.actionEl.textContent = action.name ? `${action.name}: ${action.reason || 'selected by drive competition'}` : 'nothing selected';
+    this.attentionEl.textContent = soma.attention && soma.attention.text ? soma.attention.text : 'nothing selected';
+    const count = soma.memory && Number(soma.memory.episodes);
+    this.memoryEl.textContent = Number.isFinite(count) ? `${count} episode${count === 1 ? '' : 's'}` : 'unavailable';
+    this.questionEl.textContent = soma.selfModel && soma.selfModel.question ? soma.selfModel.question : 'unavailable';
+  }
+
+  setInference(phase) {
+    const value = ['eval', 'gen'].includes(phase) ? phase : 'idle';
+    this.measure.value.textContent = value.toUpperCase();
+    this.measure.root.dataset.phase = value;
+  }
+
+  setBrain(brain) {
+    const count = brain && typeof brain === 'object' ? Object.keys(brain).length : 0;
+    this.root.querySelector('.legacy-brain').textContent = count ? `${count} synthetic regions` : 'unavailable';
+  }
+
+  setHeart(hr) {
+    this.root.querySelector('.legacy-heart').textContent = Number.isFinite(hr) ? `${Math.round(hr)} BPM` : 'unavailable';
+  }
+
+  setMental(mental) {
+    this.root.querySelector('.legacy-mental').textContent = listValues(mental, LEGACY_MENTAL);
+  }
+
+  setDerived(derived) {
+    this.root.querySelector('.legacy-derived').textContent = listValues(derived, LEGACY_DERIVED);
+  }
 
   setAmp(monotony, amp) {
     const mono = clampNum(monotony);
-    if (mono != null && this.monoBar) this.monoBar.style.width = Math.round(mono * 100) + '%';
-    if (typeof amp === 'number' && Number.isFinite(amp) && this.ampX) {
-      this.ampX.textContent = 'x' + amp.toFixed(1);
-      this.ampX.classList.toggle('hot', amp > 2.0);
-    }
+    this.root.querySelector('.legacy-amp').textContent = mono == null || !Number.isFinite(amp)
+      ? 'unavailable'
+      : `monotony ${Math.round(mono * 100)} / x${amp.toFixed(1)}`;
   }
-
-  // ---- derived composite states -----------------------------------------
-
-  setDerived(derived) {
-    if (!derived) return;
-    for (const k of DERIVED) {
-      const v = clampNum(derived[k]);
-      const node = this.derivedBars[k];
-      if (v == null || !node) continue;
-      node.bar.style.width = Math.round(v * 100) + '%';
-      node.pct.textContent = Math.round(v * 100);
-      node.row.classList.toggle('active', v > 0.6); // directive is live above 0.6
-    }
-  }
-
-  // ---- cast standing ----------------------------------------------------
 
   setCast(relations) {
-    if (!relations) return;
-    for (const [key] of [...CAST_LABELS, ...OFFICER_LABELS]) {
-      const r = relations[key];
-      const row = this.castRows[key];
-      if (!r || !row) continue;
-      const w = clampNum(r.warmth) || 0;
-      const s = clampNum(r.suspicion) || 0;
-      const g = clampNum(r.grudge) || 0;
-      row.w.style.width = Math.round(w * 100) + '%';
-      row.s.style.width = Math.round(s * 100) + '%';
-      row.g.style.width = Math.round(g * 100) + '%';
-      row.row.classList.toggle('feud', g > 0.7); // grudge directive is live
-    }
+    const count = relations && typeof relations === 'object' ? Object.keys(relations).length : 0;
+    this.root.querySelector('.legacy-cast').textContent = count ? `${count} synthetic standings` : 'unavailable';
   }
 
-  // ---- brain map --------------------------------------------------------
-
-  setBrain(brain, now) {
-    if (!brain) return;
-    now = now || this._now();
-    for (const reg of REGIONS) {
-      const a = clampNum(brain[reg.key]);
-      if (a == null) continue;
-      const el = this.nodes[reg.key];
-      el.setAttribute('fill', bloom(ramp(a), a));
-      el.classList.toggle('bloom', a > 0.9);
-
-      // sustained-saturation tracking for OVERHEAT
-      if (a > 0.9) {
-        if (!this.overheatSince[reg.key]) this.overheatSince[reg.key] = now;
-      } else {
-        this.overheatSince[reg.key] = 0;
-      }
-      const sustained = this.overheatSince[reg.key] && now - this.overheatSince[reg.key] >= 60000;
-
-      const state = this._state(a, sustained);
-      const row = this.rows[reg.key];
-      row.querySelector('.rr-pct').textContent = Math.round(a * 100) + '%';
-      const st = row.querySelector('.rr-state');
-      st.textContent = state;
-      st.className = 'rr-state s-' + state.toLowerCase();
-    }
+  reset() {
+    this.regions = {};
+    this.rows = {};
+    this._build();
   }
-
-  _state(a, sustained) {
-    if (sustained) return 'OVERHEAT';
-    if (a < 0.1) return 'SUPPRESSED';
-    if (a >= 0.9) return 'SATURATED';
-    if (a >= 0.65) return 'ELEVATED';
-    return 'NOMINAL';
-  }
-
-  // ---- heart ------------------------------------------------------------
-
-  setHeart(hr) {
-    if (!hr || hr <= 0) return;
-    this.hr = hr;
-    this.hrBpm.textContent = Math.round(hr);
-    // pulse the icon at the real BPM
-    const dur = (60 / hr).toFixed(3) + 's';
-    this.heartIcon.style.animationDuration = dur;
-    this.heartIcon.classList.toggle('tachy', hr > 100);
-  }
-
-  // ---- mental bars ------------------------------------------------------
-
-  setMental(mental) {
-    if (!mental) return;
-    for (const k in this.mentalBars) {
-      const v = clampNum(mental[k]);
-      if (v == null) continue;
-      const bar = this.mentalBars[k];
-      bar.style.width = Math.round(v * 100) + '%';
-      // hope/lucidity read "good" (cool green), the rest read "hot"
-      bar.classList.toggle('good', k === 'hope' || k === 'lucidity');
-    }
-  }
-
-  _now() {
-    return typeof performance !== 'undefined' ? performance.now() + this._epoch() : Date.now();
-  }
-  _epoch() {
-    // stable wall-clock offset so 60s OVERHEAT timing is real time
-    if (this.__e == null) this.__e = Date.now() - performance.now();
-    return this.__e;
-  }
-}
-
-function clampNum(x) {
-  if (typeof x !== 'number' || !Number.isFinite(x)) return null;
-  return Math.max(0, Math.min(1, x));
 }
