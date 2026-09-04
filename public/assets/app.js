@@ -14,6 +14,7 @@ import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
+import { fetchDayEvents, fetchDaySnapshot } from './history-feed.js';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
 import '../components/async-select/async-select.js';
@@ -23,6 +24,7 @@ const STREAM = CFG.stream || 'api/stream.php';
 const POST_POSTCARD = CFG.postPostcard || 'api/post-postcard.php';
 const OPENVERSE_SEARCH = CFG.openverseSearch || 'api/openverse-search.php';
 const TEMPO_ENDPOINT = CFG.tempo || 'api/tempo.php';
+const RANGE_ENDPOINT = CFG.range || 'api/range.php';
 const POLL_MS = 1000;
 const LETTER_MAX = 900;
 const FROM_MAX = 40;
@@ -33,6 +35,9 @@ const $ = (sel) => document.querySelector(sel);
 let pen, postcards, brain, hud, power, tempo;
 let lastSeq = 0;
 let polling = false;
+let feedLoading = false;
+let feedRenderToken = 0;
+let currentDate = /^\d{4}-\d{2}-\d{2}$/.test(String(CFG.today || '')) ? CFG.today : null;
 // DAY N pill: seeded from the server's real count (see lib/tempo.php,
 // window.CY.day) so it is right from first paint, then advanced by exactly 1 on
 // each live day-rollover event. The runner's own reported day NUMBER is never
@@ -170,6 +175,22 @@ async function loadFont() {
 }
 
 async function firstLoad() {
+  if (document.body.dataset.test !== '1' && currentDate) {
+    try {
+      await renderFeedDay(currentDate, { history: false });
+      led.lastSeq = lastSeq;
+      setStatus('Live', false);
+      return;
+    } catch (e) {
+      // Fall through to the old bounded stream bootstrap if the range endpoint is
+      // unavailable. Live viewing remains useful; only full-day backscroll is lost.
+      resetFeedSurfaces();
+    }
+  }
+  await firstLoadRecent();
+}
+
+async function firstLoadRecent() {
   let data;
   try {
     data = await fetchStream(-400);
@@ -191,6 +212,56 @@ async function firstLoad() {
   setStatus('Live', false);
 }
 
+function resetFeedSurfaces() {
+  penEntryOpen = false;
+  latestMode = 'journal';
+  if (pen && pen.reset) pen.reset();
+  if (postcards && postcards.reset) postcards.reset();
+  if (window.__cyPlain && window.__cyPlain.reset) window.__cyPlain.reset();
+  if (brain && brain.reset) brain.reset();
+  if (hud && hud.reset) hud.reset();
+}
+
+async function renderFeedDay(date, { history }) {
+  const token = ++feedRenderToken;
+  feedLoading = true;
+  resetFeedSurfaces();
+  pen.setInstant(true);
+  postcards.setInstant(true);
+  try {
+    const day = await fetchDayEvents({ rangeUrl: RANGE_ENDPOINT, date });
+    if (token !== feedRenderToken) return false;
+    for (const ev of day.events) dispatch(ev, true, false);
+
+    const snapshot = await fetchDaySnapshot({
+      rangeUrl: RANGE_ENDPOINT,
+      date,
+      head: day.head,
+    });
+    if (token !== feedRenderToken) return false;
+    for (const ev of snapshot.events) dispatch(ev, true, false);
+
+    pen.setInstant(false);
+    postcards.setInstant(false);
+    if (pen.whenIdle) await pen.whenIdle();
+    if (token !== feedRenderToken) return false;
+
+    if (history) {
+      if (pen.scrollToStart) pen.scrollToStart();
+      if (window.__cyPlain && window.__cyPlain.scrollToStart) window.__cyPlain.scrollToStart();
+    } else {
+      lastSeq = Math.max(lastSeq, day.head || 0, snapshot.head || 0);
+      if (pen.scrollToEnd) pen.scrollToEnd();
+      if (window.__cyPlain && window.__cyPlain.scrollToEnd) window.__cyPlain.scrollToEnd();
+    }
+    return true;
+  } finally {
+    pen.setInstant(false);
+    postcards.setInstant(false);
+    if (token === feedRenderToken) feedLoading = false;
+  }
+}
+
 // tokens beyond this many in one batch mean we fell behind (backgrounded tab,
 // network stall) - draw the older ones instantly and only animate the tail so
 // the pen catches up to live instead of lagging for minutes.
@@ -199,6 +270,7 @@ const ANIMATE_TAIL = 25;
 
 async function poll() {
   if (polling) return; // never overlap
+  if (feedLoading) return; // a complete-day surface is being reconstructed
   if (historyMode) return; // reading the past: do not follow the live edge
   polling = true;
   try {
@@ -411,7 +483,12 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
     case 'day':
       // A real local-midnight rollover happened - advance by exactly one from our
       // own known-correct count rather than trusting the runner's reported number.
-      if (!bootstrap) setDay(++dayCount);
+      if (!bootstrap) {
+        const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
+        if (m) currentDate = m[1];
+        resetFeedSurfaces();
+        setDay(++dayCount);
+      }
       break;
 
     case 'postcard_in':
@@ -657,37 +734,56 @@ function initHistoryControl() {
   // window.__cyMoment is the clean handoff object stage 3 replays from.
   document.addEventListener('cy:moment', (e) => {
     window.__cyMoment = e.detail;
-    enterHistory(e.detail);
-    const s = e.detail.summary || {};
-    const when = s.when || e.detail.ts || '';
-    const what = (s.lines && s.lines.length) ? s.lines.join(', ') : '';
-    pushTicker(`history: ${when}${what ? ' - ' + what : ''}`);
+    void enterHistory(e.detail);
   });
 }
 
-function enterHistory(detail) {
+async function enterHistory(detail) {
   historyMode = true;
   viewingMoment = detail;
   document.body.classList.add('cy-history');
-  showHistoryPill(detail);
+  showHistoryPill(detail, true);
+  try {
+    const rendered = await renderFeedDay(detail.date, { history: true });
+    if (!rendered || !historyMode || viewingMoment !== detail) return;
+    showHistoryPill(detail, false);
+    const s = detail.summary || {};
+    const when = s.when || detail.ts || '';
+    const what = (s.lines && s.lines.length) ? s.lines.join(', ') : '';
+    pushTicker(`history: ${when}${what ? ' - ' + what : ''}`);
+  } catch (e) {
+    if (!historyMode || viewingMoment !== detail) return;
+    const pill = $('#status');
+    if (pill) {
+      pill.classList.add('bad');
+      pill.textContent = 'history unavailable - return live';
+    }
+  }
 }
 
-function exitToLive() {
+async function exitToLive() {
   historyMode = false;
   viewingMoment = null;
+  feedRenderToken++;
   document.body.classList.remove('cy-history');
   const pill = $('#status');
   if (pill) {
     pill.classList.remove('is-history', 'bad');
-    pill.textContent = 'Live';
+    pill.textContent = 'loading today';
     pill.title = 'Travel back - pick a moment';
     pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
   }
   if (window.__cyTimeTravel) window.__cyTimeTravel.close();
-  poll(); // resume following: the catch-up path replays everything missed at once
+  try {
+    if (currentDate) await renderFeedDay(currentDate, { history: false });
+    setStatus('Live', false);
+  } catch (e) {
+    setStatus('reconnecting', true);
+  }
+  poll();
 }
 
-function showHistoryPill(detail) {
+function showHistoryPill(detail, loading = false) {
   const pill = $('#status');
   if (!pill) return;
   const s = detail.summary || {};
@@ -697,7 +793,7 @@ function showHistoryPill(detail) {
   // Non-button x (the pill itself is the button; nested buttons are invalid). The
   // whole pill returns to live; the x is the visible affordance for it.
   pill.innerHTML = '<span class="live-when"></span><span class="live-exit" aria-hidden="true">&times;</span>';
-  pill.querySelector('.live-when').textContent = when;
+  pill.querySelector('.live-when').textContent = loading ? `loading ${when}` : when;
   pill.title = 'Return to live';
   pill.setAttribute('aria-label', `Viewing ${when}. Activate to return to live.`);
 }

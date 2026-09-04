@@ -52,7 +52,7 @@ function boot() {
   // #plain hidden) until it is selected. app.js forwards EVERY event here from the
   // moment it registers, so the pane is always populated and switching to it is
   // instant; reveal() just pins it to the live edge when it becomes visible.
-  window.__cyPlain = { handle, setFont, reveal };
+  window.__cyPlain = { handle, setFont, reveal, reset, scrollToStart, scrollToEnd };
 
   if (document.body.dataset.test === '1') {
     window.__CY_PLAIN__ = {
@@ -367,12 +367,35 @@ function scrollToBottom() {
   if (jumpBtn) jumpBtn.hidden = true;
 }
 
+function scrollToStart() {
+  stuck = false;
+  scrollEl.scrollTop = 0;
+  if (jumpBtn) jumpBtn.hidden = false;
+}
+
+function scrollToEnd() {
+  stuck = true;
+  scrollToBottom();
+}
+
+function reset() {
+  colEl.textContent = '';
+  curText = null;
+  openReply = null;
+  pendingReply = null;
+  lastIncomingFrom = '';
+  draws.clear();
+  stuck = true;
+  scrollEl.scrollTop = 0;
+  if (jumpBtn) jumpBtn.hidden = true;
+}
+
 // Called by the view switch (app.js) when PLAIN becomes visible: pin it to the
 // live edge. Scroll offsets computed while the pane was display:none are
 // meaningless, so this restores the "following live" position on reveal.
 function reveal() {
-  stuck = true;
-  scrollToBottom();
+  if (document.body.classList.contains('cy-history')) scrollToStart();
+  else scrollToEnd();
 }
 
 boot();

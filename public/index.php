@@ -35,6 +35,7 @@ try {
 } catch (Throwable $e) {
     $day = 1;
 }
+$today = (new DateTimeImmutable('now', new DateTimeZone('Europe/London')))->format('Y-m-d');
 
 // The view switch (handwritten / plain / raw) is a LOCAL async-select in app.js
 // that remembers the session's choice. ?view= is an optional deep-link that forces
@@ -138,6 +139,9 @@ window.CY = {
   // baseline to increment from on a live day rollover without trusting the
   // runner's own counter.
   day: <?= json_encode($day) ?>,
+  // Calendar boundary used by the initial full-day feed. Kept server-authored so
+  // a visitor in another timezone still sees Cy's Europe/London prison day.
+  today: <?= json_encode($today) ?>,
   // Optional starting view from ?view= (handwritten|plain|raw), else null. The
   // view switch is a local async-select in app.js that otherwise remembers the
   // session's choice; this just lets a deep-link pick where it opens.

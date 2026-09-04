@@ -43,6 +43,15 @@ export class Postcards {
     if (this.active && this.active.pen) this.active.pen.setInstant(this.instant);
   }
 
+  reset() {
+    if (this.active && this.active.pen) this.active.pen.abort();
+    this.root.textContent = '';
+    this.active = null;
+    this.cards = [];
+    this._pending = null;
+    this._rotSeed = 1;
+  }
+
   // A postcard_in arrived: remember who sent it and any picture. Order-agnostic -
   // the runner emits `mode letter` BEFORE postcard_in, while the test feed emits
   // postcard_in first. If a reply card is already open (runner order), address it

@@ -13,6 +13,7 @@ declare(strict_types=1);
 //   before=<seq>  return events with seq strictly LESS than this (page backward)
 //   ts=<datetime> anchor by time: resolve to the first event at/after ts, then
 //                 page forward from just before it (so that event is included)
+//   date=YYYY-MM-DD constrain the page to one Europe/London calendar day
 //   limit=<n>     page size, default 200, capped server-side at 500
 //   kinds=a,b,c   optional whitelist filter (e.g. text,mode,postcard_in) to trim
 //                 the firehose (power/host/vitals) for a lean handwriting replay
@@ -38,6 +39,20 @@ try {
     }
     if ($limit > RANGE_MAX_LIMIT) {
         $limit = RANGE_MAX_LIMIT;
+    }
+
+    $dayStart = null;
+    $dayEnd = null;
+    if (isset($_GET['date']) && $_GET['date'] !== '') {
+        $date = (string)$_GET['date'];
+        $tz = new DateTimeZone('Europe/London');
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date, $tz);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (!$parsed || ($errors !== false && ($errors['warning_count'] || $errors['error_count'])) || $parsed->format('Y-m-d') !== $date) {
+            captive_error_response('invalid date', 400);
+        }
+        $dayStart = $parsed->format('Y-m-d 00:00:00');
+        $dayEnd = $parsed->modify('+1 day')->format('Y-m-d 00:00:00');
     }
 
     // optional kind whitelist
@@ -92,6 +107,12 @@ try {
             $params[$ph] = [$k, PDO::PARAM_STR];
         }
         $conds[] = 'kind IN (' . implode(', ', $in) . ')';
+    }
+
+    if ($dayStart !== null && $dayEnd !== null) {
+        $conds[] = 'ts >= :day_start AND ts < :day_end';
+        $params[':day_start'] = [$dayStart, PDO::PARAM_STR];
+        $params[':day_end'] = [$dayEnd, PDO::PARAM_STR];
     }
 
     $where = implode(' AND ', $conds);

@@ -10,13 +10,12 @@
 //   - Days with no data are inert and not selectable.
 //   - Small SHAPE markers flag notable days (postcards, drawings, warden notices) -
 //     shape, not more hue, so they stay separable from the mood tint.
-//   - Selecting a day reveals a 24-cell hour strip, tinted the same way, so the
-//     second click gets full resolution. Two clicks, both familiar.
+//   - Selecting a day opens that complete day's output from its first event.
 //   - A small legend explains the tints and the marker shapes.
 //
 // It draws itself ENTIRELY from the aggregate day index (GET /api/history.php); the
-// only raw touch is on COMMIT - one range.php?ts=&limit=1 call to resolve the chosen
-// hour to an exact seq (best-effort; degrades to a constructed ts + null seq).
+// only raw touch is on COMMIT - one range.php?date=&limit=1 call to resolve the
+// day's first exact seq (best-effort; degrades to a constructed ts + null seq).
 //
 // Confirming a moment resolves it to a seq + timestamp and announces it via a
 // `cy:moment` event (and an onSelect callback), exactly as the previous stage did,
@@ -80,7 +79,7 @@ function boot() {
 
   if (document.body.dataset.test === '1') {
     window.__CY_TT__ = {
-      load, open, close, confirmMoment, selectDay, renderMonth,
+      load, open, close, confirmMoment, confirmDay, selectDay, renderMonth,
       buildMoment, getIndex: () => index,
     };
   }
@@ -289,7 +288,7 @@ function renderMonth() {
       addDayMarkers(cell, day);
       if (date === selectedDate) cell.classList.add('is-selected');
       cell.setAttribute('aria-label', dayGlance(day, d));
-      cell.addEventListener('click', () => selectDay(date));
+      cell.addEventListener('click', () => confirmDay(date));
     } else {
       cell.classList.add('is-empty');
       cell.disabled = true;
@@ -329,8 +328,9 @@ function stepMonth(delta) {
   renderMonth();
 }
 
-// Reveal the 24-cell hour strip for a chosen day (the second click gets full
-// resolution). Selecting the day itself never commits - only an hour or a shortcut.
+// The old two-click day-then-hour path is retained for the test surface and for a
+// future within-day scrubber. The calendar itself calls confirmDay directly: one
+// tap means "open this day", matching the visible day-cell affordance.
 function selectDay(date) {
   selectedDate = date;
   const day = index.byDate[date];
@@ -430,7 +430,7 @@ function renderLegend() {
 
   const hint = document.createElement('div');
   hint.className = 'tt-legend-hint';
-  hint.textContent = 'Brighter = more written that day. Pick a day, then an hour.';
+  hint.textContent = 'Brighter = more written that day. Pick a day to open it.';
   legendEl.appendChild(hint);
 }
 
@@ -459,6 +459,44 @@ async function confirmMoment(date, hour) {
   lastCommitted = detail;
   emit(detail);
   close();
+}
+
+async function confirmDay(date) {
+  const moment = buildMoment(date, 0);
+  const r = await resolveDayStart(date);
+  const detail = {
+    date: moment.date,
+    hour: 0,
+    ts: r.ts,
+    seq: r.seq,
+    summary: {
+      ...moment.summary,
+      when: shortDate(date),
+    },
+  };
+  lastCommitted = detail;
+  emit(detail);
+  close();
+}
+
+async function resolveDayStart(date) {
+  const key = `day:${date}`;
+  if (seqCache.has(key)) return seqCache.get(key);
+  const fallback = { seq: null, ts: `${date} 00:00:00` };
+  let out = fallback;
+  try {
+    const res = await fetch(`${RANGE_URL}?date=${encodeURIComponent(date)}&after=0&limit=1`, { cache: 'no-store' });
+    if (res.ok) {
+      const d = await res.json();
+      const ev = d.events && d.events[0];
+      out = {
+        seq: ev && typeof ev.seq === 'number' ? ev.seq : null,
+        ts: ev && ev.ts ? ev.ts : fallback.ts,
+      };
+    }
+  } catch (e) { /* best-effort: the day replay still has the date boundary */ }
+  seqCache.set(key, out);
+  return out;
 }
 
 async function resolveSeq(ts) {

@@ -319,9 +319,17 @@ export class Pen {
     this._reflowRequested = false;
     this._remeasureQueued = false;
     this._remeasureTries = 0;
+    this._idleWaiters = [];
+    this.following = true;
 
     this._buildSvg();
     this._buildLiveRegion();
+    if (this.root && this.root.addEventListener) {
+      this.root.addEventListener('scroll', () => {
+        const gap = this.root.scrollHeight - this.root.scrollTop - this.root.clientHeight;
+        this.following = gap < 48;
+      });
+    }
   }
 
   _buildSvg() {
@@ -433,9 +441,8 @@ export class Pen {
     const widthChanged = m.w !== this.w;
     this.w = m.w;
     this.h = m.h;
-    this.svg.setAttribute('viewBox', `0 0 ${this.w} ${this.h}`);
     this.svg.setAttribute('width', this.w);
-    this.svg.setAttribute('height', this.h);
+    this._syncSurfaceHeight();
     // the wrap point comes from the SAME width used for the viewBox above.
     this.maxX = this.w - this.marginRight;
     if (this._debug) {
@@ -513,14 +520,57 @@ export class Pen {
     this.jobs = replay.concat(this.jobs);
   }
 
-  // Retain one logical flow item so a later width change can reproduce it. Capped
-  // so an all-day tab does not grow it without bound (older lines have scrolled off
-  // and been pruned from the DOM anyway).
+  // Retain the complete current day so a width change can reproduce it and a
+  // reader can scroll back to the first entry. app.js resets the surface on the
+  // real London day boundary, which gives this collection its natural bound.
   _recordFlow(item) {
     if (this.card) return;
     this.flow.push(item);
-    const CAP = 6000;
-    if (this.flow.length > CAP) this.flow.splice(0, this.flow.length - CAP);
+  }
+
+  // Clear one rendered day before replaying another. abort() safely cancels an
+  // in-flight stroke; the existing pump then drains whatever the caller queues.
+  reset() {
+    this.abort();
+    this.jobs.length = 0;
+    this.buf = '';
+    while (this.ink.firstChild) this.ink.firstChild.remove();
+    while (this.textLayer.firstChild) this.textLayer.firstChild.remove();
+    while (this.dreamLayer.firstChild) this.dreamLayer.firstChild.remove();
+    while (this.live && this.live.firstChild) this.live.firstChild.remove();
+    this.glyphNodes = [];
+    this.textNodes = [];
+    this.flow = [];
+    this._line = null;
+    this._wordGlyphs = [];
+    this._sketchBoxes.clear();
+    this._dreamBoxes.clear();
+    this._hasRenderedEntry = false;
+    this.x = this.marginX;
+    this.y = this.marginTop + this.size;
+    this.midWord = false;
+    this.mode = 'journal';
+    this.ruled = true;
+    this.root.classList.remove('paper-unruled', 'paper-dream');
+    this.scrollG.setAttribute('transform', 'translate(0, 0)');
+    this.following = true;
+    this._syncSurfaceHeight();
+    this.root.scrollTop = 0;
+  }
+
+  whenIdle() {
+    if (!this.running && !this.jobs.length && !this._reflowRequested) return Promise.resolve();
+    return new Promise((resolve) => this._idleWaiters.push(resolve));
+  }
+
+  scrollToStart() {
+    this.following = false;
+    this.root.scrollTop = 0;
+  }
+
+  scrollToEnd() {
+    this.following = true;
+    this.root.scrollTop = this.root.scrollHeight;
   }
 
   // ---- a11y: a polite live region announces completed passages -----------
@@ -924,6 +974,10 @@ export class Pen {
     } finally {
       this.running = false;
       this._hideNib();
+      if (!this.jobs.length && !this._reflowRequested && this._idleWaiters.length) {
+        const waiters = this._idleWaiters.splice(0);
+        for (const resolve of waiters) resolve();
+      }
     }
   }
 
@@ -968,16 +1022,21 @@ export class Pen {
     this.maxX = this.w - this.marginRight;
   }
 
-  // keep the current writing line comfortably in view by translating the whole
-  // scroll group (ink + text together) up once we run past the bottom margin. A
-  // card pen never scrolls: its ink must stay fixed inside the card's message area
-  // (the cram shrink keeps a long reply on the card instead).
+  _syncSurfaceHeight() {
+    if (!this.svg || !this.w || !this.h) return;
+    const contentBottom = this.y + this.marginTop + this.size * 2;
+    const surfaceH = this.card ? this.h : Math.max(this.h, Math.ceil(contentBottom));
+    this.svg.setAttribute('viewBox', `0 0 ${this.w} ${surfaceH}`);
+    this.svg.setAttribute('height', surfaceH);
+  }
+
+  // Grow the journal SVG and let the paper element perform real browser
+  // scrolling. A card pen remains fixed and uses cram-to-fit instead.
   _scroll() {
     if (this.card) return;
-    const bottom = this.h - this.size * 1.4;
-    const overflow = this.y - bottom;
-    const dy = overflow > 0 ? -overflow : 0;
-    this.scrollG.setAttribute('transform', `translate(0, ${dy.toFixed(1)})`);
+    this.scrollG.setAttribute('transform', 'translate(0, 0)');
+    this._syncSurfaceHeight();
+    if (this.following) this.root.scrollTop = this.root.scrollHeight;
   }
 
   // ---- text layer: one real <text> node per rendered line ----------------
@@ -1528,71 +1587,14 @@ export class Pen {
     this.nib.setAttribute('cy', v.y.toFixed(2));
   }
 
-  // ---- node pruning: cap the DOM so an all-day tab does not leak ---------
+  // ---- node tracking -----------------------------------------------------
 
   _trackNode(node) {
     this.glyphNodes.push(node);
-    if (this.glyphNodes.length > 1200) {
-      const dead = this.glyphNodes.splice(0, this.glyphNodes.length - 1200);
-      for (const n of dead) n.remove();
-    }
   }
 
-  // Text-node pruning is selection-aware: a user may be part-way through
-  // selecting a passage, and yanking a node out of the middle of the range
-  // would collapse their selection. So we never remove a node that intersects
-  // the current selection, and if that leaves us over the cap we defer the rest
-  // until the selection is cleared.
+  // Text lines follow the same day lifetime as the visible ink.
   _trackTextNode(node) {
     this.textNodes.push(node);
-    this._pruneText();
-  }
-
-  _pruneText() {
-    const CAP = 300; // lines kept; well past a screenful, bounds the DOM
-    if (this.textNodes.length <= CAP) return;
-    const sel = typeof window !== 'undefined' && window.getSelection ? window.getSelection() : null;
-    const hasSel = !!(sel && sel.rangeCount && !sel.isCollapsed);
-    let excess = this.textNodes.length - CAP;
-    const survivors = [];
-    let deferred = false;
-    for (const n of this.textNodes) {
-      if (excess > 0) {
-        if (hasSel && this._inSelection(sel, n)) {
-          survivors.push(n); // intersects the live selection - keep it
-          deferred = true;
-        } else {
-          n.remove();
-          excess--;
-        }
-      } else {
-        survivors.push(n);
-      }
-    }
-    this.textNodes = survivors;
-    if (deferred) this._armSelectionPrune();
-  }
-
-  _inSelection(sel, node) {
-    try {
-      return sel.containsNode(node, true); // true = partial containment counts
-    } catch {
-      return false;
-    }
-  }
-
-  // Re-run the deferred prune once the selection is gone, then unsubscribe.
-  _armSelectionPrune() {
-    if (this._selPruneArmed) return;
-    this._selPruneArmed = true;
-    const handler = () => {
-      const s = window.getSelection ? window.getSelection() : null;
-      if (!s || !s.rangeCount || s.isCollapsed) {
-        document.removeEventListener('selectionchange', handler);
-        this._selPruneArmed = false;
-        this._pruneText();
-      }
-    };
-    document.addEventListener('selectionchange', handler);
   }
 }
