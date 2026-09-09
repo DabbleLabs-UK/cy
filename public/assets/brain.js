@@ -2,8 +2,8 @@
 //
 // The shaded anatomy is a functional analogy only. Every dynamic value comes
 // from a named Soma circuit and exposes its computational source. Legacy mood,
-// pulse, amplification, and relationship figures remain available below, but
-// are unmistakably labelled as placeholders rather than biological readings.
+// pulse, amplification, and relationship figures remain available below as
+// planned stats: candidates that are not yet wired into the Soma state.
 
 export const CIRCUITS = [
   { key: 'actionSelection', label: 'ACTION SELECTION', anatomy: 'frontoparietal', path: 'M48 69 C67 48 99 40 124 48 L129 91 C104 96 78 105 54 96 Z' },
@@ -63,7 +63,7 @@ export class BrainHud {
         <span class="soma-badge">SOMA V1 - AWAITING STATE</span>
         <span class="soma-live" aria-label="Soma state unavailable"></span>
       </div>
-      <p class="soma-caveat">Computed cognitive activity. Brain locations are functional analogies, not measured physiology.</p>
+      <p class="soma-caveat">Core state is computed before language. Bounded self-output feedback is shown separately. Every reading names its Soma source; brain locations remain functional analogies, not measured physiology.</p>
       <div class="brain-figure">
         <svg class="brain-svg" viewBox="0 0 340 230" role="img" aria-labelledby="brain-title brain-desc">
           <title id="brain-title">Functional analogy of Cy's Soma circuits</title>
@@ -87,10 +87,12 @@ export class BrainHud {
         <div><span>ATTENTION</span><strong class="soma-attention">nothing selected</strong></div>
         <div><span>EPISODIC MEMORY</span><strong class="soma-memory">0 episodes</strong></div>
         <div><span>SELF-QUESTION</span><strong class="soma-question">unavailable</strong></div>
+        <div><span>SELF-OUTPUT FEEDBACK</span><strong class="soma-expression">waiting for emitted words</strong></div>
+        <div><span>LEARNED WORD ASSOCIATIONS</span><strong class="soma-associations">0 learned</strong></div>
       </div>
       <details class="legacy-box">
-        <summary>PLACEHOLDERS - NOT SOMA</summary>
-        <p>Legacy dramatic mappings retained for comparison. They are not observations, clinical measures, or implemented cognitive circuits.</p>
+        <summary>PLANNED STATS</summary>
+        <p>Not connected to implemented Soma state yet. These legacy synthetic values are retained only to show what still needs a real causal interpretation; they are not observations or clinical measures.</p>
         <dl>
           <div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
           <div><dt>mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
@@ -134,6 +136,8 @@ export class BrainHud {
     this.attentionEl = this.root.querySelector('.soma-attention');
     this.memoryEl = this.root.querySelector('.soma-memory');
     this.questionEl = this.root.querySelector('.soma-question');
+    this.expressionEl = this.root.querySelector('.soma-expression');
+    this.associationsEl = this.root.querySelector('.soma-associations');
     this.measure = {
       root: this.root.querySelector('.inference-measured'),
       value: this.root.querySelector('.measure-value'),
@@ -172,6 +176,12 @@ export class BrainHud {
     const count = soma.memory && Number(soma.memory.episodes);
     this.memoryEl.textContent = Number.isFinite(count) ? `${count} episode${count === 1 ? '' : 's'}` : 'unavailable';
     this.questionEl.textContent = soma.selfModel && soma.selfModel.question ? soma.selfModel.question : 'unavailable';
+    const expression = soma.expression || {};
+    this.expressionEl.textContent = expression.observedAtMs
+      ? `trigger ${pct(expression.triggerActivation)} / repetition ${pct(expression.repetition)} / intensity ${pct(expression.intensity)}${expression.commitment ? ' / commitment detected' : ''}`
+      : 'waiting for emitted words';
+    const learned = soma.associations && Number(soma.associations.learned);
+    this.associationsEl.textContent = Number.isFinite(learned) ? `${learned} learned trigger${learned === 1 ? '' : 's'}` : 'unavailable';
   }
 
   setInference(phase) {

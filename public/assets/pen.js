@@ -386,9 +386,10 @@ export class Pen {
 
     this.root.appendChild(svg);
     this._resize();
-    window.addEventListener('resize', () => {
+    this._onWindowResize = () => {
       if (this._resize()) this._scroll();
-    });
+    };
+    window.addEventListener('resize', this._onWindowResize);
     // The viewBox width must match the rendered width, and the wrap point is
     // derived from that same width. When the instrument panels lay out after
     // load, the sheet resizes; without this the coordinate space would keep the
@@ -631,6 +632,7 @@ export class Pen {
   // Tear down observers so a pruned/removed card pen does not leak.
   destroy() {
     try { if (this._ro) this._ro.disconnect(); } catch { /* ignore */ }
+    try { if (this._onWindowResize) window.removeEventListener('resize', this._onWindowResize); } catch { /* ignore */ }
   }
 
   // ---- vitals modulation ------------------------------------------------

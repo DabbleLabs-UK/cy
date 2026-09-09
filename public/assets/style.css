@@ -397,6 +397,72 @@ body.cy-paused::after {
 }
 .ink-svg { display: block; width: 100%; height: auto; min-height: 100%; }
 
+/* ================= CHRONOLOGICAL HANDWRITTEN FEED ================= */
+.cy-flow {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 36px;
+}
+.cy-day-banner {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 8px 14px;
+  color: #2e2a21;
+  background: rgba(232, 220, 188, 0.96);
+  border-bottom: 1px solid rgba(112, 91, 51, 0.3);
+  box-shadow: 0 6px 14px rgba(72, 55, 27, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+.cy-day-banner .cy-day-cap { font-size: 8px; letter-spacing: 0.18em; color: #7c6e52; }
+.cy-day-banner strong { font-size: 12px; font-weight: 600; }
+.cy-writing-segment {
+  margin: 14px 16px 4px;
+  border: 1px solid rgba(112, 91, 51, 0.22);
+  border-radius: 3px;
+  background: rgba(255, 252, 242, 0.22);
+  overflow: hidden;
+}
+.cy-writing-surface {
+  position: relative;
+  min-height: 120px;
+  overflow: hidden;
+}
+.cy-drawing-surface { min-height: 220px; }
+.cy-moment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 12px 0;
+  color: #817456;
+  font: 9px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0.06em;
+}
+.cy-moment-meta time { color: #514832; font-variant-numeric: tabular-nums; }
+.cy-moment-since { margin-left: auto; color: #9a8966; }
+.cy-event-block {
+  margin: 16px 28px;
+  padding: 10px 13px;
+  border-left: 2px solid rgba(92, 79, 55, 0.36);
+  color: #514832;
+  background: rgba(242, 234, 211, 0.62);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+.cy-event-block .cy-moment-meta { padding: 0 0 6px; }
+.cy-event-title { font-size: 11px; letter-spacing: 0.045em; color: #756545; }
+.cy-event-detail { margin-top: 8px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cy-event-silence { text-align: center; border-left: 0; background: transparent; color: #91836a; }
+.cy-event-silence .cy-moment-meta { justify-content: center; }
+.cy-event-postcard { border-left-color: #846b9b; background: rgba(238, 226, 207, 0.88); }
+.cy-event-postcard-reply { padding-block: 6px; opacity: 0.72; }
+.cy-event-image { display: block; max-width: min(100%, 300px); max-height: 240px; margin-top: 10px; border: 5px solid #f7f0de; box-shadow: 0 4px 14px rgba(48, 37, 20, 0.18); }
+.cy-flow > .pcard-obj { align-self: center; margin: 20px 12px; flex: 0 0 auto; }
+
 /* The ink is decoration painted on top of the real text: it must not eat the
    pointer, so the transparent text layer beneath is what the user selects. */
 .ink-layer, .nib-layer { pointer-events: none; }
@@ -942,6 +1008,23 @@ body.cy-paused::after {
 .pc-send:hover { background: linear-gradient(180deg, #2c4e6d, #1c3348); }
 .pc-send:disabled { opacity: 0.5; cursor: default; }
 .postcard-form.busy { opacity: 0.7; pointer-events: none; }
+.form-note.waiting { color: #d7b76a; }
+.form-note.waiting::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 7px;
+  border: 2px solid rgba(215, 183, 106, 0.3);
+  border-top-color: #d7b76a;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: postcard-wait-spin 0.8s linear infinite;
+}
+@keyframes postcard-wait-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .form-note.waiting::before { animation: none; border-top-color: rgba(215, 183, 106, 0.3); background: #d7b76a; }
+}
 
 @media (max-width: 520px) {
   .postcard { grid-template-columns: 1fr; }
@@ -1318,6 +1401,22 @@ body.cy-paused::after {
   font-size: 11px;
   color: var(--tel-dim);
 }
+.pl-since { margin-left: auto; color: #637282; }
+.pl-day-banner {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  margin: 0 -8px 14px;
+  padding: 8px 10px;
+  color: #dce6ee;
+  background: rgba(16, 20, 26, 0.96);
+  border-bottom: 1px solid #2b3540;
+}
+.pl-day-banner span { color: var(--tel-dim); font-size: 8px; letter-spacing: 0.18em; }
+.pl-day-banner strong { font-size: 12px; font-weight: 600; }
 .pl-time { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .pl-mode { text-transform: lowercase; letter-spacing: 0.04em; }
 
@@ -1340,6 +1439,12 @@ body.cy-paused::after {
   background: rgba(43, 95, 143, 0.07);
 }
 .pl-block-reply .pl-mode { color: var(--tel); }
+.pl-block-postcard-in { border-color: #574769; border-left: 3px solid #9677b3; background: rgba(110, 78, 133, 0.08); }
+.pl-postcard-body { color: #eadff0; }
+.pl-postcard-image { display: block; max-width: min(100%, 300px); max-height: 220px; margin-top: 10px; border-radius: 4px; }
+.pl-block-event, .pl-block-news { padding-block: 9px; background: transparent; }
+.pl-event-title { color: #9faeba; font-size: 12px; letter-spacing: 0.035em; }
+.pl-event-detail { margin-top: 5px; color: #c3ccd4; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
 
 /* an abort: the fragment stays, with a discreet indication it was cut off */
 .pl-cut {
@@ -1366,11 +1471,13 @@ body.cy-paused::after {
 }
 .pl-gap::before,
 .pl-gap::after {
-  content: "";
   flex: 1 1 auto;
-  height: 1px;
-  background: #232a34;
+  color: #657382;
+  font-size: 9px;
+  white-space: nowrap;
 }
+.pl-gap::before { content: attr(data-time); text-align: right; }
+.pl-gap::after { content: attr(data-since); text-align: left; }
 
 /* a drawing: the finished sketch, inline, thin-lined and understated */
 .pl-sketch {

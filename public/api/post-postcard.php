@@ -113,6 +113,7 @@ try {
     $insert->bindValue(':ip', $ipBin, PDO::PARAM_LOB);
     $insert->bindValue(':deliver_at', $deliverAt, PDO::PARAM_STR);
     $insert->execute();
+    $postcardId = (int)$db->lastInsertId();
 
     $rateInsert = $db->prepare("INSERT INTO rate_limits (ip, action, created_at) VALUES (:ip, 'postcard', NOW())");
     $rateInsert->bindValue(':ip', $ipBin, PDO::PARAM_LOB);
@@ -122,6 +123,7 @@ try {
 
     captive_json_response([
         'ok' => true,
+        'id' => $postcardId,
         'deliver_at' => $deliverAt,
         'returning' => (int)$visitor['postcard_count'] > 1,
     ]);

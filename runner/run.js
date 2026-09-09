@@ -48,6 +48,7 @@ import {
 import {
   reconcileSoma,
   observeSoma,
+  observeSomaOutput,
   tickSoma,
   chooseSomaAction,
   completeSomaAction,
@@ -847,7 +848,7 @@ async function main() {
         // the model that produced THIS burst (the active provider's model), and
         // the provider id, so the diagnostics show which model is running.
         provider: activeProviderId,
-        model: (r && r.stats && r.stats.model) || activeProvider().model,
+        model: (r && r.stats && r.stats.model) || (r && r.model) || activeProvider().model,
         num_ctx: NUM_CTX,
         inbox_ok: client.lastInboxOk,
         tempo_ok: client.lastTempoOk,
@@ -1335,7 +1336,7 @@ async function main() {
   // looksLikeRefusal: a refusal is discarded (never emitted), the generation is
   // aborted, and { refused:true } is returned - the caller records it as its own
   // 'refused' cycle outcome, exactly like a blocked generation.
-  async function streamGenerate({ system, prompt, opts, mode, contextTail, allowRepeat = false }) {
+  async function streamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {
     burstEmitted = ''; // fresh generation: nothing emitted yet this burst
     burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
     burstStopped = false;
@@ -1398,7 +1399,13 @@ async function main() {
 
     let gen;
     try {
-      gen = await provider.openStream({ system, prompt, opts, signal: ac.signal });
+      gen = await provider.openStream({
+        system,
+        prompt,
+        opts,
+        signal: ac.signal,
+        purpose: purpose || mode,
+      });
     } catch (err) {
       if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
       console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
@@ -1481,7 +1488,8 @@ async function main() {
     // paid its full prompt cost and produced nothing (warden ate it, or it was empty)
     // - recorded as non-emitting so the wasted spend is visible.
     await recordSpend(stats, mode, !!burstEmitted.trim());
-    return { full: cleanedFull(), aborted: false, stats, ttftMs, strip: stripSnapshot(full) };
+    if (burstEmitted.trim()) observeSomaOutput(vitals.cognition, burstEmitted, { mode, now: Date.now() });
+    return { full: cleanedFull(), aborted: false, stats, model: gen.model || provider.model, ttftMs, strip: stripSnapshot(full) };
 
     // A refusal discards everything - the refusal text is NEVER emitted. Log it so
     // it is visible, and return the distinct { refused } shape for the caller to
@@ -1495,7 +1503,7 @@ async function main() {
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
   // chunk (used for the drawing DSL, which must never reach the pen as prose).
   // Wired to currentAbort so an inbound postcard/notice can cut it short.
-  async function rawGenerate({ system, prompt, opts }) {
+  async function rawGenerate({ system, prompt, opts, purpose = 'drawing' }) {
     const ac = new AbortController();
     currentAbort = ac;
     // a non-streamed generation is opaque to the viewer (nothing reaches the page),
@@ -1503,7 +1511,7 @@ async function main() {
     // accounted for rather than looking like idle time.
     setInfer('gen');
     try {
-      const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal });
+      const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
       if (!out.ok) return '';
       // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
       // DSL pass that returned text is productive (it will attempt to render); an empty
@@ -1613,7 +1621,7 @@ async function main() {
     const prompt = buildPrompt(letterTail, 'postcard', pc, directives);
     const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(pc.body) });
     await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter' });
+    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter', purpose: 'postcard' });
     emitGen(r, 'letter', {
       zoneA: ZONE_A,
       zoneB: letterTail,
@@ -1708,7 +1716,7 @@ async function main() {
     const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
     o1.stop = [...o1.stop, '\n']; // one line only
     await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
-    const r1 = await streamGenerate({ system: ZONE_A, prompt: p1, opts: o1, mode: 'journal' });
+    const r1 = await streamGenerate({ system: ZONE_A, prompt: p1, opts: o1, mode: 'journal', purpose: 'drawing' });
     if (r1.aborted) return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
     const line = (r1.full || '').trim();
     // the decision line is itself real journal text; whether the DSL below renders or
@@ -1751,7 +1759,7 @@ async function main() {
     // base pass: the main shapes.
     const basePrompt = drawDslPrompt(subject, { badly: intent.mode === 'badly' });
     await logPrompt('draw-dsl', sys2 + '\n---\n' + basePrompt);
-    const baseRaw = await rawGenerate({ system: sys2, prompt: basePrompt, opts: o2 });
+    const baseRaw = await rawGenerate({ system: sys2, prompt: basePrompt, opts: o2, purpose: 'drawing' });
     if (!baseRaw || !baseRaw.trim()) {
       // an empty DSL pass is a FAILURE, not a repeat (the model emitted END first, or
       // was cut off). Skip the garnish; the decision line already stands.
@@ -1774,7 +1782,7 @@ async function main() {
     const baseGeom = baseVal.strokes.filter((s) => s.t !== 'T').length;
     if (baseGeom > 6) {
       for (const pass of ['detail', 'shade']) {
-        const raw = await rawGenerate({ system: sys2, prompt: drawPassPrompt(subject, strokesToDsl(all), pass), opts: o2 });
+        const raw = await rawGenerate({ system: sys2, prompt: drawPassPrompt(subject, strokesToDsl(all), pass), opts: o2, purpose: 'drawing' });
         if (!raw || !raw.trim()) continue; // this pass added nothing - stop appending junk
         const val = validateDrawing(parseStrokes(raw).strokes, { min: 1, maxText: 0 });
         if (!val.ok) continue;
@@ -2467,6 +2475,7 @@ async function main() {
     const payload = { s: chunk + ' ', mode: 'dream' };
     if (lucid) payload.lucid = true;
     emit({ kind: 'text', payload });
+    observeSomaOutput(vitals.cognition, chunk, { mode: lucid ? 'dream-lucid' : 'dream', now: Date.now() });
     lastTextMs = Date.now(); // a murmur/night-line is real output too
     watchdogStep = 0; // dream output counts as text flowing: de-escalate the watchdog
     failedCyclesSinceEmit = 0; // real output: not a stall
@@ -2553,7 +2562,7 @@ async function main() {
       const prompt = buildPrompt('', 'dream', { wake: true }, directives);
       const opts = options(vitals, config.threads, 'dream', { num_predict: 48 });
       await logPrompt('dream-wake', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-      const raw = await rawGenerate({ system: ZONE_A, prompt, opts });
+      const raw = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream' });
       const one = firstSentence(raw);
       if (one) await emitDreamText(one, { lucid: true });
       dreamState.nextMurmurAt = now + dreamMurmurGapMs(); // settle back under
@@ -2579,7 +2588,7 @@ async function main() {
       const prompt = buildPrompt('', 'dream', null, directives);
       const opts = options(vitals, config.threads, 'dream');
       await logPrompt('dream', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-      const raw = await rawGenerate({ system: ZONE_A, prompt, opts });
+      const raw = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream' });
       const murmur = shapeMurmur(raw);
       if (murmur) await emitDreamText(murmur);
       dreamState.nextMurmurAt = now + dreamMurmurGapMs();

@@ -2,11 +2,13 @@
 //
 // Environment and body observations enter here. The module appraises them,
 // updates expectations and durable episodic memory, selects one focus, and
-// chooses an action. The LLM may read the resulting directive but never writes
-// these values back. This is the hard seam between state and prose.
+// chooses an action. Generated prose returns only as an efference copy of an
+// action Cy took: it can record repetition, commitments and activation of an
+// already-learned trigger, but its sentiment never manufactures mental state.
 
 const VERSION = 1;
 const MEMORY_MAX = 512;
+const ASSOCIATION_MAX = 128;
 
 const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(x) || 0));
 const round = (x) => Number(clamp(x).toFixed(3));
@@ -58,6 +60,15 @@ function blank(now) {
       question: QUESTION,
       evidence: [],
     },
+    associations: {},
+    expression: {
+      lastText: '',
+      repetition: 0,
+      intensity: 0,
+      triggerActivation: 0,
+      commitment: false,
+      observedAtMs: 0,
+    },
   };
 }
 
@@ -83,6 +94,8 @@ export function reconcileSoma(raw, { now = Date.now() } = {}) {
     circuits: { ...base.circuits, ...(raw.circuits || {}) },
     memory: { ...base.memory, ...(raw.memory || {}) },
     selfModel: { ...base.selfModel, ...(raw.selfModel || {}) },
+    associations: { ...base.associations, ...(raw.associations || {}) },
+    expression: { ...base.expression, ...(raw.expression || {}) },
   };
   out.memory.episodes = Array.isArray(out.memory.episodes) ? out.memory.episodes.slice(-MEMORY_MAX) : [];
   out.memory.nextId = Math.max(1, finite(out.memory.nextId, 1));
@@ -110,6 +123,55 @@ function appraisalFor(name, text, tags) {
     deprivation: /hunger|meal|food|egg|tea|cancel|no mail|delayed/.test(all) ? 0.68 : 0.06,
     controlLoss: /officer|warden|lockdown|search|cancel|delayed|refus|forced/.test(all) ? 0.8 : 0.08,
   };
+}
+
+const STOP_WORDS = new Set([
+  'about', 'after', 'again', 'because', 'been', 'before', 'being', 'could', 'does',
+  'from', 'have', 'here', 'into', 'just', 'like', 'more', 'some', 'than', 'that',
+  'their', 'them', 'then', 'there', 'these', 'they', 'this', 'through', 'what',
+  'when', 'where', 'which', 'while', 'with', 'would', 'your', 'youre',
+]);
+
+function contentTokens(text) {
+  const words = String(text || '').toLowerCase().match(/[a-z][a-z']{3,}/g) || [];
+  const out = [];
+  const seen = new Set();
+  for (const raw of words) {
+    const word = raw.replace(/'/g, '');
+    if (STOP_WORDS.has(word) || ['constructor', 'prototype'].includes(word) || seen.has(word)) continue;
+    seen.add(word);
+    out.push(word);
+    if (out.length >= 16) break;
+  }
+  return out;
+}
+
+function learnedAppraisal(state, tokens) {
+  const result = { threat: 0, affiliation: 0, deprivation: 0, controlLoss: 0 };
+  for (const token of tokens) {
+    const assoc = state.associations && state.associations[token];
+    if (!assoc || finite(assoc.exposures, 0) < 2) continue;
+    for (const key of Object.keys(result)) result[key] = Math.max(result[key], clamp(assoc[key]) * 0.9);
+  }
+  return result;
+}
+
+function learnAssociations(state, tokens, appraisal, now) {
+  if (!state.associations || typeof state.associations !== 'object') state.associations = {};
+  for (const token of tokens) {
+    const old = state.associations[token] || { threat: 0, affiliation: 0, deprivation: 0, controlLoss: 0, exposures: 0 };
+    const next = { exposures: finite(old.exposures, 0) + 1, lastSeenMs: now };
+    const rate = next.exposures <= 2 ? 0.28 : 0.12;
+    for (const key of ['threat', 'affiliation', 'deprivation', 'controlLoss']) {
+      next[key] = round(clamp(old[key]) * (1 - rate) + clamp(appraisal[key]) * rate);
+    }
+    state.associations[token] = next;
+  }
+  const entries = Object.entries(state.associations);
+  if (entries.length > ASSOCIATION_MAX) {
+    entries.sort((a, b) => finite(b[1].lastSeenMs, 0) - finite(a[1].lastSeenMs, 0) || finite(b[1].exposures, 0) - finite(a[1].exposures, 0));
+    state.associations = Object.fromEntries(entries.slice(0, ASSOCIATION_MAX));
+  }
 }
 
 function remember(state, observation, salience, now, family) {
@@ -164,7 +226,12 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
   state.prediction.lastExpected = family;
   state.prediction.lastObserved = String(observation.name || family);
 
+  const tokens = contentTokens(observation.text || observation.name);
   const app = appraisalFor(observation.name, observation.text, tags);
+  const learned = learnedAppraisal(state, tokens);
+  for (const key of ['threat', 'affiliation', 'deprivation', 'controlLoss']) {
+    app[key] = Math.max(app[key], learned[key]);
+  }
   const seenFamily = state.memory.episodes.some((e) => e.family === family);
   const novelty = seenFamily ? error * 0.55 : 1;
   for (const key of ['threat', 'affiliation', 'deprivation', 'controlLoss']) {
@@ -177,6 +244,7 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
       0.18 * app.controlLoss + 0.24 * Math.max(error, novelty),
   );
   const episode = remember(state, observation, salience, now, family);
+  learnAssociations(state, tokens, app, now);
   const held = state.attention || {};
   const heldAgeMin = Math.max(0, now - finite(held.sinceMs, now)) / 60000;
   const heldStrength = clamp(finite(held.salience, 0) * Math.exp(-heldAgeMin / 20));
@@ -190,6 +258,53 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
     };
   }
   addSelfEvidence(state, observation.name, observation.text, now);
+  state.sequence++;
+  return state;
+}
+
+// Feed Cy's own emitted words back as evidence of an ACTION, not as a mood
+// detector. This is an efference-copy channel: it records what he expressed and
+// lets a word that acquired meaning through earlier lived outcomes reactivate the
+// attended material. It never changes threat/affiliation/etc from prose sentiment.
+export function observeSomaOutput(state, text, { mode = 'journal', now = Date.now() } = {}) {
+  if (!state || !String(text || '').trim()) return state;
+  const clean = String(text).replace(/\s+/g, ' ').trim().slice(0, 640);
+  const tokens = contentTokens(clean);
+  const previousTokens = new Set(contentTokens(state.expression && state.expression.lastText));
+  const overlap = tokens.filter((token) => previousTokens.has(token)).length;
+  const union = new Set([...tokens, ...previousTokens]).size;
+  const repetition = union ? overlap / union : 0;
+  const letters = clean.match(/[A-Za-z]/g) || [];
+  const upper = clean.match(/[A-Z]/g) || [];
+  const punctuation = (clean.match(/[!?]{2,}/g) || []).length;
+  const intensity = clamp((letters.length ? upper.length / letters.length : 0) * 0.7 + Math.min(0.3, punctuation * 0.1));
+  const learned = learnedAppraisal(state, tokens);
+  const triggerActivation = Math.max(...Object.values(learned));
+  const commitment = /\b(?:i will|i'll|i am going to|i promise|tomorrow i)\b/i.test(clean);
+
+  state.expression = {
+    lastText: clean,
+    repetition: round(repetition),
+    intensity: round(intensity),
+    triggerActivation: round(triggerActivation),
+    commitment,
+    observedAtMs: now,
+    mode,
+  };
+
+  // A self-spoken learned trigger can keep the already-selected episode active,
+  // but cannot create a new appraisal or reverse-engineer an emotion from tone.
+  if (state.attention && state.attention.memoryId && triggerActivation > 0.25) {
+    state.attention.salience = round(Math.max(state.attention.salience, triggerActivation * 0.45));
+  }
+  if (commitment || repetition > 0.55 || intensity > 0.3 || triggerActivation > 0.35) {
+    remember(state, {
+      name: 'self_expression',
+      text: clean,
+      tags: ['self-output', mode, commitment ? 'commitment' : 'expression'],
+      ts: new Date(now).toISOString(),
+    }, clamp(0.08 + 0.24 * triggerActivation + 0.12 * repetition + 0.12 * intensity + (commitment ? 0.2 : 0)), now, 'expression');
+  }
   state.sequence++;
   return state;
 }
@@ -392,7 +507,20 @@ export function somaSnapshot(state) {
       question: state.selfModel.question,
       evidenceCount: state.selfModel.evidence.length,
     },
+    expression: {
+      repetition: round(state.expression.repetition),
+      intensity: round(state.expression.intensity),
+      triggerActivation: round(state.expression.triggerActivation),
+      commitment: !!state.expression.commitment,
+      mode: state.expression.mode || '',
+      observedAtMs: finite(state.expression.observedAtMs, 0),
+    },
+    associations: {
+      learned: Object.values(state.associations || {}).filter((assoc) => finite(assoc && assoc.exposures, 0) >= 2).length,
+      candidates: Object.keys(state.associations || {}).length,
+      maximum: ASSOCIATION_MAX,
+    },
   };
 }
 
-export { VERSION as SOMA_VERSION, MEMORY_MAX as SOMA_MEMORY_MAX };
+export { VERSION as SOMA_VERSION, MEMORY_MAX as SOMA_MEMORY_MAX, ASSOCIATION_MAX as SOMA_ASSOCIATION_MAX };

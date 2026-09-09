@@ -509,9 +509,10 @@ export function dreamDrawing(rnd = Math.random) {
   const strokes = [];
   // concentric marks: something enclosing something else, ring after ring
   const rings = 5 + Math.floor(rnd() * 4); // 5..8
+  let ringRadius = 5;
   for (let i = 0; i < rings; i++) {
-    const r = Math.min(40, 5 + i * (3 + rnd() * 3));
-    strokes.push({ t: 'C', x: cx, y: cy, r });
+    strokes.push({ t: 'C', x: cx, y: cy, r: Math.min(40, ringRadius) });
+    ringRadius += 3 + rnd() * 3;
   }
   // a shape gone over again and again: the same arc, redrawn with a small drift
   const reps = 3 + Math.floor(rnd() * 3); // 3..5

@@ -5,7 +5,7 @@
 //   node runner/provider.test.js
 
 import assert from 'node:assert/strict';
-import { computeCost, looksLikeRefusal, deepseekToNdjsonReader } from './provider.js';
+import { computeCost, looksLikeRefusal, deepseekToNdjsonReader, localModelFor } from './provider.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -13,6 +13,20 @@ const ok = (msg) => { n++; console.log('  ok - ' + msg); };
 const FLASH = { input_cache_miss: 0.14, input_cache_hit: 0.0028, output: 0.28 }; // USD / 1e6
 const PRO = { input_cache_miss: 0.435, input_cache_hit: 0.003625, output: 0.87 };
 const FX = 0.79;
+
+// ---- 0. optional local routes fall back safely and split postcard work --------
+{
+  const cfg = {
+    model: 'primary-8b',
+    ollamaModels: { postcard: 'fast-3b', journal: '', drawing: 'draw-7b', dream: '' },
+  };
+  assert.equal(localModelFor(cfg, 'letter'), 'fast-3b');
+  assert.equal(localModelFor(cfg, 'postcard'), 'fast-3b');
+  assert.equal(localModelFor(cfg, 'drawing'), 'draw-7b');
+  assert.equal(localModelFor(cfg, 'dream'), 'primary-8b');
+  assert.equal(localModelFor({ model: 'only-model' }, 'postcard'), 'only-model');
+  ok('local model routes split postcard/drawing work and safely fall back to the primary model');
+}
 
 // ---- 1. computeCost: reported cache split, per-million pricing, GBP via FX ----
 {

@@ -199,9 +199,8 @@ window.CY = {
 
   <section class="col col-paper">
     <div id="paper" class="paper"></div>
-    <!-- Postcard replies: distinct card objects that appear over the sheet, are
-         written on live, then settle into place while the journal resumes beneath. -->
-    <div id="postcards" class="postcards"></div>
+    <!-- The handwritten surface is a chronological composition: writing segments,
+         event markers and postcard objects all share this one scrolling column. -->
     <?php if ($rawEnabled): ?>
     <!-- RAW debugging view: built and driven by raw.js, hidden until selected. It
          replaces the paper sheet in place (the instrument panels stay). -->

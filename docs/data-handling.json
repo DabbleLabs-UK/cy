@@ -16,8 +16,9 @@
     "Uploaded or remotely selected postcard images re-encoded as WebP with metadata removed, plus source attribution when applicable",
     "A returning visitor's postcard count, compact rolling notes, and legacy synthetic standing values",
     "On the Dell runner, a bounded Soma episodic memory of up to 512 selected environmental events. An episode may contain postcard text or caption, a prison incident, a warden notice, or machine-continuity evidence, together with time, category, tags, and computed salience",
-    "On the Dell runner, learned event-family expectations, current attention and action, self-model evidence, and other implemented Soma state in the gitignored runtime state file",
-    "On the Dell runner, a rolling context of screened Cy-generated prose, operational logs, electricity and paid-provider spend totals, and retry queues"
+    "On the Dell runner, learned event-family expectations, up to 128 bounded word associations learned from lived input, current attention and action, self-output action feedback, self-model evidence, and other implemented Soma state in the gitignored runtime state file",
+    "On the Dell runner, a rolling context of screened Cy-generated prose, operational logs, electricity and paid-provider spend totals, and retry queues",
+    "In the visitor's browser, only the numeric IDs, submission times, and waiting/responding state of that browser's postcards awaiting a reply, retained for at most 24 hours so waiting state survives a refresh"
   ],
   "transmits": [
     {
@@ -43,17 +44,17 @@
     {
       "recipient": "Public viewers",
       "purpose": "Render and replay the live or historical Cy experience",
-      "data": "Screened public event-stream content, public postcard fields, drawings, operational telemetry, implemented Soma snapshots, and clearly labelled legacy placeholder values"
+      "data": "Screened public event-stream content, public postcard fields, drawings, operational telemetry, implemented Soma snapshots, and clearly labelled planned synthetic values"
     }
   ],
   "does_not_store": [
     "Raw uploaded image metadata after re-encoding",
     "Model-provider API keys in the repository or public event stream",
     "Blocked postcard text or blocked model output in the public event stream",
-    "A biological or clinical measurement of Cy; brain locations and legacy vitals are explicit analogies or placeholders"
+    "A biological or clinical measurement of Cy; brain locations and legacy vitals are explicit analogies or planned synthetic values"
   ],
   "notes": [
-    "Generated model text is not fed back into implemented Soma state. It is retained only as screened narrative context and public output.",
+    "Screened model text returns to Soma only as a bounded efference copy of Cy's action: repetition, intensity, commitments, and activation of word associations previously learned from lived input. Text sentiment cannot directly manufacture appraisal or emotional state.",
     "Soma memory is bounded by count and preferentially retains salient older episodes alongside recent ones; a time-based deletion period is not currently implemented.",
     "Policy wording generated from this manifest requires human review before release."
   ]

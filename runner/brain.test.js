@@ -22,7 +22,7 @@ for (const circuit of CIRCUITS) {
 }
 
 const source = await readFile(join(here, '..', 'public', 'assets', 'brain.js'), 'utf8');
-assert.match(source, /PLACEHOLDERS - NOT SOMA/);
+assert.match(source, /PLANNED STATS/);
 assert.match(source, /functional analogies, not measured physiology/);
 assert.doesNotMatch(source, /createElementNS\([^\n]+ellipse/);
 

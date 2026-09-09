@@ -28,9 +28,10 @@ const HANDS = -2.4; // base tilt (deg); each card jitters around it for an objec
 const MAX_CARDS = 6; // keep a short stack of recent cards; prune the oldest
 
 export class Postcards {
-  constructor(root, font) {
+  constructor(root, font, { inline = false } = {}) {
     this.root = root; // #postcards overlay container over the paper
     this.font = font;
+    this.inline = !!inline;
     this.instant = false;
     this.active = null; // { el, pen, body, fullBody }
     this.cards = []; // settled/active cards, newest last; capped at MAX_CARDS
@@ -44,8 +45,10 @@ export class Postcards {
   }
 
   reset() {
-    if (this.active && this.active.pen) this.active.pen.abort();
-    this.root.textContent = '';
+    for (const card of this.cards) {
+      try { if (card.pen) { card.pen.abort(); card.pen.destroy(); } } catch { /* best effort */ }
+      if (card.el && card.el.remove) card.el.remove();
+    }
     this.active = null;
     this.cards = [];
     this._pending = null;
@@ -70,6 +73,10 @@ export class Postcards {
         this.active.hasPic = true;
       }
       this.active.id = info.id;
+      // The runner announces letter mode just before it emits postcard_in. In an
+      // inline chronology the reply card was therefore created one object early;
+      // moving it to the end here places the incoming postcard before the reply.
+      if (this.inline) this.root.appendChild(this.active.el);
     } else {
       this._pending = info;
     }
@@ -238,6 +245,9 @@ export class Postcards {
   }
 
   _prune() {
+    // A chronological day replay must retain every reply in the loaded window.
+    // The old six-card cap remains for the legacy overlay mode only.
+    if (this.inline) return;
     while (this.cards.length > MAX_CARDS) {
       const dead = this.cards.shift();
       if (dead === this.active) {

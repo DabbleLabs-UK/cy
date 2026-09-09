@@ -32,6 +32,18 @@ export const DEEPSEEK = 'deepseek';
 
 const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : Number(x) || 0);
 
+// Resolve an optional local model route. Empty/missing routes deliberately fall
+// back to the existing single `model`, so adding the config shape changes nothing
+// until the Dell runner is given an installed model name for that purpose.
+export function localModelFor(config, purpose) {
+  const routes = (config && config.ollamaModels) || {};
+  const rawKey = String(purpose || 'journal');
+  const key = rawKey === 'letter' ? 'postcard' : rawKey === 'warden' ? 'notice' : rawKey;
+  const routed = typeof routes[key] === 'string' ? routes[key].trim() : '';
+  const journal = typeof routes.journal === 'string' ? routes.journal.trim() : '';
+  return routed || journal || config.model;
+}
+
 // ---- key loading -----------------------------------------------------------
 //
 // The DeepSeek key lives at runner/deepseek.key (gitignored). Missing file means
@@ -256,31 +268,36 @@ function makeOllama(config) {
     metered: false,
     screensContent: false, // abliterated: no refusals to screen
     get model() {
-      return config.model;
+      return localModelFor(config, 'journal');
+    },
+    modelFor(purpose) {
+      return localModelFor(config, purpose);
     },
     available() {
       return true;
     },
-    async openStream({ system, prompt, opts, signal }) {
+    async openStream({ system, prompt, opts, signal, purpose }) {
+      const model = localModelFor(config, purpose);
       const res = await fetch(`${url()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, system, prompt, options: opts, keep_alive: -1, stream: true }),
+        body: JSON.stringify({ model, system, prompt, options: opts, keep_alive: -1, stream: true }),
         signal,
       });
       if (!res.ok || !res.body) return { ok: false, status: res.status };
-      return { ok: true, status: 200, reader: res.body.getReader() };
+      return { ok: true, status: 200, reader: res.body.getReader(), model };
     },
-    async rawGenerate({ system, prompt, opts, signal }) {
+    async rawGenerate({ system, prompt, opts, signal, purpose }) {
+      const model = localModelFor(config, purpose);
       const res = await fetch(`${url()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, system, prompt, options: opts, keep_alive: -1, stream: false }),
+        body: JSON.stringify({ model, system, prompt, options: opts, keep_alive: -1, stream: false }),
         signal,
       });
       if (!res.ok) return { ok: false, status: res.status, text: '' };
       const j = await res.json();
-      return { ok: true, status: 200, text: j.response || '', stats: null };
+      return { ok: true, status: 200, text: j.response || '', stats: null, model };
     },
   };
 }
@@ -309,6 +326,9 @@ function makeDeepSeek(config, key) {
     get model() {
       return ds.model;
     },
+    modelFor() {
+      return ds.model;
+    },
     available() {
       return !!key;
     },
@@ -330,6 +350,7 @@ function makeDeepSeek(config, key) {
         ok: true,
         status: 200,
         reader: deepseekToNdjsonReader(res.body.getReader(), { model: ds.model, priceRow: priceRow(), fx }),
+        model: ds.model,
       };
     },
     async rawGenerate({ system, prompt, opts, signal }) {
@@ -362,7 +383,7 @@ function makeDeepSeek(config, key) {
         },
         cost: { usd: c.costUsd, gbp: c.costGbp },
       };
-      return { ok: true, status: 200, text, stats };
+      return { ok: true, status: 200, text, stats, model: ds.model };
     },
   };
 }

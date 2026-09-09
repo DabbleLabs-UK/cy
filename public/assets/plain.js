@@ -25,6 +25,7 @@
 // exposes window.__cyPlain (event sink + font handoff + reveal) for app.js.
 
 import { sketchToPaths, sketchBounds } from './pen.js';
+import { ambientEventLabel, clockOf, dayLabel, formatDuration, sinceLabel, timestampMs } from './timeline.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
@@ -38,6 +39,11 @@ let curText = null;               // { el, textEl, cut } - open journal/dream bl
 let openReply = null;             // { el, textEl, cut } - reply being written now
 let pendingReply = null;          // a finished reply awaiting its authoritative body
 let lastIncomingFrom = '';        // sender of the most recent postcard, for the reply label
+let incomingAwaitingReply = false;
+let replyMode = false;
+let pendingReplyTs = null;
+let lastMomentMs = null;
+let loadEarlier = null;
 const draws = new Map();          // drawing id -> { svg, strokes[] }
 
 // ---- boot ---------------------------------------------------------------
@@ -52,7 +58,10 @@ function boot() {
   // #plain hidden) until it is selected. app.js forwards EVERY event here from the
   // moment it registers, so the pane is always populated and switching to it is
   // instant; reveal() just pins it to the live edge when it becomes visible.
-  window.__cyPlain = { handle, setFont, reveal, reset, scrollToStart, scrollToEnd };
+  window.__cyPlain = {
+    handle, setFont, reveal, reset, scrollToStart, scrollToEnd,
+    beginDay, onNearStart, scrollState, restoreAfterPrepend,
+  };
 
   if (document.body.dataset.test === '1') {
     window.__CY_PLAIN__ = {
@@ -106,8 +115,16 @@ function handle(ev, bootstrap) {
 
     case 'mode': {
       finalizeText(); // any mode change closes the open journal block
-      if (p.to === 'letter') beginReply(ev.ts);
-      else if (p.from === 'letter') settleReply();
+      if (p.to === 'letter') {
+        replyMode = true;
+        pendingReplyTs = ev.ts;
+        if (incomingAwaitingReply) beginReply(ev.ts);
+      } else if (p.from === 'letter') {
+        settleReply();
+        replyMode = false;
+        incomingAwaitingReply = false;
+        pendingReplyTs = null;
+      }
       break;
     }
 
@@ -119,7 +136,7 @@ function handle(ev, bootstrap) {
 
     case 'silence':
       finalizeText();
-      addGap(Number(p.seconds) || 0);
+      addGap(Number(p.seconds) || 0, ev.ts);
       break;
 
     case 'abort':
@@ -127,16 +144,31 @@ function handle(ev, bootstrap) {
       break;
 
     case 'draw':
-      addDraw(p);
+      addDraw(p, ev.ts);
       break;
 
     case 'postcard_in':
       lastIncomingFrom = p.from || '';
+      incomingAwaitingReply = true;
+      addPostcardIn(p, ev.ts);
+      if (replyMode && !openReply) beginReply(pendingReplyTs || ev.ts);
       break;
 
     case 'postcard_out':
       fillReply(p.body);
       break;
+
+    case 'news_in':
+      addEvent('news delivered', p.headline || '', ev.ts, 'news');
+      break;
+
+    case 'event': {
+      const label = ambientEventLabel(p);
+      if (label && !['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives'].includes(String(p.name || ''))) {
+        addEvent(label, p.text || p.detail || '', ev.ts, 'event');
+      }
+      break;
+    }
   }
   autoScroll();
 }
@@ -154,7 +186,7 @@ function appendText(s, mode, ts) {
 
 function makeTextBlock(mode, ts) {
   const b = makeBlock('text');
-  addMeta(b.el, clockOf(ts), textModeLabel(mode));
+  addMeta(b.el, ts, textModeLabel(mode));
   const t = document.createElement('div');
   t.className = 'pl-text';
   b.el.appendChild(t);
@@ -183,8 +215,9 @@ function textModeLabel(mode) {
 // complete.
 
 function beginReply(ts) {
+  if (openReply) return;
   const b = makeBlock('reply');
-  addMeta(b.el, clockOf(ts), lastIncomingFrom ? 'reply to ' + lastIncomingFrom : 'reply');
+  addMeta(b.el, ts, lastIncomingFrom ? 'reply to ' + lastIncomingFrom : 'reply');
   const t = document.createElement('div');
   t.className = 'pl-text';
   b.el.appendChild(t);
@@ -232,12 +265,67 @@ function markCut() {
 
 // ---- silence: a quiet gap marker ---------------------------------------
 
-function addGap(secs) {
+function addGap(secs, ts) {
   if (secs <= 0) return;
   const g = document.createElement('div');
   g.className = 'pl-gap';
-  g.textContent = 'quiet for ' + humanDur(secs);
+  const marker = document.createElement('span');
+  marker.textContent = '[inmate silent for ' + formatDuration(secs) + ']';
+  g.appendChild(marker);
+  addMomentAttrs(g, ts);
   colEl.appendChild(g);
+}
+
+// ---- incoming postcards + other public events -------------------------
+
+function addPostcardIn(p, ts) {
+  finalizeText();
+  const b = makeBlock('postcard-in');
+  addMeta(b.el, ts, 'postcard from ' + (p.from || 'someone'));
+  if (p.body) {
+    const body = document.createElement('div');
+    body.className = 'pl-text pl-postcard-body';
+    body.textContent = String(p.body);
+    b.el.appendChild(body);
+  }
+  if (p.image) {
+    const img = document.createElement('img');
+    img.className = 'pl-postcard-image';
+    img.loading = 'lazy';
+    img.alt = 'image included with the postcard';
+    img.src = String(p.image);
+    b.el.appendChild(img);
+  }
+}
+
+function addEvent(label, detail, ts, kind) {
+  finalizeText();
+  const b = makeBlock(kind || 'event');
+  addMeta(b.el, ts, 'event');
+  const title = document.createElement('div');
+  title.className = 'pl-event-title';
+  title.textContent = '[' + String(label) + ']';
+  b.el.appendChild(title);
+  if (detail) {
+    const body = document.createElement('div');
+    body.className = 'pl-event-detail';
+    body.textContent = String(detail);
+    b.el.appendChild(body);
+  }
+}
+
+function beginDay(date) {
+  finalizeText();
+  const banner = document.createElement('div');
+  banner.className = 'pl-day-banner';
+  banner.dataset.date = String(date || '');
+  const cap = document.createElement('span');
+  cap.textContent = 'VIEWING';
+  const label = document.createElement('strong');
+  label.textContent = dayLabel(date);
+  banner.appendChild(cap);
+  banner.appendChild(label);
+  colEl.appendChild(banner);
 }
 
 // ---- drawings: the finished sketch, inline -----------------------------
@@ -247,15 +335,16 @@ function addGap(secs) {
 // single strokes) sharing an id; we accumulate by id and re-render in place, so
 // the reader sees the finished sketch rather than a re-animation.
 
-function addDraw(p) {
+function addDraw(p, ts) {
   if (!p || !Array.isArray(p.strokes) || !p.strokes.length) return;
   const id = p.id != null ? String(p.id) : ('anon-' + colEl.childElementCount);
   let d = draws.get(id);
   if (!d) {
     finalizeText(); // a fresh drawing is its own block, in order
     const b = makeBlock('draw');
-    if (p.title) addMeta(b.el, null, p.dream ? 'dream drawing' : String(p.title));
-    else if (p.dream) addMeta(b.el, null, 'dream drawing');
+    if (p.title) addMeta(b.el, ts, p.dream ? 'dream drawing' : String(p.title));
+    else if (p.dream) addMeta(b.el, ts, 'dream drawing');
+    else addMeta(b.el, ts, 'drawing');
     const wrap = document.createElement('div');
     wrap.className = 'pl-sketch';
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -320,9 +409,10 @@ function makeBlock(kind) {
 
 // A quiet meta line: a small, muted timestamp and, where relevant, the mode.
 // Understated - not a header bar. Either part may be omitted.
-function addMeta(blockEl, time, label) {
+function addMeta(blockEl, ts, label) {
   const meta = document.createElement('div');
   meta.className = 'pl-meta';
+  const time = clockOf(ts);
   if (time) {
     const t = document.createElement('span');
     t.className = 'pl-time';
@@ -335,22 +425,28 @@ function addMeta(blockEl, time, label) {
     l.textContent = label;
     meta.appendChild(l);
   }
+  const since = sinceLabel(ts, lastMomentMs);
+  if (since) {
+    const s = document.createElement('span');
+    s.className = 'pl-since';
+    s.textContent = '+' + since;
+    meta.appendChild(s);
+  }
   blockEl.appendChild(meta);
+  const ms = timestampMs(ts);
+  if (ms != null) lastMomentMs = ms;
+}
+
+function addMomentAttrs(el, ts) {
+  const time = clockOf(ts);
+  const since = sinceLabel(ts, lastMomentMs);
+  if (time) el.dataset.time = time;
+  if (since) el.dataset.since = '+' + since;
+  const ms = timestampMs(ts);
+  if (ms != null) lastMomentMs = ms;
 }
 
 // ---- formatting ---------------------------------------------------------
-
-function clockOf(ts) {
-  if (!ts) return '';
-  const m = String(ts).match(/(\d{2}):(\d{2})/);
-  return m ? m[1] + ':' + m[2] : '';
-}
-
-function humanDur(secs) {
-  if (secs < 60) return Math.round(secs) + 's';
-  if (secs < 3600) return Math.round(secs / 60) + 'm';
-  return Math.round(secs / 3600) + 'h';
-}
 
 // ---- scrolling ----------------------------------------------------------
 
@@ -358,6 +454,11 @@ function onScroll() {
   const nearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 48;
   stuck = nearBottom;
   if (jumpBtn) jumpBtn.hidden = nearBottom;
+  if (scrollEl.scrollTop < 80 && loadEarlier) loadEarlier();
+}
+
+function onNearStart(fn) {
+  loadEarlier = typeof fn === 'function' ? fn : null;
 }
 function autoScroll() {
   if (stuck) scrollToBottom();
@@ -378,12 +479,27 @@ function scrollToEnd() {
   scrollToBottom();
 }
 
+function scrollState() {
+  return { top: scrollEl.scrollTop, height: scrollEl.scrollHeight };
+}
+
+function restoreAfterPrepend(state) {
+  if (!state) return;
+  stuck = false;
+  scrollEl.scrollTop = Math.max(0, scrollEl.scrollHeight - state.height + state.top);
+  if (jumpBtn) jumpBtn.hidden = false;
+}
+
 function reset() {
   colEl.textContent = '';
   curText = null;
   openReply = null;
   pendingReply = null;
   lastIncomingFrom = '';
+  incomingAwaitingReply = false;
+  replyMode = false;
+  pendingReplyTs = null;
+  lastMomentMs = null;
   draws.clear();
   stuck = true;
   scrollEl.scrollTop = 0;

@@ -3,6 +3,7 @@ import {
   chooseSomaAction,
   completeSomaAction,
   observeSoma,
+  observeSomaOutput,
   reconcileSoma,
   somaDirective,
   somaSampling,
@@ -26,6 +27,16 @@ assert.ok(soma.appraisal.threat > 0.5);
 assert.ok(soma.appraisal.controlLoss > 0.5);
 assert.ok(soma.prediction.error > 0.5);
 assert.match(soma.attention.text, /searched the cell/);
+
+// Repeated lived pairings teach a bounded cheap word association. Seeing the word
+// in Cy's own later output reactivates attention but does not manufacture appraisal.
+observeSoma(soma, { name: 'cell_search', text: 'Mr Locke took the folded postcard', tags: ['officer', 'search'] }, { now: t0 + 2000 });
+const threatBeforeOutput = soma.appraisal.threat;
+observeSomaOutput(soma, 'locke. the folded thing again. i will remember that.', { now: t0 + 3000 });
+assert.ok(soma.expression.triggerActivation > 0);
+assert.equal(soma.expression.commitment, true);
+assert.equal(soma.appraisal.threat, threatBeforeOutput, 'self-output must not manufacture appraisal');
+assert.ok(soma.memory.episodes.some((episode) => episode.family === 'expression'));
 
 tickSoma(soma, {
   physical: { pain: 0.2, hunger: 0.8, fatigue: 0.35 },
@@ -81,8 +92,10 @@ assert.match(soma.attention.source, /^memory:/);
 
 const snapshot = somaSnapshot(soma);
 assert.equal(snapshot.status, 'implemented');
-assert.equal(snapshot.memory.episodes, 2);
+assert.ok(snapshot.memory.episodes >= 4);
 assert.equal(snapshot.circuits.predictionError.source.includes('expectation'), true);
+assert.ok(snapshot.associations.learned > 0);
+assert.equal(snapshot.expression.commitment, true);
 
 const restored = reconcileSoma(JSON.parse(JSON.stringify(soma)), { now: t0 + 9000 });
 assert.equal(restored.memory.episodes.length, soma.memory.episodes.length);

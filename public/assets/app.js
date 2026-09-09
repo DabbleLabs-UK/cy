@@ -8,13 +8,14 @@
 // Endpoints come from window.CY (injected by index.php) so the same code
 // runs against the fake test feed.
 
-import { Pen } from './pen.js';
+import { ComposedFeed } from './composed-feed.js';
 import { Postcards } from './postcard.js';
 import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
-import { fetchDayEvents, fetchDaySnapshot } from './history-feed.js';
+import { fetchDayEvents, fetchDaySnapshot, NARRATIVE_KINDS } from './history-feed.js';
+import { ambientEventLabel, previousDate } from './timeline.js';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
 import '../components/async-select/async-select.js';
@@ -33,6 +34,7 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const $ = (sel) => document.querySelector(sel);
 
 let pen, postcards, brain, hud, power, tempo;
+let postcardWait = null;
 let lastSeq = 0;
 let polling = false;
 let feedLoading = false;
@@ -47,6 +49,11 @@ let dayCount = typeof CFG.day === 'number' ? CFG.day : 1;
 // HISTORY MODE: while true the live poll is suspended (we are reading the past,
 // not following him now). Returning to live kicks an immediate catch-up poll.
 let historyMode = false;
+// Days currently composed in the centre column, oldest first. Live events are
+// folded into the newest record so loading an earlier day can rebuild the window
+// without losing anything that arrived since boot.
+let loadedDays = [];
+let loadingEarlier = false;
 
 // ---- inference LED (public, everyone) -----------------------------------
 // A small dot next to the pause control that lights while the model is producing
@@ -141,8 +148,8 @@ async function boot() {
   // runs before this awaited font resolves, so it is present by now.
   if (window.__cyPlain) window.__cyPlain.setFont(font);
 
-  pen = new Pen($('#paper'), font);
-  postcards = new Postcards($('#postcards'), font);
+  pen = new ComposedFeed($('#paper'), font);
+  postcards = new Postcards(pen.contentRoot(), font, { inline: true });
   brain = new BrainHud($('#brain'));
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
@@ -155,6 +162,12 @@ async function boot() {
   initHistoryControl();
   initGearMenu();        // admin only: pause + model provider
   initLed(); // last, so the LED lands leftmost (before the selects)
+
+  // Both public reading surfaces ask for the preceding calendar day when their
+  // reader reaches the top. The guard in loadEarlierDay coalesces simultaneous
+  // requests if both surfaces happen to report the boundary during a rebuild.
+  pen.onNearStart(loadEarlierDay);
+  if (window.__cyPlain && window.__cyPlain.onNearStart) window.__cyPlain.onNearStart(loadEarlierDay);
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
@@ -203,6 +216,18 @@ async function firstLoadRecent() {
   postcards.setInstant(true);
   // apply only the latest vitals/host from the backlog, but render all text
   const events = data.events || [];
+  // The bounded-stream fallback still needs a real day object. Without this the
+  // first upward scroll had no date to decrement, so full-day backscroll could
+  // never recover after a temporary range-endpoint failure at boot.
+  if (currentDate) {
+    loadedDays = [{
+      date: currentDate,
+      events: events.filter((ev) => NARRATIVE_KINDS.includes(ev.kind)),
+      snapshot: [],
+    }];
+    if (pen.beginDay) pen.beginDay(currentDate);
+    if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate);
+  }
   for (const ev of events) dispatch(ev, true);
   pen.setInstant(false);
   postcards.setInstant(false);
@@ -216,8 +241,8 @@ async function firstLoadRecent() {
 function resetFeedSurfaces() {
   penEntryOpen = false;
   latestMode = 'journal';
-  if (pen && pen.reset) pen.reset();
   if (postcards && postcards.reset) postcards.reset();
+  if (pen && pen.reset) pen.reset();
   if (window.__cyPlain && window.__cyPlain.reset) window.__cyPlain.reset();
   if (brain && brain.reset) brain.reset();
   if (hud && hud.reset) hud.reset();
@@ -226,25 +251,17 @@ function resetFeedSurfaces() {
 async function renderFeedDay(date, { history }) {
   const token = ++feedRenderToken;
   feedLoading = true;
-  resetFeedSurfaces();
-  pen.setInstant(true);
-  postcards.setInstant(true);
   try {
     const day = await fetchDayEvents({ rangeUrl: RANGE_ENDPOINT, date });
     if (token !== feedRenderToken) return false;
-    for (const ev of day.events) dispatch(ev, true, false);
-
     const snapshot = await fetchDaySnapshot({
       rangeUrl: RANGE_ENDPOINT,
       date,
       head: day.head,
     });
     if (token !== feedRenderToken) return false;
-    for (const ev of snapshot.events) dispatch(ev, true, false);
-
-    pen.setInstant(false);
-    postcards.setInstant(false);
-    if (pen.whenIdle) await pen.whenIdle();
+    loadedDays = [{ date, events: day.events, snapshot: snapshot.events }];
+    await replayLoadedDays(token);
     if (token !== feedRenderToken) return false;
 
     if (history) {
@@ -263,6 +280,55 @@ async function renderFeedDay(date, { history }) {
   }
 }
 
+async function replayLoadedDays(token, prependState = null) {
+  resetFeedSurfaces();
+  pen.setInstant(true);
+  postcards.setInstant(true);
+  for (const day of loadedDays) {
+    if (pen.beginDay) pen.beginDay(day.date);
+    if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(day.date);
+    for (const ev of day.events || []) dispatch(ev, true, false);
+  }
+  // Operational snapshots belong after the newest narrative day. They update the
+  // side panels but do not create centre-column objects.
+  const newest = loadedDays[loadedDays.length - 1];
+  for (const ev of (newest && newest.snapshot) || []) dispatch(ev, true, false);
+  pen.setInstant(false);
+  postcards.setInstant(false);
+  if (pen.whenIdle) await pen.whenIdle();
+  if (token !== feedRenderToken) return false;
+  if (prependState) {
+    if (pen.restoreAfterPrepend) pen.restoreAfterPrepend(prependState.pen);
+    if (window.__cyPlain && window.__cyPlain.restoreAfterPrepend) {
+      window.__cyPlain.restoreAfterPrepend(prependState.plain);
+    }
+  }
+  return true;
+}
+
+async function loadEarlierDay() {
+  if (loadingEarlier || feedLoading || !loadedDays.length) return;
+  loadingEarlier = true;
+  feedLoading = true;
+  const token = ++feedRenderToken;
+  const prependState = {
+    pen: pen.scrollState ? pen.scrollState() : null,
+    plain: window.__cyPlain && window.__cyPlain.scrollState ? window.__cyPlain.scrollState() : null,
+  };
+  try {
+    const date = previousDate(loadedDays[0].date);
+    const day = await fetchDayEvents({ rangeUrl: RANGE_ENDPOINT, date });
+    if (token !== feedRenderToken) return;
+    loadedDays.unshift({ date, events: day.events, snapshot: [] });
+    await replayLoadedDays(token, prependState);
+  } catch {
+    // Keep the already-rendered window intact. Another upward gesture can retry.
+  } finally {
+    if (token === feedRenderToken) feedLoading = false;
+    loadingEarlier = false;
+  }
+}
+
 // tokens beyond this many in one batch mean we fell behind (backgrounded tab,
 // network stall) - draw the older ones instantly and only animate the tail so
 // the pen catches up to live instead of lagging for minutes.
@@ -277,6 +343,7 @@ async function poll() {
   try {
     const data = await fetchStream(lastSeq);
     const events = data.events || [];
+    rememberLiveBatch(events);
     dispatchBatch(events);
     // Drive the public LED from the freshest inference phase in THIS live batch
     // (after rendering, so it wins over any token fast-path in the same batch).
@@ -287,6 +354,19 @@ async function poll() {
     setStatus('reconnecting', true);
   } finally {
     polling = false;
+  }
+}
+
+function rememberLiveBatch(events) {
+  for (const ev of events || []) {
+    if (ev.kind === 'day') {
+      const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) loadedDays = [{ date: m[1], events: [], snapshot: [] }];
+      continue;
+    }
+    if (!NARRATIVE_KINDS.includes(ev.kind) || !loadedDays.length) continue;
+    const newest = loadedDays[loadedDays.length - 1];
+    if (!(newest.events || []).some((known) => known.seq === ev.seq)) newest.events.push(ev);
   }
 }
 
@@ -339,13 +419,6 @@ let latestMode = 'journal';
 // stream, no second data path - just the boundary the pen was never told about.
 let penEntryOpen = false;
 
-// HH:MM out of an event timestamp, for the entry lead-in (mirrors plain's clockOf).
-function clockOf(ts) {
-  if (!ts) return '';
-  const m = String(ts).match(/(\d{2}):(\d{2})/);
-  return m ? m[1] + ':' + m[2] : '';
-}
-
 function dispatch(ev, bootstrap, live = !bootstrap) {
   // PLAIN reading view (behind ?view=plain): forward the same event stream, backlog
   // included, so it can render its own clean blocks. No-op unless plain.js loaded.
@@ -365,7 +438,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         // first token of a new entry: open it on a fresh, dated line (the break +
         // timestamp the plain view shows, in the language of the notebook).
         if (!penEntryOpen) {
-          pen.beginEntry(clockOf(ev.ts), p.mode);
+          pen.beginEntry(ev.ts, p.mode);
           penEntryOpen = true;
         }
         pen.write(p.s, p.mode, p.lucid, p.shout);
@@ -377,7 +450,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // backlog fill pen.instant is set, so a drawing that finished before you
       // arrived lays down complete instead of re-animating from scratch.
       penEntryOpen = false; // a drawing is its own thing; text after it is a new entry
-      pen.draw(p);
+      pen.draw(p, ev.ts);
       if (!bootstrap && p.dream) {
         // the night's slow dream drawing: mention it once, quietly, at its start
         if (p.seq === 0) pushTicker('drawing something in his sleep');
@@ -421,7 +494,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // fresh dated entry, so the resumed line is stamped with its own time.
       penEntryOpen = false;
       const secs = Number(p.seconds) || 0;
-      pen.silence(secs);
+      pen.silence(secs, ev.ts);
       if (!bootstrap && secs >= 60) pushTicker(p.reason === 'under' ? 'asleep, gone still' : 'gone quiet');
       break;
     }
@@ -489,36 +562,45 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
         if (m) currentDate = m[1];
         resetFeedSurfaces();
+        if (currentDate && pen.beginDay) pen.beginDay(currentDate);
+        if (currentDate && window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate);
         setDay(++dayCount);
       }
       break;
 
     case 'postcard_in':
       hud.addPostcardIn(p);
+      // The incoming object belongs in the same chronology as the writing. Its
+      // full public text and image remain available when this day is replayed.
+      if (pen.postcard) pen.postcard(p, ev.ts);
       // remember the sender + any picture so the reply card is addressed back to
       // them (and can pin their photo) when the reply begins.
       postcards.incoming(p);
-      pushTicker(`postcard from ${p.from || 'someone'}${p.image ? ' (with a picture)' : ''}`);
+      if (postcardWait) postcardWait.incoming(p.id);
+      if (!bootstrap) pushTicker(`postcard from ${p.from || 'someone'}${p.image ? ' (with a picture)' : ''}`);
       break;
     case 'postcard_out':
       hud.addPostcardOut(p);
       // the authoritative full reply text, for the mailbag and as the backlog
       // backfill if this card's per-token stream scrolled out of the window.
       postcards.reply(p.body);
+      if (pen.event) pen.event('reply sent', '', ev.ts, 'postcard-reply');
+      if (postcardWait) postcardWait.replied(p.reply_to || p.id);
       break;
     case 'news_in':
       hud.addNewsIn(p);
-      pushTicker(`news: ${p.headline || ''}`);
+      if (pen.event) pen.event('news delivered', p.headline || '', ev.ts, 'news');
+      if (!bootstrap) pushTicker(`news: ${p.headline || ''}`);
       break;
 
     // the runner also emits a generic `event` for ambient prison happenings
     case 'event':
-      handleAmbient(p);
+      handleAmbient(p, ev.ts, bootstrap);
       break;
   }
 }
 
-function handleAmbient(p) {
+function handleAmbient(p, ts, bootstrap = false) {
   const name = p.name || '';
   if (name === 'provider') {
     // the runner switched provider mid-loop: settle any pending switch at once
@@ -545,17 +627,23 @@ function handleAmbient(p) {
   if (name === 'social') {
     const who = p.who || 'someone';
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
-    pushTicker(g > 0.7 ? `bad blood with ${who}` : `${who} on the spur`);
+    const label = g > 0.7 ? `bad blood with ${who}` : `${who} on the spur`;
+    if (pen.event) pen.event(label, p.detail || '', ts, 'prison');
+    if (!bootstrap) pushTicker(label);
     return;
   }
   if (name === 'officer') {
     const who = p.who || 'an officer';
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
-    pushTicker(g > 0.7 ? `bad blood with ${who}` : `${who} on the wing`);
+    const label = g > 0.7 ? `bad blood with ${who}` : `${who} on the wing`;
+    if (pen.event) pen.event(label, p.detail || '', ts, 'prison');
+    if (!bootstrap) pushTicker(label);
     return;
   }
   if (name === 'overheard') {
-    pushTicker(p.misheard ? 'something half-heard, and it is about him' : 'something half-heard down the wing');
+    const label = ambientEventLabel(p);
+    if (pen.event && label) pen.event(label, p.text || '', ts, 'prison');
+    if (!bootstrap) pushTicker(label);
     return;
   }
   const nice = {
@@ -577,7 +665,14 @@ function handleAmbient(p) {
     assoc_cancelled: 'association cancelled',
     lockdown: 'the wing on lockdown',
   };
-  if (nice[name]) pushTicker(nice[name]);
+  if (nice[name]) {
+    // postcard/news objects already carry their richer content in the chronology;
+    // do not duplicate their generic precursor impulse as a second block.
+    if (pen.event && !['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives'].includes(name)) {
+      pen.event(ambientEventLabel(p) || nice[name], p.text || p.detail || '', ts, 'prison');
+    }
+    if (!bootstrap) pushTicker(nice[name]);
+  }
 }
 
 // ---- header / status widgets -------------------------------------------
@@ -677,11 +772,9 @@ function applyView(view) {
   const isRaw = view === 'raw';
 
   const paper = $('#paper');
-  const postcards = $('#postcards');
   const plainEl = $('#plain');
   const rawEl = $('#raw');
   if (paper) paper.hidden = !isHand;
-  if (postcards) postcards.hidden = !isHand; // reply cards belong to the handwritten sheet
   if (plainEl) plainEl.hidden = !isPlain;
   if (rawEl) rawEl.hidden = !isRaw;
 
@@ -1437,6 +1530,65 @@ function wireForms() {
   const body = $('#pc-body');
   const count = $('#pc-count');
   const note = $('#pc-note');
+  const waitKey = 'cy-pending-postcards-v1';
+  let pending = loadPending();
+
+  function loadPending() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(waitKey) || '[]');
+      const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+      return Array.isArray(parsed)
+        ? parsed.filter((x) => Number(x.id) > 0 && Number(x.at) >= dayAgo)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function savePending() {
+    try { localStorage.setItem(waitKey, JSON.stringify(pending)); } catch { /* storage unavailable */ }
+  }
+  // Persist the 24-hour pruning immediately, rather than leaving expired IDs in
+  // storage until the visitor next sends or receives a postcard.
+  savePending();
+
+  function renderWaiting(message) {
+    if (!pending.length && !message) return;
+    const extra = pending.length > 1 ? ` (${pending.length} postcards awaiting replies)` : '';
+    note.textContent = (message || 'Waiting for inmate to respond...') + extra;
+    note.className = 'form-note show waiting';
+  }
+
+  function track(id) {
+    const n = Number(id);
+    if (!(n > 0)) return;
+    pending = pending.filter((x) => Number(x.id) !== n);
+    pending.push({ id: n, at: Date.now(), state: 'waiting' });
+    savePending();
+    renderWaiting('Postcard delivered. Waiting for inmate to respond...');
+  }
+
+  postcardWait = {
+    incoming(id) {
+      const item = pending.find((x) => Number(x.id) === Number(id));
+      if (!item) return;
+      item.state = 'responding';
+      savePending();
+      renderWaiting('The inmate is responding...');
+    },
+    replied(id) {
+      const before = pending.length;
+      pending = pending.filter((x) => Number(x.id) !== Number(id));
+      if (pending.length === before) return;
+      savePending();
+      if (pending.length) renderWaiting('The inmate replied. Waiting for another response...');
+      else showNote(note, 'The inmate replied. His postcard is in the timeline.', false);
+    },
+  };
+  if (pending.length) {
+    const responding = pending.some((x) => x.state === 'responding');
+    renderWaiting(responding ? 'The inmate is responding...' : 'Waiting for inmate to respond...');
+  }
 
   const drop = $('#pc-drop');
   const fileInput = $('#pc-file');
@@ -1608,8 +1760,8 @@ function wireForms() {
         body.value = '';
         updateCount();
         clearPicture();
-        const back = data.returning ? 'he knows you. ' : '';
-        showNote(note, 'posted. ' + back + 'he gets it straight away.', false);
+        if (Number(data.id) > 0) track(data.id);
+        else showNote(note, 'Postcard delivered. Waiting for inmate to respond...', false);
       }
     } catch (err) {
       showNote(note, 'network error, try again', true);
