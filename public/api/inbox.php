@@ -62,21 +62,26 @@ try {
         $db->prepare("UPDATE postcards SET delivered_at = NOW() WHERE id IN ($placeholders)")->execute($ids);
     }
 
-    // Archive fan mail in bounded batches. Dell screens these and emits a public
-    // fan_mail_in event but does not enqueue a model reply.
-    $fanMail = $db->query(
-        "SELECT id, from_name, body, image_path, image_source, image_attrib, caption, posted_at, mail_class
-         FROM postcards
-         WHERE mail_class IN ('fan', 'fan_final') AND deliver_at <= NOW()
-               AND delivered_at IS NULL AND replied_at IS NULL AND blocked = 0
-         ORDER BY posted_at ASC, id ASC
-         LIMIT 25
-         FOR UPDATE"
-    )->fetchAll();
-    if ($fanMail) {
-        $ids = array_column($fanMail, 'id');
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $db->prepare("UPDATE postcards SET delivered_at = NOW() WHERE id IN ($placeholders)")->execute($ids);
+    // Fan-mail collection is capability-gated. An older Dell runner ignores the
+    // fan_mail response field, so handing it rows would mark them delivered and
+    // silently lose their public archive event. Updated runners opt in with
+    // ?fan_mail=1 and then screen/emit these without enqueuing a model reply.
+    $fanMail = [];
+    if (captive_postcard_fan_mail_supported($_GET)) {
+        $fanMail = $db->query(
+            "SELECT id, from_name, body, image_path, image_source, image_attrib, caption, posted_at, mail_class
+             FROM postcards
+             WHERE mail_class IN ('fan', 'fan_final') AND deliver_at <= NOW()
+                   AND delivered_at IS NULL AND replied_at IS NULL AND blocked = 0
+             ORDER BY posted_at ASC, id ASC
+             LIMIT 25
+             FOR UPDATE"
+        )->fetchAll();
+        if ($fanMail) {
+            $ids = array_column($fanMail, 'id');
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $db->prepare("UPDATE postcards SET delivered_at = NOW() WHERE id IN ($placeholders)")->execute($ids);
+        }
     }
 
     $news = $db->query('SELECT id, source, headline, summary, url FROM news WHERE deliver_at <= NOW() AND delivered_at IS NULL FOR UPDATE')->fetchAll();

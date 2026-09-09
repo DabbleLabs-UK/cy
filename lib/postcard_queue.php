@@ -12,6 +12,11 @@ function captive_postcard_disposition(int $activeReplies, int $capacity = CY_REP
     return $activeReplies < max(1, $capacity) ? 'reply_queue' : 'fan_mail';
 }
 
+function captive_postcard_fan_mail_supported(array $query): bool
+{
+    return isset($query['fan_mail']) && (string)$query['fan_mail'] === '1';
+}
+
 /** @return array{reply_capacity:int,promote_every:int,completed_since_promotion:int} */
 function captive_postcard_queue_lock(PDO $db): array
 {

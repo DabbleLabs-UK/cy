@@ -233,7 +233,7 @@ export class Client {
       }
     } else {
       try {
-        const res = await fetch(`${this.config.apiBase}/api/inbox.php`, {
+        const res = await fetch(`${this.config.apiBase}/api/inbox.php?fan_mail=1`, {
           method: 'GET',
           headers: { 'X-Cy-Key': this.config.ingestKey },
           signal: AbortSignal.timeout(15000),
