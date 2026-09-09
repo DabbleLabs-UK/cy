@@ -35,6 +35,38 @@ async function getJson(fetchImpl, url) {
   return data;
 }
 
+export async function fetchDayPage({
+  rangeUrl,
+  date,
+  after = null,
+  before = null,
+  kinds = NARRATIVE_KINDS,
+  fetchImpl = fetch,
+  limit = 500,
+} = {}) {
+  if (!validDate(date)) throw new Error('history date must be YYYY-MM-DD');
+  if (!rangeUrl) throw new Error('history range URL is required');
+  if (after != null && before != null) throw new Error('history page accepts after or before, not both');
+
+  const data = await getJson(fetchImpl, endpoint(rangeUrl, {
+    date,
+    after,
+    before,
+    limit,
+    kinds: kinds.join(','),
+  }));
+  const events = [...data.events].sort((a, b) => Number(a.seq) - Number(b.seq));
+  const cursors = data.cursors || {};
+  return {
+    events,
+    head: Number(data.now) || 0,
+    firstSeq: events.length ? Number(events[0].seq) : null,
+    lastSeq: events.length ? Number(events[events.length - 1].seq) : null,
+    hasMoreBackward: !!cursors.has_more_backward,
+    hasMoreForward: !!cursors.has_more_forward,
+  };
+}
+
 export async function fetchDayEvents({
   rangeUrl,
   date,

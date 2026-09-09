@@ -44,6 +44,9 @@ let replyMode = false;
 let pendingReplyTs = null;
 let lastMomentMs = null;
 let loadEarlier = null;
+let loadLater = null;
+let scrollSettleToken = 0;
+let suppressPaging = false;
 const draws = new Map();          // drawing id -> { svg, strokes[] }
 
 // ---- boot ---------------------------------------------------------------
@@ -60,7 +63,7 @@ function boot() {
   // instant; reveal() just pins it to the live edge when it becomes visible.
   window.__cyPlain = {
     handle, setFont, reveal, reset, scrollToStart, scrollToEnd,
-    beginDay, onNearStart, scrollState, restoreAfterPrepend,
+    beginDay, onNearStart, onNearEnd, scrollState, restoreAfterPrepend, restorePosition,
   };
 
   if (document.body.dataset.test === '1') {
@@ -475,26 +478,30 @@ function addMomentAttrs(el, ts) {
 // ---- scrolling ----------------------------------------------------------
 
 function onScroll() {
+  if ((root && root.hidden) || suppressPaging) return;
   const nearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 48;
   stuck = nearBottom;
   if (jumpBtn) jumpBtn.hidden = nearBottom;
   if (scrollEl.scrollTop < 80 && loadEarlier) loadEarlier();
+  if (nearBottom && loadLater) loadLater();
 }
 
 function onNearStart(fn) {
   loadEarlier = typeof fn === 'function' ? fn : null;
 }
+function onNearEnd(fn) {
+  loadLater = typeof fn === 'function' ? fn : null;
+}
 function autoScroll() {
   if (stuck) scrollToBottom();
 }
 function scrollToBottom() {
-  scrollEl.scrollTop = scrollEl.scrollHeight;
+  setScrollTop(scrollEl.scrollHeight, true);
   if (jumpBtn) jumpBtn.hidden = true;
 }
 
 function scrollToStart() {
-  stuck = false;
-  scrollEl.scrollTop = 0;
+  setScrollTop(0, false);
   if (jumpBtn) jumpBtn.hidden = false;
 }
 
@@ -509,9 +516,26 @@ function scrollState() {
 
 function restoreAfterPrepend(state) {
   if (!state) return;
-  stuck = false;
-  scrollEl.scrollTop = Math.max(0, scrollEl.scrollHeight - state.height + state.top);
+  setScrollTop(Math.max(0, scrollEl.scrollHeight - state.height + state.top), false);
   if (jumpBtn) jumpBtn.hidden = false;
+}
+
+function restorePosition(state) {
+  if (!state) return;
+  setScrollTop(Math.max(0, state.top), false);
+  if (jumpBtn) jumpBtn.hidden = false;
+}
+
+function setScrollTop(top, following) {
+  const token = ++scrollSettleToken;
+  stuck = !!following;
+  suppressPaging = true;
+  scrollEl.scrollTop = top;
+  const release = () => {
+    if (token === scrollSettleToken) suppressPaging = false;
+  };
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(release);
+  else setTimeout(release, 0);
 }
 
 function reset() {
@@ -525,8 +549,7 @@ function reset() {
   pendingReplyTs = null;
   lastMomentMs = null;
   draws.clear();
-  stuck = true;
-  scrollEl.scrollTop = 0;
+  setScrollTop(0, true);
   if (jumpBtn) jumpBtn.hidden = true;
 }
 

@@ -14,7 +14,7 @@ import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
-import { fetchDayEvents, fetchDaySnapshot, NARRATIVE_KINDS } from './history-feed.js';
+import { fetchDayPage, fetchDaySnapshot, NARRATIVE_KINDS } from './history-feed.js';
 import { ambientEventLabel, previousDate } from './timeline.js';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
@@ -54,6 +54,15 @@ let historyMode = false;
 // without losing anything that arrived since boot.
 let loadedDays = [];
 let loadingEarlier = false;
+const HISTORY_PAGE_LIMIT = 250;
+const REPLAY_YIELD_EVERY = 100;
+
+function yieldReplayFrame() {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+}
 
 // ---- inference LED (public, everyone) -----------------------------------
 // A small dot next to the pause control that lights while the model is producing
@@ -168,6 +177,8 @@ async function boot() {
   // requests if both surfaces happen to report the boundary during a rebuild.
   pen.onNearStart(loadEarlierDay);
   if (window.__cyPlain && window.__cyPlain.onNearStart) window.__cyPlain.onNearStart(loadEarlierDay);
+  pen.onNearEnd(loadLaterHistory);
+  if (window.__cyPlain && window.__cyPlain.onNearEnd) window.__cyPlain.onNearEnd(loadLaterHistory);
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
@@ -224,6 +235,8 @@ async function firstLoadRecent() {
       date: currentDate,
       events: events.filter((ev) => NARRATIVE_KINDS.includes(ev.kind)),
       snapshot: [],
+      hasMoreBackward: events.length > 0,
+      hasMoreForward: false,
     }];
     if (pen.beginDay) pen.beginDay(currentDate);
     if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate);
@@ -252,7 +265,16 @@ async function renderFeedDay(date, { history }) {
   const token = ++feedRenderToken;
   feedLoading = true;
   try {
-    const day = await fetchDayEvents({ rangeUrl: RANGE_ENDPOINT, date });
+    // Live opens on the final bounded page and pages backward as the reader
+    // scrolls. A calendar day opens at its first bounded page and pages forward.
+    // Never download an unbounded full day before the interface becomes usable.
+    const day = await fetchDayPage({
+      rangeUrl: RANGE_ENDPOINT,
+      date,
+      after: history ? 0 : null,
+      before: history ? null : Number.MAX_SAFE_INTEGER,
+      limit: HISTORY_PAGE_LIMIT,
+    });
     if (token !== feedRenderToken) return false;
     const snapshot = await fetchDaySnapshot({
       rangeUrl: RANGE_ENDPOINT,
@@ -260,7 +282,13 @@ async function renderFeedDay(date, { history }) {
       head: day.head,
     });
     if (token !== feedRenderToken) return false;
-    loadedDays = [{ date, events: day.events, snapshot: snapshot.events }];
+    loadedDays = [{
+      date,
+      events: day.events,
+      snapshot: snapshot.events,
+      hasMoreBackward: history ? false : day.hasMoreBackward,
+      hasMoreForward: history ? day.hasMoreForward : false,
+    }];
     await replayLoadedDays(token);
     if (token !== feedRenderToken) return false;
 
@@ -280,19 +308,32 @@ async function renderFeedDay(date, { history }) {
   }
 }
 
-async function replayLoadedDays(token, prependState = null) {
+async function replayLoadedDays(token, prependState = null, positionState = null) {
   resetFeedSurfaces();
   pen.setInstant(true);
   postcards.setInstant(true);
+  let replayed = 0;
+  let latestGen = null;
   for (const day of loadedDays) {
     if (pen.beginDay) pen.beginDay(day.date);
     if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(day.date);
-    for (const ev of day.events || []) dispatch(ev, true, false);
+    for (const ev of day.events || []) {
+      dispatch(ev, true, false);
+      if (ev.kind === 'gen') latestGen = ev;
+      replayed++;
+      if (replayed % REPLAY_YIELD_EVERY === 0) {
+        await yieldReplayFrame();
+        if (token !== feedRenderToken) return false;
+      }
+    }
   }
   // Operational snapshots belong after the newest narrative day. They update the
   // side panels but do not create centre-column objects.
   const newest = loadedDays[loadedDays.length - 1];
   for (const ev of (newest && newest.snapshot) || []) dispatch(ev, true, false);
+  // Generation boundaries are needed to split the chronology, but repainting
+  // the telemetry card thousands of times during replay is pure wasted work.
+  if (latestGen) hud.setGen(latestGen.payload || {});
   pen.setInstant(false);
   postcards.setInstant(false);
   if (pen.whenIdle) await pen.whenIdle();
@@ -301,6 +342,11 @@ async function replayLoadedDays(token, prependState = null) {
     if (pen.restoreAfterPrepend) pen.restoreAfterPrepend(prependState.pen);
     if (window.__cyPlain && window.__cyPlain.restoreAfterPrepend) {
       window.__cyPlain.restoreAfterPrepend(prependState.plain);
+    }
+  } else if (positionState) {
+    if (pen.restorePosition) pen.restorePosition(positionState.pen);
+    if (window.__cyPlain && window.__cyPlain.restorePosition) {
+      window.__cyPlain.restorePosition(positionState.plain);
     }
   }
   return true;
@@ -316,13 +362,69 @@ async function loadEarlierDay() {
     plain: window.__cyPlain && window.__cyPlain.scrollState ? window.__cyPlain.scrollState() : null,
   };
   try {
-    const date = previousDate(loadedDays[0].date);
-    const day = await fetchDayEvents({ rangeUrl: RANGE_ENDPOINT, date });
-    if (token !== feedRenderToken) return;
-    loadedDays.unshift({ date, events: day.events, snapshot: [] });
+    const oldest = loadedDays[0];
+    if (oldest.hasMoreBackward && oldest.events.length) {
+      const day = await fetchDayPage({
+        rangeUrl: RANGE_ENDPOINT,
+        date: oldest.date,
+        before: oldest.events[0].seq,
+        limit: HISTORY_PAGE_LIMIT,
+      });
+      if (token !== feedRenderToken) return;
+      const known = new Set(oldest.events.map((ev) => ev.seq));
+      oldest.events = day.events.filter((ev) => !known.has(ev.seq)).concat(oldest.events);
+      oldest.hasMoreBackward = day.hasMoreBackward;
+    } else {
+      const date = previousDate(oldest.date);
+      const day = await fetchDayPage({
+        rangeUrl: RANGE_ENDPOINT,
+        date,
+        before: Number.MAX_SAFE_INTEGER,
+        limit: HISTORY_PAGE_LIMIT,
+      });
+      if (token !== feedRenderToken) return;
+      loadedDays.unshift({
+        date,
+        events: day.events,
+        snapshot: [],
+        hasMoreBackward: day.hasMoreBackward,
+        hasMoreForward: day.hasMoreForward,
+      });
+    }
     await replayLoadedDays(token, prependState);
   } catch {
     // Keep the already-rendered window intact. Another upward gesture can retry.
+  } finally {
+    if (token === feedRenderToken) feedLoading = false;
+    loadingEarlier = false;
+  }
+}
+
+async function loadLaterHistory() {
+  if (!historyMode || loadingEarlier || feedLoading || !loadedDays.length) return;
+  const newest = loadedDays[loadedDays.length - 1];
+  if (!newest.hasMoreForward || !newest.events.length) return;
+  loadingEarlier = true;
+  feedLoading = true;
+  const token = ++feedRenderToken;
+  const positionState = {
+    pen: pen.scrollState ? pen.scrollState() : null,
+    plain: window.__cyPlain && window.__cyPlain.scrollState ? window.__cyPlain.scrollState() : null,
+  };
+  try {
+    const day = await fetchDayPage({
+      rangeUrl: RANGE_ENDPOINT,
+      date: newest.date,
+      after: newest.events[newest.events.length - 1].seq,
+      limit: HISTORY_PAGE_LIMIT,
+    });
+    if (token !== feedRenderToken) return;
+    const known = new Set(newest.events.map((ev) => ev.seq));
+    newest.events = newest.events.concat(day.events.filter((ev) => !known.has(ev.seq)));
+    newest.hasMoreForward = day.hasMoreForward;
+    await replayLoadedDays(token, null, positionState);
+  } catch {
+    // Keep the currently rendered page. Another downward gesture can retry.
   } finally {
     if (token === feedRenderToken) feedLoading = false;
     loadingEarlier = false;
@@ -361,7 +463,13 @@ function rememberLiveBatch(events) {
   for (const ev of events || []) {
     if (ev.kind === 'day') {
       const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
-      if (m) loadedDays = [{ date: m[1], events: [], snapshot: [] }];
+      if (m) loadedDays = [{
+        date: m[1],
+        events: [],
+        snapshot: [],
+        hasMoreBackward: false,
+        hasMoreForward: false,
+      }];
       continue;
     }
     if (!NARRATIVE_KINDS.includes(ev.kind) || !loadedDays.length) continue;
@@ -463,7 +571,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       penEntryOpen = false; // any mode flip ends the open entry (a card interrupts here)
       const to = p.to || latestMode;
       latestMode = to;
-      setMode(to, p.cause); // header pill
+      if (!bootstrap) setMode(to, p.cause); // snapshot sets the historical header once
       if (to === 'letter') {
         // a reply is starting: build the postcard and write on IT, not the sheet.
         // The journal pen is deliberately NOT switched to letter mode, so the
@@ -534,7 +642,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // a generation burst finished: close the open journal entry so the next burst
       // opens its own, dated (a letter burst is closed by the mode flip, not here).
       if (p.mode !== 'letter') penEntryOpen = false;
-      hud.setGen(p);
+      if (!bootstrap) hud.setGen(p);
       break;
 
     case 'power':

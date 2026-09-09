@@ -18,14 +18,19 @@ export class ComposedFeed {
     this.lastMomentMs = null;
     this.following = true;
     this.loadingEarlier = null;
+    this.loadingLater = null;
+    this.scrollSettleToken = 0;
+    this.suppressPaging = false;
 
     this.flow = document.createElement('div');
     this.flow.className = 'cy-flow';
     this.root.appendChild(this.flow);
     this.root.addEventListener('scroll', () => {
+      if (this.root.hidden || this.suppressPaging) return;
       const gap = this.root.scrollHeight - this.root.scrollTop - this.root.clientHeight;
       this.following = gap < 48;
       if (this.root.scrollTop < 80 && this.loadingEarlier) this.loadingEarlier();
+      if (gap < 80 && this.loadingLater) this.loadingLater();
     });
   }
 
@@ -35,6 +40,10 @@ export class ComposedFeed {
 
   onNearStart(fn) {
     this.loadingEarlier = typeof fn === 'function' ? fn : null;
+  }
+
+  onNearEnd(fn) {
+    this.loadingLater = typeof fn === 'function' ? fn : null;
   }
 
   beginDay(date) {
@@ -62,6 +71,19 @@ export class ComposedFeed {
     surface.className = 'cy-writing-surface';
     block.appendChild(surface);
     this.flow.appendChild(block);
+
+    // A complete-day replay can contain hundreds of thousands of characters.
+    // Building Hershey SVG strokes for all of them creates millions of DOM nodes
+    // and can make the browser declare the page unresponsive. Historical prose
+    // remains handwriting-styled and selectable, but only genuinely live prose
+    // pays for the animated vector pen.
+    if (this.instant) {
+      surface.classList.add('cy-writing-static');
+      this.current = { block, surface, text: '', mode: mode || 'journal', static: true };
+      this._follow();
+      return;
+    }
+
     const pen = new Pen(surface, this.font);
     pen.setInstant(this.instant);
     if (this.vitals) pen.setVitals(this.vitals);
@@ -74,7 +96,12 @@ export class ComposedFeed {
   write(text, mode, lucid, shout) {
     if (!text) return;
     if (!this.current) this.beginEntry('', mode);
-    this.current.pen.write(text, mode, lucid, shout);
+    if (this.current.static) {
+      this.current.text += String(text);
+      this.current.surface.textContent = this.current.text;
+    } else {
+      this.current.pen.write(text, mode, lucid, shout);
+    }
     this._follow();
   }
 
@@ -149,13 +176,13 @@ export class ComposedFeed {
   }
 
   abort() {
-    if (this.current && this.current.pen) this.current.pen.abort();
+    if (this.current && !this.current.static && this.current.pen) this.current.pen.abort();
     this.closeEntry();
   }
 
   setVitals(payload) {
     this.vitals = payload || null;
-    if (this.current && this.current.pen) this.current.pen.setVitals(payload);
+    if (this.current && !this.current.static && this.current.pen) this.current.pen.setVitals(payload);
   }
 
   setMode(mode) {
@@ -166,7 +193,11 @@ export class ComposedFeed {
   }
 
   setInstant(on) {
+    const wasInstant = this.instant;
     this.instant = !!on;
+    // Do not append new live tokens to a lightweight historical segment. The
+    // next live token opens a real animated pen surface.
+    if (wasInstant && !this.instant && this.current && this.current.static) this.closeEntry();
     for (const pen of this.pens) pen.setInstant(this.instant);
   }
 
@@ -178,8 +209,7 @@ export class ComposedFeed {
     this.current = null;
     this.lastMomentMs = null;
     this.flow.textContent = '';
-    this.following = true;
-    this.root.scrollTop = 0;
+    this._setScrollTop(0, true);
   }
 
   whenIdle() {
@@ -187,13 +217,11 @@ export class ComposedFeed {
   }
 
   scrollToStart() {
-    this.following = false;
-    this.root.scrollTop = 0;
+    this._setScrollTop(0, false);
   }
 
   scrollToEnd() {
-    this.following = true;
-    this.root.scrollTop = this.root.scrollHeight;
+    this._setScrollTop(this.root.scrollHeight, true);
   }
 
   scrollState() {
@@ -202,8 +230,12 @@ export class ComposedFeed {
 
   restoreAfterPrepend(state) {
     if (!state) return;
-    this.following = false;
-    this.root.scrollTop = Math.max(0, this.root.scrollHeight - state.height + state.top);
+    this._setScrollTop(Math.max(0, this.root.scrollHeight - state.height + state.top), false);
+  }
+
+  restorePosition(state) {
+    if (!state) return;
+    this._setScrollTop(Math.max(0, state.top), false);
   }
 
   _appendMoment(block, ts, label) {
@@ -231,5 +263,17 @@ export class ComposedFeed {
 
   _follow() {
     if (this.following) this.root.scrollTop = this.root.scrollHeight;
+  }
+
+  _setScrollTop(top, following) {
+    const token = ++this.scrollSettleToken;
+    this.following = !!following;
+    this.suppressPaging = true;
+    this.root.scrollTop = top;
+    const release = () => {
+      if (token === this.scrollSettleToken) this.suppressPaging = false;
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(release);
+    else setTimeout(release, 0);
   }
 }

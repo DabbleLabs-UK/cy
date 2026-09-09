@@ -432,6 +432,16 @@ body.cy-paused::after {
   min-height: 120px;
   overflow: hidden;
 }
+.cy-writing-static {
+  min-height: 0;
+  padding: 10px 14px 16px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Segoe Script", cursive;
+  font-size: 18px;
+  line-height: 1.65;
+}
 .cy-drawing-surface { min-height: 220px; }
 .cy-moment-meta {
   display: flex;

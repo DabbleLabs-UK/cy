@@ -158,10 +158,10 @@ runner/              the model runner (drives inmate 7734)
 
 ## Deploy
 
-Target on vps1: `/home/dabblela/cy/public`.
+Target on vps3: `/home/dabblela/cy/public`.
 
 Stack is Caddy + PHP 8.5-FPM (unix socket) + MariaDB 11.8, same as the rest
-of the DabbleLabs vps1 apps. The Caddy block should mirror the existing
+of the DabbleLabs vps3 apps. The Caddy block should mirror the existing
 `opinionpot.dabblelabs.uk` block, with `root * /home/dabblela/cy/public`
 and `php_fastcgi unix//run/php/php8.5-fpm.sock`.
 
