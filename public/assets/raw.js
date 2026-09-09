@@ -33,7 +33,7 @@ const MAX_ROWS = 1500; // rolling DOM cap (see NOTE below)
 // Every event kind the feed can carry. Order defines the filter-chip order.
 const KINDS = [
   'text', 'gen', 'silence', 'mode', 'abort', 'draw', 'vitals', 'host',
-  'power', 'tempo', 'postcard_in', 'postcard_out', 'news_in', 'warden',
+  'power', 'tempo', 'postcard_in', 'postcard_out', 'fan_mail_in', 'news_in', 'warden',
   'event', 'day',
 ];
 
@@ -375,6 +375,8 @@ function summaryFor(ev) {
       return `from ${p.from || '?'}${p.image != null && p.image !== null ? '  +picture' : ''}${p.body ? '  ' + JSON.stringify(String(p.body).slice(0, 60)) : ''}`;
     case 'postcard_out':
       return `reply_to=${p.reply_to}  ${JSON.stringify(String(p.body || '').slice(0, 70))}`;
+    case 'fan_mail_in':
+      return `kept from ${p.from || '?'}${p.image ? '  +picture' : ''}${p.body ? '  ' + JSON.stringify(String(p.body).slice(0, 60)) : ''}`;
     case 'news_in':
       return `${p.source || '?'}: ${p.headline || ''}`;
     case 'warden':

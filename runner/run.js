@@ -1607,6 +1607,7 @@ async function main() {
         attrib: pc.image_attrib || null,
         visitor_id: pc.visitor_id || null,
         visit_count: pc.visitor ? pc.visitor.visit_count : null,
+        promoted: !!pc.promoted,
       },
     });
 
@@ -1636,6 +1637,11 @@ async function main() {
     const reply = (r.full || '').trim();
     if (reply) {
       emit({ kind: 'postcard_out', payload: { id: pc.id, reply_to: pc.id, body: reply } });
+    } else {
+      // Do not let a failed/empty generation silently occupy the server's bounded
+      // reply tray forever. The server reclasses it as retained fan mail, and the
+      // next inbox poll creates the public archive receipt.
+      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
     }
 
     // remember them: a cheap compressed note + a standing nudge, written back to
@@ -1833,10 +1839,41 @@ async function main() {
   // ---- inbox: postcards interrupt; news just colours the state ----
   client.onInbox = (data) => {
     let interrupt = false;
+    // Fan mail has been accepted and retained by the prison, but it is not a
+    // promise of immediate access to Cy. Screen it, archive it in the public
+    // chronology, and leave the model uninterrupted. If the server later promotes
+    // it, it returns through data.postcards and follows the ordinary reply path.
+    for (const pc of data.fan_mail || []) {
+      const screen = pc.body ? warden.screenIn(pc.body) : { ok: true };
+      if (!screen.ok) {
+        emit({ kind: 'postcard_blocked', payload: { id: pc.id, reason: screen.reason || 'screened' } });
+        continue;
+      }
+      emit({
+        kind: 'fan_mail_in',
+        payload: {
+          id: pc.id,
+          from: pc.from_name || null,
+          body: pc.body || null,
+          image: pc.image_path || null,
+          attrib: pc.image_attrib || null,
+          posted_at: pc.posted_at || null,
+          state: 'kept',
+          may_reply: pc.mail_class === 'fan',
+        },
+      });
+    }
     for (const pc of data.postcards || []) {
       // screen any text; an image-only postcard (no body) is always allowed
-      if (pc.body && !warden.screenIn(pc.body).ok) continue; // silent reject
-      pendingPostcards.push(pc);
+      const screen = pc.body ? warden.screenIn(pc.body) : { ok: true };
+      if (!screen.ok) {
+        emit({ kind: 'postcard_blocked', payload: { id: pc.id, reason: screen.reason || 'screened' } });
+        continue;
+      }
+      // Newest waiting visitor goes to the front. The server bounds this tray and
+      // periodically promotes its oldest fan item, so this cannot grow without
+      // limit or permanently erase the aged-mail fairness rule.
+      pendingPostcards.unshift(pc);
       // a postcard can also ASK him to draw something - queue it (he may honour
       // it, honour it badly, or refuse, decided later against standing + mood).
       if (pc.body) {

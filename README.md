@@ -18,18 +18,21 @@ Cy's implemented inner-state layer is Soma v1 (`runner/soma.js`). Environment
 and body observations are appraised against learned expectations, stored as
 bounded episodic memory, competed for attention, and used to select an action.
 Only then is the selected material sent to the language model. Generated prose
-cannot write back into Soma. This keeps the model in the role of expression,
-not hidden author of the state that supposedly caused its own words.
+returns only as bounded evidence of Cy's own action - repetition, intensity,
+commitment, and activation of associations learned from lived input. Prose
+sentiment cannot directly set appraisal. This keeps the model in the role of
+expression, not hidden author of the state that supposedly caused its own words.
 
 The left panel shows those implemented circuits and names the source of every
 dynamic value. Its brain-shaped rendering is explicitly a functional analogy,
 not a biological measurement. Older heartbeat, mood, composite, amplification,
 brain-region, and relationship figures are retained under a collapsed
-`PLACEHOLDERS - NOT SOMA` section so implementation status is unambiguous.
+`PLANNED STATS` section so implementation status is unambiguous.
 
-The live paper retains the whole current London day and is vertically scrollable
-back to its start. The calendar loads a selected day's complete narrative event
-range on one click, then positions the reconstructed day at its beginning.
+The live paper is a chronological composition of writing bursts, drawings,
+postcards, prison events and exact silence spans. It is vertically scrollable to
+the start of the day and prepends earlier days when the reader reaches the top.
+The calendar loads a selected day's complete narrative range on one click.
 
 Viewers never talk to DELL directly. They poll `api/stream.php?since=<seq>`,
 which returns any events newer than the seq they last saw (or, for a first
@@ -38,16 +41,17 @@ completely decoupled from however many people are watching, and lets the
 viewer be a dumb polling client with no websocket/SSE infrastructure needed
 for the skeleton.
 
-Postcards are a separate, slower path: the public can write to CY (a
-postcard into the cell -- text on one side, a picture on the other, either
-optional but at least one required), but not immediately -- everything
-queues with a `deliver_at` timestamp pinned to the next of three fixed daily
-mail drops (08:00 / 13:00 / 19:00 Europe/London), and DELL only sees them via
-`api/inbox.php`, which atomically claims (marks `delivered_at`) whatever is
-due. This gives a natural moderation/rate-limit window and means DELL never
-has to poll a live "someone just posted" queue -- it just asks "what's in
-today's mail" at drop time. `news` follows the same deliver_at queue shape
-so future news ingestion can reuse the same inbox mechanism.
+Postcards are accepted immediately. The first eight unresolved items occupy a
+bounded reply tray; overload remains accepted as durable fan mail instead of
+being rejected. Dell claims one reply item at a time, newest-first while it is
+fresh, but any item waiting 15 minutes ages into oldest-first priority. Fan mail
+is screened and recorded in the public chronology without entering the model
+prompt. Every fifth completed reply promotes the oldest archived fan item, and
+an empty tray also promotes one, so heavy traffic cannot grow an unbounded model
+queue and older accepted mail still has a path back in. The sender receives an
+explicit reply-tray or fan-mail receipt; only reply-tray receipts show a waiting
+spinner. Abuse rate limits remain separate from overload handling. `news` follows
+the existing deliver_at queue shape and shares the runner inbox poll.
 
 People who write are remembered. On the first postcard a visitor is issued a
 random id in a signed, httpOnly cookie; a `visitors` row holds a chosen
@@ -134,11 +138,13 @@ lib/db.php          PDO factory + config loader
 lib/http.php        JSON response + auth helpers
 lib/schedule.php     next-mail-drop calculation
 lib/image.php       shared image intake: validate, downscale, strip EXIF, WebP
+lib/postcard_queue.php  bounded reply tray + fan-mail promotion rules
 lib/visitor.php     signed visitor cookie + visitors upsert
 lib/presence.php    cheap, throttled live-viewer presence (viewers table)
 lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting
 config/config.sample.php   template; copy to config/config.php (gitignored)
-sql/schema.sql       MariaDB schema (events, postcards, visitors, news, rate_limits, viewers, tempo, drawings)
+sql/schema.sql       MariaDB schema (events, postcards, queue state, visitors, news, rate limits, viewers, tempo, drawings)
+tests/postcard_queue_test.php  pure reply-tray admission checks
 tests/tempo_test.php  pure-logic tests for the tempo/presence rules (php tests/tempo_test.php)
 runner/              the model runner (drives inmate 7734)
 ```

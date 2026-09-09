@@ -114,7 +114,14 @@ export class ComposedFeed {
   postcard(payload, ts) {
     const p = payload || {};
     const from = p.from || 'someone';
-    return this.event('postcard received from ' + from, p.body || '', ts, 'postcard', p.image || '');
+    const label = p.promoted ? 'fan mail chosen for Cy from ' + from : 'postcard received from ' + from;
+    return this.event(label, p.body || '', ts, 'postcard', p.image || '');
+  }
+
+  fanMail(payload, ts) {
+    const p = payload || {};
+    const from = p.from || 'someone';
+    return this.event('fan mail bag - kept from ' + from, p.body || '', ts, 'fan-mail', p.image || '');
   }
 
   silence(seconds, ts) {

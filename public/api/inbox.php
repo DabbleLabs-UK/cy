@@ -1,16 +1,20 @@
 <?php
 declare(strict_types=1);
 
-// inbox.php - runner-only: atomically claim whatever mail is due at this drop.
+// inbox.php - runner-only: atomically claim one reply plus fan-mail receipts.
 //
-// Postcards (the merged letter+image feed) and news are marked delivered_at=NOW
-// under a row lock so the same item is never handed out twice. Each due postcard
+// The bounded reply tray hands Dell one item at a time. Fresh mail is selected
+// newest-first while anything waiting 15 minutes ages into oldest-first priority,
+// preventing starvation. Fan mail is separately handed to the runner only for
+// screening and public archiving; it does not enter the LLM reply queue unless it
+// is later promoted. Each reply postcard
 // carries its sender's visitor memory (handle, counts, standing, notes) so the
 // runner can recognise a returning writer in Cy's voice. That memory is for the
 // runner only and is never echoed into the public event stream.
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
+require __DIR__ . '/../../lib/postcard_queue.php';
 
 try {
     captive_require_ingest_key();
@@ -18,9 +22,21 @@ try {
     $db = captive_db();
     $db->beginTransaction();
 
+    captive_postcard_queue_lock($db);
+    // If the tray is completely quiet, use the free place for the oldest fan-mail
+    // item. The every-N-replies promotion in ingest.php handles sustained traffic.
+    if (captive_postcard_active_replies($db) === 0 && captive_postcard_promote_oldest($db)) {
+        $db->exec(
+            'UPDATE postcard_queue_state
+             SET completed_since_promotion = 0, updated_at = NOW()
+             WHERE id = 1'
+        );
+    }
+
     $postcards = $db->query(
         'SELECT p.id, p.visitor_id, p.from_name, p.body, p.image_path, p.image_source,
-                p.image_attrib, p.caption, p.posted_at,
+                p.image_attrib, p.caption, p.posted_at, p.mail_class,
+                (p.promoted_at IS NOT NULL) AS promoted,
                 (SELECT MAX(pp.posted_at) FROM postcards pp
                    WHERE pp.visitor_id = p.visitor_id AND pp.id < p.id) AS prev_posted_at,
                 v.handle AS v_handle, v.visit_count AS v_visit_count,
@@ -29,12 +45,36 @@ try {
                 v.first_seen AS v_first_seen, v.last_seen AS v_last_seen
          FROM postcards p
          LEFT JOIN visitors v ON v.visitor_id = p.visitor_id
-         WHERE p.deliver_at <= NOW() AND p.delivered_at IS NULL AND p.blocked = 0
+         WHERE p.mail_class = \'reply\' AND p.deliver_at <= NOW()
+               AND p.delivered_at IS NULL AND p.replied_at IS NULL AND p.blocked = 0
+         ORDER BY
+            (p.posted_at <= (NOW() - INTERVAL 15 MINUTE)) DESC,
+            CASE WHEN p.posted_at <= (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END ASC,
+            CASE WHEN p.posted_at > (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END DESC,
+            p.id DESC
+         LIMIT 1
          FOR UPDATE'
     )->fetchAll();
 
     if ($postcards) {
         $ids = array_column($postcards, 'id');
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $db->prepare("UPDATE postcards SET delivered_at = NOW() WHERE id IN ($placeholders)")->execute($ids);
+    }
+
+    // Archive fan mail in bounded batches. Dell screens these and emits a public
+    // fan_mail_in event but does not enqueue a model reply.
+    $fanMail = $db->query(
+        "SELECT id, from_name, body, image_path, image_source, image_attrib, caption, posted_at, mail_class
+         FROM postcards
+         WHERE mail_class IN ('fan', 'fan_final') AND deliver_at <= NOW()
+               AND delivered_at IS NULL AND replied_at IS NULL AND blocked = 0
+         ORDER BY posted_at ASC, id ASC
+         LIMIT 25
+         FOR UPDATE"
+    )->fetchAll();
+    if ($fanMail) {
+        $ids = array_column($fanMail, 'id');
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $db->prepare("UPDATE postcards SET delivered_at = NOW() WHERE id IN ($placeholders)")->execute($ids);
     }
@@ -75,11 +115,26 @@ try {
             'image_source' => $p['image_source'],
             'image_attrib' => $p['image_attrib'],
             'caption' => $p['caption'],
+            'promoted' => (bool)$p['promoted'],
             'visitor' => $visitor,
         ];
     }, $postcards);
 
-    captive_json_response(['postcards' => $out, 'news' => $news]);
+    $fanOut = array_map(static function (array $p): array {
+        return [
+            'id' => (int)$p['id'],
+            'from_name' => $p['from_name'],
+            'body' => $p['body'],
+            'image_path' => $p['image_path'],
+            'image_source' => $p['image_source'],
+            'image_attrib' => $p['image_attrib'],
+            'caption' => $p['caption'],
+            'posted_at' => $p['posted_at'],
+            'mail_class' => $p['mail_class'],
+        ];
+    }, $fanMail);
+
+    captive_json_response(['postcards' => $out, 'fan_mail' => $fanOut, 'news' => $news]);
 } catch (Throwable $e) {
     if (isset($db) && $db->inTransaction()) {
         $db->rollBack();

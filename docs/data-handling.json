@@ -12,7 +12,7 @@
   ],
   "stores": [
     "The ordered public event stream, including screened Cy prose, prison events, public postcard fields, drawings, operational telemetry, and sourced Soma circuit snapshots",
-    "Queued and delivered postcards, their delivery schedule, submitted text, optional handle, moderation state, and rate-limit metadata",
+    "Queued and delivered postcards, their reply-tray or fan-mail class, delivery, promotion and reply timestamps, submitted text, optional handle, moderation state, and rate-limit metadata",
     "Uploaded or remotely selected postcard images re-encoded as WebP with metadata removed, plus source attribution when applicable",
     "A returning visitor's postcard count, compact rolling notes, and legacy synthetic standing values",
     "On the Dell runner, a bounded Soma episodic memory of up to 512 selected environmental events. An episode may contain postcard text or caption, a prison incident, a warden notice, or machine-continuity evidence, together with time, category, tags, and computed salience",
@@ -23,8 +23,8 @@
   "transmits": [
     {
       "recipient": "Dell runner",
-      "purpose": "Deliver due mail and real environment state to Cy and maintain the continuous process",
-      "data": "Due postcard text and image reference, chosen handle, returning-visitor memory and standing, warden notices, news, tempo, and owner controls"
+      "purpose": "Deliver one selected reply item to Cy, screen and archive fan mail without prompting the model, and maintain the continuous process",
+      "data": "Selected reply postcard text and image reference, chosen handle, returning-visitor memory and standing; fan-mail postcard content for screening and public archiving; warden notices, news, tempo, and owner controls"
     },
     {
       "recipient": "cy.dabblelabs.uk server",
@@ -44,7 +44,7 @@
     {
       "recipient": "Public viewers",
       "purpose": "Render and replay the live or historical Cy experience",
-      "data": "Screened public event-stream content, public postcard fields, drawings, operational telemetry, implemented Soma snapshots, and clearly labelled planned synthetic values"
+      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, implemented Soma snapshots, and clearly labelled planned synthetic values"
     }
   ],
   "does_not_store": [
@@ -55,6 +55,7 @@
   ],
   "notes": [
     "Screened model text returns to Soma only as a bounded efference copy of Cy's action: repetition, intensity, commitments, and activation of word associations previously learned from lived input. Text sentiment cannot directly manufacture appraisal or emotional state.",
+    "Fan mail is retained and made publicly replayable after runner-side screening, but it is not treated as something Cy perceived and does not affect Soma unless it is later promoted into the reply tray.",
     "Soma memory is bounded by count and preferentially retains salient older episodes alongside recent ones; a time-based deletion period is not currently implemented.",
     "Policy wording generated from this manifest requires human review before release."
   ]

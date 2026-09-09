@@ -5,6 +5,7 @@ require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/admin.php';
 require __DIR__ . '/../../lib/tempo.php';
+require __DIR__ . '/../../lib/postcard_queue.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -29,6 +30,11 @@ try {
          SET warmth = :warmth, suspicion = :suspicion, grudge = :grudge, notes = :notes
          WHERE visitor_id = :id'
     );
+    $postcardBlocked = $db->prepare(
+        'UPDATE postcards
+         SET blocked = 1, block_reason = :reason
+         WHERE id = :id'
+    );
     // Persist a completed drawing. Like visitor_seen this is a side-channel: the
     // per-pass `draw` events already carry the animation into the public stream,
     // and this writes the durable record. ON DUPLICATE keeps a re-sent batch
@@ -50,6 +56,47 @@ try {
         $kind = (string)$event['kind'];
         if ($kind === '' || strlen($kind) > 24) {
             throw new InvalidArgumentException('invalid kind');
+        }
+
+        // The authoritative public reply also closes the server-side queue item.
+        // This happens in the same transaction as the event insert. Idempotence is
+        // enforced by replied_at IS NULL, so a retried batch cannot advance the
+        // fan-mail promotion counter twice.
+        if ($kind === 'postcard_out') {
+            $p = $event['payload'];
+            $postcardId = is_array($p) ? (int)($p['reply_to'] ?? $p['id'] ?? 0) : 0;
+            captive_postcard_mark_replied($db, $postcardId, (string)$event['ts']);
+        }
+
+        // Runner-side inbound moderation is authoritative. Record the result but
+        // never put the rejected postcard or its reason into the public stream.
+        if ($kind === 'postcard_blocked') {
+            $p = $event['payload'];
+            if (is_array($p) && (int)($p['id'] ?? 0) > 0) {
+                $postcardBlocked->execute([
+                    ':id' => (int)$p['id'],
+                    ':reason' => mb_substr((string)($p['reason'] ?? 'screened'), 0, 80),
+                ]);
+            }
+            continue;
+        }
+
+        // A reply generation that produced no usable text must not occupy the
+        // bounded tray forever. Move it to fan mail, where it is still retained
+        // and will receive an honest public archive event on the next inbox poll.
+        if ($kind === 'postcard_deferred') {
+            $p = $event['payload'];
+            $postcardId = is_array($p) ? (int)($p['id'] ?? 0) : 0;
+            if ($postcardId > 0) {
+                captive_postcard_queue_lock($db);
+                $defer = $db->prepare(
+                    "UPDATE postcards
+                     SET mail_class = 'fan_final', delivered_at = NULL
+                     WHERE id = :id AND replied_at IS NULL AND blocked = 0"
+                );
+                $defer->execute([':id' => $postcardId]);
+            }
+            continue;
         }
 
         // visitor_seen is a side-channel memory update, not a streamed event.

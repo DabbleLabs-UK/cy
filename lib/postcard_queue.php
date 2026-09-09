@@ -1,0 +1,81 @@
+<?php
+declare(strict_types=1);
+
+// The reply tray is deliberately small. Once it is full, intake remains open but
+// new items become durable fan mail: visible in the public archive, with no false
+// promise of an immediate personal reply.
+const CY_REPLY_TRAY_CAPACITY = 8;
+const CY_FAN_PROMOTE_EVERY_REPLIES = 5;
+
+function captive_postcard_disposition(int $activeReplies, int $capacity = CY_REPLY_TRAY_CAPACITY): string
+{
+    return $activeReplies < max(1, $capacity) ? 'reply_queue' : 'fan_mail';
+}
+
+/** @return array{reply_capacity:int,promote_every:int,completed_since_promotion:int} */
+function captive_postcard_queue_lock(PDO $db): array
+{
+    $row = $db->query(
+        'SELECT reply_capacity, promote_every, completed_since_promotion
+         FROM postcard_queue_state WHERE id = 1 FOR UPDATE'
+    )->fetch();
+    if (!$row) {
+        throw new RuntimeException('postcard queue state is missing');
+    }
+    return [
+        'reply_capacity' => max(1, (int)$row['reply_capacity']),
+        'promote_every' => max(1, (int)$row['promote_every']),
+        'completed_since_promotion' => max(0, (int)$row['completed_since_promotion']),
+    ];
+}
+
+function captive_postcard_active_replies(PDO $db): int
+{
+    return (int)$db->query(
+        "SELECT COUNT(*) FROM postcards
+         WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0"
+    )->fetchColumn();
+}
+
+// Promote only fan mail that has already been archived publicly. Resetting
+// delivered_at then lets the normal inbox path hand it to Cy as a reply item.
+function captive_postcard_promote_oldest(PDO $db): bool
+{
+    $changed = $db->exec(
+        "UPDATE postcards
+         SET mail_class = 'reply', promoted_at = NOW(), delivered_at = NULL
+         WHERE mail_class = 'fan' AND delivered_at IS NOT NULL AND blocked = 0
+         ORDER BY posted_at ASC, id ASC
+         LIMIT 1"
+    );
+    return (int)$changed === 1;
+}
+
+// Called only for the first authoritative reply event for a postcard. Every fifth
+// completed reply reserves the newly-freed place for the oldest archived fan item.
+function captive_postcard_mark_replied(PDO $db, int $postcardId, string $at): void
+{
+    if ($postcardId <= 0) {
+        return;
+    }
+    $queue = captive_postcard_queue_lock($db);
+    $update = $db->prepare(
+        'UPDATE postcards SET replied_at = :at
+         WHERE id = :id AND replied_at IS NULL'
+    );
+    $update->execute([':at' => $at, ':id' => $postcardId]);
+    if ($update->rowCount() !== 1) {
+        return;
+    }
+
+    $completed = $queue['completed_since_promotion'] + 1;
+    if ($completed >= $queue['promote_every'] && captive_postcard_promote_oldest($db)) {
+        $completed = 0;
+    }
+    $state = $db->prepare(
+        'UPDATE postcard_queue_state
+         SET completed_since_promotion = :completed, updated_at = NOW()
+         WHERE id = 1'
+    );
+    $state->execute([':completed' => $completed]);
+}

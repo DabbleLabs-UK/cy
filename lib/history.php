@@ -138,6 +138,12 @@ function history_fold(array &$d, int $seq, string $ts, string $kind, $payload): 
             $d['postcards_in']++;
             break;
 
+        case 'fan_mail_in':
+            // Fan mail is a real received postcard and gets the same calendar
+            // marker, even though it did not enter Cy's reply tray at this point.
+            $d['postcards_in']++;
+            break;
+
         case 'postcard_out':
             $d['postcards_out']++;
             break;

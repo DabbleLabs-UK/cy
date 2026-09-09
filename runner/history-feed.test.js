@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { fetchDayEvents, fetchDaySnapshot } from '../public/assets/history-feed.js';
+import { fetchDayEvents, fetchDaySnapshot, NARRATIVE_KINDS } from '../public/assets/history-feed.js';
+
+assert.ok(NARRATIVE_KINDS.includes('fan_mail_in'), 'fan mail remains part of historical replay');
 
 const calls = [];
 const pages = [

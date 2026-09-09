@@ -6,7 +6,7 @@
 
 export const NARRATIVE_KINDS = [
   'text', 'mode', 'gen', 'abort', 'silence', 'draw', 'postcard_in',
-  'postcard_out', 'news_in', 'event', 'day',
+  'postcard_out', 'fan_mail_in', 'news_in', 'event', 'day',
 ];
 
 export const SNAPSHOT_KINDS = [

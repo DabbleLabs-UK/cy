@@ -229,6 +229,10 @@ window.CY = {
 
     <div class="panel">
       <div class="panel-title">SEND CY A POSTCARD</div>
+      <div class="fan-mail-rule">
+        <strong>THE FAN MAIL BAG</strong>
+        <span>If Cy's reply tray is full, the prison still keeps your postcard in the public archive. It may be chosen for him later.</span>
+      </div>
       <form id="postcard-form" class="postcard-form" autocomplete="off">
 
         <div class="postcard">
@@ -274,7 +278,7 @@ window.CY = {
           <span id="pc-count" class="counter">0 / 900</span>
           <button type="submit" class="pc-send">Post it</button>
         </div>
-        <p class="form-hint">He gets it straight away. Text, a picture, or both.</p>
+        <p class="form-hint">Text, a picture, or both. A receipt will say whether it reached his reply tray or the fan mail bag.</p>
         <p id="pc-note" class="form-note"></p>
       </form>
     </div>

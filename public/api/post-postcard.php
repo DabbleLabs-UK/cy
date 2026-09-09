@@ -18,6 +18,7 @@ require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/image.php';
 require __DIR__ . '/../../lib/visitor.php';
+require __DIR__ . '/../../lib/postcard_queue.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -96,13 +97,21 @@ try {
 
     $db->beginTransaction();
 
+    // Lock the one queue row so simultaneous visitors cannot all see the same
+    // final free place. Load never closes intake: it changes the destination from
+    // the bounded reply tray to the durable fan-mail bag.
+    $queue = captive_postcard_queue_lock($db);
+    $activeReplies = captive_postcard_active_replies($db);
+    $disposition = captive_postcard_disposition($activeReplies, $queue['reply_capacity']);
+    $mailClass = $disposition === 'fan_mail' ? 'fan' : 'reply';
+
     $visitor = captive_touch_visitor($db, $from);
 
     $insert = $db->prepare(
         'INSERT INTO postcards
-            (visitor_id, from_name, body, image_path, image_source, image_attrib, ip, posted_at, deliver_at)
+            (visitor_id, from_name, body, image_path, image_source, image_attrib, ip, posted_at, deliver_at, mail_class)
          VALUES
-            (:visitor_id, :from_name, :body, :image_path, :image_source, :image_attrib, :ip, NOW(), :deliver_at)'
+            (:visitor_id, :from_name, :body, :image_path, :image_source, :image_attrib, :ip, NOW(), :deliver_at, :mail_class)'
     );
     $insert->bindValue(':visitor_id', $visitor['visitor_id'], PDO::PARAM_STR);
     $insert->bindValue(':from_name', $from, PDO::PARAM_STR);
@@ -112,6 +121,7 @@ try {
     $insert->bindValue(':image_attrib', $imageAttrib, $imageAttrib !== null ? PDO::PARAM_STR : PDO::PARAM_NULL);
     $insert->bindValue(':ip', $ipBin, PDO::PARAM_LOB);
     $insert->bindValue(':deliver_at', $deliverAt, PDO::PARAM_STR);
+    $insert->bindValue(':mail_class', $mailClass, PDO::PARAM_STR);
     $insert->execute();
     $postcardId = (int)$db->lastInsertId();
 
@@ -125,6 +135,8 @@ try {
         'ok' => true,
         'id' => $postcardId,
         'deliver_at' => $deliverAt,
+        'disposition' => $disposition,
+        'reply_expected' => $disposition === 'reply_queue',
         'returning' => (int)$visitor['postcard_count'] > 1,
     ]);
 } catch (Throwable $e) {

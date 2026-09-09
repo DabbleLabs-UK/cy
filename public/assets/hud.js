@@ -432,7 +432,7 @@ export class Hud {
     const attrib = p.image && p.attrib ? `<div class="mail-cap">${esc(p.attrib)}</div>` : '';
     const body = p.body ? `<div class="mail-body">${esc(p.body)}</div>` : '';
     el.innerHTML =
-      `<div class="mail-h"><span class="mail-tag">POSTCARD</span>` +
+      `<div class="mail-h"><span class="mail-tag">${p.promoted ? 'FAN MAIL CHOSEN' : 'POSTCARD'}</span>` +
       `<span class="mail-from">from ${esc(p.from || 'anonymous')}</span></div>` +
       img + attrib + body;
     this._push(el);
@@ -445,6 +445,25 @@ export class Hud {
     el.innerHTML =
       `<div class="mail-h"><span class="mail-tag out">7734 REPLIES</span></div>` +
       `<div class="mail-body">${esc(p.body)}</div>`;
+    this._push(el);
+  }
+
+  addFanMail(p) {
+    if (!this._once('fan_mail_in', p.id)) return;
+    const el = document.createElement('div');
+    el.className = 'mail fan-mail-in';
+    const img = p.image
+      ? `<img class="mail-img" loading="lazy" alt="a fan mail postcard picture" src="${esc(p.image)}">`
+      : '';
+    const attrib = p.image && p.attrib ? `<div class="mail-cap">${esc(p.attrib)}</div>` : '';
+    const body = p.body ? `<div class="mail-body">${esc(p.body)}</div>` : '';
+    el.innerHTML =
+      `<div class="mail-h"><span class="mail-tag fan">FAN MAIL - KEPT</span>` +
+      `<span class="mail-from">from ${esc(p.from || 'anonymous')}</span></div>` +
+      img + attrib + body +
+      `<div class="mail-cap">${p.may_reply === false
+        ? 'Cy could not answer this time. This remains in the archive.'
+        : 'The reply tray was full. This remains in the archive and may be chosen later.'}</div>`;
     this._push(el);
   }
 

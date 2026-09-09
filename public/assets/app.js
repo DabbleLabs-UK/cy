@@ -587,6 +587,12 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       if (pen.event) pen.event('reply sent', '', ev.ts, 'postcard-reply');
       if (postcardWait) postcardWait.replied(p.reply_to || p.id);
       break;
+    case 'fan_mail_in':
+      hud.addFanMail(p);
+      if (pen.fanMail) pen.fanMail(p, ev.ts);
+      if (postcardWait) postcardWait.fan(p.id, p.may_reply !== false);
+      if (!bootstrap) pushTicker(`fan mail kept from ${p.from || 'someone'}`);
+      break;
     case 'news_in':
       hud.addNewsIn(p);
       if (pen.event) pen.event('news delivered', p.headline || '', ev.ts, 'news');
@@ -1584,6 +1590,19 @@ function wireForms() {
       if (pending.length) renderWaiting('The inmate replied. Waiting for another response...');
       else showNote(note, 'The inmate replied. His postcard is in the timeline.', false);
     },
+    fan(id, mayReply) {
+      const before = pending.length;
+      pending = pending.filter((x) => Number(x.id) !== Number(id));
+      if (pending.length === before) return;
+      savePending();
+      if (pending.length) renderWaiting('One postcard moved to the fan mail bag. Waiting for another response...');
+      else {
+        note.textContent = mayReply
+          ? 'Your postcard is safe in the fan mail bag and may be chosen later.'
+          : 'Cy could not answer this time, but your postcard is safe in the fan mail bag.';
+        note.className = 'form-note show fan';
+      }
+    },
   };
   if (pending.length) {
     const responding = pending.some((x) => x.state === 'responding');
@@ -1760,7 +1779,10 @@ function wireForms() {
         body.value = '';
         updateCount();
         clearPicture();
-        if (Number(data.id) > 0) track(data.id);
+        if (data.disposition === 'fan_mail') {
+          note.textContent = 'The reply tray is full. Your postcard is safe in the fan mail bag and may be chosen later.';
+          note.className = 'form-note show fan';
+        } else if (Number(data.id) > 0) track(data.id);
         else showNote(note, 'Postcard delivered. Waiting for inmate to respond...', false);
       }
     } catch (err) {

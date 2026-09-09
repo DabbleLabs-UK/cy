@@ -158,6 +158,10 @@ function handle(ev, bootstrap) {
       fillReply(p.body);
       break;
 
+    case 'fan_mail_in':
+      addFanMail(p, ev.ts);
+      break;
+
     case 'news_in':
       addEvent('news delivered', p.headline || '', ev.ts, 'news');
       break;
@@ -281,7 +285,7 @@ function addGap(secs, ts) {
 function addPostcardIn(p, ts) {
   finalizeText();
   const b = makeBlock('postcard-in');
-  addMeta(b.el, ts, 'postcard from ' + (p.from || 'someone'));
+  addMeta(b.el, ts, (p.promoted ? 'fan mail chosen from ' : 'postcard from ') + (p.from || 'someone'));
   if (p.body) {
     const body = document.createElement('div');
     body.className = 'pl-text pl-postcard-body';
@@ -293,6 +297,26 @@ function addPostcardIn(p, ts) {
     img.className = 'pl-postcard-image';
     img.loading = 'lazy';
     img.alt = 'image included with the postcard';
+    img.src = String(p.image);
+    b.el.appendChild(img);
+  }
+}
+
+function addFanMail(p, ts) {
+  finalizeText();
+  const b = makeBlock('fan-mail');
+  addMeta(b.el, ts, 'fan mail bag - kept from ' + (p.from || 'someone'));
+  if (p.body) {
+    const body = document.createElement('div');
+    body.className = 'pl-text pl-postcard-body';
+    body.textContent = String(p.body);
+    b.el.appendChild(body);
+  }
+  if (p.image) {
+    const img = document.createElement('img');
+    img.className = 'pl-postcard-image';
+    img.loading = 'lazy';
+    img.alt = 'image kept with the fan mail postcard';
     img.src = String(p.image);
     b.el.appendChild(img);
   }

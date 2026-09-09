@@ -227,7 +227,7 @@ export class Client {
       }
       // Consume it so the same items are not re-delivered on the next poll.
       try {
-        await writeFile(this.inboxPath, JSON.stringify({ postcards: [], news: [], warden: [] }));
+        await writeFile(this.inboxPath, JSON.stringify({ postcards: [], fan_mail: [], news: [], warden: [] }));
       } catch {
         /* ignore */
       }
@@ -253,6 +253,7 @@ export class Client {
     }
     const has =
       (data.postcards && data.postcards.length) ||
+      (data.fan_mail && data.fan_mail.length) ||
       (data.news && data.news.length) ||
       (data.warden && data.warden.length);
     if (has && this.onInbox) this.onInbox(data);
