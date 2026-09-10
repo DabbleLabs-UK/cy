@@ -449,6 +449,61 @@ function captive_tempo_set_deepseek_available(PDO $db, bool $available): void
     }
 }
 
+// ---- tempo electricity cost anchors ---------------------------------------
+//
+// The runner is the authority for the electricity model because it knows the
+// configured idle/load wattage and tariff. It includes the resulting pence/hour
+// anchors in every persisted `tempo` event. Return the latest valid pair on the
+// ordinary tempo endpoint too, so a newly opened browser can price the current
+// duty cycle immediately instead of waiting for the next tempo change.
+//
+// The fixed pair is Cy's established deployment model (22W idle, 62W load at
+// 26.35p/kWh). It is used only before the runner has ever emitted an anchor or if
+// that lookup fails; a valid live runner value always wins.
+function captive_tempo_fallback_cost_anchors(): array
+{
+    $tariff = 0.2635;
+    return [
+        'pph_idle' => round((22.0 / 1000.0) * $tariff * 100.0, 3),
+        'pph_load' => round((62.0 / 1000.0) * $tariff * 100.0, 3),
+    ];
+}
+
+function captive_tempo_cost_anchors_from_payload($payload): ?array
+{
+    if (is_string($payload)) {
+        $payload = json_decode($payload, true);
+    }
+    if (!is_array($payload) || !isset($payload['pph_idle'], $payload['pph_load'])) {
+        return null;
+    }
+    if (!is_numeric($payload['pph_idle']) || !is_numeric($payload['pph_load'])) {
+        return null;
+    }
+    $idle = (float)$payload['pph_idle'];
+    $load = (float)$payload['pph_load'];
+    if (!is_finite($idle) || !is_finite($load) || $idle < 0.0 || $load < $idle) {
+        return null;
+    }
+    return ['pph_idle' => $idle, 'pph_load' => $load];
+}
+
+function captive_tempo_cost_anchors(PDO $db): array
+{
+    try {
+        $payload = $db->query(
+            "SELECT payload FROM events WHERE kind = 'tempo' ORDER BY seq DESC LIMIT 1"
+        )->fetchColumn();
+        $anchors = captive_tempo_cost_anchors_from_payload($payload === false ? null : $payload);
+        if ($anchors !== null) {
+            return $anchors;
+        }
+    } catch (Throwable $e) {
+        /* pre-event or temporarily unavailable store: use the established model */
+    }
+    return captive_tempo_fallback_cost_anchors();
+}
+
 // Resolve the current effective tempo, reconciling the store: if nobody is
 // watching, any lingering custom value is discarded here. Returns the public
 // shape ['speed', 'viewers', 'custom', 'paused']. The runner reads 'paused' from

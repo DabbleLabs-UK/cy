@@ -3,8 +3,10 @@ declare(strict_types=1);
 
 // tempo.php - the viewer-driven duty-cycle tempo endpoint.
 //
-//   GET  -> current { speed, viewers, custom }. A browser GET also refreshes the
-//           caller's presence; the runner (X-Cy-Key) is NOT counted as a viewer.
+//   GET  -> current { speed, viewers, custom, pph_idle, pph_load }. A browser GET
+//           also refreshes the caller's presence; the runner (X-Cy-Key) is NOT
+//           counted as a viewer. Cost anchors come from the live runner's latest
+//           persisted tempo event, with the established power model as fallback.
 //   POST { speed } -> a watching viewer sets a custom speed 1..100. Validated,
 //           clamped, and rate-limited to 6 changes/minute per viewer.
 //
@@ -46,7 +48,7 @@ try {
 
         captive_tempo_set_custom($db, $speed);
         $state = captive_tempo_state($db);
-        captive_json_response(['ok' => true] + $state);
+        captive_json_response(['ok' => true] + $state + captive_tempo_cost_anchors($db));
     }
 
     if ($method !== 'GET') {
@@ -57,7 +59,7 @@ try {
         captive_touch_presence($db);
     }
     $state = captive_tempo_state($db);
-    captive_json_response(['ok' => true] + $state);
+    captive_json_response(['ok' => true] + $state + captive_tempo_cost_anchors($db));
 } catch (Throwable $e) {
     captive_error_response('internal error', 500);
 }

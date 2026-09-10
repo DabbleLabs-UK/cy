@@ -19,6 +19,25 @@
 
 const IDLE_SPEED = 5; // the nobody-watching baseline the cost of watching is measured from
 
+// Grounded first-paint fallback from Cy's established power model. The tempo API
+// replaces these with the latest anchors emitted by the live runner, but keeping
+// the same configured baseline here means the card never presents an unexplained
+// "--" while that initial request is in flight (or during a brief network fault).
+const FALLBACK_POWER = { idleWatts: 22, loadWatts: 62, tariff: 0.2635 };
+const pencePerHour = (watts, tariff) => (watts / 1000) * tariff * 100;
+const FALLBACK_PPH_IDLE = pencePerHour(FALLBACK_POWER.idleWatts, FALLBACK_POWER.tariff);
+const FALLBACK_PPH_LOAD = pencePerHour(FALLBACK_POWER.loadWatts, FALLBACK_POWER.tariff);
+
+export function watchingCostPph(speed, pphIdle, pphLoad) {
+  const s = Number(speed);
+  const idle = Number(pphIdle);
+  const load = Number(pphLoad);
+  if (![s, idle, load].every(Number.isFinite)) return null;
+  const range = load - idle;
+  const pphAt = (atSpeed) => idle + (atSpeed / 100) * range;
+  return Math.max(0, pphAt(s) - pphAt(IDLE_SPEED));
+}
+
 // A representative burst duration to reason about cadence with, until a real one
 // arrives on a `tempo` event (bursts run ~75s). A percentage means nothing to a
 // viewer; the effective GAP between bursts does, so the panel renders that.
@@ -74,14 +93,15 @@ export class Tempo {
     this.root = root;
     this.endpoint = endpoint || 'api/tempo.php';
     this.viewerEl = viewerEl;
-    this.speed = null; // last server-known effective speed
+    this.speed = IDLE_SPEED; // grounded idle until the initial server state arrives
     this.viewers = 0;
     this.custom = false;
-    this.pphIdle = null; // pence/hour anchors from the runner (null until seen)
-    this.pphLoad = null;
+    this.pphIdle = FALLBACK_PPH_IDLE; // replaced by runner-derived API anchors
+    this.pphLoad = FALLBACK_PPH_LOAD;
     this.burstMs = DEFAULT_BURST_MS; // representative recent burst, from tempo events
     this._dragging = false;
     this._build();
+    this._applyState(this.speed, this.viewers, this.custom);
     this._loadInitial();
   }
 
@@ -128,7 +148,7 @@ export class Tempo {
       const res = await fetch(this.endpoint, { cache: 'no-store' });
       if (!res.ok) return;
       const d = await res.json();
-      if (d && d.speed != null) this._applyState(d.speed, d.viewers, d.custom);
+      if (d) this.update(d);
     } catch {
       /* the stream's tempo events will fill it in shortly */
     }
@@ -139,8 +159,10 @@ export class Tempo {
   // slider out from under them).
   update(p) {
     if (!p) return;
-    if (p.pph_idle != null) this.pphIdle = Number(p.pph_idle);
-    if (p.pph_load != null) this.pphLoad = Number(p.pph_load);
+    const idle = p.pph_idle == null ? null : Number(p.pph_idle);
+    const load = p.pph_load == null ? null : Number(p.pph_load);
+    if (idle != null && Number.isFinite(idle)) this.pphIdle = idle;
+    if (load != null && Number.isFinite(load)) this.pphLoad = load;
     if (p.burst_ms != null && Number(p.burst_ms) > 0) this.burstMs = Number(p.burst_ms);
     if (!this._dragging && p.speed != null) {
       this._applyState(p.speed, p.viewers, p.custom);
@@ -168,7 +190,7 @@ export class Tempo {
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok && d && d.speed != null) {
-        this._applyState(d.speed, d.viewers, d.custom);
+        this.update(d);
       }
     } catch {
       /* leave the optimistic value; the next tempo event reconciles it */
@@ -191,14 +213,9 @@ export class Tempo {
       this.cadenceEl.textContent = speed != null ? cadencePhrase(this.burstMs, speed) : 'duty cycle';
     }
 
-    if (this.pphIdle == null || this.pphLoad == null || speed == null) {
-      this.cphEl.textContent = '--';
-      this.cphAbsEl.textContent = '';
-      return;
-    }
     const range = this.pphLoad - this.pphIdle;
     const pphAt = (s) => this.pphIdle + (s / 100) * range;
-    const watching = Math.max(0, pphAt(speed) - pphAt(IDLE_SPEED)); // cost above the unwatched baseline
+    const watching = watchingCostPph(speed, this.pphIdle, this.pphLoad);
     this.cphEl.textContent = watching.toFixed(1);
     this.cphAbsEl.textContent = 'he draws ' + pphAt(speed).toFixed(1) + ' p/hour at this tempo';
   }

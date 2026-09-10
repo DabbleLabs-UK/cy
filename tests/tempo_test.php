@@ -24,6 +24,14 @@ function check(string $label, bool $ok): void
     $ok ? $pass++ : $fail++;
 }
 
+echo "==== TEMPO ELECTRICITY COST ANCHORS ====\n";
+$fallback = captive_tempo_fallback_cost_anchors();
+check('fallback idle cost is grounded in 22W at 26.35p/kWh', abs($fallback['pph_idle'] - 0.580) < 0.0001);
+check('fallback load cost is grounded in 62W at 26.35p/kWh', abs($fallback['pph_load'] - 1.634) < 0.0001);
+$anchors = captive_tempo_cost_anchors_from_payload('{"pph_idle":0.61,"pph_load":1.72}');
+check('runner cost anchors decode from persisted tempo payload', $anchors === ['pph_idle' => 0.61, 'pph_load' => 1.72]);
+check('invalid runner cost anchors are rejected', captive_tempo_cost_anchors_from_payload('{"pph_idle":"bad","pph_load":1.72}') === null);
+
 echo "==== TEMPO DECISION (5% / 30% / custom) ====\n";
 
 // nobody watching -> 5%, not custom
