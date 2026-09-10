@@ -39,8 +39,21 @@ try {
     // whether it came back out of the fan-mail bag. This also keeps events honest
     // when an older runner does not yet send those fields.
     $postcardProvenance = $db->prepare(
-        'SELECT posted_at, (promoted_at IS NOT NULL) AS promoted
+        'SELECT posted_at, (promoted_at IS NOT NULL) AS promoted, reply_attempts
          FROM postcards WHERE id = :id'
+    );
+    $postcardDeferred = $db->prepare(
+        "SELECT reply_attempts FROM postcards
+         WHERE id = :id AND mail_class = 'reply' AND replied_at IS NULL
+           AND delivered_at IS NOT NULL AND blocked = 0
+         FOR UPDATE"
+    );
+    $postcardRetry = $db->prepare(
+        'UPDATE postcards
+         SET reply_attempts = :attempts, mail_class = :mail_class,
+             delivered_at = NULL, deliver_at = :deliver_at
+         WHERE id = :id AND mail_class = \'reply\' AND replied_at IS NULL
+           AND delivered_at IS NOT NULL AND blocked = 0'
     );
     // Persist a completed drawing. Like visitor_seen this is a side-channel: the
     // per-pass `draw` events already carry the animation into the public stream,
@@ -88,20 +101,26 @@ try {
             continue;
         }
 
-        // A reply generation that produced no usable text must not occupy the
-        // bounded tray forever. Move it to fan mail, where it is still retained
-        // and will receive an honest public archive event on the next inbox poll.
+        // One empty/error generation is not a full tray. Release the claim and
+        // retry it after a short delay. Only after the bounded attempt allowance
+        // is exhausted does it become terminal fan mail and receive an archive
+        // event on the next inbox poll.
         if ($kind === 'postcard_deferred') {
             $p = $event['payload'];
             $postcardId = is_array($p) ? (int)($p['id'] ?? 0) : 0;
             if ($postcardId > 0) {
                 captive_postcard_queue_lock($db);
-                $defer = $db->prepare(
-                    "UPDATE postcards
-                     SET mail_class = 'fan_final', delivered_at = NULL
-                     WHERE id = :id AND replied_at IS NULL AND blocked = 0"
-                );
-                $defer->execute([':id' => $postcardId]);
+                $postcardDeferred->execute([':id' => $postcardId]);
+                $claimed = $postcardDeferred->fetch();
+                if ($claimed) {
+                    $outcome = captive_postcard_failed_attempt((int)$claimed['reply_attempts']);
+                    $postcardRetry->execute([
+                        ':attempts' => $outcome['attempts'],
+                        ':mail_class' => $outcome['mail_class'],
+                        ':deliver_at' => gmdate('Y-m-d H:i:s', time() + $outcome['retry_after_seconds']),
+                        ':id' => $postcardId,
+                    ]);
+                }
             }
             continue;
         }
@@ -166,6 +185,9 @@ try {
             if ($postcardId > 0) {
                 $postcardProvenance->execute([':id' => $postcardId]);
                 $source = $postcardProvenance->fetch();
+                if ($source && !captive_postcard_should_publish_arrival((int)$source['reply_attempts'])) {
+                    continue;
+                }
                 $payload = captive_postcard_event_provenance($payload, $source ?: null);
             }
         }

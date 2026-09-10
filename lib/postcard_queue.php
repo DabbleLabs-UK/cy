@@ -6,6 +6,12 @@ declare(strict_types=1);
 // promise of an immediate personal reply.
 const CY_REPLY_TRAY_CAPACITY = 8;
 const CY_FAN_PROMOTE_EVERY_REPLIES = 5;
+// A single empty or failed model call is transient, not evidence that the reply
+// tray is full. Give a claimed postcard three total attempts before retaining it
+// as final fan mail, with a short pause between attempts to avoid a hot loop when
+// the model service is temporarily unavailable.
+const CY_REPLY_MAX_ATTEMPTS = 3;
+const CY_REPLY_RETRY_DELAY_SECONDS = 10;
 // A claimed reply normally completes in a few minutes. If a runner disappears
 // after claiming one, do not let that abandoned claim occupy the bounded tray
 // forever. The postcard itself remains retained in the database and timeline.
@@ -24,6 +30,27 @@ function captive_postcard_fan_mail_supported(array $query): bool
 function captive_postcard_can_claim_next(int $inFlightReplies): bool
 {
     return $inFlightReplies <= 0;
+}
+
+/** @return array{attempts:int,retry:bool,mail_class:string,retry_after_seconds:int} */
+function captive_postcard_failed_attempt(int $completedAttempts, int $maxAttempts = CY_REPLY_MAX_ATTEMPTS): array
+{
+    $attempts = max(0, $completedAttempts) + 1;
+    $retry = $attempts < max(1, $maxAttempts);
+    return [
+        'attempts' => $attempts,
+        'retry' => $retry,
+        'mail_class' => $retry ? 'reply' : 'fan_final',
+        'retry_after_seconds' => $retry ? CY_REPLY_RETRY_DELAY_SECONDS : 0,
+    ];
+}
+
+// A retry is the same physical postcard returning to the model lane. Its first
+// arrival is already in the public chronology, so later attempts must not create
+// duplicate postcard cards or imply that the visitor posted it again.
+function captive_postcard_should_publish_arrival(int $completedAttempts): bool
+{
+    return $completedAttempts <= 0;
 }
 
 /**

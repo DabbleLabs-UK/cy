@@ -56,6 +56,7 @@ CREATE TABLE postcards (
     delivered_at  DATETIME NULL,
     promoted_at   DATETIME NULL,
     replied_at    DATETIME NULL,
+    reply_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
     blocked       TINYINT DEFAULT 0,
     block_reason  VARCHAR(80) NULL,
     INDEX idx_delivered_deliver (delivered_at, deliver_at),
