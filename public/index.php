@@ -188,6 +188,8 @@ window.CY = {
   </div>
 </header>
 
+<div id="topbar-spacer" aria-hidden="true"></div>
+
 <div id="ticker" class="ticker"></div>
 
 <main class="layout">
@@ -292,6 +294,7 @@ window.CY = {
 
 </main>
 
+<script type="module" src="<?= htmlspecialchars(cy_asset('shell-layout.js'), ENT_QUOTES) ?>"></script>
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/app.js'), ENT_QUOTES) ?>"></script>
 <?php if ($rawEnabled): ?>
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/raw.js'), ENT_QUOTES) ?>"></script>

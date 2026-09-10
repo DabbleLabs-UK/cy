@@ -1,7 +1,17 @@
-/* The identity and live-state controls remain visible while the page scrolls. */
+/* The identity and live-state controls are attached to the viewport. */
+:root {
+  --cy-topbar-height: 45px;
+}
+
 #topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 100;
+  left: 0;
+  right: 0;
+  z-index: 30;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.45);
+}
+
+#topbar-spacer {
+  height: var(--cy-topbar-height);
 }
