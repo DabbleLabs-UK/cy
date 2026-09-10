@@ -77,8 +77,6 @@ export class Hud {
   _buildHost() {
     this.hostEl.classList.add('hostpanel');
     this.hostEl.innerHTML = `
-      <div class="hp-title">HMP ThinkPad &middot; Host</div>
-
       <div class="hp-sec" title="${esc(TIP.syscpu)}">SYSTEM <span class="hp-sec-note">whole machine, measured</span></div>
       <div class="hp-row" title="${esc(TIP.syscpu)}"><span class="hp-k">CPU</span>
         <span class="hp-bar"><i id="hp-cpu-bar"></i></span>

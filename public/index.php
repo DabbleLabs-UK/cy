@@ -219,19 +219,20 @@ window.CY = {
   </section>
 
   <aside class="col col-side">
-    <div class="panel">
+    <details class="panel panel-collapsible">
+      <summary class="panel-title panel-toggle">HMP ThinkPad &middot; Host</summary>
       <div id="host"></div>
-    </div>
+    </details>
 
-    <div class="panel">
-      <div class="panel-title">THE METER &middot; ELECTRICITY</div>
+    <details class="panel panel-collapsible">
+      <summary class="panel-title panel-toggle">THE METER &middot; ELECTRICITY</summary>
       <div id="power"></div>
-    </div>
+    </details>
 
-    <div class="panel">
-      <div class="panel-title">TEMPO &middot; DUTY CYCLE</div>
+    <details class="panel panel-collapsible">
+      <summary class="panel-title panel-toggle">TEMPO &middot; DUTY CYCLE</summary>
       <div id="tempo"></div>
-    </div>
+    </details>
 
     <div class="panel">
       <div class="panel-title">SEND CY A POSTCARD</div>

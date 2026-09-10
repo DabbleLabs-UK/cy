@@ -29,6 +29,14 @@ const page = await readFile(new URL('../public/index.php', import.meta.url), 'ut
 assert.match(page, /id="topbar-spacer"/);
 assert.match(page, /id="watchers"[^>]*class="pill watchers-pill"/);
 assert.match(page, /cy_asset\('shell-layout\.js'\)/);
+assert.match(page, /<details class="panel panel-collapsible">\s*<summary class="panel-title panel-toggle">HMP ThinkPad &middot; Host<\/summary>\s*<div id="host"><\/div>\s*<\/details>/, 'host card is collapsed by default behind its title bar');
+assert.match(page, /<details class="panel panel-collapsible">\s*<summary class="panel-title panel-toggle">THE METER &middot; ELECTRICITY<\/summary>\s*<div id="power"><\/div>\s*<\/details>/, 'meter card is collapsed by default behind its title bar');
+assert.match(page, /<details class="panel panel-collapsible">\s*<summary class="panel-title panel-toggle">TEMPO &middot; DUTY CYCLE<\/summary>\s*<div id="tempo"><\/div>\s*<\/details>/, 'tempo card is collapsed by default behind its title bar');
+assert.equal((page.match(/<details class="panel panel-collapsible">/g) || []).length, 3, 'only the requested top three right-column cards use the default-collapsed treatment');
+
+const chromeCss = await readFile(new URL('../public/assets/style.css', import.meta.url), 'utf8');
+assert.match(chromeCss, /\.panel-collapsible\s*>\s*\.panel-toggle::after\s*\{[\s\S]*?content:\s*'\+';/, 'collapsed card title shows an expand marker');
+assert.match(chromeCss, /\.panel-collapsible\[open\]\s*>\s*\.panel-toggle::after\s*\{\s*content:\s*'-';\s*\}/, 'expanded card title shows a collapse marker');
 
 const app = await readFile(new URL('../public/assets/app.js', import.meta.url), 'utf8');
 assert.match(app, /new Tempo\(tempoEl, TEMPO_ENDPOINT, \$\('#watchers'\)\)/);

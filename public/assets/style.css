@@ -366,6 +366,40 @@ body.cy-paused::after {
   padding-bottom: 6px;
 }
 
+/* The three machine-control cards begin as compact title bars. Native details
+   keeps the toggle keyboard- and touch-accessible while the custom marker makes
+   their shared collapsed/expanded state clear in the instrument-panel style. */
+.panel-collapsible > .panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  color: #93a6b6;
+}
+.panel-collapsible > .panel-toggle::-webkit-details-marker { display: none; }
+.panel-collapsible > .panel-toggle::after {
+  content: '+';
+  margin-left: auto;
+  color: #a7c9dd;
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+.panel-collapsible[open] > .panel-toggle::after { content: '-'; }
+.panel-collapsible > .panel-toggle:hover { color: #c3d5e1; }
+.panel-collapsible > .panel-toggle:focus-visible {
+  outline: 2px solid #6fb2ff;
+  outline-offset: 3px;
+}
+.panel-collapsible:not([open]) > .panel-toggle {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+}
+
 /* ================= CHRONOLOGY TRAY ================= */
 .col-paper { position: sticky; top: 14px; }
 .paper {
@@ -879,10 +913,6 @@ body.cy-paused::after {
   --hp-accent: #a7c9dd;
   color: var(--hp-value);
   line-height: 1.35;
-}
-.hostpanel .hp-title {
-  font-size: 10px; letter-spacing: 0.28em; color: var(--hp-label);
-  margin-bottom: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 6px;
 }
 .hp-row { display: grid; grid-template-columns: 3.5ch 1fr auto; gap: 8px; align-items: center; margin: 6px 0; }
 .hp-sub { grid-template-columns: 3.5ch auto; }
