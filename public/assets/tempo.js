@@ -1,8 +1,9 @@
 // tempo.js - the viewer-driven duty-cycle control.
 //
 // A small, understated instrument-chrome panel: the current speed as a
-// percentage, a slider 1-100, the live count of who is watching, and the cost of
-// watching plainly stated ("watching costs Warden Florian X p/hour").
+// percentage, a slider 1-100, and the cost of watching plainly stated
+// ("watching costs Warden Florian X p/hour"). The live viewer count is updated
+// here but displayed in the persistent top bar.
 //
 // Tempo is a DUTY CYCLE - 100% is continuous, lower means more silence between
 // bursts. The effective speed is decided server-side from presence (nobody = 5%,
@@ -69,9 +70,10 @@ function cadencePhrase(burstMs, speed) {
 }
 
 export class Tempo {
-  constructor(root, endpoint) {
+  constructor(root, endpoint, viewerEl = null) {
     this.root = root;
     this.endpoint = endpoint || 'api/tempo.php';
+    this.viewerEl = viewerEl;
     this.speed = null; // last server-known effective speed
     this.viewers = 0;
     this.custom = false;
@@ -88,7 +90,6 @@ export class Tempo {
     this.root.innerHTML = `
       <div class="tp-head">
         <div class="tp-readout"><span id="tp-pct">--</span><span class="tp-unit">%</span></div>
-        <div class="tp-watchers"><span id="tp-count">--</span><span class="tp-wlabel">watching</span></div>
       </div>
       <input id="tp-slider" class="tp-slider" type="range" min="1" max="100" value="30"
              aria-label="generation tempo, percent duty cycle">
@@ -98,7 +99,7 @@ export class Tempo {
         <span class="tp-cost-sub" id="tp-cph-abs"></span>
       </div>`;
     this.pctEl = this.root.querySelector('#tp-pct');
-    this.countEl = this.root.querySelector('#tp-count');
+    this.countEl = this.viewerEl;
     this.slider = this.root.querySelector('#tp-slider');
     this.cphEl = this.root.querySelector('#tp-cph');
     this.cphAbsEl = this.root.querySelector('#tp-cph-abs');
@@ -179,7 +180,10 @@ export class Tempo {
   _render(atSpeed) {
     const speed = atSpeed != null ? atSpeed : this.speed;
     if (speed != null) this.pctEl.textContent = String(Math.round(speed));
-    this.countEl.textContent = String(this.viewers);
+    if (this.countEl) {
+      this.countEl.textContent = `${this.viewers} WATCHING`;
+      this.countEl.setAttribute('aria-label', `${this.viewers} ${this.viewers === 1 ? 'person' : 'people'} watching`);
+    }
 
     // the cadence a viewer actually feels at this speed - the effective gap
     // between bursts - which reads as alive where a bare percentage does not.

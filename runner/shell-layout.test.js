@@ -27,6 +27,14 @@ assert.match(css, /\.col-paper\s*>\s*\.paper,[\s\S]*?height:\s*100%;[\s\S]*?min-
 
 const page = await readFile(new URL('../public/index.php', import.meta.url), 'utf8');
 assert.match(page, /id="topbar-spacer"/);
+assert.match(page, /id="watchers"[^>]*class="pill watchers-pill"/);
 assert.match(page, /cy_asset\('shell-layout\.js'\)/);
+
+const app = await readFile(new URL('../public/assets/app.js', import.meta.url), 'utf8');
+assert.match(app, /new Tempo\(tempoEl, TEMPO_ENDPOINT, \$\('#watchers'\)\)/);
+
+const tempo = await readFile(new URL('../public/assets/tempo.js', import.meta.url), 'utf8');
+assert.doesNotMatch(tempo, /tp-watchers/);
+assert.match(tempo, /this\.countEl\.textContent = `\$\{this\.viewers\} WATCHING`/);
 
 console.log('shell-layout.test.js: all checks passed');

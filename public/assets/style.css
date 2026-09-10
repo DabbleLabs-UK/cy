@@ -1219,8 +1219,8 @@ body.cy-paused::after {
 .pw-band { fill: #e6b45e; fill-opacity: 0.16; stroke: none; }
 .pw-line { fill: none; stroke: #e6b45e; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .pw-axis { display: grid; grid-template-columns: auto 1fr auto; align-items: center; margin-top: 3px; }
-.pw-yl, .pw-xl { font-size: 9px; color: var(--tel-dim); font-variant-numeric: tabular-nums; }
-.pw-xl { text-align: right; }
+.pw-time { font-size: 9px; color: var(--tel-dim); font-variant-numeric: tabular-nums; }
+.pw-time:last-child { text-align: right; }
 .pw-caption { font-size: 9px; color: #9c8552; letter-spacing: 0.08em; text-align: center; }
 
 /* ---- tempo (duty cycle) ---- */
@@ -1231,9 +1231,6 @@ body.cy-paused::after {
   font-size: 30px; line-height: 1; color: #e8eef4; font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
 }
 .tp-unit { font-size: 13px; color: var(--tel-dim); letter-spacing: 0.1em; }
-.tp-watchers { display: flex; align-items: baseline; gap: 5px; }
-.tp-watchers #tp-count { font-size: 16px; color: var(--tel); font-variant-numeric: tabular-nums; }
-.tp-wlabel { font-size: 9px; letter-spacing: 0.16em; color: var(--tel-dim); text-transform: uppercase; }
 .tp-slider {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 5px; margin: 2px 0;

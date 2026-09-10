@@ -171,7 +171,7 @@ async function boot() {
   const powerEl = $('#power');
   if (powerEl) power = new Power(powerEl);
   const tempoEl = $('#tempo');
-  if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT);
+  if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT, $('#watchers'));
 
   wireForms();
   initViewSwitch();

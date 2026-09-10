@@ -186,6 +186,7 @@ window.CY = {
     <span id="day" class="pill">DAY <?= $day ?></span>
     <span id="mode" class="pill" data-mode="journal">JOURNAL</span>
     <span id="status" class="pill status">connecting</span>
+    <span id="watchers" class="pill watchers-pill" aria-label="Viewer count unavailable">-- WATCHING</span>
   </div>
 </header>
 

@@ -32,8 +32,8 @@ function fakeRoot() {
   const els = {};
   return {
     classList: { add() {} },
-    set innerHTML(_v) {},
-    get innerHTML() { return ''; },
+    set innerHTML(v) { this.html = v; },
+    get innerHTML() { return this.html || ''; },
     querySelector: (sel) => (els[sel] || (els[sel] = stub())),
   };
 }
@@ -41,6 +41,9 @@ function fakeRoot() {
 // ---- 2. displays the LATEST cost_total / kwh_total, not a client-side sum ----
 const root = fakeRoot();
 const p = new Power(root);
+assert.doesNotMatch(root.innerHTML, /pw-ytop/, 'the internal vertical scale ceiling is not presented as a watt reading');
+assert.match(root.innerHTML, /pw-xstart/);
+assert.match(root.innerHTML, /pw-xend/);
 const feed = { watts: 35.1, kwh_total: 0.114606, cost_total: 0.0302, cost_per_hour: 0.0093, uptime_s: 27588 };
 let t = 1_700_000_000_000;
 p.push(feed, t);
@@ -53,6 +56,9 @@ ok('meter displays the latest cost_total (3.0p) and kwh_total');
 for (let i = 0; i < 8; i++) p.push(feed, (t += 30000));
 assert.equal(p.costEl.textContent, '3.0p', 'identical replayed events must not accumulate');
 assert.equal(p.kwhEl.textContent, '0.115 kWh', 'kWh must not accumulate either');
+assert.match(p.xStartEl.textContent, /^\d{2}:\d{2}$/);
+assert.match(p.xEndEl.textContent, /^\d{2}:\d{2}$/);
+assert.notEqual(p.xStartEl.textContent, p.xEndEl.textContent, 'the graph endpoints are shown separately');
 ok('identical replayed events leave the total unchanged (no client-side integration)');
 
 // ---- 4. crossing GBP 1.00 flips pence -> pounds automatically ----

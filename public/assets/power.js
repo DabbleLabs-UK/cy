@@ -64,9 +64,9 @@ export class Power {
         </svg>
         <div class="pw-tip" id="pw-tip" hidden></div>
         <div class="pw-axis">
-          <span class="pw-yl" id="pw-ytop">-- W</span>
+          <span class="pw-time" id="pw-xstart"></span>
           <span class="pw-caption">area under the line = cost</span>
-          <span class="pw-xl" id="pw-xspan"></span>
+          <span class="pw-time" id="pw-xend"></span>
         </div>
       </div>`;
     this.costEl = this.root.querySelector('#pw-cost');
@@ -77,8 +77,8 @@ export class Power {
     this.areaEl = this.root.querySelector('#pw-area');
     this.bandEl = this.root.querySelector('#pw-band');
     this.lineEl = this.root.querySelector('#pw-line');
-    this.yTopEl = this.root.querySelector('#pw-ytop');
-    this.xSpanEl = this.root.querySelector('#pw-xspan');
+    this.xStartEl = this.root.querySelector('#pw-xstart');
+    this.xEndEl = this.root.querySelector('#pw-xend');
     this.svgEl = this.root.querySelector('.pw-svg');
     this.tipEl = this.root.querySelector('#pw-tip');
     this._geo = null; // { t0, span, W } set each render, for tooltip mapping
@@ -180,7 +180,6 @@ export class Power {
     let wMax = 60;
     for (const q of pts) if (q.wmax > wMax) wMax = q.wmax;
     wMax = Math.ceil(wMax / 10) * 10;
-    this.yTopEl.textContent = wMax + ' W';
 
     const t0 = pts[0].t;
     const t1 = last.t;
@@ -217,8 +216,12 @@ export class Power {
     this.areaEl.setAttribute('d', area);
     this.bandEl.setAttribute('d', band);
 
-    // x span label (only when we have a real time range)
-    this.xSpanEl.textContent = span > 60000 ? fmtClock(t0) + ' - ' + fmtClock(t1) : '';
+    // Put each endpoint below its corresponding side of the graph. The vertical
+    // scale remains internal: presenting its ceiling as a lone watt reading made
+    // it look like a fourth live meter value.
+    const showRange = pts.length > 1;
+    this.xStartEl.textContent = showRange ? fmtClock(t0) : '';
+    this.xEndEl.textContent = showRange ? fmtClock(t1) : '';
   }
 }
 
