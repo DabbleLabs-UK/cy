@@ -104,6 +104,7 @@ import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } fr
 import { createWarden, sanitize, stripScaffold, stripScaffoldAccounted, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
+import { recordCompletedSilence } from './silence.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -2779,13 +2780,17 @@ async function main() {
       const selectedAction = cognition.action;
 
       // Silence is now a selected, inspectable action rather than a random result
-      // of legacy mood axes.
+      // of legacy mood axes. Publish it only after the quiet period has actually
+      // elapsed: the feed treats the event timestamp as the end of the span.
       if (selectedAction.name === 'silence') {
         const seconds = Math.round(45 + 180 * ((soma.state && soma.state.drives.rest) || 0));
-        emit({ kind: 'silence', payload: { seconds, reason: `soma: ${selectedAction.reason}` } });
         await recordOutcome('deliberate-silence');
         soma.completeAction('silence');
-        await idleSilently(seconds * 1000);
+        await recordCompletedSilence(seconds, {
+          idle: idleSilently,
+          emit,
+          reason: `soma: ${selectedAction.reason}`,
+        });
         continue;
       }
 
