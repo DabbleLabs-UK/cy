@@ -5,7 +5,7 @@
 // preserved during live viewing and historical replay.
 
 import { Pen } from './pen.js';
-import { bindEndpointTime, dayLabel, formatDuration, shiftTimestamp, timestampMs } from './timeline.js';
+import { bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 
 // One person has one hand. Each visible writing object owns its own Pen renderer,
 // but they all reserve this shared lane so only the earliest unfinished object can
@@ -53,6 +53,7 @@ export class ComposedFeed {
     this.loadingLater = null;
     this.chooseDay = null;
     this.changeDay = null;
+    this.goLive = null;
     this.scrollSettleToken = 0;
     this.suppressPaging = false;
 
@@ -92,6 +93,10 @@ export class ComposedFeed {
     this.changeDay = typeof fn === 'function' ? fn : null;
   }
 
+  onGoLive(fn) {
+    this.goLive = typeof fn === 'function' ? fn : null;
+  }
+
   beginDay(date, today = '') {
     this.closeEntry();
     const banner = document.createElement('div');
@@ -112,7 +117,8 @@ export class ComposedFeed {
     choose.setAttribute('aria-label', 'Choose another day');
     const cap = document.createElement('span');
     cap.className = 'cy-day-cap';
-    cap.textContent = 'VIEWING';
+    const liveDay = isLiveDate(date, today);
+    cap.textContent = liveDay ? 'LIVE' : 'VIEWING';
     const label = document.createElement('strong');
     label.textContent = dayLabel(date);
     choose.appendChild(cap);
@@ -124,15 +130,30 @@ export class ComposedFeed {
     const next = document.createElement('button');
     next.type = 'button';
     next.className = 'cy-day-step';
-    next.textContent = 'Next day';
-    next.disabled = !!today && String(date) >= String(today);
+    const nextDate = shiftDate(date, 1);
+    next.textContent = !liveDay && nextDate === today ? 'Live today' : 'Next day';
+    next.disabled = liveDay || (!!today && String(date) >= String(today));
     next.addEventListener('click', () => {
       if (this.changeDay) this.changeDay(1);
     });
 
+    const actions = document.createElement('div');
+    actions.className = 'cy-day-actions';
+    actions.appendChild(next);
+    if (!liveDay && today && nextDate !== today) {
+      const live = document.createElement('button');
+      live.type = 'button';
+      live.className = 'cy-day-step cy-day-live';
+      live.textContent = 'Live now';
+      live.addEventListener('click', () => {
+        if (this.goLive) this.goLive();
+      });
+      actions.appendChild(live);
+    }
+
     banner.appendChild(previous);
     banner.appendChild(choose);
-    banner.appendChild(next);
+    banner.appendChild(actions);
     this.flow.appendChild(banner);
   }
 

@@ -117,6 +117,21 @@ assert.ok(entry.children[2]._classes.has('cy-moment-end'), 'writing shows its en
 assert.match(entry.children[0].children[0].textContent, /^20:15:45 \(/);
 assert.match(entry.children[2].children[0].textContent, /^20:20:48 \(/);
 assert.equal(spans.flow.children[0].children.length, 3, 'day banner exposes previous, chooser, and next controls');
+const historyActions = spans.flow.children[0].children[2];
+assert.ok(historyActions._classes.has('cy-day-actions'), 'history day groups its forward and live actions');
+assert.equal(historyActions.children[0].textContent, 'Live today', 'the final forward step clearly returns to live');
+assert.equal(historyActions.children.length, 1, 'the day before today does not duplicate the live action');
+
+const olderRoot = makeEl('div');
+const olderFeed = new ComposedFeed(olderRoot, { chars: [] });
+olderFeed.beginDay('2026-09-08', '2026-09-10');
+assert.equal(olderFeed.flow.children[0].children[2].children[1].textContent, 'Live now', 'an older history day has a direct live escape');
+
+const liveRoot = makeEl('div');
+const liveFeed = new ComposedFeed(liveRoot, { chars: [] });
+liveFeed.beginDay('2026-09-10', '2026-09-10');
+assert.equal(liveFeed.flow.children[0].children[1].children[0].textContent, 'LIVE');
+assert.equal(liveFeed.flow.children[0].children[2].children.length, 1, 'the live day does not show a redundant live button');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const css = await readFile(join(here, '..', 'public', 'assets', 'style.css'), 'utf8');

@@ -48,24 +48,25 @@ globalThis.window = {};
 
 await import('../public/assets/plain.js');
 const plain = window.__cyPlain;
-plain.beginDay('2026-09-09', '2026-09-10');
-plain.handle({ kind: 'text', ts: '2026-09-09 20:15:45', payload: { mode: 'journal', s: 'a thought' } }, true);
-plain.handle({ kind: 'gen', ts: '2026-09-09 20:20:48', payload: { mode: 'journal' } }, true);
+plain.beginDay('2026-09-08', '2026-09-10');
+plain.handle({ kind: 'text', ts: '2026-09-08 20:15:45', payload: { mode: 'journal', s: 'a thought' } }, true);
+plain.handle({ kind: 'gen', ts: '2026-09-08 20:20:48', payload: { mode: 'journal' } }, true);
 
 const col = window.__CY_PLAIN__.col();
+assert.equal(col.children[0].children[2].children[1].textContent, 'Live now', 'plain history has a direct live escape');
 const writing = col.children[1];
 assert.ok(writing.children[0]._classes.has('pl-meta-start'), 'plain writing shows its start endpoint');
 assert.ok(writing.children[2]._classes.has('pl-meta-end'), 'plain writing shows its end endpoint');
 assert.match(writing.children[0].children[0].textContent, /^20:15:45 \(/);
 assert.match(writing.children[2].children[0].textContent, /^20:20:48 \(/);
 
-plain.handle({ kind: 'silence', ts: '2026-09-09 20:25:48', payload: { seconds: 300 } }, true);
+plain.handle({ kind: 'silence', ts: '2026-09-08 20:25:48', payload: { seconds: 300 } }, true);
 const silence = col.children[2];
 assert.equal(silence.children.length, 3, 'a silence span has a start, label, and end');
 assert.match(silence.children[0].children[0].textContent, /^20:20:48 \(/);
 assert.match(silence.children[2].children[0].textContent, /^20:25:48 \(/);
 
-plain.handle({ kind: 'event', ts: '2026-09-09 20:30:00', payload: { name: 'cell_search' } }, true);
+plain.handle({ kind: 'event', ts: '2026-09-08 20:30:00', payload: { name: 'cell_search' } }, true);
 const point = col.children[3];
 assert.ok(point.children[0]._classes.has('pl-meta-point'), 'a point event has one timestamp endpoint');
 

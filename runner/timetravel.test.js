@@ -41,6 +41,7 @@ function makeEl(tag) {
       return true;
     },
     setAttribute(name, value) { el[name] = String(value); },
+    getAttribute(name) { return el[name] == null ? null : String(el[name]); },
     showModal() { el.open = true; },
     close() { el.open = false; el.dispatchEvent({ type: 'close', bubbles: false }); },
     focus() {},
@@ -115,6 +116,11 @@ const sep10 = grid.children.find((cell) => cell.children[0] && cell.children[0].
 assert.ok(sep9.classList.contains('is-unindexed'), 'a raw date after the rollup watermark remains selectable');
 assert.equal(sep9.disabled, false);
 assert.ok(sep10.classList.contains('is-selected'), 'the currently viewed date is highlighted');
+assert.match(sep10.getAttribute('aria-label'), /return to live/, 'today is described as the route back to live');
+
+window.__CY_TT__.setToday('2026-09-11');
+const sep11 = grid.children.find((cell) => cell.children[0] && cell.children[0].textContent === '11');
+assert.ok(sep11.classList.contains('is-today'), 'the chooser follows a live midnight rollover without reload');
 
 let selections = 0;
 document.addEventListener('cy:moment', () => { selections++; });

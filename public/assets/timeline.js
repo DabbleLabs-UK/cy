@@ -30,6 +30,10 @@ export function previousDate(date) {
   return shiftDate(date, -1);
 }
 
+export function isLiveDate(date, today) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) && String(date) === String(today || '');
+}
+
 export function dayLabel(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return String(date || '');
   const d = new Date(date + 'T12:00:00Z');

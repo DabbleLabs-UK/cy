@@ -17,6 +17,26 @@ function validDate(date) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(date || ''));
 }
 
+export function narrativeEventsForDate(events, date, kinds = NARRATIVE_KINDS) {
+  if (!validDate(date)) return [];
+  const allowed = new Set(kinds);
+  return (events || []).filter((event) =>
+    allowed.has(event && event.kind) && String((event && event.ts) || '').slice(0, 10) === date
+  );
+}
+
+// A stream response can be capped while `now` points far beyond its final row.
+// Advance only through events the client actually rendered, or the remaining
+// capped rows are skipped forever on the next poll.
+export function advanceStreamCursor(current, events) {
+  let cursor = Number(current) || 0;
+  for (const event of events || []) {
+    const seq = Number(event && event.seq);
+    if (Number.isFinite(seq) && seq > cursor) cursor = seq;
+  }
+  return cursor;
+}
+
 function endpoint(rangeUrl, params) {
   const q = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -131,6 +151,8 @@ export async function fetchDaySnapshot({
   }));
   return {
     events: data.events,
-    head: Number(data.now) || Number(head) || 0,
+    // This snapshot was explicitly anchored to `head`. A newer server `now`
+    // belongs to the next live poll and must not advance the stream cursor.
+    head: Number(head) || 0,
   };
 }

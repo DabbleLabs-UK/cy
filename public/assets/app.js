@@ -14,8 +14,14 @@ import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
-import { fetchDayPage, fetchDaySnapshot, NARRATIVE_KINDS } from './history-feed.js';
-import { ambientEventLabel, dayLabel, shiftDate } from './timeline.js';
+import {
+  advanceStreamCursor,
+  fetchDayPage,
+  fetchDaySnapshot,
+  narrativeEventsForDate,
+  NARRATIVE_KINDS,
+} from './history-feed.js';
+import { ambientEventLabel, dayLabel, isLiveDate, shiftDate } from './timeline.js';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
 import '../components/async-select/async-select.js';
@@ -39,6 +45,7 @@ let lastSeq = 0;
 let polling = false;
 let feedLoading = false;
 let feedRenderToken = 0;
+let viewTransitionToken = 0;
 let currentDate = /^\d{4}-\d{2}-\d{2}$/.test(String(CFG.today || '')) ? CFG.today : null;
 // DAY N pill: seeded from the server's real count (see lib/tempo.php,
 // window.CY.day) so it is right from first paint, then advanced by exactly 1 on
@@ -180,8 +187,10 @@ async function boot() {
   if (window.__cyPlain && window.__cyPlain.onNearEnd) window.__cyPlain.onNearEnd(loadLaterHistory);
   pen.onChooseDay(openDayChooser);
   pen.onChangeDay(changeViewedDay);
+  pen.onGoLive(exitToLive);
   if (window.__cyPlain && window.__cyPlain.onChooseDay) window.__cyPlain.onChooseDay(openDayChooser);
   if (window.__cyPlain && window.__cyPlain.onChangeDay) window.__cyPlain.onChangeDay(changeViewedDay);
+  if (window.__cyPlain && window.__cyPlain.onGoLive) window.__cyPlain.onGoLive(exitToLive);
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
@@ -228,26 +237,38 @@ async function firstLoadRecent() {
   }
   pen.setInstant(true);
   postcards.setInstant(true);
-  // apply only the latest vitals/host from the backlog, but render all text
+  // Keep operational snapshots from the bounded backlog, but never place older
+  // narrative beneath today's banner if the normal day endpoint failed at boot.
   const events = data.events || [];
+  const narrative = currentDate
+    ? narrativeEventsForDate(events, currentDate)
+    : events.filter((ev) => NARRATIVE_KINDS.includes(ev.kind));
   // The bounded-stream fallback still needs a real day object. Without this the
   // first upward scroll had no date to decrement, so full-day backscroll could
   // never recover after a temporary range-endpoint failure at boot.
   if (currentDate) {
     loadedDays = [{
       date: currentDate,
-      events: events.filter((ev) => NARRATIVE_KINDS.includes(ev.kind)),
+      events: narrative,
       snapshot: [],
-      hasMoreBackward: events.length > 0,
+      hasMoreBackward: narrative.length > 0,
       hasMoreForward: false,
     }];
     if (pen.beginDay) pen.beginDay(currentDate, currentDate);
     if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate, currentDate);
   }
-  for (const ev of events) dispatch(ev, true);
+  const currentNarrativeSeqs = new Set(narrative.map((ev) => ev.seq));
+  for (const ev of events) {
+    if (!NARRATIVE_KINDS.includes(ev.kind) || !currentDate || currentNarrativeSeqs.has(ev.seq)) {
+      dispatch(ev, true);
+    }
+  }
   pen.setInstant(false);
   postcards.setInstant(false);
-  if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
+  // Advance only through rows actually received. The bounded endpoint can gain
+  // a newer server head while its page is being assembled; using that head here
+  // would skip those newly inserted events on the next poll.
+  lastSeq = advanceStreamCursor(lastSeq, events);
   // The LED stays idle through the backlog fill; only inference events newer than
   // the load point may ever drive it, so replayed history can never light it.
   led.lastSeq = lastSeq;
@@ -427,19 +448,27 @@ async function poll() {
   if (polling) return; // never overlap
   if (feedLoading) return; // a complete-day surface is being reconstructed
   if (historyMode) return; // reading the past: do not follow the live edge
+  const renderToken = feedRenderToken;
+  const transitionToken = viewTransitionToken;
   polling = true;
   try {
     const data = await fetchStream(lastSeq);
     const events = data.events || [];
+    // A request that began before a day render or a live/history transition must
+    // not paint into the replacement surface. Its cursor also stays untouched so
+    // the next live poll can collect those events normally.
+    if (historyMode || feedLoading || renderToken !== feedRenderToken || transitionToken !== viewTransitionToken) return;
     rememberLiveBatch(events);
     dispatchBatch(events);
     // Drive the public LED from the freshest inference phase in THIS live batch
     // (after rendering, so it wins over any token fast-path in the same batch).
     driveLedFromBatch(events);
-    if (typeof data.now === 'number') lastSeq = Math.max(lastSeq, data.now);
+    lastSeq = advanceStreamCursor(lastSeq, events);
     setStatus('Live', false);
   } catch (e) {
-    setStatus('reconnecting', true);
+    if (!historyMode && renderToken === feedRenderToken && transitionToken === viewTransitionToken) {
+      setStatus('reconnecting', true);
+    }
   } finally {
     polling = false;
   }
@@ -495,12 +524,7 @@ async function fetchStream(since) {
   const url = `${STREAM}?since=${since}&limit=500`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error('stream ' + res.status);
-  const data = await res.json();
-  // track highest seq we actually saw as a fallback to `now`
-  for (const ev of data.events || []) {
-    if (typeof ev.seq === 'number' && ev.seq > lastSeq) lastSeq = ev.seq;
-  }
-  return data;
+  return res.json();
 }
 
 // ---- event dispatch -----------------------------------------------------
@@ -659,7 +683,12 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // own known-correct count rather than trusting the runner's reported number.
       if (!bootstrap) {
         const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
-        if (m) currentDate = m[1];
+        if (m) {
+          currentDate = m[1];
+          if (window.__cyTimeTravel && window.__cyTimeTravel.setToday) {
+            window.__cyTimeTravel.setToday(currentDate);
+          }
+        }
         resetFeedSurfaces();
         if (currentDate && pen.beginDay) pen.beginDay(currentDate, currentDate);
         if (currentDate && window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate, currentDate);
@@ -932,8 +961,17 @@ function initHistoryControl() {
   // The calendar dialog's committed day: enter history and light the pill.
   document.addEventListener('cy:moment', (e) => {
     window.__cyMoment = e.detail;
-    void enterHistory(e.detail);
+    void showSelectedDay(e.detail);
   });
+}
+
+async function showSelectedDay(detail) {
+  if (!detail || !detail.date) return;
+  if (isLiveDate(detail.date, currentDate)) {
+    await exitToLive();
+    return;
+  }
+  await enterHistory(detail);
 }
 
 function activeFeedDate() {
@@ -957,24 +995,30 @@ function changeViewedDay(delta) {
     summary: { when: dayLabel(date), lines: [] },
   };
   window.__cyMoment = detail;
-  void enterHistory(detail);
+  void showSelectedDay(detail);
 }
 
 async function enterHistory(detail) {
+  if (!detail || !detail.date) return;
+  if (isLiveDate(detail.date, currentDate)) {
+    await exitToLive();
+    return;
+  }
+  const transition = ++viewTransitionToken;
   historyMode = true;
   viewingMoment = detail;
   document.body.classList.add('cy-history');
   showHistoryPill(detail, true);
   try {
     const rendered = await renderFeedDay(detail.date, { history: true });
-    if (!rendered || !historyMode || viewingMoment !== detail) return;
+    if (!rendered || transition !== viewTransitionToken || !historyMode || viewingMoment !== detail) return;
     showHistoryPill(detail, false);
     const s = detail.summary || {};
     const when = s.when || detail.ts || '';
     const what = (s.lines && s.lines.length) ? s.lines.join(', ') : '';
     pushTicker(`history: ${when}${what ? ' - ' + what : ''}`);
   } catch (e) {
-    if (!historyMode || viewingMoment !== detail) return;
+    if (transition !== viewTransitionToken || !historyMode || viewingMoment !== detail) return;
     const pill = $('#status');
     if (pill) {
       pill.classList.add('bad');
@@ -984,6 +1028,7 @@ async function enterHistory(detail) {
 }
 
 async function exitToLive() {
+  const transition = ++viewTransitionToken;
   historyMode = false;
   viewingMoment = null;
   feedRenderToken++;
@@ -997,12 +1042,14 @@ async function exitToLive() {
   }
   if (window.__cyTimeTravel) window.__cyTimeTravel.close();
   try {
-    if (currentDate) await renderFeedDay(currentDate, { history: false });
+    const rendered = currentDate ? await renderFeedDay(currentDate, { history: false }) : false;
+    if (!rendered || transition !== viewTransitionToken || historyMode) return;
     setStatus('Live', false);
   } catch (e) {
+    if (transition !== viewTransitionToken || historyMode) return;
     setStatus('reconnecting', true);
   }
-  poll();
+  if (transition === viewTransitionToken && !historyMode) poll();
 }
 
 function showHistoryPill(detail, loading = false) {

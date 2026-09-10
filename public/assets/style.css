@@ -420,7 +420,9 @@ body.cy-paused::after {
   font: inherit;
   cursor: pointer;
 }
+.cy-day-actions { display: flex; align-items: stretch; gap: 4px; }
 .cy-day-step { padding: 5px 9px; font-size: 9px; }
+.cy-day-live { color: #8dd2a0; border-color: #45634e; }
 .cy-day-choose {
   min-width: 0;
   display: flex;
@@ -1497,7 +1499,9 @@ body.cy-paused::after {
   font: inherit;
   cursor: pointer;
 }
+.pl-day-actions { display: flex; align-items: stretch; gap: 4px; }
 .pl-day-step { padding: 5px 9px; font-size: 9px; }
+.pl-day-live { color: var(--good); border-color: #3e5f49; }
 .pl-day-choose {
   min-width: 0;
   display: flex;

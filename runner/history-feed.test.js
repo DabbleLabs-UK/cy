@@ -1,7 +1,28 @@
 import assert from 'node:assert/strict';
-import { fetchDayEvents, fetchDayPage, fetchDaySnapshot, NARRATIVE_KINDS } from '../public/assets/history-feed.js';
+import {
+  advanceStreamCursor,
+  fetchDayEvents,
+  fetchDayPage,
+  fetchDaySnapshot,
+  narrativeEventsForDate,
+  NARRATIVE_KINDS,
+} from '../public/assets/history-feed.js';
 
 assert.ok(NARRATIVE_KINDS.includes('fan_mail_in'), 'fan mail remains part of historical replay');
+assert.deepEqual(
+  narrativeEventsForDate([
+    { seq: 1, ts: '2026-08-19 13:00:00', kind: 'text' },
+    { seq: 2, ts: '2026-09-10 06:00:00', kind: 'text' },
+    { seq: 3, ts: '2026-09-10 06:00:01', kind: 'vitals' },
+  ], '2026-09-10').map((event) => event.seq),
+  [2],
+  'the stream fallback cannot label older narrative as today',
+);
+assert.equal(
+  advanceStreamCursor(100, [{ seq: 101 }, { seq: 600 }]),
+  600,
+  'a capped stream advances only through rows actually received',
+);
 
 const calls = [];
 const pages = [
@@ -86,6 +107,7 @@ const snapshot = await fetchDaySnapshot({
   },
 });
 assert.deepEqual(snapshot.events.map((e) => e.seq), [150]);
+assert.equal(snapshot.head, 200, 'snapshot stays on its requested page head');
 assert.equal(snapshotCalls[0].searchParams.get('date'), '2026-09-04');
 assert.equal(snapshotCalls[0].searchParams.get('before'), '201');
 

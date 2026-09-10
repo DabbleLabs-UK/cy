@@ -25,7 +25,7 @@
 // exposes window.__cyPlain (event sink + font handoff + reveal) for app.js.
 
 import { sketchToPaths, sketchBounds } from './pen.js';
-import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, shiftTimestamp, timestampMs } from './timeline.js';
+import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
@@ -46,6 +46,7 @@ let loadEarlier = null;
 let loadLater = null;
 let chooseDay = null;
 let changeDay = null;
+let goLive = null;
 let scrollSettleToken = 0;
 let suppressPaging = false;
 const draws = new Map();          // drawing id -> { svg, strokes[] }
@@ -64,7 +65,7 @@ function boot() {
   // instant; reveal() just pins it to the live edge when it becomes visible.
   window.__cyPlain = {
     handle, setFont, reveal, reset, scrollToStart, scrollToEnd,
-    beginDay, onNearStart, onNearEnd, onChooseDay, onChangeDay,
+    beginDay, onNearStart, onNearEnd, onChooseDay, onChangeDay, onGoLive,
     scrollState, restoreAfterPrepend, restorePosition,
   };
 
@@ -371,7 +372,8 @@ function beginDay(date, today = '') {
   choose.className = 'pl-day-choose';
   choose.setAttribute('aria-label', 'Choose another day');
   const cap = document.createElement('span');
-  cap.textContent = 'VIEWING';
+  const liveDay = isLiveDate(date, today);
+  cap.textContent = liveDay ? 'LIVE' : 'VIEWING';
   const label = document.createElement('strong');
   label.textContent = dayLabel(date);
   choose.appendChild(cap);
@@ -381,13 +383,26 @@ function beginDay(date, today = '') {
   const next = document.createElement('button');
   next.type = 'button';
   next.className = 'pl-day-step';
-  next.textContent = 'Next day';
-  next.disabled = !!today && String(date) >= String(today);
+  const nextDate = shiftDate(date, 1);
+  next.textContent = !liveDay && nextDate === today ? 'Live today' : 'Next day';
+  next.disabled = liveDay || (!!today && String(date) >= String(today));
   next.addEventListener('click', () => { if (changeDay) changeDay(1); });
+
+  const actions = document.createElement('div');
+  actions.className = 'pl-day-actions';
+  actions.appendChild(next);
+  if (!liveDay && today && nextDate !== today) {
+    const live = document.createElement('button');
+    live.type = 'button';
+    live.className = 'pl-day-step pl-day-live';
+    live.textContent = 'Live now';
+    live.addEventListener('click', () => { if (goLive) goLive(); });
+    actions.appendChild(live);
+  }
 
   banner.appendChild(previous);
   banner.appendChild(choose);
-  banner.appendChild(next);
+  banner.appendChild(actions);
   colEl.appendChild(banner);
 }
 
@@ -518,6 +533,9 @@ function onChooseDay(fn) {
 }
 function onChangeDay(fn) {
   changeDay = typeof fn === 'function' ? fn : null;
+}
+function onGoLive(fn) {
+  goLive = typeof fn === 'function' ? fn : null;
 }
 function autoScroll() {
   if (stuck) scrollToBottom();

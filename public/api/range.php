@@ -32,6 +32,10 @@ header('Cache-Control: public, max-age=15');
 
 try {
     $db = captive_db();
+    // Freeze this response at one high-water mark before selecting page rows.
+    // Events inserted while the query runs remain beyond `now` and are picked up
+    // by the next live poll instead of being skipped by an advanced cursor.
+    $head = (int)$db->query('SELECT COALESCE(MAX(seq), 0) FROM events')->fetchColumn();
 
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : RANGE_DEFAULT_LIMIT;
     if ($limit < 1) {
@@ -74,8 +78,9 @@ try {
     // one so that first event is included in the forward page).
     $after = isset($_GET['after']) ? (int)$_GET['after'] : null;
     if ($after === null && $before === null && isset($_GET['ts']) && $_GET['ts'] !== '') {
-        $stmt = $db->prepare('SELECT MIN(seq) FROM events WHERE ts >= :ts');
+        $stmt = $db->prepare('SELECT MIN(seq) FROM events WHERE ts >= :ts AND seq <= :head');
         $stmt->bindValue(':ts', (string)$_GET['ts']);
+        $stmt->bindValue(':head', $head, PDO::PARAM_INT);
         $stmt->execute();
         $anchor = $stmt->fetchColumn();
         // If nothing is at/after ts we are past the end: page from the max seq
@@ -98,6 +103,8 @@ try {
         $conds[] = 'seq > :after';
         $params[':after'] = [$after, PDO::PARAM_INT];
     }
+    $conds[] = 'seq <= :head';
+    $params[':head'] = [$head, PDO::PARAM_INT];
 
     if ($kinds) {
         $in = [];
@@ -150,7 +157,6 @@ try {
 
     $firstSeq = $events ? $events[0]['seq'] : null;
     $lastSeq = $events ? $events[count($events) - 1]['seq'] : null;
-    $head = (int)$db->query('SELECT COALESCE(MAX(seq), 0) FROM events')->fetchColumn();
 
     // Direction-aware "is there more" flags. For the direction we did NOT page,
     // there is more iff the page is non-empty and not already at the edge.

@@ -6,6 +6,7 @@ import {
   dayLabel,
   endpointLabel,
   formatDuration,
+  isLiveDate,
   previousDate,
   refreshEndpointTimes,
   shiftDate,
@@ -19,6 +20,8 @@ assert.equal(formatDuration(0), '0s');
 assert.equal(previousDate('2026-03-01'), '2026-02-28');
 assert.equal(previousDate('2024-03-01'), '2024-02-29');
 assert.equal(shiftDate('2026-03-01', 1), '2026-03-02');
+assert.equal(isLiveDate('2026-09-10', '2026-09-10'), true, 'today selects the live view');
+assert.equal(isLiveDate('2026-09-09', '2026-09-10'), false, 'an earlier date selects history');
 assert.equal(clockOf('2026-09-09 14:03:27'), '14:03:27');
 assert.match(dayLabel('2026-09-09'), /9 September 2026/);
 assert.equal(

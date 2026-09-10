@@ -39,14 +39,15 @@ let maxYM = 0;
 let selectedDate = '';
 let lastCommitted = null;
 let openerFocus = null;
+let todayDate = validDate(CFG.today) ? CFG.today : londonToday();
 const selectListeners = [];
 
 function boot() {
   build();
-  window.__cyTimeTravel = { open, close, onSelect, selected: () => lastCommitted };
+  window.__cyTimeTravel = { open, close, onSelect, setToday, selected: () => lastCommitted };
   if (document.body.dataset.test === '1') {
     window.__CY_TT__ = {
-      load, open, close, confirmDay, renderMonth, stepMonth, getIndex: () => index,
+      load, open, close, confirmDay, renderMonth, stepMonth, setToday, getIndex: () => index,
     };
   }
 }
@@ -72,7 +73,7 @@ function build() {
 
   const intro = document.createElement('p');
   intro.className = 'tt-intro';
-  intro.textContent = 'The feed shows one complete day at a time. Choose another date here.';
+  intro.textContent = 'Choose a past day to read it. Choosing today returns straight to the live feed.';
 
   const dateForm = document.createElement('form');
   dateForm.className = 'tt-date-form';
@@ -198,7 +199,7 @@ function computeDerived(days, moods) {
     if (day.chars > maxDayChars) maxDayChars = day.chars;
   }
   index = { days, byDate, moods };
-  maxDate = validDate(CFG.today) ? CFG.today : londonToday();
+  maxDate = todayDate;
   const prisonDays = Math.max(1, Math.floor(Number(CFG.day) || 1));
   const inferredStart = shiftDate(maxDate, 1 - prisonDays);
   const indexedStart = days.length && validDate(days[0].date) ? days[0].date : maxDate;
@@ -206,6 +207,25 @@ function computeDerived(days, moods) {
   if (minDate > maxDate) minDate = maxDate;
   minYM = ymOf(minDate);
   maxYM = ymOf(maxDate);
+}
+
+function setToday(date) {
+  if (!validDate(date)) return;
+  todayDate = date;
+  if (!index) return;
+  computeDerived(index.days || [], index.moods || {});
+  selectedDate = clampDate(selectedDate || maxDate);
+  if (dateInput) {
+    dateInput.min = minDate;
+    dateInput.max = maxDate;
+    dateInput.value = selectedDate;
+  }
+  const shownYM = viewYear * 12 + viewMonth;
+  if (shownYM > maxYM) {
+    viewYear = Number(maxDate.slice(0, 4));
+    viewMonth = Number(maxDate.slice(5, 7)) - 1;
+  }
+  if (dlg && dlg.open) renderMonth();
 }
 
 function renderMonth() {
@@ -245,7 +265,11 @@ function renderMonth() {
         cell.classList.add('is-unindexed');
         cell.setAttribute('aria-label', longDate(date) + ', raw day not yet summarised');
       }
-      if (date === maxDate) cell.classList.add('is-today');
+      if (date === maxDate) {
+        cell.classList.add('is-today');
+        const existingLabel = cell.getAttribute('aria-label') || longDate(date);
+        cell.setAttribute('aria-label', existingLabel + ', today - return to live');
+      }
       if (date === selectedDate) cell.classList.add('is-selected');
       cell.addEventListener('click', () => confirmDay(date));
     }
