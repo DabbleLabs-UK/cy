@@ -1,14 +1,34 @@
 import assert from 'node:assert/strict';
-import { metricExplanation, buildHistoryPath, buildHistoryUrl } from '../public/assets/brain.js';
+import {
+  buildHistoryPath,
+  buildHistoryUrl,
+  contributorExplanation,
+  metricExplanation,
+  metricStateSummary,
+  visibleContributors,
+} from '../public/assets/brain.js';
 
 const metric = {
   label: 'ANXIETY', value: 64, baseline: 18, trend: 'rising', trendDelta: 4.2,
   contributors: [{ contribution: 22.4, description: 'threat or lost control in: the cell search' }],
 };
 const explanation = metricExplanation(metric);
-assert.match(explanation, /Current 64/);
-assert.match(explanation, /Resting tendency 18/);
+assert.match(explanation, /Current level 64/);
+assert.match(explanation, /Usual resting level 18/);
 assert.match(explanation, /\+22\.4: threat or lost control in: the cell search/);
+assert.equal(metricStateSummary(metric), 'Current level 64; usual resting level 18. It has risen 4.2 points recently.');
+
+const repeated = {
+  contributors: [
+    { contribution: 22.4, sourceType: 'cognitive_event', sourceId: '45:unresolved', startedAtMs: 1, description: 'the cell search' },
+    { contribution: 18, sourceType: 'cognitive_event', sourceId: '46:unresolved', startedAtMs: 2, description: 'the cell search' },
+    { contribution: -5, sourceType: 'social', sourceId: 'visitor:1', startedAtMs: 3, description: 'a kind postcard' },
+  ],
+};
+assert.deepEqual(visibleContributors(repeated).map((item) => item.description), ['the cell search', 'a kind postcard'], 'visible evidence is deduplicated');
+const readableContributor = contributorExplanation(repeated.contributors[0]);
+assert.match(readableContributor, /the cell search - raised this by 22\.4/);
+assert.doesNotMatch(readableContributor, /cognitive_event|45:unresolved/, 'internal source identifiers stay out of the normal disclosure');
 
 const path = buildHistoryPath([
   { ts: 0, value: 10 }, { ts: 60000, value: 20 }, { ts: 120000, value: 30 },

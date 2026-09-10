@@ -55,12 +55,43 @@ export function metricExplanation(metric) {
   const trend = metric.trend === 'rising' ? `rising ${Math.abs(metric.trendDelta || 0).toFixed(1)} points`
     : metric.trend === 'falling' ? `falling ${Math.abs(metric.trendDelta || 0).toFixed(1)} points`
       : 'steady over the recent window';
-  const contributors = Array.isArray(metric.contributors) ? metric.contributors : [];
+  const contributors = visibleContributors(metric);
   if (!contributors.length) {
-    return `Current ${metric.value}. Resting tendency ${metric.baseline}. It is ${trend}; no active contributor is materially above the resting tendency.`;
+    return `Current level ${metric.value}. Usual resting level ${metric.baseline}. It is ${trend}; no recent influence is materially above the resting tendency.`;
   }
   const causes = contributors.slice(0, 4).map((item) => `${item.contribution >= 0 ? '+' : ''}${item.contribution}: ${item.description}`).join('; ');
-  return `Current ${metric.value}. Resting tendency ${metric.baseline}. It is ${trend}. Active contributors: ${causes}.`;
+  return `Current level ${metric.value}. Usual resting level ${metric.baseline}. It is ${trend}. Main recent influences: ${causes}.`;
+}
+
+export function metricStateSummary(metric) {
+  if (!metric) return 'No current state is available.';
+  const trend = metric.trend === 'rising' ? `It has risen ${Math.abs(metric.trendDelta || 0).toFixed(1)} points recently.`
+    : metric.trend === 'falling' ? `It has fallen ${Math.abs(metric.trendDelta || 0).toFixed(1)} points recently.`
+      : 'It has been steady recently.';
+  return `Current level ${metric.value}; usual resting level ${metric.baseline}. ${trend}`;
+}
+
+export function visibleContributors(metric, limit = 4) {
+  const source = Array.isArray(metric && metric.contributors) ? metric.contributors : [];
+  const seen = new Set();
+  const result = [];
+  for (const contributor of source) {
+    const description = String(contributor && contributor.description || '').trim();
+    if (!description || seen.has(description)) continue;
+    seen.add(description);
+    result.push(contributor);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+export function contributorExplanation(contributor) {
+  const amount = Number(contributor && contributor.contribution) || 0;
+  const effect = amount >= 0 ? `raised this by ${Math.abs(amount)}` : `lowered this by ${Math.abs(amount)}`;
+  const at = Number.isFinite(contributor && contributor.startedAtMs)
+    ? new Date(contributor.startedAtMs).toLocaleString()
+    : 'time unavailable';
+  return `${String(contributor && contributor.description || 'Unlabelled influence')} - ${effect} (${at})`;
 }
 
 export function buildHistoryPath(points, width = 280, height = 80) {
@@ -148,7 +179,7 @@ export class BrainHud {
       entry.className = 'soma-state-entry soma-reading-entry';
       entry.dataset.metric = definition.key;
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.label}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">Awaiting Soma state.</p><ul class="soma-contributors"></ul>${historyMarkup()}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">Awaiting Soma state.</p><p class="soma-influences-title">RECENT INFLUENCES</p><ul class="soma-contributors"></ul>${historyMarkup()}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
@@ -291,13 +322,14 @@ export class BrainHud {
     const entry = this.rows[key];
     if (!metric || !entry) return;
     const detail = entry.querySelector('.soma-reading-detail');
-    detail.querySelector('.soma-reading-description').textContent = metricExplanation(metric);
+    detail.querySelector('.soma-reading-description').textContent = metricStateSummary(metric);
     const list = detail.querySelector('.soma-contributors');
+    const contributors = visibleContributors(metric);
+    detail.querySelector('.soma-influences-title').hidden = contributors.length === 0;
     list.textContent = '';
-    for (const contributor of metric.contributors || []) {
+    for (const contributor of contributors) {
       const item = document.createElement('li');
-      const at = Number.isFinite(contributor.startedAtMs) ? new Date(contributor.startedAtMs).toLocaleString() : 'time unavailable';
-      item.textContent = `${contributor.contribution >= 0 ? '+' : ''}${contributor.contribution} | ${contributor.sourceType} | ${contributor.sourceId} | ${at} | ${contributor.description}`;
+      item.textContent = contributorExplanation(contributor);
       list.appendChild(item);
     }
   }
