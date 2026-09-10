@@ -320,6 +320,10 @@ export class Pen {
     this._remeasureQueued = false;
     this._remeasureTries = 0;
     this._idleWaiters = [];
+    // Once a newer chronology object exists, this pen is historical. Any stroke
+    // still in flight and every queued mark must finish flat so the only moving
+    // hand belongs to the latest item at the bottom of the feed.
+    this.finishPending = false;
     // Optional shared animation gate. Composed surfaces use this to ensure a
     // later physical pen cannot start while an earlier card or entry is still
     // being written.
@@ -561,6 +565,7 @@ export class Pen {
     this.following = true;
     this._syncSurfaceHeight();
     this.root.scrollTop = 0;
+    this.finishPending = false;
   }
 
   whenIdle() {
@@ -883,6 +888,26 @@ export class Pen {
   // page loads mid-stream instantly instead of animating hundreds of events.
   setInstant(on) {
     this.instant = !!on;
+  }
+
+  // Complete this pen without losing any queued text or drawing. This differs
+  // from abort(), which deliberately drops the remainder and leaves a scar.
+  // Used when a newer visible chronology item arrives while this older surface
+  // is still animating.
+  finishImmediately() {
+    this.finishPending = true;
+    for (const job of this.jobs) {
+      if (Object.prototype.hasOwnProperty.call(job, 'instant')) job.instant = true;
+    }
+    const c = this._cur;
+    if (!c || !c.anim) return;
+    try {
+      c.path.style.strokeDashoffset = '0';
+      c.anim.finish();
+    } catch {
+      try { c.anim.cancel(); } catch { /* best effort */ }
+    }
+    this._hideNib();
   }
 
   _enqueue(job) {
@@ -1238,7 +1263,7 @@ export class Pen {
     // draw each stroke sequentially
     for (const dPath of g.strokes) {
       if (this.abortFlag) break;
-      await this._drawStroke(grp, dPath, sw, op, instant);
+      await this._drawStroke(grp, dPath, sw, op, instant || this.finishPending);
     }
 
     this.x += advance;
@@ -1422,7 +1447,7 @@ export class Pen {
       if (this.abortFlag) break;
       const jx = (Math.random() * 2 - 1) * style.jitter;
       const jy = (Math.random() * 2 - 1) * style.jitter;
-      await this._sketchStroke(grp, seg, box.scale, style, jx, jy, instant);
+      await this._sketchStroke(grp, seg, box.scale, style, jx, jy, instant || this.finishPending);
     }
 
     // caption in the same hand beneath the drawing, once, on the final pass
@@ -1432,7 +1457,7 @@ export class Pen {
         cap.setAttribute('class', 'sketch-caption');
         this.ink.appendChild(cap);
         this._trackNode(cap);
-        await this._captionLine(cap, box, String(drawing.title), style, instant);
+        await this._captionLine(cap, box, String(drawing.title), style, instant || this.finishPending);
       }
       this._sketchBoxes.delete(id);
     }
@@ -1568,7 +1593,7 @@ export class Pen {
       if (this.abortFlag) break;
       const jx = (Math.random() * 2 - 1) * style.jitter;
       const jy = (Math.random() * 2 - 1) * style.jitter;
-      await this._sketchStroke(box.grp, seg, box.scale, style, jx, jy, instant);
+      await this._sketchStroke(box.grp, seg, box.scale, style, jx, jy, instant || this.finishPending);
     }
   }
 

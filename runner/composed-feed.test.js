@@ -104,6 +104,16 @@ chronology.beginEntry('2026-09-09 10:25:00', 'dream');
 assert.ok(chronology.current.block._classes.has('cy-writing-note'), 'dream writing uses unruled note stock');
 assert.equal(chronology.current.block._classes.has('cy-journal-entry'), false, 'dream writing is not presented as a journal entry');
 
+const movingRoot = makeEl('div');
+const moving = new ComposedFeed(movingRoot, { chars: [] });
+let olderFinished = 0;
+moving.setInstant(true);
+moving.pens.push({ finishImmediately() { olderFinished++; }, setInstant() {} });
+moving.event('a later event', '', '2026-09-09 10:30:00', 'prison');
+assert.equal(olderFinished, 1, 'a later visible event finishes animation on older writing');
+moving.beginEntry('2026-09-09 10:31:00', 'journal');
+assert.equal(olderFinished, 2, 'a newer journal entry finishes animation on older writing');
+
 const spanRoot = makeEl('div');
 const spans = new ComposedFeed(spanRoot, { chars: [] });
 spans.setInstant(true);

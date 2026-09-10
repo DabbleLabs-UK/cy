@@ -158,6 +158,7 @@ export class ComposedFeed {
   }
 
   beginEntry(ts, mode) {
+    this.finishAnimations();
     this.closeEntry(ts);
     const entryMode = mode || 'journal';
     const block = document.createElement('article');
@@ -218,6 +219,7 @@ export class ComposedFeed {
   }
 
   event(label, detail, ts, kind = 'event', image = '') {
+    this.finishAnimations();
     this.closeEntry(ts);
     const block = document.createElement('section');
     block.className = 'cy-event-block cy-event-' + kind;
@@ -262,6 +264,7 @@ export class ComposedFeed {
   silence(seconds, ts) {
     const secs = Math.max(0, Number(seconds) || 0);
     if (!secs) return;
+    this.finishAnimations();
     this.closeEntry(shiftTimestamp(ts, -secs));
     const block = document.createElement('section');
     block.className = 'cy-event-block cy-event-silence';
@@ -277,6 +280,7 @@ export class ComposedFeed {
   }
 
   draw(drawing, ts) {
+    this.finishAnimations();
     this.closeEntry(ts);
     const block = document.createElement('section');
     block.className = 'cy-writing-segment cy-drawing-segment';
@@ -320,6 +324,14 @@ export class ComposedFeed {
     // next live token opens a real animated pen surface.
     if (wasInstant && !this.instant && this.current && this.current.static) this.closeEntry();
     for (const pen of this.pens) pen.setInstant(this.instant);
+  }
+
+  // A later visible object has taken the bottom of the chronology. Preserve all
+  // earlier ink, but stop those older surfaces owning a moving pen.
+  finishAnimations() {
+    for (const pen of this.pens) {
+      if (pen && typeof pen.finishImmediately === 'function') pen.finishImmediately();
+    }
   }
 
   reset() {

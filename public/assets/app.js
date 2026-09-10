@@ -556,6 +556,10 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         // first token of a new entry: open it on a fresh, dated line (the break +
         // timestamp the plain view shows, in the language of the notebook).
         if (!penEntryOpen) {
+          // A journal entry is now the newest visible item. A reply card from the
+          // preceding burst may finish its remaining ink, but cannot keep moving
+          // above the new entry.
+          postcards.finishAnimations();
           pen.beginEntry(ev.ts, p.mode);
           penEntryOpen = true;
         }
@@ -567,6 +571,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // a drawing pass: the same pen engine, fed strokes instead of glyphs. On
       // backlog fill pen.instant is set, so a drawing that finished before you
       // arrived lays down complete instead of re-animating from scratch.
+      postcards.finishAnimations();
       penEntryOpen = false; // a drawing is its own thing; text after it is a new entry
       pen.draw(p, ev.ts);
       if (!bootstrap && p.dream) {
@@ -587,6 +592,8 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         // a reply is starting: build the postcard and write on IT, not the sheet.
         // The journal pen is deliberately NOT switched to letter mode, so the
         // paper keeps its place and the journal resumes on it once the card settles.
+        pen.finishAnimations();
+        postcards.finishAnimations();
         postcards.begin();
       } else {
         if (p.from === 'letter') postcards.settle(); // reply done: card settles into place
@@ -614,6 +621,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // fresh dated entry, so the resumed line is stamped with its own time.
       penEntryOpen = false;
       const secs = Number(p.seconds) || 0;
+      postcards.finishAnimations();
       pen.silence(secs, ev.ts);
       if (!bootstrap && secs >= 60) pushTicker(p.reason === 'under' ? 'asleep, gone still' : 'gone quiet');
       break;
@@ -712,17 +720,20 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // the authoritative full reply text, for the mailbag and as the backlog
       // backfill if this card's per-token stream scrolled out of the window.
       postcards.reply(p.body);
+      postcards.finishAnimations();
       if (pen.event) pen.event('reply sent', '', ev.ts, 'postcard-reply');
       if (postcardWait) postcardWait.replied(p.reply_to || p.id);
       break;
     case 'fan_mail_in':
       hud.addFanMail(p);
+      postcards.finishAnimations();
       if (pen.fanMail) pen.fanMail(p, ev.ts);
       if (postcardWait) postcardWait.fan(p.id, p.may_reply !== false);
       if (!bootstrap) pushTicker(`fan mail kept from ${p.from || 'someone'}`);
       break;
     case 'news_in':
       hud.addNewsIn(p);
+      postcards.finishAnimations();
       if (pen.event) pen.event('news delivered', p.headline || '', ev.ts, 'news');
       if (!bootstrap) pushTicker(`news: ${p.headline || ''}`);
       break;
@@ -762,6 +773,7 @@ function handleAmbient(p, ts, bootstrap = false) {
     const who = p.who || 'someone';
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
     const label = g > 0.7 ? `bad blood with ${who}` : `${who} on the spur`;
+    postcards.finishAnimations();
     if (pen.event) pen.event(label, p.detail || '', ts, 'prison');
     if (!bootstrap) pushTicker(label);
     return;
@@ -770,12 +782,14 @@ function handleAmbient(p, ts, bootstrap = false) {
     const who = p.who || 'an officer';
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
     const label = g > 0.7 ? `bad blood with ${who}` : `${who} on the wing`;
+    postcards.finishAnimations();
     if (pen.event) pen.event(label, p.detail || '', ts, 'prison');
     if (!bootstrap) pushTicker(label);
     return;
   }
   if (name === 'overheard') {
     const label = ambientEventLabel(p);
+    postcards.finishAnimations();
     if (pen.event && label) pen.event(label, p.text || '', ts, 'prison');
     if (!bootstrap) pushTicker(label);
     return;
@@ -803,6 +817,7 @@ function handleAmbient(p, ts, bootstrap = false) {
     // postcard/news objects already carry their richer content in the chronology;
     // do not duplicate their generic precursor impulse as a second block.
     if (pen.event && !['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives'].includes(name)) {
+      postcards.finishAnimations();
       pen.event(ambientEventLabel(p) || nice[name], p.text || p.detail || '', ts, 'prison');
     }
     if (!bootstrap) pushTicker(nice[name]);

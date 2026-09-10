@@ -45,6 +45,16 @@ export class Postcards {
     if (this.active && this.active.pen) this.active.pen.setInstant(this.instant);
   }
 
+  // Preserve every word but flatten any reply that is no longer the newest
+  // visible item in the chronology.
+  finishAnimations() {
+    for (const card of this.cards) {
+      if (card.pen && typeof card.pen.finishImmediately === 'function') {
+        card.pen.finishImmediately();
+      }
+    }
+  }
+
   reset() {
     for (const card of this.cards) {
       if (card.finishLane) card.finishLane();

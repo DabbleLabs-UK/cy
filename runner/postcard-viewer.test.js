@@ -148,6 +148,25 @@ await (async () => {
   ok('a physical pen waits at the shared animation gate before drawing');
 })();
 
+// ---- 0a. superseded writing completes in full instead of being aborted ----
+await (async () => {
+  const older = new Pen(newRoot(), FONT);
+  const body = 'older words';
+  older.write(body);
+  for (let i = 0; i < 80 && !older._cur; i++) await new Promise((r) => setTimeout(r, 0));
+  assert.ok(older._cur, 'the older pen has a stroke in flight before it is superseded');
+  older._cur.anim.finish = function finish() {
+    if (typeof this.onfinish === 'function') this.onfinish();
+  };
+  older.finishImmediately();
+  await drain(older);
+  assert.equal(older.jobs.length, 0, 'all queued writing was completed');
+  const nonSpace = [...body].filter((c) => c !== ' ').length;
+  assert.equal(glyphGroups(older).length, nonSpace, 'finishing immediately preserves every queued character');
+  assert.equal(older.finishPending, true, 'the superseded pen cannot resume animated movement');
+  ok('superseded writing completes immediately without dropping words');
+})();
+
 // ---- 1. the reply renders on a franked, censored, addressed CARD ----
 await (async () => {
   const pcRoot = newRoot();
@@ -202,6 +221,17 @@ await (async () => {
   assert.equal(calls.length, 2, 'settling the reply releases the shared lane');
   assert.equal(calls[1].pen, cardPen, 'the same card pen is released');
   ok('a live reply participates in the single shared handwriting lane');
+})();
+
+// ---- 1aa. a newer feed item can flatten an older reply without dropping it ----
+await (async () => {
+  const pc = new Postcards(newRoot(), FONT);
+  pc.begin();
+  let finished = 0;
+  pc.active.pen.finishImmediately = () => { finished++; };
+  pc.finishAnimations();
+  assert.equal(finished, 1, 'a newer chronology item finishes the older card animation');
+  ok('an older reply can be completed immediately when a newer item arrives');
 })();
 
 // ---- 1b. an incoming picture is pinned to the card ----
