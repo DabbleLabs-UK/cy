@@ -15,3 +15,51 @@
 #topbar-spacer {
   height: var(--cy-topbar-height);
 }
+
+/* On desktop the instrument board occupies the viewport below the fixed header.
+   Each outer column owns its scrolling; the chronology frame itself never rides
+   up or down with the document, and its day banner remains pinned inside it. */
+@media (min-width: 901px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  #topbar-spacer,
+  #ticker {
+    flex: 0 0 auto;
+  }
+
+  .layout {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    overflow: hidden;
+    align-items: stretch;
+  }
+
+  .layout > .col {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .layout > .col-paper {
+    position: static;
+    overflow: hidden;
+  }
+
+  .col-paper > .paper,
+  .col-paper > .raw,
+  .col-paper > .plain {
+    height: 100%;
+    min-height: 0;
+  }
+}

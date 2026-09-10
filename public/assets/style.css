@@ -757,7 +757,52 @@ body.cy-paused::after {
 }
 .soma-region:focus-visible { outline: none; stroke: #eef6fb; stroke-width: 2; }
 .soma-region.active { filter: drop-shadow(0 0 5px rgba(240,137,70,0.55)); }
+.soma-region.is-associated {
+  stroke: #eef6fb;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 7px rgba(143,178,201,0.85));
+}
 .brain-key { position: absolute; right: 6px; bottom: 5px; color: rgba(186,203,215,0.5); font-size: 8px; letter-spacing: 0.14em; }
+.soma-region-list { display: grid; gap: 4px; margin-top: 7px; }
+.soma-region-entry {
+  border: 1px solid var(--line);
+  border-left: 2px solid #405668;
+  background: rgba(12, 17, 23, 0.72);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.soma-region-entry > summary {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 7px 5px 17px;
+  list-style: none;
+  cursor: pointer;
+}
+.soma-region-entry > summary::-webkit-details-marker { display: none; }
+.soma-region-entry > summary::before {
+  content: '+';
+  position: absolute;
+  left: 6px;
+  color: #718796;
+  font-size: 9px;
+}
+.soma-region-entry[open] > summary::before { content: '-'; }
+.soma-region-name { color: var(--tel); font-size: 8.5px; letter-spacing: 0.04em; }
+.soma-region-state { color: #cbd6de; font-size: 8px; font-weight: 600; letter-spacing: 0.07em; }
+.soma-region-entry > p {
+  margin: 0;
+  padding: 0 8px 7px 17px;
+  color: #91a2af;
+  font-size: 8.5px;
+  line-height: 1.45;
+}
+.soma-region-entry.is-associated {
+  border-color: #8fb2c9;
+  background: rgba(39, 66, 84, 0.45);
+}
+.soma-region-entry.is-associated .soma-region-name { color: #eef6fb; }
 .inference-measured { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 7px; border-block: 1px solid var(--line); padding: 7px 0; }
 .measure-dot { width: 7px; height: 7px; border-radius: 50%; background: #34414d; }
 .inference-measured[data-phase="eval"] .measure-dot { background: #cf9840; box-shadow: 0 0 7px rgba(207,152,64,0.7); }

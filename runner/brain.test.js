@@ -19,6 +19,7 @@ assert.deepEqual(
 );
 for (const region of BRAIN_REGIONS) {
   assert.match(region.path, /^M\d/);
+  assert.ok(region.label);
   assert.ok(snapshot.experienced.brain[region.key].explanation);
 }
 
@@ -32,6 +33,11 @@ assert.match(source, /this\.root\.querySelector\('\.soma-implemented'\)\.hidden 
 assert.match(source, /data-range="1h"/);
 assert.match(source, /data-range="24h"/);
 assert.match(source, /data-range="7d"/);
+assert.match(source, /class="soma-region-list"/);
+assert.match(source, /className = 'soma-region-entry'/);
+assert.match(source, /setRegionAssociation\(definition\.key, true\)/);
+assert.match(source, /region\.classList\.toggle\('is-associated', associated\)/);
+assert.match(source, /entry\.classList\.toggle\('is-associated', associated\)/);
 assert.doesNotMatch(source, /createElementNS\([^\n]+ellipse/);
 
 console.log('brain.test.js: all checks passed');

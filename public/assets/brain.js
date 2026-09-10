@@ -14,12 +14,12 @@ export const EXPERIENCED_METRICS = [
 ];
 
 export const BRAIN_REGIONS = [
-  { key: 'amygdala', path: 'M48 70 C68 48 99 40 125 48 L130 92 C103 98 77 104 54 96 Z' },
-  { key: 'prefrontal', path: 'M60 104 C82 87 107 87 132 97 L137 126 C107 130 80 127 58 117 Z' },
-  { key: 'acc', path: 'M119 67 C150 54 190 59 213 79 L202 93 C178 78 148 76 126 89 Z' },
-  { key: 'insula', path: 'M129 112 C145 96 172 94 191 107 C184 129 158 141 136 132 Z' },
-  { key: 'hippocampal', path: 'M166 151 C185 140 218 145 239 163 C218 158 210 174 193 179 C180 179 169 168 166 151 Z' },
-  { key: 'temporalSocial', path: 'M218 125 C246 119 278 129 291 151 C276 174 244 184 213 176 C225 157 228 143 218 125 Z' },
+  { key: 'amygdala', label: 'Amygdala analogy', path: 'M48 70 C68 48 99 40 125 48 L130 92 C103 98 77 104 54 96 Z' },
+  { key: 'prefrontal', label: 'Prefrontal analogy', path: 'M60 104 C82 87 107 87 132 97 L137 126 C107 130 80 127 58 117 Z' },
+  { key: 'acc', label: 'Anterior cingulate analogy', path: 'M119 67 C150 54 190 59 213 79 L202 93 C178 78 148 76 126 89 Z' },
+  { key: 'insula', label: 'Insula analogy', path: 'M129 112 C145 96 172 94 191 107 C184 129 158 141 136 132 Z' },
+  { key: 'hippocampal', label: 'Hippocampal analogy', path: 'M166 151 C185 140 218 145 239 163 C218 158 210 174 193 179 C180 179 169 168 166 151 Z' },
+  { key: 'temporalSocial', label: 'Temporal / social analogy', path: 'M218 125 C246 119 278 129 291 151 C276 174 244 184 213 176 C225 157 228 143 218 125 Z' },
 ];
 
 const CIRCUITS = [
@@ -88,6 +88,7 @@ export class BrainHud {
     this.latestBrain = {};
     this.rows = {};
     this.regions = {};
+    this.regionRows = {};
     this.activeMetric = null;
     this._build();
   }
@@ -112,6 +113,7 @@ export class BrainHud {
           </svg>
           <div class="brain-key">SOMA / FUNCTIONAL ANALOGY</div>
         </div>
+        <div class="soma-region-list" aria-label="Functional brain region states"></div>
         <section class="soma-detail" hidden aria-live="polite">
           <button class="soma-detail-close" type="button" aria-label="Close state details">x</button>
           <h3></h3><p class="soma-detail-text"></p><ul class="soma-contributors"></ul>
@@ -146,12 +148,15 @@ export class BrainHud {
       this.rows[definition.key] = button;
     }
     const svg = this.root.querySelector('.brain-svg');
+    const regionList = this.root.querySelector('.soma-region-list');
     for (const definition of BRAIN_REGIONS) {
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', definition.path);
       path.setAttribute('class', 'soma-region');
       path.setAttribute('tabindex', '0');
       path.setAttribute('role', 'button');
+      path.setAttribute('aria-controls', `soma-region-${definition.key}`);
+      path.setAttribute('aria-expanded', 'false');
       path.dataset.region = definition.key;
       path.addEventListener('click', () => this.openRegion(definition.key));
       path.addEventListener('keydown', (event) => {
@@ -162,6 +167,22 @@ export class BrainHud {
       path.appendChild(title);
       svg.appendChild(path);
       this.regions[definition.key] = path;
+
+      const entry = document.createElement('details');
+      entry.className = 'soma-region-entry';
+      entry.id = `soma-region-${definition.key}`;
+      entry.dataset.region = definition.key;
+      entry.innerHTML = `<summary><span class="soma-region-name">${definition.label}</span><strong class="soma-region-state">--</strong></summary><p>Awaiting Soma state.</p>`;
+      entry.addEventListener('toggle', () => path.setAttribute('aria-expanded', String(entry.open)));
+      regionList.appendChild(entry);
+      this.regionRows[definition.key] = entry;
+
+      for (const item of [path, entry]) {
+        item.addEventListener('mouseenter', () => this.setRegionAssociation(definition.key, true));
+        item.addEventListener('mouseleave', () => this.setRegionAssociation(definition.key, false));
+        item.addEventListener('focusin', () => this.setRegionAssociation(definition.key, true));
+        item.addEventListener('focusout', () => this.setRegionAssociation(definition.key, false));
+      }
     }
     const diagnostics = this.root.querySelector('.soma-diagnostic-rows');
     for (const [key, label] of CIRCUITS) {
@@ -199,13 +220,19 @@ export class BrainHud {
     for (const definition of BRAIN_REGIONS) {
       const reading = this.latestBrain[definition.key];
       const region = this.regions[definition.key];
-      if (!reading || !region) continue;
+      const entry = this.regionRows[definition.key];
+      if (!reading || !region || !entry) continue;
       const value = clamp01(reading.value) || 0;
+      const percentage = Math.round(value * 100);
+      const description = `${reading.label}: ${reading.level}. ${reading.explanation} Current activity: ${percentage}%.`;
       region.style.fill = activityColor(value);
       region.style.fillOpacity = String(0.25 + value * 0.75);
       region.classList.toggle('active', value >= 0.5);
-      region.querySelector('title').textContent = `${reading.label}: ${reading.level}. ${reading.explanation}`;
+      region.querySelector('title').textContent = description;
       region.setAttribute('aria-label', `${reading.label}: ${reading.level}`);
+      entry.querySelector('.soma-region-name').textContent = reading.label;
+      entry.querySelector('.soma-region-state').textContent = `${String(reading.level).toUpperCase()} ${percentage}%`;
+      entry.querySelector('p').textContent = description;
     }
     for (const [key] of CIRCUITS) {
       const reading = soma.circuits && soma.circuits[key];
@@ -266,16 +293,16 @@ export class BrainHud {
   }
 
   openRegion(key) {
-    const region = this.latestBrain[key];
-    if (!region) return;
-    this.activeMetric = null;
-    const detail = this.root.querySelector('.soma-detail');
-    detail.hidden = false;
-    detail.querySelector('h3').textContent = region.label;
-    detail.querySelector('.soma-detail-text').textContent = region.explanation;
-    detail.querySelector('.soma-contributors').textContent = '';
-    detail.querySelector('.soma-history path').setAttribute('d', '');
-    detail.querySelector('.soma-history-note').textContent = `Current activity: ${region.level} (${Math.round(region.value * 100)}).`;
+    const entry = this.regionRows[key];
+    if (!entry) return;
+    entry.open = !entry.open;
+  }
+
+  setRegionAssociation(key, associated) {
+    const region = this.regions[key];
+    const entry = this.regionRows[key];
+    if (region) region.classList.toggle('is-associated', associated);
+    if (entry) entry.classList.toggle('is-associated', associated);
   }
 
   async loadHistory(key, range) {
@@ -308,5 +335,5 @@ export class BrainHud {
   setAmp(monotony, amp) { this.root.querySelector('.legacy-amp').textContent = clamp01(monotony) == null || !Number.isFinite(amp) ? 'unavailable' : `monotony ${Math.round(monotony * 100)} / x${amp.toFixed(1)}`; }
   setCast(relations) { this.root.querySelector('.legacy-cast').textContent = relations && Object.keys(relations).length ? `${Object.keys(relations).length} synthetic standings` : 'unavailable'; }
 
-  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this._build(); }
+  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this._build(); }
 }

@@ -20,6 +20,10 @@ const css = await readFile(new URL('../public/shell-layout.css', import.meta.url
 assert.match(css, /#topbar\s*\{[\s\S]*?position:\s*fixed;/, 'the header is fixed to the viewport');
 assert.doesNotMatch(css, /position:\s*sticky;/, 'the failed sticky implementation is gone');
 assert.match(css, /#topbar-spacer\s*\{[\s\S]*?var\(--cy-topbar-height\)/);
+assert.match(css, /@media\s*\(min-width:\s*901px\)[\s\S]*?body\s*\{[\s\S]*?overflow:\s*hidden;/, 'desktop document scrolling is contained below the header');
+assert.match(css, /\.layout\s*\{[\s\S]*?flex:\s*1 1 auto;[\s\S]*?min-height:\s*0;/, 'the desktop board fills only the remaining viewport');
+assert.match(css, /\.layout\s*>\s*\.col-paper\s*\{[\s\S]*?position:\s*static;[\s\S]*?overflow:\s*hidden;/, 'the chronology frame stays fixed while its contents scroll');
+assert.match(css, /\.col-paper\s*>\s*\.paper,[\s\S]*?height:\s*100%;[\s\S]*?min-height:\s*0;/, 'all centre views use the fixed desktop frame height');
 
 const page = await readFile(new URL('../public/index.php', import.meta.url), 'utf8');
 assert.match(page, /id="topbar-spacer"/);
