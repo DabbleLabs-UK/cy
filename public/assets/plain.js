@@ -25,7 +25,7 @@
 // exposes window.__cyPlain (event sink + font handoff + reveal) for app.js.
 
 import { sketchToPaths, sketchBounds } from './pen.js';
-import { ambientEventLabel, clockOf, dayLabel, formatDuration, sinceLabel, timestampMs } from './timeline.js';
+import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, shiftTimestamp, timestampMs } from './timeline.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
@@ -42,9 +42,10 @@ let lastIncomingFrom = '';        // sender of the most recent postcard, for the
 let incomingAwaitingReply = false;
 let replyMode = false;
 let pendingReplyTs = null;
-let lastMomentMs = null;
 let loadEarlier = null;
 let loadLater = null;
+let chooseDay = null;
+let changeDay = null;
 let scrollSettleToken = 0;
 let suppressPaging = false;
 const draws = new Map();          // drawing id -> { svg, strokes[] }
@@ -63,7 +64,8 @@ function boot() {
   // instant; reveal() just pins it to the live edge when it becomes visible.
   window.__cyPlain = {
     handle, setFont, reveal, reset, scrollToStart, scrollToEnd,
-    beginDay, onNearStart, onNearEnd, scrollState, restoreAfterPrepend, restorePosition,
+    beginDay, onNearStart, onNearEnd, onChooseDay, onChangeDay,
+    scrollState, restoreAfterPrepend, restorePosition,
   };
 
   if (document.body.dataset.test === '1') {
@@ -117,13 +119,13 @@ function handle(ev, bootstrap) {
       break;
 
     case 'mode': {
-      finalizeText(); // any mode change closes the open journal block
+      finalizeText(ev.ts); // any mode change closes the open journal block
       if (p.to === 'letter') {
         replyMode = true;
         pendingReplyTs = ev.ts;
         if (incomingAwaitingReply) beginReply(ev.ts);
       } else if (p.from === 'letter') {
-        settleReply();
+        settleReply(ev.ts);
         replyMode = false;
         incomingAwaitingReply = false;
         pendingReplyTs = null;
@@ -134,16 +136,16 @@ function handle(ev, bootstrap) {
     case 'gen':
       // a burst finished: close the open journal block so the next burst starts
       // its own. (A letter burst is closed by the mode flip back, not here.)
-      if (p.mode !== 'letter') finalizeText();
+      if (p.mode !== 'letter') finalizeText(ev.ts);
       break;
 
     case 'silence':
-      finalizeText();
+      finalizeText(shiftTimestamp(ev.ts, -(Number(p.seconds) || 0)));
       addGap(Number(p.seconds) || 0, ev.ts);
       break;
 
     case 'abort':
-      markCut();
+      markCut(ev.ts);
       break;
 
     case 'draw':
@@ -193,14 +195,16 @@ function appendText(s, mode, ts) {
 
 function makeTextBlock(mode, ts) {
   const b = makeBlock('text');
-  addMeta(b.el, ts, textModeLabel(mode));
+  const label = textModeLabel(mode);
+  addEndpoint(b.el, ts, label + ' starts', 'start');
   const t = document.createElement('div');
   t.className = 'pl-text';
   b.el.appendChild(t);
-  return { el: b.el, textEl: t, cut: false };
+  return { el: b.el, textEl: t, cut: false, label, startMs: timestampMs(ts) };
 }
 
-function finalizeText() {
+function finalizeText(endTs = '') {
+  if (curText) appendEnd(curText, endTs);
   curText = null;
 }
 
@@ -224,11 +228,12 @@ function textModeLabel(mode) {
 function beginReply(ts) {
   if (openReply) return;
   const b = makeBlock('reply');
-  addMeta(b.el, ts, lastIncomingFrom ? 'reply to ' + lastIncomingFrom : 'reply');
+  const label = lastIncomingFrom ? 'reply to ' + lastIncomingFrom : 'reply';
+  addEndpoint(b.el, ts, label + ' starts', 'start');
   const t = document.createElement('div');
   t.className = 'pl-text';
   b.el.appendChild(t);
-  openReply = { el: b.el, textEl: t, cut: false };
+  openReply = { el: b.el, textEl: t, cut: false, label, startMs: timestampMs(ts) };
 }
 
 function appendReply(s) {
@@ -237,8 +242,12 @@ function appendReply(s) {
   openReply.textEl.appendChild(document.createTextNode(s));
 }
 
-function settleReply() {
-  if (openReply) { pendingReply = openReply; openReply = null; }
+function settleReply(endTs = '') {
+  if (openReply) {
+    appendEnd(openReply, endTs);
+    pendingReply = openReply;
+    openReply = null;
+  }
 }
 
 function fillReply(body) {
@@ -258,7 +267,7 @@ function fillReply(body) {
 
 // ---- abort: cut off -----------------------------------------------------
 
-function markCut() {
+function markCut(ts = '') {
   const target = openReply || curText;
   if (!target || target.cut) return;
   target.cut = true;
@@ -267,7 +276,9 @@ function markCut() {
   m.className = 'pl-cut';
   m.textContent = 'cut off';
   target.textEl.appendChild(m);
-  if (target === curText) finalizeText();
+  appendEnd(target, ts);
+  if (target === curText) curText = null;
+  else if (target === openReply) { pendingReply = openReply; openReply = null; }
 }
 
 // ---- silence: a quiet gap marker ---------------------------------------
@@ -276,19 +287,21 @@ function addGap(secs, ts) {
   if (secs <= 0) return;
   const g = document.createElement('div');
   g.className = 'pl-gap';
+  addEndpoint(g, shiftTimestamp(ts, -secs), 'silence starts', 'start');
   const marker = document.createElement('span');
+  marker.className = 'pl-gap-label';
   marker.textContent = '[inmate silent for ' + formatDuration(secs) + ']';
   g.appendChild(marker);
-  addMomentAttrs(g, ts);
+  addEndpoint(g, ts, 'silence ends', 'end');
   colEl.appendChild(g);
 }
 
 // ---- incoming postcards + other public events -------------------------
 
 function addPostcardIn(p, ts) {
-  finalizeText();
+  finalizeText(ts);
   const b = makeBlock('postcard-in');
-  addMeta(b.el, ts, (p.promoted ? 'fan mail chosen from ' : 'postcard from ') + (p.from || 'someone'));
+  addEndpoint(b.el, ts, (p.promoted ? 'fan mail chosen from ' : 'postcard from ') + (p.from || 'someone'), 'point');
   if (p.body) {
     const body = document.createElement('div');
     body.className = 'pl-text pl-postcard-body';
@@ -306,9 +319,9 @@ function addPostcardIn(p, ts) {
 }
 
 function addFanMail(p, ts) {
-  finalizeText();
+  finalizeText(ts);
   const b = makeBlock('fan-mail');
-  addMeta(b.el, ts, 'fan mail bag - kept from ' + (p.from || 'someone'));
+  addEndpoint(b.el, ts, 'fan mail bag - kept from ' + (p.from || 'someone'), 'point');
   if (p.body) {
     const body = document.createElement('div');
     body.className = 'pl-text pl-postcard-body';
@@ -326,9 +339,9 @@ function addFanMail(p, ts) {
 }
 
 function addEvent(label, detail, ts, kind) {
-  finalizeText();
+  finalizeText(ts);
   const b = makeBlock(kind || 'event');
-  addMeta(b.el, ts, 'event');
+  addEndpoint(b.el, ts, 'event', 'point');
   const title = document.createElement('div');
   title.className = 'pl-event-title';
   title.textContent = '[' + String(label) + ']';
@@ -341,17 +354,40 @@ function addEvent(label, detail, ts, kind) {
   }
 }
 
-function beginDay(date) {
+function beginDay(date, today = '') {
   finalizeText();
   const banner = document.createElement('div');
   banner.className = 'pl-day-banner';
   banner.dataset.date = String(date || '');
+
+  const previous = document.createElement('button');
+  previous.type = 'button';
+  previous.className = 'pl-day-step';
+  previous.textContent = 'Previous day';
+  previous.addEventListener('click', () => { if (changeDay) changeDay(-1); });
+
+  const choose = document.createElement('button');
+  choose.type = 'button';
+  choose.className = 'pl-day-choose';
+  choose.setAttribute('aria-label', 'Choose another day');
   const cap = document.createElement('span');
   cap.textContent = 'VIEWING';
   const label = document.createElement('strong');
   label.textContent = dayLabel(date);
-  banner.appendChild(cap);
-  banner.appendChild(label);
+  choose.appendChild(cap);
+  choose.appendChild(label);
+  choose.addEventListener('click', () => { if (chooseDay) chooseDay(); });
+
+  const next = document.createElement('button');
+  next.type = 'button';
+  next.className = 'pl-day-step';
+  next.textContent = 'Next day';
+  next.disabled = !!today && String(date) >= String(today);
+  next.addEventListener('click', () => { if (changeDay) changeDay(1); });
+
+  banner.appendChild(previous);
+  banner.appendChild(choose);
+  banner.appendChild(next);
   colEl.appendChild(banner);
 }
 
@@ -367,11 +403,11 @@ function addDraw(p, ts) {
   const id = p.id != null ? String(p.id) : ('anon-' + colEl.childElementCount);
   let d = draws.get(id);
   if (!d) {
-    finalizeText(); // a fresh drawing is its own block, in order
+    finalizeText(ts); // a fresh drawing is its own block, in order
     const b = makeBlock('draw');
-    if (p.title) addMeta(b.el, ts, p.dream ? 'dream drawing' : String(p.title));
-    else if (p.dream) addMeta(b.el, ts, 'dream drawing');
-    else addMeta(b.el, ts, 'drawing');
+    if (p.title) addEndpoint(b.el, ts, p.dream ? 'dream drawing' : String(p.title), 'point');
+    else if (p.dream) addEndpoint(b.el, ts, 'dream drawing', 'point');
+    else addEndpoint(b.el, ts, 'drawing', 'point');
     const wrap = document.createElement('div');
     wrap.className = 'pl-sketch';
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -436,41 +472,26 @@ function makeBlock(kind) {
 
 // A quiet meta line: a small, muted timestamp and, where relevant, the mode.
 // Understated - not a header bar. Either part may be omitted.
-function addMeta(blockEl, ts, label) {
+function addEndpoint(blockEl, ts, label, edge) {
   const meta = document.createElement('div');
-  meta.className = 'pl-meta';
-  const time = clockOf(ts);
-  if (time) {
-    const t = document.createElement('span');
-    t.className = 'pl-time';
-    t.textContent = time;
-    meta.appendChild(t);
-  }
+  meta.className = 'pl-meta pl-meta-' + edge;
+  const t = document.createElement('time');
+  t.className = 'pl-time';
+  bindEndpointTime(t, ts);
+  meta.appendChild(t);
   if (label) {
     const l = document.createElement('span');
     l.className = 'pl-mode';
     l.textContent = label;
     meta.appendChild(l);
   }
-  const since = sinceLabel(ts, lastMomentMs);
-  if (since) {
-    const s = document.createElement('span');
-    s.className = 'pl-since';
-    s.textContent = '+' + since;
-    meta.appendChild(s);
-  }
   blockEl.appendChild(meta);
-  const ms = timestampMs(ts);
-  if (ms != null) lastMomentMs = ms;
 }
 
-function addMomentAttrs(el, ts) {
-  const time = clockOf(ts);
-  const since = sinceLabel(ts, lastMomentMs);
-  if (time) el.dataset.time = time;
-  if (since) el.dataset.since = '+' + since;
-  const ms = timestampMs(ts);
-  if (ms != null) lastMomentMs = ms;
+function appendEnd(item, ts) {
+  const endMs = timestampMs(ts);
+  if (!item || endMs == null || (item.startMs != null && endMs < item.startMs)) return;
+  addEndpoint(item.el, ts, item.label + ' ends', 'end');
 }
 
 // ---- formatting ---------------------------------------------------------
@@ -491,6 +512,12 @@ function onNearStart(fn) {
 }
 function onNearEnd(fn) {
   loadLater = typeof fn === 'function' ? fn : null;
+}
+function onChooseDay(fn) {
+  chooseDay = typeof fn === 'function' ? fn : null;
+}
+function onChangeDay(fn) {
+  changeDay = typeof fn === 'function' ? fn : null;
 }
 function autoScroll() {
   if (stuck) scrollToBottom();
@@ -547,7 +574,6 @@ function reset() {
   incomingAwaitingReply = false;
   replyMode = false;
   pendingReplyTs = null;
-  lastMomentMs = null;
   draws.clear();
   setScrollTop(0, true);
   if (jumpBtn) jumpBtn.hidden = true;

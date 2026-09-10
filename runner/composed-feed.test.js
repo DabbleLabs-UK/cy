@@ -22,6 +22,7 @@ function makeEl(tag) {
     get className() { return el._className || ''; },
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
     addEventListener() {},
+    setAttribute(name, value) { el[name] = String(value); },
     set textContent(v) { el._text = String(v); if (v === '') el.children = []; },
     get textContent() { return el._text; },
   };
@@ -66,5 +67,19 @@ chronology.write('after search', 'journal');
 assert.equal(chronology.flow.children.length, 3, 'ambient events remain between surrounding writing periods');
 assert.equal(chronology.flow.children[1].dataset.kind, 'prison');
 assert.equal(chronology.flow.children[1].children[1].textContent, '[the cell is searched]');
+
+const spanRoot = makeEl('div');
+const spans = new ComposedFeed(spanRoot, { chars: [] });
+spans.setInstant(true);
+spans.beginDay('2026-09-09', '2026-09-10');
+spans.beginEntry('2026-09-09 20:15:45', 'journal');
+spans.write('one bounded thought', 'journal');
+spans.closeEntry('2026-09-09 20:20:48');
+const entry = spans.flow.children[1];
+assert.ok(entry.children[0]._classes.has('cy-moment-start'), 'writing shows its start endpoint');
+assert.ok(entry.children[2]._classes.has('cy-moment-end'), 'writing shows its end endpoint');
+assert.match(entry.children[0].children[0].textContent, /^20:15:45 \(/);
+assert.match(entry.children[2].children[0].textContent, /^20:20:48 \(/);
+assert.equal(spans.flow.children[0].children.length, 3, 'day banner exposes previous, chooser, and next controls');
 
 console.log('composed-feed.test.js: all checks passed');

@@ -5,7 +5,7 @@
 // preserved during live viewing and historical replay.
 
 import { Pen } from './pen.js';
-import { clockOf, dayLabel, formatDuration, sinceLabel, timestampMs } from './timeline.js';
+import { bindEndpointTime, dayLabel, formatDuration, shiftTimestamp, timestampMs } from './timeline.js';
 
 export class ComposedFeed {
   constructor(root, font) {
@@ -15,10 +15,11 @@ export class ComposedFeed {
     this.current = null;
     this.pens = [];
     this.vitals = null;
-    this.lastMomentMs = null;
     this.following = true;
     this.loadingEarlier = null;
     this.loadingLater = null;
+    this.chooseDay = null;
+    this.changeDay = null;
     this.scrollSettleToken = 0;
     this.suppressPaging = false;
 
@@ -46,27 +47,65 @@ export class ComposedFeed {
     this.loadingLater = typeof fn === 'function' ? fn : null;
   }
 
-  beginDay(date) {
+  onChooseDay(fn) {
+    this.chooseDay = typeof fn === 'function' ? fn : null;
+  }
+
+  onChangeDay(fn) {
+    this.changeDay = typeof fn === 'function' ? fn : null;
+  }
+
+  beginDay(date, today = '') {
     this.closeEntry();
     const banner = document.createElement('div');
     banner.className = 'cy-day-banner';
     banner.dataset.date = String(date || '');
+
+    const previous = document.createElement('button');
+    previous.type = 'button';
+    previous.className = 'cy-day-step';
+    previous.textContent = 'Previous day';
+    previous.addEventListener('click', () => {
+      if (this.changeDay) this.changeDay(-1);
+    });
+
+    const choose = document.createElement('button');
+    choose.type = 'button';
+    choose.className = 'cy-day-choose';
+    choose.setAttribute('aria-label', 'Choose another day');
     const cap = document.createElement('span');
     cap.className = 'cy-day-cap';
     cap.textContent = 'VIEWING';
     const label = document.createElement('strong');
     label.textContent = dayLabel(date);
-    banner.appendChild(cap);
-    banner.appendChild(label);
+    choose.appendChild(cap);
+    choose.appendChild(label);
+    choose.addEventListener('click', () => {
+      if (this.chooseDay) this.chooseDay();
+    });
+
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.className = 'cy-day-step';
+    next.textContent = 'Next day';
+    next.disabled = !!today && String(date) >= String(today);
+    next.addEventListener('click', () => {
+      if (this.changeDay) this.changeDay(1);
+    });
+
+    banner.appendChild(previous);
+    banner.appendChild(choose);
+    banner.appendChild(next);
     this.flow.appendChild(banner);
   }
 
   beginEntry(ts, mode) {
-    this.closeEntry();
+    this.closeEntry(ts);
     const block = document.createElement('article');
     block.className = 'cy-writing-segment';
     block.dataset.kind = mode || 'journal';
-    this._appendMoment(block, ts, mode === 'dream' ? 'dream' : mode === 'warden' ? 'notice' : 'writing');
+    const label = mode === 'dream' ? 'dream' : mode === 'warden' ? 'notice' : 'writing';
+    this._appendEndpoint(block, ts, label + ' starts', 'start');
     const surface = document.createElement('div');
     surface.className = 'cy-writing-surface';
     block.appendChild(surface);
@@ -79,7 +118,10 @@ export class ComposedFeed {
     // pays for the animated vector pen.
     if (this.instant) {
       surface.classList.add('cy-writing-static');
-      this.current = { block, surface, text: '', mode: mode || 'journal', static: true };
+      this.current = {
+        block, surface, text: '', mode: mode || 'journal', label,
+        startMs: timestampMs(ts), static: true,
+      };
       this._follow();
       return;
     }
@@ -89,7 +131,7 @@ export class ComposedFeed {
     if (this.vitals) pen.setVitals(this.vitals);
     pen.beginEntry('', mode || 'journal');
     this.pens.push(pen);
-    this.current = { block, pen, mode: mode || 'journal' };
+    this.current = { block, pen, mode: mode || 'journal', label, startMs: timestampMs(ts) };
     this._follow();
   }
 
@@ -105,16 +147,21 @@ export class ComposedFeed {
     this._follow();
   }
 
-  closeEntry() {
+  closeEntry(endTs = '') {
+    const entry = this.current;
+    const endMs = timestampMs(endTs);
+    if (entry && endMs != null && (entry.startMs == null || endMs >= entry.startMs)) {
+      this._appendEndpoint(entry.block, endTs, entry.label + ' ends', 'end');
+    }
     this.current = null;
   }
 
   event(label, detail, ts, kind = 'event', image = '') {
-    this.closeEntry();
+    this.closeEntry(ts);
     const block = document.createElement('section');
     block.className = 'cy-event-block cy-event-' + kind;
     block.dataset.kind = kind;
-    this._appendMoment(block, ts, 'event');
+    this._appendEndpoint(block, ts, 'event', 'point');
     const title = document.createElement('div');
     title.className = 'cy-event-title';
     title.textContent = '[' + String(label || 'event') + ']';
@@ -154,15 +201,26 @@ export class ComposedFeed {
   silence(seconds, ts) {
     const secs = Math.max(0, Number(seconds) || 0);
     if (!secs) return;
-    this.event('inmate silent for ' + formatDuration(secs), '', ts, 'silence');
+    this.closeEntry(shiftTimestamp(ts, -secs));
+    const block = document.createElement('section');
+    block.className = 'cy-event-block cy-event-silence';
+    block.dataset.kind = 'silence';
+    this._appendEndpoint(block, shiftTimestamp(ts, -secs), 'silence starts', 'start');
+    const title = document.createElement('div');
+    title.className = 'cy-event-title';
+    title.textContent = '[inmate silent for ' + formatDuration(secs) + ']';
+    block.appendChild(title);
+    this._appendEndpoint(block, ts, 'silence ends', 'end');
+    this.flow.appendChild(block);
+    this._follow();
   }
 
   draw(drawing, ts) {
-    this.closeEntry();
+    this.closeEntry(ts);
     const block = document.createElement('section');
     block.className = 'cy-writing-segment cy-drawing-segment';
     block.dataset.kind = 'drawing';
-    this._appendMoment(block, ts, drawing && drawing.dream ? 'dream drawing' : 'drawing');
+    this._appendEndpoint(block, ts, drawing && drawing.dream ? 'dream drawing' : 'drawing', 'point');
     const surface = document.createElement('div');
     surface.className = 'cy-writing-surface cy-drawing-surface';
     block.appendChild(surface);
@@ -175,9 +233,9 @@ export class ComposedFeed {
     this._follow();
   }
 
-  abort() {
+  abort(ts = '') {
     if (this.current && !this.current.static && this.current.pen) this.current.pen.abort();
-    this.closeEntry();
+    this.closeEntry(ts);
   }
 
   setVitals(payload) {
@@ -185,10 +243,10 @@ export class ComposedFeed {
     if (this.current && !this.current.static && this.current.pen) this.current.pen.setVitals(payload);
   }
 
-  setMode(mode) {
+  setMode(mode, ts = '') {
     // A mode boundary ends the current object. The next token creates a fresh
     // surface in the new mode; mutating the previous segment would rewrite history.
-    this.closeEntry();
+    this.closeEntry(ts);
     this.mode = mode;
   }
 
@@ -207,7 +265,6 @@ export class ComposedFeed {
     }
     this.pens = [];
     this.current = null;
-    this.lastMomentMs = null;
     this.flow.textContent = '';
     this._setScrollTop(0, true);
   }
@@ -238,27 +295,18 @@ export class ComposedFeed {
     this._setScrollTop(Math.max(0, state.top), false);
   }
 
-  _appendMoment(block, ts, label) {
+  _appendEndpoint(block, ts, label, edge) {
     const meta = document.createElement('div');
-    meta.className = 'cy-moment-meta';
+    meta.className = 'cy-moment-meta cy-moment-' + edge;
     const time = document.createElement('time');
-    time.textContent = clockOf(ts) || '--:--';
+    bindEndpointTime(time, ts);
     meta.appendChild(time);
     if (label) {
       const kind = document.createElement('span');
       kind.textContent = label;
       meta.appendChild(kind);
     }
-    const since = sinceLabel(ts, this.lastMomentMs);
-    if (since) {
-      const elapsed = document.createElement('span');
-      elapsed.className = 'cy-moment-since';
-      elapsed.textContent = '+' + since;
-      meta.appendChild(elapsed);
-    }
     block.appendChild(meta);
-    const ms = timestampMs(ts);
-    if (ms != null) this.lastMomentMs = ms;
   }
 
   _follow() {

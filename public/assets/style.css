@@ -408,16 +408,41 @@ body.cy-paused::after {
   position: sticky;
   top: 0;
   z-index: 8;
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  padding: 8px 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 6px;
+  padding: 6px 8px;
   color: #2e2a21;
   background: rgba(232, 220, 188, 0.96);
   border-bottom: 1px solid rgba(112, 91, 51, 0.3);
   box-shadow: 0 6px 14px rgba(72, 55, 27, 0.08);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
+.cy-day-step,
+.cy-day-choose {
+  min-height: 34px;
+  border: 1px solid rgba(112, 91, 51, 0.28);
+  border-radius: 4px;
+  color: #514832;
+  background: rgba(255, 252, 242, 0.25);
+  font: inherit;
+  cursor: pointer;
+}
+.cy-day-step { padding: 5px 9px; font-size: 9px; }
+.cy-day-choose {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 9px;
+  padding: 5px 8px;
+}
+.cy-day-step:hover:not(:disabled),
+.cy-day-choose:hover { border-color: rgba(90, 66, 25, 0.65); background: rgba(255, 252, 242, 0.55); }
+.cy-day-step:focus-visible,
+.cy-day-choose:focus-visible { outline: 2px solid #826b3d; outline-offset: 1px; }
+.cy-day-step:disabled { opacity: 0.38; cursor: default; }
 .cy-day-banner .cy-day-cap { font-size: 8px; letter-spacing: 0.18em; color: #7c6e52; }
 .cy-day-banner strong { font-size: 12px; font-weight: 600; }
 .cy-writing-segment {
@@ -453,8 +478,13 @@ body.cy-paused::after {
   font: 9px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   letter-spacing: 0.06em;
 }
-.cy-moment-meta time { color: #514832; font-variant-numeric: tabular-nums; }
-.cy-moment-since { margin-left: auto; color: #9a8966; }
+.cy-moment-meta time { color: #514832; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+.cy-moment-end {
+  justify-content: flex-end;
+  margin-top: 3px;
+  padding: 6px 12px 7px;
+  border-top: 1px dotted rgba(112, 91, 51, 0.2);
+}
 .cy-event-block {
   margin: 16px 28px;
   padding: 10px 13px;
@@ -464,10 +494,11 @@ body.cy-paused::after {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
 .cy-event-block .cy-moment-meta { padding: 0 0 6px; }
+.cy-event-block .cy-moment-end { padding: 6px 0 0; }
 .cy-event-title { font-size: 11px; letter-spacing: 0.045em; color: #756545; }
 .cy-event-detail { margin-top: 8px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cy-event-silence { text-align: center; border-left: 0; background: transparent; color: #91836a; }
-.cy-event-silence .cy-moment-meta { justify-content: center; }
+.cy-event-silence .cy-moment-meta { justify-content: center; border-color: rgba(112, 91, 51, 0.14); }
 .cy-event-postcard { border-left-color: #846b9b; background: rgba(238, 226, 207, 0.88); }
 .cy-event-postcard-reply { padding-block: 6px; opacity: 0.72; }
 .cy-event-fan-mail { border: 1px dashed rgba(114, 78, 40, 0.48); border-left: 5px solid #8e6138; background: rgba(218, 191, 143, 0.45); }
@@ -1419,20 +1450,49 @@ body.cy-paused::after {
   font-size: 11px;
   color: var(--tel-dim);
 }
-.pl-since { margin-left: auto; color: #637282; }
+.pl-meta-end {
+  justify-content: flex-end;
+  margin-top: 9px;
+  margin-bottom: 0;
+  padding-top: 6px;
+  border-top: 1px dotted #28323c;
+}
 .pl-day-banner {
   position: sticky;
   top: 0;
   z-index: 4;
-  display: flex;
-  gap: 9px;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
   margin: 0 -8px 14px;
   padding: 8px 10px;
   color: #dce6ee;
   background: rgba(16, 20, 26, 0.96);
   border-bottom: 1px solid #2b3540;
 }
+.pl-day-step,
+.pl-day-choose {
+  min-height: 34px;
+  border: 1px solid #313c48;
+  border-radius: 5px;
+  color: #bac6d0;
+  background: #151b22;
+  font: inherit;
+  cursor: pointer;
+}
+.pl-day-step { padding: 5px 9px; font-size: 9px; }
+.pl-day-choose {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 9px;
+  padding: 5px 8px;
+}
+.pl-day-step:hover:not(:disabled), .pl-day-choose:hover { border-color: #637282; background: #1b232c; }
+.pl-day-step:focus-visible, .pl-day-choose:focus-visible { outline: 2px solid var(--good); outline-offset: 1px; }
+.pl-day-step:disabled { opacity: 0.35; cursor: default; }
 .pl-day-banner span { color: var(--tel-dim); font-size: 8px; letter-spacing: 0.18em; }
 .pl-day-banner strong { font-size: 12px; font-weight: 600; }
 .pl-time { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
@@ -1480,23 +1540,18 @@ body.cy-paused::after {
 
 /* a silence: a small, quiet gap marker with the duration - readable, not decorative */
 .pl-gap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
   margin: 16px 4px;
   color: var(--tel-dim);
   font-size: 11px;
   letter-spacing: 0.06em;
 }
-.pl-gap::before,
-.pl-gap::after {
-  flex: 1 1 auto;
-  color: #657382;
-  font-size: 9px;
-  white-space: nowrap;
-}
-.pl-gap::before { content: attr(data-time); text-align: right; }
-.pl-gap::after { content: attr(data-since); text-align: left; }
+.pl-gap .pl-meta { margin: 0; }
+.pl-gap .pl-meta-start { justify-content: flex-start; }
+.pl-gap .pl-meta-end { justify-content: flex-end; }
+.pl-gap-label { text-align: center; }
 
 /* a drawing: the finished sketch, inline, thin-lined and understated */
 .pl-sketch {

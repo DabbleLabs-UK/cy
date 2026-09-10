@@ -31,8 +31,10 @@ brain-region, and relationship figures are retained under a collapsed
 
 The live paper is a chronological composition of writing bursts, drawings,
 postcards, prison events and exact silence spans. It is vertically scrollable to
-the start of the day and prepends earlier days when the reader reaches the top.
-The calendar loads a selected day's complete narrative range on one click.
+the start of its selected day; it never mixes dates in one scroll surface. A
+sticky day banner and a day-only month/date chooser open another date from its
+start. Duration events show independently ageing start and end timestamps, while
+point events show one timestamp.
 
 Viewers never talk to DELL directly. They poll `api/stream.php?since=<seq>`,
 which returns any events newer than the seq they last saw (or, for a first

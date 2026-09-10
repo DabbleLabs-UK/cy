@@ -15,7 +15,7 @@ import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
 import { fetchDayPage, fetchDaySnapshot, NARRATIVE_KINDS } from './history-feed.js';
-import { ambientEventLabel, previousDate } from './timeline.js';
+import { ambientEventLabel, dayLabel, shiftDate } from './timeline.js';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
 import '../components/async-select/async-select.js';
@@ -172,13 +172,16 @@ async function boot() {
   initGearMenu();        // admin only: pause + model provider
   initLed(); // last, so the LED lands leftmost (before the selects)
 
-  // Both public reading surfaces ask for the preceding calendar day when their
-  // reader reaches the top. The guard in loadEarlierDay coalesces simultaneous
-  // requests if both surfaces happen to report the boundary during a rebuild.
+  // Both public reading surfaces page within the selected day. Reaching its top
+  // never silently crosses into another date; the day banner owns that choice.
   pen.onNearStart(loadEarlierDay);
   if (window.__cyPlain && window.__cyPlain.onNearStart) window.__cyPlain.onNearStart(loadEarlierDay);
   pen.onNearEnd(loadLaterHistory);
   if (window.__cyPlain && window.__cyPlain.onNearEnd) window.__cyPlain.onNearEnd(loadLaterHistory);
+  pen.onChooseDay(openDayChooser);
+  pen.onChangeDay(changeViewedDay);
+  if (window.__cyPlain && window.__cyPlain.onChooseDay) window.__cyPlain.onChooseDay(openDayChooser);
+  if (window.__cyPlain && window.__cyPlain.onChangeDay) window.__cyPlain.onChangeDay(changeViewedDay);
 
   // test hook (only on the ?stream=test page): lets a headless check drive the
   // real event dispatch, e.g. to assert an abort raises no toast. Inert in prod.
@@ -238,8 +241,8 @@ async function firstLoadRecent() {
       hasMoreBackward: events.length > 0,
       hasMoreForward: false,
     }];
-    if (pen.beginDay) pen.beginDay(currentDate);
-    if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate);
+    if (pen.beginDay) pen.beginDay(currentDate, currentDate);
+    if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate, currentDate);
   }
   for (const ev of events) dispatch(ev, true);
   pen.setInstant(false);
@@ -315,8 +318,8 @@ async function replayLoadedDays(token, prependState = null, positionState = null
   let replayed = 0;
   let latestGen = null;
   for (const day of loadedDays) {
-    if (pen.beginDay) pen.beginDay(day.date);
-    if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(day.date);
+    if (pen.beginDay) pen.beginDay(day.date, currentDate);
+    if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(day.date, currentDate);
     for (const ev of day.events || []) {
       dispatch(ev, true, false);
       if (ev.kind === 'gen') latestGen = ev;
@@ -363,34 +366,17 @@ async function loadEarlierDay() {
   };
   try {
     const oldest = loadedDays[0];
-    if (oldest.hasMoreBackward && oldest.events.length) {
-      const day = await fetchDayPage({
-        rangeUrl: RANGE_ENDPOINT,
-        date: oldest.date,
-        before: oldest.events[0].seq,
-        limit: HISTORY_PAGE_LIMIT,
-      });
-      if (token !== feedRenderToken) return;
-      const known = new Set(oldest.events.map((ev) => ev.seq));
-      oldest.events = day.events.filter((ev) => !known.has(ev.seq)).concat(oldest.events);
-      oldest.hasMoreBackward = day.hasMoreBackward;
-    } else {
-      const date = previousDate(oldest.date);
-      const day = await fetchDayPage({
-        rangeUrl: RANGE_ENDPOINT,
-        date,
-        before: Number.MAX_SAFE_INTEGER,
-        limit: HISTORY_PAGE_LIMIT,
-      });
-      if (token !== feedRenderToken) return;
-      loadedDays.unshift({
-        date,
-        events: day.events,
-        snapshot: [],
-        hasMoreBackward: day.hasMoreBackward,
-        hasMoreForward: day.hasMoreForward,
-      });
-    }
+    if (!oldest.hasMoreBackward || !oldest.events.length) return;
+    const day = await fetchDayPage({
+      rangeUrl: RANGE_ENDPOINT,
+      date: oldest.date,
+      before: oldest.events[0].seq,
+      limit: HISTORY_PAGE_LIMIT,
+    });
+    if (token !== feedRenderToken) return;
+    const known = new Set(oldest.events.map((ev) => ev.seq));
+    oldest.events = day.events.filter((ev) => !known.has(ev.seq)).concat(oldest.events);
+    oldest.hasMoreBackward = day.hasMoreBackward;
     await replayLoadedDays(token, prependState);
   } catch {
     // Keep the already-rendered window intact. Another upward gesture can retry.
@@ -571,6 +557,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       penEntryOpen = false; // any mode flip ends the open entry (a card interrupts here)
       const to = p.to || latestMode;
       latestMode = to;
+      pen.setMode(to, ev.ts);
       if (!bootstrap) setMode(to, p.cause); // snapshot sets the historical header once
       if (to === 'letter') {
         // a reply is starting: build the postcard and write on IT, not the sheet.
@@ -579,7 +566,6 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         postcards.begin();
       } else {
         if (p.from === 'letter') postcards.settle(); // reply done: card settles into place
-        pen.setMode(to); // journal / dream / warden still drive the paper sheet
       }
       break;
     }
@@ -590,9 +576,11 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // fragment staying on the page - announcing the mechanism breaks the
       // fiction. During a reply the interrupt cuts the CARD's stroke; otherwise
       // it cuts the journal thought on the sheet.
-      if (!bootstrap) {
-        if (latestMode === 'letter') postcards.abort();
-        else { pen.abort(); penEntryOpen = false; } // the cut-off thought ends the entry
+      if (latestMode === 'letter') {
+        if (!bootstrap) postcards.abort();
+      } else {
+        pen.abort(ev.ts);
+        penEntryOpen = false; // the cut-off thought ends the entry
       }
       break;
 
@@ -641,7 +629,10 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
     case 'gen':
       // a generation burst finished: close the open journal entry so the next burst
       // opens its own, dated (a letter burst is closed by the mode flip, not here).
-      if (p.mode !== 'letter') penEntryOpen = false;
+      if (p.mode !== 'letter') {
+        pen.closeEntry(ev.ts);
+        penEntryOpen = false;
+      }
       if (!bootstrap) hud.setGen(p);
       break;
 
@@ -670,8 +661,8 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
         if (m) currentDate = m[1];
         resetFeedSurfaces();
-        if (currentDate && pen.beginDay) pen.beginDay(currentDate);
-        if (currentDate && window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate);
+        if (currentDate && pen.beginDay) pen.beginDay(currentDate, currentDate);
+        if (currentDate && window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate, currentDate);
         setDay(++dayCount);
       }
       break;
@@ -908,12 +899,11 @@ function applyView(view) {
 // The green connection pill doubles as the time-travel control - a select box was
 // the wrong affordance for live-versus-history; a status indicator you can act on
 // is the right one. Live: the pill shows the connection status and, when clicked,
-// opens the calendar dialog (timetravel.js) to choose a moment. Reading the past:
-// it turns amber, shows the moment being viewed, and clicking it (or its x) returns
+// opens the calendar dialog (timetravel.js) to choose a day. Reading the past:
+// it turns amber, shows the day being viewed, and clicking it (or its x) returns
 // to live. One element does status, entry and exit. History is public: anyone can
-// read back. The dialog resolves a chosen moment to a seq + timestamp and announces
-// it via `cy:moment`; we consume that here to enter history, and stage 3 consumes
-// the same event / `window.__cyMoment` to replay it.
+// read back. The dialog announces a chosen day via `cy:moment`; this client then
+// opens that day's first bounded page and pages forward within the same date.
 let viewingMoment = null;
 
 function initHistoryControl() {
@@ -923,13 +913,13 @@ function initHistoryControl() {
   pill.setAttribute('role', 'button');
   pill.setAttribute('tabindex', '0');
   pill.setAttribute('aria-haspopup', 'dialog');
-  pill.title = 'Travel back - pick a moment';
+  pill.title = 'Travel back - choose a day';
   pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
 
   const activate = () => {
     if (historyMode) { exitToLive(); return; }
     pill.focus(); // so the dialog returns focus here on close
-    if (window.__cyTimeTravel) window.__cyTimeTravel.open();
+    openDayChooser();
   };
   pill.addEventListener('click', activate);
   pill.addEventListener('keydown', (e) => {
@@ -939,12 +929,35 @@ function initHistoryControl() {
     }
   });
 
-  // The calendar dialog's committed moment: enter history and light the pill.
-  // window.__cyMoment is the clean handoff object stage 3 replays from.
+  // The calendar dialog's committed day: enter history and light the pill.
   document.addEventListener('cy:moment', (e) => {
     window.__cyMoment = e.detail;
     void enterHistory(e.detail);
   });
+}
+
+function activeFeedDate() {
+  return loadedDays.length ? loadedDays[0].date : currentDate;
+}
+
+function openDayChooser() {
+  if (window.__cyTimeTravel) window.__cyTimeTravel.open(activeFeedDate());
+}
+
+function changeViewedDay(delta) {
+  const from = activeFeedDate();
+  if (!from) return;
+  const date = shiftDate(from, delta);
+  if (currentDate && date > currentDate) return;
+  const detail = {
+    date,
+    hour: 0,
+    ts: date + ' 00:00:00',
+    seq: null,
+    summary: { when: dayLabel(date), lines: [] },
+  };
+  window.__cyMoment = detail;
+  void enterHistory(detail);
 }
 
 async function enterHistory(detail) {
@@ -979,7 +992,7 @@ async function exitToLive() {
   if (pill) {
     pill.classList.remove('is-history', 'bad');
     pill.textContent = 'loading today';
-    pill.title = 'Travel back - pick a moment';
+    pill.title = 'Travel back - choose a day';
     pill.setAttribute('aria-label', 'Watching live. Activate to travel back.');
   }
   if (window.__cyTimeTravel) window.__cyTimeTravel.close();
