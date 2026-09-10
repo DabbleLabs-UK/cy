@@ -28,6 +28,7 @@ import {
   brainRegions,
   clamp,
   TRIVIAL_EVENTS,
+  vitalsLoadIssue,
 } from './vitals.js';
 import {
   ZONE_A,
@@ -45,16 +46,8 @@ import {
   dreamMaterial,
   dreamMurmurGapMs,
 } from './prompt.js';
-import {
-  reconcileSoma,
-  observeSoma,
-  observeSomaOutput,
-  tickSoma,
-  chooseSomaAction,
-  completeSomaAction,
-  somaDirective,
-  somaSnapshot,
-} from './soma.js';
+import { createSomaRuntime } from './soma-runtime.js';
+import { prepareSomaGeneration } from './soma-cycle.js';
 import {
   parseStrokes,
   moodSnapshot,
@@ -323,7 +316,14 @@ async function main() {
   const blockedLogPath = join(STATE_DIR, 'blocked.log');
 
   const vitals = await loadVitals(vitalsPath);
-  vitals.cognition = reconcileSoma(vitals.cognition, { now: Date.now() });
+  let pendingSomaFailure = null;
+  let reportSomaFailure = (failure) => { pendingSomaFailure = failure; };
+  const soma = createSomaRuntime(vitals.cognition, {
+    now: Date.now(),
+    initialFailure: vitalsLoadIssue(vitals),
+    onState: (state) => { vitals.cognition = state; },
+    onFailure: (failure) => reportSomaFailure(failure),
+  });
   if (!vitals.lastMailMs) vitals.lastMailMs = Date.now();
   if (typeof vitals.monotony !== 'number') vitals.monotony = 0;
   // the cast + grudge map lives on the vitals object so it persists with state
@@ -358,6 +358,11 @@ async function main() {
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
+  reportSomaFailure = (failure) => {
+    emit({ kind: 'event', payload: { name: 'soma_unavailable', reason: failure.reason, operation: failure.operation } });
+    client.kick();
+  };
+  if (pendingSomaFailure) reportSomaFailure(pendingSomaFailure);
 
   // ---- inference activity signal (public LED, everyone - not the ?111 gate) ----
   // A live "is the model generating RIGHT NOW" flag, signalled by the runner at the
@@ -396,8 +401,7 @@ async function main() {
   console.log(`[cy] providers: ollama ready; deepseek ${providers[DEEPSEEK].available() ? 'ready' : 'unavailable (no key file)'}`);
   let activeProviderId = OLLAMA;
   const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
-  observeSoma(
-    vitals.cognition,
+  soma.observe(
     {
       name: 'runner_restart',
       text: 'continuity resumed inside the machine; local inference became available again',
@@ -528,12 +532,20 @@ async function main() {
     inc.ts = tsNow();
     pushIncident(vitals.ledger, inc);
     vitals.lastIncidentMs = Date.now();
-    observeSoma(
-      vitals.cognition,
+    const standing = ctx.actorKey ? vitals.relations[ctx.actorKey] : null;
+    const relationalAppraisal = standing ? {
+      threat: Math.max(0.08, standing.suspicion || 0, standing.grudge || 0),
+      affiliation: Math.max(0.05, standing.warmth || 0),
+      controlLoss: kind === 'officer' ? Math.max(0.35, standing.suspicion || 0) : 0.08,
+    } : undefined;
+    soma.observe(
       {
         name: kind,
         text: incidentLine(inc),
         tags: [kind, inc.sub, inc.verb].filter(Boolean),
+        entities: [inc.actor, inc.subject].filter(Boolean),
+        appraisal: relationalAppraisal,
+        outcome: ctx.evType || ctx.sub || null,
         ts: inc.ts,
       },
       { now: Date.now() },
@@ -593,8 +605,7 @@ async function main() {
   if (contextBuf.length > CONTEXT_HARD) {
     const removed = contextBuf.length - CONTEXT_SOFT;
     contextBuf = contextBuf.slice(-CONTEXT_SOFT);
-    observeSoma(
-      vitals.cognition,
+    soma.observe(
       { name: 'context_trim', text: `${removed} characters of continuity were unavailable after restart`, tags: ['context', 'memory', 'machine'], ts: tsNow() },
       { now: Date.now() },
     );
@@ -605,8 +616,7 @@ async function main() {
     if (contextBuf.length > CONTEXT_HARD) {
       const removed = contextBuf.length - CONTEXT_SOFT;
       contextBuf = contextBuf.slice(-CONTEXT_SOFT); // rare, large trim
-      observeSoma(
-        vitals.cognition,
+      soma.observe(
         { name: 'context_trim', text: `${removed} characters fell out of immediate language context`, tags: ['context', 'memory', 'machine'], ts: tsNow() },
         { now: Date.now() },
       );
@@ -619,8 +629,7 @@ async function main() {
     const before = contextBuf.length;
     const keep = Math.max(0, contextBuf.length - Math.floor(contextBuf.length * frac));
     contextBuf = keep > 0 ? contextBuf.slice(-keep) : '';
-    observeSoma(
-      vitals.cognition,
+    soma.observe(
       { name: 'context_trim', text: `${before - contextBuf.length} characters were removed to break a repeated loop`, tags: ['context', 'memory', 'machine'], ts: tsNow() },
       { now: Date.now() },
     );
@@ -1285,7 +1294,7 @@ async function main() {
       if (currentAbort) currentAbort.abort();
       return;
     }
-    // ANGER-DRIVEN CAPITALISATION. The paper shows the SHOUTED rendering; the
+    // SOMA-DRIVEN CAPITALISATION. The paper shows the SHOUTED rendering; the
     // model's ORIGINAL text is what feeds back into Zone B (and introspection).
     // Feeding the caps back would make him imitate his own shouting until the page
     // is permanently capped - the same failure mode as the old scaffold leak.
@@ -1295,11 +1304,15 @@ async function main() {
     let payloadS = chunk;
     let shoutSpans = null;
     if (mode !== 'letter') {
+      const cognition = soma.state;
+      const appraisal = (cognition && cognition.appraisal) || {};
+      const drives = (cognition && cognition.drives) || {};
+      const expression = (cognition && cognition.expression) || {};
       const sh = shout(chunk, {
-        expressed: vitals.expressed || 0,
-        despair: vitals.mental.despair || 0,
-        numbness: (vitals.derived && vitals.derived.numbness) || 0,
-        hunger: vitals.physical.hunger || 0,
+        expressed: Math.max(appraisal.threat || 0, appraisal.controlLoss || 0, expression.intensity || 0),
+        despair: drives.rest > 0.88 ? drives.rest : 0,
+        numbness: 0,
+        hunger: drives.food || 0,
         grudgeNames: grudgeNames(vitals.relations),
       });
       payloadS = sh.text;
@@ -1488,7 +1501,7 @@ async function main() {
     // paid its full prompt cost and produced nothing (warden ate it, or it was empty)
     // - recorded as non-emitting so the wasted spend is visible.
     await recordSpend(stats, mode, !!burstEmitted.trim());
-    if (burstEmitted.trim()) observeSomaOutput(vitals.cognition, burstEmitted, { mode, now: Date.now() });
+    if (burstEmitted.trim()) soma.observeOutput(burstEmitted, { mode, now: Date.now() });
     return { full: cleanedFull(), aborted: false, stats, model: gen.model || provider.model, ttftMs, strip: stripSnapshot(full) };
 
     // A refusal discards everything - the refusal text is NEVER emitted. Log it so
@@ -1529,11 +1542,11 @@ async function main() {
   // Assemble the contextual prompt injections for a waking generation: the cast
   // standing, any hot grudge, an amplified trivial event, and - on a cadence or a
   // whole-pound crossing - the running electricity cost.
-  function buildCtx() {
+  function buildCtx(somaContext = soma.directive()) {
     genCount++;
     const ctx = {
       grudge: grudgeDirective(vitals.relations),
-      soma: somaDirective(vitals.cognition),
+      soma: somaContext,
     };
     // cast standing block only when a relation is actually charged (roster itself
     // is always in Zone A); keeps Zone C small on calm days.
@@ -1573,19 +1586,37 @@ async function main() {
     const hostile = isHostile(pc.body);
     const warm = isWarm(pc.body);
     const evName = hostile ? 'letter_hostile' : 'letter_arrives';
-    fireEvent(evName, { from: pc.from_name || null });
-    observeSoma(
-      vitals.cognition,
+    fireEvent(evName, { from: pc.from_name || null }, { observe: false });
+    soma.observe(
       {
         name: pc.image_path ? 'postcard_with_image' : 'postcard',
         text: [pc.body, pc.caption, pc.image_attrib].filter(Boolean).join(' | ') || 'a postcard arrived without words',
-        tags: ['mail', 'postcard', pc.image_path ? 'image' : 'text'],
+        tags: ['mail', 'postcard', hostile ? 'hostile' : (warm ? 'warm' : 'neutral'), pc.image_path ? 'image' : 'text'],
+        entities: [pc.from_name].filter(Boolean),
+        appraisal: {
+          threat: hostile ? 0.82 : Math.max(0.08, (pc.visitor && pc.visitor.suspicion) || 0),
+          affiliation: warm ? 0.82 : Math.max(0.28, (pc.visitor && pc.visitor.warmth) || 0),
+          controlLoss: hostile ? 0.3 : 0.08,
+          deprivation: 0.03,
+        },
+        outcome: 'postcard received',
         ts: tsNow(),
       },
       { now: Date.now() },
     );
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
+    const cognition = prepareSomaGeneration(soma, {
+      canDraw: false,
+      now: Date.now(),
+      inputs: {
+        physical: vitals.physical,
+        monotony: vitals.monotony,
+        asleep: false,
+        lastMailMs: vitals.lastMailMs,
+        now: Date.now(),
+      },
+    });
     if (pc.image_path) {
       vitals.lastImageMs = Date.now(); // a picture just came - he may draw off it
       // remember the picture for dreams: its caption/attribution is the material,
@@ -1613,7 +1644,7 @@ async function main() {
 
     // recognition: fold the visitor into the relations mechanism for this reply
     const visitor = pc.visitor ? { ...pc.visitor, from_name: pc.from_name } : null;
-    const ctx = buildCtx();
+    const ctx = buildCtx(cognition.directive);
     const recog = visitorForPrompt(visitor, { now: Date.now() });
     if (recog) ctx.visitor = recog;
 
@@ -1643,6 +1674,7 @@ async function main() {
       // next inbox poll creates the public archive receipt.
       emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
     }
+    soma.completeAction(cognition.action.name);
 
     // remember them: a cheap compressed note + a standing nudge, written back to
     // the DB via a private visitor_seen event (never enters the public stream).
@@ -1672,18 +1704,36 @@ async function main() {
     const a = ampOf(vitals);
     applyDeltas(vitals, { anxiety: +0.2, anger: +0.15, lucidity: +0.1 }, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.5);
-    observeSoma(
-      vitals.cognition,
-      { name: 'warden_notice', text: notice.text, tags: ['warden', 'officer', 'control'], ts: tsNow() },
+    soma.observe(
+      {
+        name: 'warden_notice',
+        text: notice.text,
+        tags: ['warden', 'officer', 'control'],
+        entities: ['Warden Florian'],
+        outcome: 'instruction imposed',
+        ts: tsNow(),
+      },
       { now: Date.now() },
     );
     emit({ kind: 'event', payload: { name: 'warden', amp: Number(a.toFixed(3)), text: notice.text } });
 
-    const directives = buildDirectives(vitals, 'journal', buildCtx());
+    const cognition = prepareSomaGeneration(soma, {
+      canDraw: false,
+      now: Date.now(),
+      inputs: {
+        physical: vitals.physical,
+        monotony: vitals.monotony,
+        asleep: false,
+        lastMailMs: vitals.lastMailMs,
+        now: Date.now(),
+      },
+    });
+    const directives = buildDirectives(vitals, 'journal', buildCtx(cognition.directive));
     const prompt = buildPrompt(contextText(), 'warden', notice, directives);
     const opts = options(vitals, config.threads, 'journal', { num_predict: letterPredict(notice.text) });
     await logPrompt('warden', ZONE_A + '\n\n---PROMPT---\n' + prompt);
     await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden' });
+    soma.completeAction(cognition.action.name);
 
     emit({ kind: 'mode', payload: { from: 'warden', to: 'journal' } });
     currentMode = 'journal';
@@ -1707,7 +1757,9 @@ async function main() {
     const intent = req ? resolveRequest(req, vitals) : { mode: 'spontaneous', subject: null, requestedBy: null };
 
     // fixation: he keeps redrawing the same thing
-    const fixation = (vitals.derived && vitals.derived.fixation) || 0;
+    const fixation = soma.state
+      ? Math.max(soma.state.circuits.memoryRecall || 0, soma.state.circuits.attention || 0)
+      : 0;
     const redraw = !req && fixation > 0.6 && vitals.lastDrawSubject && Math.random() < 0.6;
 
     // ---- stage 1: the one-line decision, in voice, streamed to the page ----
@@ -1954,8 +2006,7 @@ async function main() {
     }
     const from = activeProviderId;
     activeProviderId = id;
-    observeSoma(
-      vitals.cognition,
+    soma.observe(
       {
         name: 'provider_change',
         text: `the process producing language changed from ${from} to ${id}`,
@@ -1998,8 +2049,7 @@ async function main() {
   client.onRegimeChange = (to) => {
     const from = activeRegimeId;
     activeRegimeId = to;
-    observeSoma(
-      vitals.cognition,
+    soma.observe(
       {
         name: 'regime_change',
         text: `the prison day was externally changed from ${from} to ${to}`,
@@ -2016,23 +2066,26 @@ async function main() {
   // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
   // it was a trivial thing landing under high amplification, arm the "this is the
   // day" cue. Returns the amp that was applied.
-  function fireEvent(name, extra = {}) {
+  function fireEvent(name, extra = {}, { observe = true } = {}) {
     const a = ampOf(vitals);
     applyEvent(vitals, name, { now: Date.now() });
     const detail = Object.entries(extra)
       .filter(([, value]) => value != null)
       .map(([key, value]) => `${key} ${value}`)
       .join(', ');
-    observeSoma(
-      vitals.cognition,
-      {
-        name,
-        text: detail ? `${name}: ${detail}` : name.replaceAll('_', ' '),
-        tags: [name, ...Object.keys(extra)],
-        ts: tsNow(),
-      },
-      { now: Date.now() },
-    );
+    if (observe) {
+      soma.observe(
+        {
+          name,
+          text: detail ? `${name}: ${detail}` : name.replaceAll('_', ' '),
+          tags: [name, ...Object.keys(extra)],
+          entities: [extra.from, extra.who].filter(Boolean),
+          outcome: extra.outcome || null,
+          ts: tsNow(),
+        },
+        { now: Date.now() },
+      );
+    }
     if (TRIVIAL_EVENTS.has(name) && a > 2.0) {
       amplifiedCue = { label: TRIVIAL_LABELS[name] || name, until: Date.now() + 3 * 60 * 1000 };
     }
@@ -2093,8 +2146,14 @@ async function main() {
   // the fact (but not the paranoid content) for the ticker.
   function fireOverheard() {
     const item = pickOverheard();
-    const paranoia = (vitals.derived && vitals.derived.paranoia) || 0;
-    const p = mishearChance({ lucidity: vitals.mental.lucidity, paranoia });
+    const cognition = soma.state;
+    const uncertainty = cognition ? cognition.selfModel.uncertainty || 0 : 0;
+    const predictionError = cognition ? cognition.prediction.error || 0 : 0;
+    const threat = cognition ? cognition.appraisal.threat || 0 : 0;
+    const p = mishearChance({
+      lucidity: 1 - Math.max(predictionError, uncertainty * 0.5),
+      paranoia: threat,
+    });
     const misheard = Math.random() < p;
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
     const { mins } = londonParts();
@@ -2225,7 +2284,7 @@ async function main() {
     // Runs every tick so the lag is smooth and a spike sulks down between bursts.
     updateAffect(vitals, { amp: ampOf(vitals) });
     scheduler(now);
-    tickSoma(vitals.cognition, {
+    soma.tick({
       physical: vitals.physical,
       monotony: vitals.monotony,
       asleep,
@@ -2258,7 +2317,7 @@ async function main() {
         derived: vitals.derived,
         hr,
         brain,
-        soma: somaSnapshot(vitals.cognition),
+        soma: soma.snapshot(),
         legacy: {
           status: 'placeholder',
           reason: 'legacy dramatic mappings; not implemented Soma or measured physiology',
@@ -2457,8 +2516,7 @@ async function main() {
     if (pound > lastPound) {
       lastPound = pound;
       forceCost = true;
-      observeSoma(
-        vitals.cognition,
+      soma.observe(
         {
           name: 'power_cost_crossing',
           text: `the machine has now consumed ${pound} GBP of electricity while continuity was maintained`,
@@ -2512,7 +2570,7 @@ async function main() {
     const payload = { s: chunk + ' ', mode: 'dream' };
     if (lucid) payload.lucid = true;
     emit({ kind: 'text', payload });
-    observeSomaOutput(vitals.cognition, chunk, { mode: lucid ? 'dream-lucid' : 'dream', now: Date.now() });
+    soma.observeOutput(chunk, { mode: lucid ? 'dream-lucid' : 'dream', now: Date.now() });
     lastTextMs = Date.now(); // a murmur/night-line is real output too
     watchdogStep = 0; // dream output counts as text flowing: de-escalate the watchdog
     failedCyclesSinceEmit = 0; // real output: not a stall
@@ -2705,27 +2763,35 @@ async function main() {
       // eligible only after a real cooldown so it cannot crowd out the journal.
       const nowMs = Date.now();
       const hasDrawRequest = pendingDrawRequests.length > 0;
-      const selectedAction = chooseSomaAction(vitals.cognition, {
+      const cognition = prepareSomaGeneration(soma, {
         asleep: false,
         canDraw: hasDrawRequest || nowMs - (vitals.lastDrawMs || 0) > 45 * 60 * 1000,
         forceDraw: hasDrawRequest,
         now: nowMs,
+        inputs: {
+          physical: vitals.physical,
+          monotony: vitals.monotony,
+          asleep: false,
+          lastMailMs: vitals.lastMailMs,
+          now: nowMs,
+        },
       });
+      const selectedAction = cognition.action;
 
       // Silence is now a selected, inspectable action rather than a random result
       // of legacy mood axes.
       if (selectedAction.name === 'silence') {
-        const seconds = Math.round(45 + 180 * (vitals.cognition.drives.rest || 0));
+        const seconds = Math.round(45 + 180 * ((soma.state && soma.state.drives.rest) || 0));
         emit({ kind: 'silence', payload: { seconds, reason: `soma: ${selectedAction.reason}` } });
         await recordOutcome('deliberate-silence');
-        completeSomaAction(vitals.cognition, 'silence');
+        soma.completeAction('silence');
         await idleSilently(seconds * 1000);
         continue;
       }
 
       if (selectedAction.name === 'draw') {
         await recordOutcome((await doDraw()) || 'empty');
-        completeSomaAction(vitals.cognition, 'draw');
+        soma.completeAction('draw');
         continue;
       }
 
@@ -2739,7 +2805,7 @@ async function main() {
       let directives;
       let burstForm = null; // the selected form directive, surfaced to the RAW view
       {
-        const ctx = buildCtx();
+        const ctx = buildCtx(cognition.directive);
         ctx.bans = bans;
         ctx.regime = regimeDirective(mins);
         burstForm = selectedAction.name;
@@ -2936,7 +3002,7 @@ async function main() {
         // Language is an expression of Soma, never an input to it. Completing
         // the selected action changes only the associated drive; the generated
         // wording cannot reward itself or rewrite memory, mood, or relations.
-        completeSomaAction(vitals.cognition, selectedAction.name);
+        soma.completeAction(selectedAction.name);
       }
       // roll the "did this burst carry a wing noise" window for the no-drumbeat rule
       recentNoise = [recentNoise[1], noiseThisBurst];
@@ -3020,7 +3086,7 @@ async function main() {
     bans: bansDirective(vitals.recentOpeners),
     regime: regimeDirective(londonParts().mins),
     grudge: grudgeDirective(vitals.relations),
-    soma: somaDirective(vitals.cognition),
+    soma: soma.directive(),
     incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0, rnd: () => 0 }),
   };
   if (castCharged(vitals.relations)) sampleCtx.cast = castForPrompt(vitals.relations);

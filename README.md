@@ -15,13 +15,37 @@ model does, and a single ordered log makes "what happened, in what order"
 trivial to reconstruct and replay.
 
 Cy's implemented inner-state layer is Soma v1 (`runner/soma.js`). Environment
-and body observations are appraised against learned expectations, stored as
-bounded episodic memory, competed for attention, and used to select an action.
-Only then is the selected material sent to the language model. Generated prose
-returns only as bounded evidence of Cy's own action - repetition, intensity,
-commitment, and activation of associations learned from lived input. Prose
-sentiment cannot directly set appraisal. This keeps the model in the role of
-expression, not hidden author of the state that supposedly caused its own words.
+and body observations are structurally appraised, competed for attention, and
+used to select an action before a prompt is built. Only observations above a
+salience threshold become durable episodes. Those episodes retain time,
+entities, compact content, appraisal, salience and any known outcome. Retrieval
+scores shared entities/content, salience and recency rather than returning the
+last N records. Repeated observed event transitions form modest next-event
+expectations; a material mismatch creates prediction error and raises attention
+and loss-of-control appraisal.
+
+The live pre-language boundary is `runner/soma-cycle.js`. Autonomous journal,
+postcard and warden generation all cross it after their new lived input has been
+observed. The resulting action and compact natural-language directive enter Zone
+C together. Hunger, fatigue and pain remain time-based inputs in `vitals.js` and
+feed Soma; the old mental/composite values no longer choose waking sampling,
+capitalisation, drawing fixation, request handling or mishearing in the live
+runner. Those paths now use Soma. Some legacy values still exist for compatibility,
+diagnostics and the separate dream mechanic, and remain labelled placeholders.
+
+Generated prose returns only as bounded evidence of Cy's own action - repetition,
+intensity, commitment, recurring themes, and activation of associations learned
+from repeated lived input. It can sustain or release an existing focus and select
+a related lived episode, but it cannot directly create threat, affiliation,
+deprivation or control-loss appraisal. Any stored self-output episode is explicitly
+typed as self-output and records that its content is not evidence of an event.
+
+`runner/soma-runtime.js` is the failure boundary. A load or computation failure
+is logged once, emits a public `soma_unavailable` event, removes Soma context and
+uses a fixed neutral generation profile so Cy continues without falling back to
+the legacy mood engine. Vitals snapshots and `api/soma.php` then report Soma as
+unavailable instead of manufacturing a replacement state. An invalid persisted
+vitals file is preserved once as `vitals.json.invalid.bak` for diagnosis.
 
 The left panel shows those implemented circuits and names the source of every
 dynamic value. Its brain-shaped rendering is explicitly a functional analogy,
@@ -137,6 +161,7 @@ blocked content is not. Front end: `public/assets/raw.js` + `public/index.php`.
 public/            webroot
   index.php         viewer page + postcard composer
   api/stream.php    public event feed (polling; also records viewer presence)
+  api/soma.php      public latest persisted runner Soma snapshot
   api/post-postcard.php  public: send a postcard (text and/or image)
   api/openverse-search.php  public: proxy Openverse image search for the composer
   api/tempo.php     public: GET current tempo / POST a custom speed (duty cycle)
@@ -155,6 +180,7 @@ config/config.sample.php   template; copy to config/config.php (gitignored)
 sql/schema.sql       MariaDB schema (events, postcards, queue state, visitors, news, rate limits, viewers, tempo, drawings)
 tests/postcard_queue_test.php  pure reply-tray admission checks
 tests/tempo_test.php  pure-logic tests for the tempo/presence rules (php tests/tempo_test.php)
+tests/soma_api_test.php  proves the browser API returns the runner snapshot unchanged
 runner/              the model runner (drives inmate 7734)
 ```
 

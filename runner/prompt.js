@@ -552,21 +552,15 @@ export function amplifiedDirective(label) {
 
 export function sampling(v) {
   if (v && v.cognition) return somaSampling(v.cognition);
-  const m = v.mental;
-  // Temperature tracks STATE, it is not a high default: at normal lucidity with
-  // ordinary dissociation it sits ~0.8 (coherent shorthand), and only genuinely
-  // high dissociation / low lucidity / agitation pushes it toward incoherence.
-  // The old base (0.72) plus wide coefficients ran hot even when he was lucid,
-  // which is what was shaking the prose apart. repeat_penalty + repeat_last_n are
-  // raised so the model does not restate a phrase verbatim WITHIN one burst.
+  // If Soma is unavailable, keep language generation alive with a neutral fixed
+  // profile. Legacy mood scalars are diagnostics/placeholders and must not become
+  // a second hidden behavioural brain merely because the real state failed.
   return {
-    temperature: Number(
-      Math.min(1.4, 0.55 + 0.45 * m.dissociation + 0.28 * (1 - m.lucidity) + 0.15 * m.agitation).toFixed(3),
-    ),
-    top_p: Number((0.94 - 0.16 * m.lucidity).toFixed(3)),
-    repeat_penalty: Number((1.14 + 0.2 * m.stress).toFixed(3)),
+    temperature: 0.72,
+    top_p: 0.86,
+    repeat_penalty: 1.18,
     repeat_last_n: 160,
-    num_predict: Math.round(70 * (0.4 + 0.6 * m.lucidity)),
+    num_predict: 62,
   };
 }
 

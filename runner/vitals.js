@@ -263,12 +263,13 @@ const zoneFor = (key) => ZONE_OF.get(key) || 'soma';
 // Retrieve the raw zone objects off a proxy (used by saveVitals). Non-string so
 // it never collides with a real field name and stays out of enumeration.
 const ZONES = Symbol('somaZones');
+const LOAD_ISSUE = Symbol('vitalsLoadIssue');
 
 // Build the flat-facing proxy over the three zone objects. Reads and writes to
 // any old flat path route to the owning zone; nested objects (physical, mental,
 // derived, relations) are returned by reference so in-place mutation
 // (vitals.mental.anxiety = x, vitals.recentOpeners.push(...)) works unchanged.
-function makeVitals(soma, signals, bookkeeping) {
+function makeVitals(soma, signals, bookkeeping, loadIssue = null) {
   const zones = { soma, signals, bookkeeping };
   const flatKeys = () =>
     [...new Set([...Object.keys(soma), ...Object.keys(signals), ...Object.keys(bookkeeping)])];
@@ -277,6 +278,7 @@ function makeVitals(soma, signals, bookkeeping) {
     {
       get(_t, prop) {
         if (prop === ZONES) return zones;
+        if (prop === LOAD_ISSUE) return loadIssue;
         if (typeof prop === 'symbol') return undefined;
         return zones[zoneFor(prop)][prop];
       },
@@ -320,9 +322,24 @@ export async function loadVitals(path) {
   const bookPath = join(dirname(path), 'bookkeeping.json');
 
   let raw = null;
+  let loadIssue = null;
   try {
     raw = JSON.parse(await readFile(path, 'utf8'));
-  } catch {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('top-level value is not an object');
+    }
+  } catch (error) {
+    if (await fileExists(path)) {
+      loadIssue = `persisted vitals could not be parsed: ${error && error.message ? error.message : 'invalid JSON'}`;
+      const invalidBackup = path + '.invalid.bak';
+      if (!(await fileExists(invalidBackup))) {
+        try {
+          await copyFile(path, invalidBackup);
+        } catch {
+          /* best-effort forensic backup; the runner still continues */
+        }
+      }
+    }
     raw = null;
   }
 
@@ -380,7 +397,11 @@ export async function loadVitals(path) {
   // initialVitals default ({}) until the first tick, matching the old code.
   if (raw !== null) signals.derived = computeDerived(soma);
 
-  return makeVitals(soma, signals, bookkeeping);
+  return makeVitals(soma, signals, bookkeeping, loadIssue);
+}
+
+export function vitalsLoadIssue(v) {
+  return v && v[LOAD_ISSUE] ? String(v[LOAD_ISSUE]) : null;
 }
 
 export async function saveVitals(path, v) {

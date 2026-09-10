@@ -1,0 +1,137 @@
+// soma-runtime.js - fault boundary around Cy's implemented Soma engine.
+//
+// The runner must keep writing if persisted cognition is corrupt or a Soma
+// operation throws. This adapter owns the live state reference, disables Soma
+// on the first failure, and returns explicit unavailable snapshots plus neutral
+// fallbacks. It never substitutes a fresh state that could look observed.
+
+import * as defaultEngine from './soma.js';
+
+const FALLBACK_ACTION = Object.freeze({
+  name: 'observe',
+  reason: 'Soma is unavailable; continue without a state-selected action',
+  score: 0,
+});
+
+function cleanReason(error) {
+  const message = error && error.message ? error.message : String(error || 'unknown Soma failure');
+  return message.replace(/\s+/g, ' ').trim().slice(0, 180) || 'unknown Soma failure';
+}
+
+export function createSomaRuntime(rawState, {
+  now = Date.now(),
+  engine = defaultEngine,
+  logger = console,
+  onState = () => {},
+  onFailure = () => {},
+  initialFailure = null,
+} = {}) {
+  let state = null;
+  let failure = null;
+
+  function disable(operation, error) {
+    if (failure) return;
+    failure = { operation, reason: cleanReason(error), atMs: Date.now() };
+    state = null;
+    try {
+      onState(null);
+    } catch {
+      // State publication is outside Soma and must not break the fallback.
+    }
+    if (logger && typeof logger.error === 'function') {
+      logger.error(`[cy] Soma unavailable during ${operation}: ${failure.reason}`);
+    }
+    try {
+      onFailure({ ...failure });
+    } catch {
+      // A reporting failure must not escape the fault boundary.
+    }
+  }
+
+  function mutate(operation, fn) {
+    if (failure || !state) return state;
+    try {
+      const next = fn(state);
+      if (next && typeof next === 'object') state = next;
+      onState(state);
+      return state;
+    } catch (error) {
+      disable(operation, error);
+      return null;
+    }
+  }
+
+  try {
+    if (initialFailure) throw new Error(String(initialFailure));
+    if (rawState != null && (!rawState || typeof rawState !== 'object' || rawState.version !== engine.SOMA_VERSION)) {
+      throw new Error('persisted Soma state has an unsupported or missing version');
+    }
+    state = engine.reconcileSoma(rawState, { now });
+    if (!state || typeof state !== 'object') throw new Error('reconciliation returned no state');
+    onState(state);
+  } catch (error) {
+    disable('load', error);
+  }
+
+  return {
+    get available() {
+      return !failure && !!state;
+    },
+    get state() {
+      return state;
+    },
+    get failure() {
+      return failure ? { ...failure } : null;
+    },
+    observe(observation, options) {
+      return mutate('observation', (current) => engine.observeSoma(current, observation, options));
+    },
+    observeOutput(text, options) {
+      return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
+    },
+    tick(options) {
+      return mutate('tick', (current) => engine.tickSoma(current, options));
+    },
+    chooseAction(options) {
+      if (failure || !state) return { ...FALLBACK_ACTION };
+      try {
+        return engine.chooseSomaAction(state, options);
+      } catch (error) {
+        disable('action selection', error);
+        return { ...FALLBACK_ACTION };
+      }
+    },
+    completeAction(name) {
+      mutate('action completion', (current) => {
+        engine.completeSomaAction(current, name);
+        return current;
+      });
+    },
+    directive() {
+      if (failure || !state) return '';
+      try {
+        return engine.somaDirective(state);
+      } catch (error) {
+        disable('prompt context', error);
+        return '';
+      }
+    },
+    snapshot() {
+      if (failure || !state) {
+        return {
+          version: null,
+          status: 'unavailable',
+          reason: failure ? failure.reason : 'Soma state is unavailable',
+        };
+      }
+      try {
+        return engine.somaSnapshot(state);
+      } catch (error) {
+        disable('snapshot', error);
+        return { version: null, status: 'unavailable', reason: failure.reason };
+      }
+    },
+  };
+}
+
+export { FALLBACK_ACTION };

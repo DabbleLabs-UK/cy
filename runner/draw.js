@@ -230,6 +230,25 @@ export function subjectLooksProse(subject) {
 // A shallow snapshot of the vitals that shape the marks + get stored with the
 // drawing (the mood he drew it in).
 export function moodSnapshot(v) {
+  const cognition = v.cognition;
+  if (cognition) {
+    const appraisal = cognition.appraisal || {};
+    const drives = cognition.drives || {};
+    return {
+      physical: { ...(v.physical || {}) },
+      // Kept in this compatibility shape because the pen renderer consumes these
+      // two visual style inputs. In the live runner they are projections of Soma,
+      // not the legacy mood axes.
+      mental: {
+        anger: Math.max(appraisal.threat || 0, appraisal.controlLoss || 0),
+        despair: Math.max(appraisal.deprivation || 0, drives.rest || 0),
+      },
+      soma: {
+        action: cognition.action && cognition.action.name,
+        attention: cognition.attention && cognition.attention.text,
+      },
+    };
+  }
   return {
     physical: { ...(v.physical || {}) },
     mental: { ...(v.mental || {}) },
@@ -301,10 +320,15 @@ export function detectDrawRequest(body) {
 // something of his own. Returns { mode, subject, requestedBy }.
 export function resolveRequest(req, v, { rnd = Math.random } = {}) {
   const m = v.mental || {};
+  const cognition = v.cognition;
   const warmth = typeof req.warmth === 'number' ? req.warmth : 0.3;
   const grudge = typeof req.grudge === 'number' ? req.grudge : 0.05;
-  const anger = m.anger || 0;
-  const despair = m.despair || 0;
+  const anger = cognition
+    ? Math.max(cognition.appraisal.threat || 0, cognition.appraisal.controlLoss || 0)
+    : (m.anger || 0);
+  const despair = cognition
+    ? Math.max(cognition.appraisal.deprivation || 0, cognition.drives.rest || 0)
+    : (m.despair || 0);
 
   let honour = Math.max(0, 0.45 + 0.5 * warmth - 0.6 * grudge - 0.3 * anger - 0.2 * despair);
   let refuse = Math.max(0, 0.15 + 0.6 * grudge + 0.35 * anger);

@@ -17,26 +17,58 @@ const soma = reconcileSoma(null, { now: t0 });
 assert.equal(soma.version, 1);
 assert.equal(soma.memory.episodes.length, 0);
 
+// Low-salience texture can hold momentary attention without being promoted to
+// durable episodic memory.
+const quiet = reconcileSoma(null, { now: t0 });
+observeSoma(quiet, { name: 'texture', text: 'the pipe clicks once', tags: ['texture'] }, { now: t0 + 500 });
+assert.equal(quiet.memory.episodes.length, 0);
+assert.match(quiet.attention.text, /pipe clicks/);
+
 observeSoma(soma, {
   name: 'cell_search',
   text: 'Mr Locke searched the cell and took the folded postcard',
   tags: ['officer', 'search'],
+  entities: ['Mr Locke'],
+  outcome: 'postcard taken',
 }, { now: t0 + 1000 });
 assert.equal(soma.memory.episodes.length, 1);
 assert.ok(soma.appraisal.threat > 0.5);
 assert.ok(soma.appraisal.controlLoss > 0.5);
-assert.ok(soma.prediction.error > 0.5);
+assert.equal(soma.prediction.error, 0, 'novelty is not mislabeled as a violated prediction');
 assert.match(soma.attention.text, /searched the cell/);
+assert.deepEqual(soma.memory.episodes[0].entities, ['Mr Locke']);
+assert.equal(soma.memory.episodes[0].outcome, 'postcard taken');
 
 // Repeated lived pairings teach a bounded cheap word association. Seeing the word
 // in Cy's own later output reactivates attention but does not manufacture appraisal.
-observeSoma(soma, { name: 'cell_search', text: 'Mr Locke took the folded postcard', tags: ['officer', 'search'] }, { now: t0 + 2000 });
+observeSoma(soma, {
+  name: 'cell_search', text: 'Mr Locke took the folded postcard', tags: ['officer', 'search'], entities: ['Mr Locke'], outcome: 'postcard taken',
+}, { now: t0 + 2000 });
+assert.equal(soma.memory.selectedId, 1, 'a related event retrieves the earlier lived episode');
+observeSoma(soma, {
+  name: 'cell_search', text: 'Mr Locke searched the folded postcard again', tags: ['officer', 'search'], entities: ['Mr Locke'], outcome: 'postcard taken',
+}, { now: t0 + 2500 });
+assert.equal(soma.prediction.pending.expectedFamily, 'officer', 'repeated event transitions create a modest expectation');
+
+// A material mismatch against a learned next-event expectation creates actual
+// prediction error, which contributes to loss-of-control appraisal and salience.
+observeSoma(soma, {
+  name: 'postcard', text: 'the folded postcard came back from Jody', tags: ['mail', 'postcard'], entities: ['Jody'], outcome: 'postcard received',
+}, { now: t0 + 2800 });
+assert.equal(soma.prediction.lastExpected, 'officer');
+assert.ok(soma.prediction.error >= 0.6);
+assert.ok(soma.memory.selectedId, 'the related postcard retrieves a previous episode about it');
+
 const threatBeforeOutput = soma.appraisal.threat;
-observeSomaOutput(soma, 'locke. the folded thing again. i will remember that.', { now: t0 + 3000 });
+const episodeCountBeforeOutput = soma.memory.episodes.length;
+observeSomaOutput(soma, 'locke. the folded postcard again. i will remember that.', { now: t0 + 3000 });
 assert.ok(soma.expression.triggerActivation > 0);
 assert.equal(soma.expression.commitment, true);
 assert.equal(soma.appraisal.threat, threatBeforeOutput, 'self-output must not manufacture appraisal');
 assert.ok(soma.memory.episodes.some((episode) => episode.family === 'expression'));
+assert.ok(soma.memory.episodes.length > episodeCountBeforeOutput);
+assert.equal(soma.memory.episodes.at(-1).kind, 'self_output');
+assert.match(soma.memory.episodes.at(-1).outcome, /not evidence/);
 
 tickSoma(soma, {
   physical: { pain: 0.2, hunger: 0.8, fatigue: 0.35 },
@@ -60,6 +92,7 @@ assert.ok(soma.drives.understanding < before);
 
 const directive = somaDirective(soma);
 assert.match(directive, /computed before language/);
+assert.match(directive, /related lived memory/);
 assert.doesNotMatch(directive, /anxiety|despair|STATE:/i);
 const sampling = somaSampling(soma);
 assert.ok(sampling.temperature >= 0.58 && sampling.temperature <= 1.05);
@@ -93,6 +126,7 @@ assert.match(soma.attention.source, /^memory:/);
 const snapshot = somaSnapshot(soma);
 assert.equal(snapshot.status, 'implemented');
 assert.ok(snapshot.memory.episodes >= 4);
+assert.ok(snapshot.memory.selected);
 assert.equal(snapshot.circuits.predictionError.source.includes('expectation'), true);
 assert.ok(snapshot.associations.learned > 0);
 assert.equal(snapshot.expression.commitment, true);

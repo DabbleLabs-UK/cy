@@ -1,0 +1,164 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, access, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import * as engine from './soma.js';
+import { createSomaRuntime } from './soma-runtime.js';
+import { prepareSomaGeneration } from './soma-cycle.js';
+import { buildDirectives, buildPrompt, options } from './prompt.js';
+import { loadVitals, saveVitals, vitalsLoadIssue } from './vitals.js';
+
+const t0 = Date.parse('2026-09-10T12:00:00Z');
+let persisted = null;
+const runtime = createSomaRuntime(null, {
+  now: t0,
+  onState: (state) => { persisted = state; },
+});
+assert.equal(runtime.available, true);
+assert.equal(persisted.memory.episodes.length, 0);
+
+runtime.observe({
+  name: 'cell_search',
+  text: 'Mr Locke searched the cell and moved the blue postcard',
+  tags: ['officer', 'search'],
+  entities: ['Mr Locke'],
+  outcome: 'blue postcard moved',
+}, { now: t0 + 1000 });
+assert.equal(runtime.state.memory.episodes.length, 1);
+
+runtime.observe({
+  name: 'cell_search',
+  text: 'Mr Locke moved the blue postcard again',
+  tags: ['officer', 'search'],
+  entities: ['Mr Locke'],
+  outcome: 'blue postcard moved',
+}, { now: t0 + 2000 });
+runtime.observe({
+  name: 'cell_search',
+  text: 'Mr Locke searched around the blue postcard',
+  tags: ['officer', 'search'],
+  entities: ['Mr Locke'],
+  outcome: 'blue postcard moved',
+}, { now: t0 + 3000 });
+runtime.observe({
+  name: 'postcard',
+  text: 'Jody sent the blue postcard back through the door',
+  tags: ['mail', 'postcard'],
+  entities: ['Jody'],
+  outcome: 'postcard received',
+}, { now: t0 + 4000 });
+
+assert.ok(runtime.state.prediction.error >= 0.6);
+assert.ok(runtime.state.memory.selectedId, 'related later event selected an older episode');
+
+runtime.tick({
+  physical: { pain: 0.1, hunger: 0.7, fatigue: 0.82 },
+  monotony: 0.3,
+  asleep: false,
+  lastMailMs: t0 + 4000,
+  now: t0 + 5000,
+});
+const generation = prepareSomaGeneration(runtime, {
+  canDraw: false,
+  now: t0 + 6000,
+  inputs: {
+    physical: { pain: 0.1, hunger: 0.7, fatigue: 0.82 },
+    monotony: 0.3,
+    asleep: false,
+    lastMailMs: t0 + 4000,
+    now: t0 + 6000,
+  },
+});
+const vitals = { cognition: runtime.state };
+const zoneC = buildDirectives(vitals, 'journal', { soma: generation.directive });
+const prompt = buildPrompt('', 'journal', null, zoneC);
+assert.match(prompt, /SOMA - computed before language/);
+assert.match(prompt, /action selected:/);
+assert.match(prompt, /related lived memory/);
+assert.match(prompt, /officer was expected next/i);
+assert.ok(prompt.indexOf('SOMA - computed before language') > prompt.indexOf('ONE THING'));
+
+const appraisalBeforeOutput = { ...runtime.state.appraisal };
+runtime.observeOutput('locke and the blue postcard again. i will not forget it.', { mode: 'journal', now: t0 + 7000 });
+assert.deepEqual(runtime.state.appraisal, appraisalBeforeOutput, 'own prose did not become an external event');
+assert.ok(runtime.state.expression.themes.includes('locke') || runtime.state.expression.themes.includes('postcard'));
+
+const persistenceDir = await mkdtemp(join(tmpdir(), 'cy-soma-persist-'));
+let restarted;
+try {
+  const vitalsPath = join(persistenceDir, 'vitals.json');
+  const diskVitals = await loadVitals(vitalsPath);
+  diskVitals.cognition = JSON.parse(JSON.stringify(persisted));
+  await saveVitals(vitalsPath, diskVitals);
+  const loadedVitals = await loadVitals(vitalsPath);
+  restarted = createSomaRuntime(loadedVitals.cognition, { now: t0 + 8000 });
+} finally {
+  await rm(persistenceDir, { recursive: true, force: true });
+}
+assert.equal(restarted.available, true);
+assert.equal(restarted.state.memory.episodes.length, runtime.state.memory.episodes.length);
+assert.equal(restarted.state.memory.selectedId, runtime.state.memory.selectedId);
+assert.equal(restarted.state.expression.lastText, runtime.state.expression.lastText);
+
+const failures = [];
+const broken = createSomaRuntime(null, {
+  now: t0,
+  engine: {
+    ...engine,
+    observeSoma() { throw new Error('instrumented update failure'); },
+  },
+  logger: { error() {} },
+  onFailure: (failure) => failures.push(failure),
+});
+broken.observe({ name: 'cell_search' }, { now: t0 + 1 });
+assert.equal(broken.available, false);
+assert.equal(broken.directive(), '');
+assert.equal(broken.snapshot().status, 'unavailable');
+assert.match(broken.snapshot().reason, /instrumented update failure/);
+assert.equal(prepareSomaGeneration(broken).action.name, 'observe');
+assert.equal(failures.length, 1);
+assert.deepEqual(
+  Object.fromEntries(Object.entries(options({ cognition: broken.state }, 2, 'journal')).filter(([key]) => !['stop', 'num_ctx', 'num_thread'].includes(key))),
+  { temperature: 0.72, top_p: 0.86, repeat_penalty: 1.18, repeat_last_n: 160, num_predict: 62 },
+);
+
+const temp = await mkdtemp(join(tmpdir(), 'cy-soma-'));
+try {
+  const badVitalsPath = join(temp, 'vitals.json');
+  await writeFile(badVitalsPath, '{not json');
+  const badVitals = await loadVitals(badVitalsPath);
+  assert.match(vitalsLoadIssue(badVitals), /could not be parsed/);
+  await access(badVitalsPath + '.invalid.bak');
+  const badLoadRuntime = createSomaRuntime(badVitals.cognition, {
+    initialFailure: vitalsLoadIssue(badVitals),
+    logger: { error() {} },
+  });
+  assert.equal(badLoadRuntime.snapshot().status, 'unavailable');
+} finally {
+  await rm(temp, { recursive: true, force: true });
+}
+
+const scenario = {
+  afterLivedEvents: {
+    episodes: runtime.state.memory.episodes.filter((episode) => episode.kind === 'lived_event').length,
+    attention: runtime.state.attention.text,
+    selectedMemory: engine.somaSnapshot(runtime.state).memory.selected.text,
+    prediction: engine.somaSnapshot(runtime.state).prediction,
+  },
+  journal: {
+    action: generation.action.name,
+    somaContext: generation.directive,
+  },
+  afterOwnOutput: {
+    expression: engine.somaSnapshot(runtime.state).expression,
+    appraisalUnchanged: true,
+  },
+  restart: {
+    episodes: restarted.state.memory.episodes.length,
+    selectedMemoryId: restarted.state.memory.selectedId,
+  },
+  failure: broken.snapshot(),
+};
+
+console.log('soma.integration.test.js: all checks passed');
+console.log(`SOMA_SCENARIO ${JSON.stringify(scenario)}`);
