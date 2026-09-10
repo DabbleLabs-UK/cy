@@ -892,7 +892,7 @@ function initViewSwitch() {
     { value: 'handwritten', label: 'Handwritten', description: 'pen on paper', local: true },
     { value: 'plain', label: 'Plain', description: 'clean reading view', local: true },
   ];
-  if (admin) options.push({ value: 'raw', label: 'Raw', description: 'terminal log', local: true });
+  if (admin) options.push({ value: 'raw', label: 'Diagnostics', description: 'recent technical events', local: true });
 
   const sel = document.createElement('async-select');
   sel.className = 'cy-select cy-view-select';

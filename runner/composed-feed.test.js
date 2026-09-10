@@ -12,6 +12,7 @@ function makeEl(tag) {
     style: {},
     _text: '',
     _classes: new Set(),
+    _listeners: {},
     scrollTop: 0,
     scrollHeight: 1000,
     clientHeight: 500,
@@ -24,7 +25,8 @@ function makeEl(tag) {
     set className(v) { el._className = String(v); el._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
     get className() { return el._className || ''; },
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
-    addEventListener() {},
+    addEventListener(type, fn) { (el._listeners[type] ||= []).push(fn); },
+    dispatchEvent(event) { for (const fn of el._listeners[event.type] || []) fn(event); },
     setAttribute(name, value) { el[name] = String(value); },
     set textContent(v) { el._text = String(v); if (v === '') el.children = []; },
     get textContent() { return el._text; },
@@ -113,6 +115,19 @@ moving.event('a later event', '', '2026-09-09 10:30:00', 'prison');
 assert.equal(olderFinished, 1, 'a later visible event finishes animation on older writing');
 moving.beginEntry('2026-09-09 10:31:00', 'journal');
 assert.equal(olderFinished, 2, 'a newer journal entry finishes animation on older writing');
+
+const jumpRoot = makeEl('div');
+const jumpFeed = new ComposedFeed(jumpRoot, { chars: [] });
+jumpFeed.scrollEl.scrollHeight = 1200;
+jumpFeed.scrollEl.clientHeight = 500;
+jumpFeed.scrollEl.scrollTop = 200;
+jumpFeed.scrollEl.dispatchEvent({ type: 'scroll' });
+const jumpButton = jumpRoot.children[1];
+assert.ok(jumpButton._classes.has('feed-jump'), 'handwritten uses the shared jump-to-latest control');
+assert.equal(jumpButton.hidden, false, 'handwritten shows jump to latest when scrolled away from the end');
+jumpButton.dispatchEvent({ type: 'click' });
+assert.equal(jumpFeed.scrollEl.scrollTop, 1200, 'handwritten jump returns to the latest item');
+assert.equal(jumpButton.hidden, true, 'jump control hides again at the latest item');
 
 const spanRoot = makeEl('div');
 const spans = new ComposedFeed(spanRoot, { chars: [] });

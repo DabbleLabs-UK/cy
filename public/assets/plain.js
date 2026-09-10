@@ -26,12 +26,13 @@
 
 import { sketchToPaths, sketchBounds } from './pen.js';
 import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
+import { createJumpToLatest } from './jump-to-latest.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
 let scrollEl = null;  // the scrolling region
 let colEl = null;     // the centred reading column blocks live in
-let jumpBtn = null;   // 'jump to latest' affordance
+let jumpControl = null;
 let font = null;      // Hershey font, for the 'T' label strokes in drawings
 
 let stuck = true;                 // pinned to the live bottom edge
@@ -90,13 +91,10 @@ function buildShell() {
   scrollEl.appendChild(colEl);
   root.appendChild(scrollEl);
 
-  jumpBtn = document.createElement('button');
-  jumpBtn.type = 'button';
-  jumpBtn.className = 'pl-jump';
-  jumpBtn.textContent = 'jump to latest';
-  jumpBtn.hidden = true;
-  jumpBtn.addEventListener('click', () => { stuck = true; scrollToBottom(); });
-  root.appendChild(jumpBtn);
+  jumpControl = createJumpToLatest(root, scrollEl, () => {
+    stuck = true;
+    scrollToBottom();
+  });
 }
 
 function setFont(f) {
@@ -517,7 +515,7 @@ function onScroll() {
   if ((root && root.hidden) || suppressPaging) return;
   const nearBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 48;
   stuck = nearBottom;
-  if (jumpBtn) jumpBtn.hidden = nearBottom;
+  if (jumpControl) jumpControl.sync(nearBottom);
   if (scrollEl.scrollTop < 80 && loadEarlier) loadEarlier();
   if (nearBottom && loadLater) loadLater();
 }
@@ -542,12 +540,12 @@ function autoScroll() {
 }
 function scrollToBottom() {
   setScrollTop(scrollEl.scrollHeight, true);
-  if (jumpBtn) jumpBtn.hidden = true;
+  if (jumpControl) jumpControl.hide();
 }
 
 function scrollToStart() {
   setScrollTop(0, false);
-  if (jumpBtn) jumpBtn.hidden = false;
+  if (jumpControl) jumpControl.show();
 }
 
 function scrollToEnd() {
@@ -562,13 +560,13 @@ function scrollState() {
 function restoreAfterPrepend(state) {
   if (!state) return;
   setScrollTop(Math.max(0, scrollEl.scrollHeight - state.height + state.top), false);
-  if (jumpBtn) jumpBtn.hidden = false;
+  if (jumpControl) jumpControl.show();
 }
 
 function restorePosition(state) {
   if (!state) return;
   setScrollTop(Math.max(0, state.top), false);
-  if (jumpBtn) jumpBtn.hidden = false;
+  if (jumpControl) jumpControl.show();
 }
 
 function setScrollTop(top, following) {
@@ -594,7 +592,7 @@ function reset() {
   pendingReplyTs = null;
   draws.clear();
   setScrollTop(0, true);
-  if (jumpBtn) jumpBtn.hidden = true;
+  if (jumpControl) jumpControl.hide();
 }
 
 // Called by the view switch (app.js) when PLAIN becomes visible: pin it to the

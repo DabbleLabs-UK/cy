@@ -1,4 +1,4 @@
-// raw.js - the RAW debugging view for CY.
+// raw.js - the on-demand diagnostics view for CY.
 //
 // An unstyled, live, debugging-grade view of what the runner is actually doing.
 // Gated behind admin (index.php sets window.CY.raw): only then is this module even
@@ -9,15 +9,14 @@
 // login.
 //
 // The view switch (app.js) owns which view is on screen and remembers the choice
-// for the session; this module just exposes window.__cyRaw.start()/stop() so the
-// switch can run RAW's own faster poll only while the raw view is showing.
+// for the session. This module does no feed work while closed. Opening it fetches
+// a small recent window; older records load only when the operator requests them.
 //
 // RAW replaces the paper sheet in place (the instrument panels keep updating,
-// driven by app.js as normal). It polls the SAME public event feed as app.js but
-// FASTER (~400ms) and renders every event as a terminal line the instant it
-// arrives - no pen pacing, no animation - so the stream feels like the model's
-// real output rate, stalls and all. Newest at the BOTTOM, auto-scrolling unless
-// you have scrolled up.
+// driven by app.js as normal). It polls the same public feed at an ordinary pace
+// and renders compact terminal lines. High-volume telemetry starts hidden, detail
+// is built only when expanded, and the DOM stays tightly bounded. Newest is at
+// the bottom and follows live unless the operator has scrolled up.
 //
 // SAFETY: this view is POST-WARDEN only. It never has, and never requests, any
 // pre-warden text. A blocked chunk reaches the feed only as a `warden` event
@@ -27,8 +26,11 @@
 
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
-const POLL_MS = 400; // faster than the handwritten view's 1000ms - watch the rate
-const MAX_ROWS = 1500; // rolling DOM cap (see NOTE below)
+const RANGE = CFG.range || 'api/range.php';
+const POLL_MS = 1000;
+const INITIAL_ROWS = 100;
+const OLDER_PAGE_ROWS = 100;
+const MAX_ROWS = 300;
 
 // Every event kind the feed can carry. Order defines the filter-chip order.
 const KINDS = [
@@ -44,17 +46,24 @@ let logEl = null;        // the scrolling line container
 let jumpBtn = null;      // 'jump to live' affordance
 let capNote = null;      // "showing last N of M" footer
 let searchInput = null;
+let olderBtn = null;
 
 let active = false;       // is the raw view currently on screen (driven by app.js)
 let pollTimer = null;
-let hydrated = false;     // has RAW loaded a backlog yet
 let sinceSeq = 0;         // raw's own high-water mark (independent of app.js)
 let seenTotal = 0;        // total events rendered (for the cap note)
 let dropped = 0;          // rows removed from the top by the cap
 let stuck = true;         // pinned to the live bottom edge
 let lastRenderMs = null;  // for the per-line arrival delta
+let firstSeq = null;
+let hasMoreOlder = false;
+let polling = false;
+let loadingOlder = false;
+let activationToken = 0;
 
-const hiddenKinds = new Set(); // kinds toggled OFF in the filter bar
+// Keep the diagnostic signal visible by default. Per-token prose and frequent
+// machine samples remain available through Filters without filling the screen.
+const hiddenKinds = new Set(['text', 'vitals', 'host', 'power', 'tempo']);
 let searchTerm = '';
 
 // Warden drops seen since the last `gen`, attached to that burst's detail so the
@@ -80,6 +89,8 @@ function boot() {
       kinds: () => [...logEl.querySelectorAll('.rl')].map((r) => r.dataset.kind),
       log: () => logEl,
       jumpBtn: () => jumpBtn,
+      olderBtn: () => olderBtn,
+      cap: () => capNote.textContent,
     };
   }
 }
@@ -97,7 +108,7 @@ function buildShell() {
   const search = document.createElement('input');
   search.type = 'text';
   search.className = 'raw-search';
-  search.placeholder = 'search the stream...';
+  search.placeholder = 'search recent diagnostics...';
   search.addEventListener('input', () => {
     searchTerm = search.value.trim().toLowerCase();
     applyFilterAll();
@@ -105,12 +116,18 @@ function buildShell() {
   searchInput = search;
   bar.appendChild(search);
 
+  const filters = document.createElement('details');
+  filters.className = 'raw-filters';
+  const filterLabel = document.createElement('summary');
+  filterLabel.textContent = 'filters';
+  filters.appendChild(filterLabel);
+
   const chips = document.createElement('div');
   chips.className = 'raw-chips';
   for (const k of KINDS) {
     const c = document.createElement('button');
     c.type = 'button';
-    c.className = 'raw-chip on k-' + k;
+    c.className = 'raw-chip k-' + k + (hiddenKinds.has(k) ? '' : ' on');
     c.dataset.kind = k;
     c.textContent = k;
     c.title = 'toggle ' + k + ' events';
@@ -121,14 +138,22 @@ function buildShell() {
     });
     chips.appendChild(c);
   }
-  bar.appendChild(chips);
+  filters.appendChild(chips);
+
+  const filterTools = document.createElement('div');
+  filterTools.className = 'raw-filter-tools';
+  const allBtn = mkBtn('show all', () => { hiddenKinds.clear(); syncChips(); applyFilterAll(); });
+  const noneBtn = mkBtn('hide all', () => { KINDS.forEach((k) => hiddenKinds.add(k)); syncChips(); applyFilterAll(); });
+  filterTools.append(allBtn, noneBtn);
+  filters.appendChild(filterTools);
+  bar.appendChild(filters);
 
   const tools = document.createElement('div');
   tools.className = 'raw-tools';
-  const allBtn = mkBtn('all', () => { hiddenKinds.clear(); syncChips(); applyFilterAll(); });
-  const noneBtn = mkBtn('none', () => { KINDS.forEach((k) => hiddenKinds.add(k)); syncChips(); applyFilterAll(); });
+  olderBtn = mkBtn('load 100 older', loadOlder);
+  olderBtn.disabled = true;
   const copyBtn = mkBtn('copy visible', copyVisible);
-  tools.append(allBtn, noneBtn, copyBtn);
+  tools.append(olderBtn, copyBtn);
   bar.appendChild(tools);
 
   root.appendChild(bar);
@@ -177,55 +202,99 @@ function logRootChips() {
 // ---- activation (driven by the view switch in app.js) -------------------
 
 function startRaw() {
+  if (active) return;
   active = true;
-  if (!hydrated) { hydrated = true; hydrate(); } // pull a backlog on first entry
+  const token = ++activationToken;
+  refreshRecent(token);
   if (!pollTimer) pollTimer = setInterval(pollRaw, POLL_MS);
 }
 function stopRaw() {
   active = false;
+  activationToken++;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
 // ---- polling ------------------------------------------------------------
 
-async function fetchStream(since) {
-  const url = `${STREAM}?since=${since}&limit=500`;
+async function fetchStream(since, limit = INITIAL_ROWS) {
+  const url = `${STREAM}?since=${since}&limit=${limit}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error('stream ' + res.status);
   return res.json();
 }
 
-// First entry into RAW: pull a chunk of backlog so history is visible at once.
-async function hydrate() {
+// Every entry starts from a fresh, bounded recent window. Time spent outside the
+// diagnostics view never creates a catch-up dump or hidden rendering work.
+async function refreshRecent(token) {
+  polling = true;
   try {
-    const data = await fetchStream(-500);
-    for (const ev of data.events || []) render(ev);
-    if (typeof data.now === 'number') sinceSeq = Math.max(sinceSeq, data.now);
+    const data = await fetchStream(-INITIAL_ROWS, INITIAL_ROWS);
+    if (!active || token !== activationToken) return;
+    resetLog();
+    for (const ev of data.events || []) render(ev, { follow: false });
+    if (typeof data.now === 'number') sinceSeq = data.now;
+    firstSeq = firstEventSeq();
+    hasMoreOlder = firstSeq != null && firstSeq > 1;
+    syncOlderButton();
     stuck = true;
     scrollToBottom();
   } catch {
     /* offline: pollRaw will keep trying */
+  } finally {
+    if (token === activationToken) polling = false;
   }
 }
 
 async function pollRaw() {
-  if (!active) return;
+  if (!active || polling) return;
+  const token = activationToken;
+  polling = true;
   try {
-    const data = await fetchStream(sinceSeq);
+    const data = await fetchStream(sinceSeq, INITIAL_ROWS);
+    if (!active || token !== activationToken) return;
     for (const ev of data.events || []) render(ev);
-    if (typeof data.now === 'number') sinceSeq = Math.max(sinceSeq, data.now);
+    const events = data.events || [];
+    if (events.length) sinceSeq = Math.max(sinceSeq, Number(events[events.length - 1].seq) || 0);
+    if (events.length < INITIAL_ROWS && typeof data.now === 'number') sinceSeq = Math.max(sinceSeq, data.now);
   } catch {
     /* transient: try again next tick */
+  } finally {
+    polling = false;
+  }
+}
+
+async function loadOlder() {
+  if (!active || loadingOlder || firstSeq == null || !hasMoreOlder) return;
+  const capacity = MAX_ROWS - logEl.querySelectorAll('.rl').length;
+  if (capacity <= 0) return;
+  loadingOlder = true;
+  syncOlderButton();
+  try {
+    const limit = Math.min(OLDER_PAGE_ROWS, capacity);
+    const res = await fetch(`${RANGE}?before=${firstSeq}&limit=${limit}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('range ' + res.status);
+    const data = await res.json();
+    if (!active) return;
+    const events = data.events || [];
+    for (let i = events.length - 1; i >= 0; i--) render(events[i], { prepend: true, follow: false });
+    firstSeq = firstEventSeq();
+    hasMoreOlder = !!(data.cursors && data.cursors.has_more_backward);
+    updateCap();
+  } catch {
+    /* leave the existing recent window usable */
+  } finally {
+    loadingOlder = false;
+    syncOlderButton();
   }
 }
 
 // ---- rendering ----------------------------------------------------------
 
-function render(ev) {
+function render(ev, { prepend = false, follow = true } = {}) {
   if (typeof ev.seq === 'number' && ev.seq > sinceSeq) sinceSeq = ev.seq;
 
   // keep the warden->burst association current
-  if (ev.kind === 'warden') {
+  if (!prepend && ev.kind === 'warden') {
     const p = ev.payload || {};
     wardenSinceGen.push({ category: p.category || 'unknown', chars: p.chars || 0 });
   }
@@ -249,7 +318,7 @@ function render(ev) {
 
   const delta = document.createElement('span');
   delta.className = 'rl-dt';
-  delta.textContent = '+' + dt + 'ms';
+  delta.textContent = prepend ? 'history' : '+' + dt + 'ms';
   head.appendChild(delta);
 
   const seq = document.createElement('span');
@@ -289,8 +358,8 @@ function render(ev) {
 
   let jsonShown = false;
   let builtStructured = false;
-  const drops = ev.kind === 'gen' ? wardenSinceGen.slice() : null;
-  if (ev.kind === 'gen') wardenSinceGen = [];
+  const drops = ev.kind === 'gen' ? (prepend ? [] : wardenSinceGen.slice()) : null;
+  if (!prepend && ev.kind === 'gen') wardenSinceGen = [];
 
   const showStructured = () => {
     if (!builtStructured) {
@@ -316,12 +385,15 @@ function render(ev) {
     jbtn.classList.add('on');
   });
 
-  logEl.appendChild(row);
+  if (prepend && logEl.firstChild) logEl.insertBefore(row, logEl.firstChild);
+  else logEl.appendChild(row);
   seenTotal++;
   applyFilterRow(row);
-  capRows();
+  if (!prepend) capRows();
+  firstSeq = firstEventSeq();
+  syncOlderButton();
   updateCap();
-  if (stuck) scrollToBottom();
+  if (follow && stuck && !prepend) scrollToBottom();
 }
 
 // ms-grade clock: the event's server second-stamp with the client's arrival
@@ -696,17 +768,44 @@ function capRows() {
     dropped++;
     rows--;
   }
+  firstSeq = firstEventSeq();
 }
 function updateCap() {
   if (!capNote) return;
   const shown = logEl.querySelectorAll('.rl:not(.filtered)').length;
   const inDom = logEl.querySelectorAll('.rl').length;
   const filteredOut = inDom - shown;
-  let s = `showing ${shown} of ${seenTotal} events (rolling window: last ${MAX_ROWS} kept in DOM`;
+  let s = `showing ${shown} recent technical events (${inDom} loaded, maximum ${MAX_ROWS}`;
   if (dropped) s += `, ${dropped} earlier dropped`;
   s += ')';
   if (filteredOut) s += ` - ${filteredOut} hidden by filter/search`;
+  if (hasMoreOlder && inDom < MAX_ROWS) s += ' - older records load only when requested';
   capNote.textContent = s;
+}
+
+function firstEventSeq() {
+  const first = logEl && logEl.querySelector('.rl');
+  return first && first.dataset.seq ? Number(first.dataset.seq) : null;
+}
+
+function syncOlderButton() {
+  if (!olderBtn || !logEl) return;
+  const full = logEl.querySelectorAll('.rl').length >= MAX_ROWS;
+  olderBtn.disabled = loadingOlder || !hasMoreOlder || full;
+  olderBtn.textContent = loadingOlder ? 'loading older...' : full ? 'history limit reached' : 'load 100 older';
+}
+
+function resetLog() {
+  logEl.textContent = '';
+  sinceSeq = 0;
+  seenTotal = 0;
+  dropped = 0;
+  firstSeq = null;
+  hasMoreOlder = false;
+  lastRenderMs = null;
+  wardenSinceGen = [];
+  syncOlderButton();
+  updateCap();
 }
 
 // ---- copy ---------------------------------------------------------------

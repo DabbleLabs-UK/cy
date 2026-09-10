@@ -6,6 +6,7 @@
 
 import { Pen } from './pen.js';
 import { bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
+import { createJumpToLatest } from './jump-to-latest.js';
 
 // One person has one hand. Each visible writing object owns its own Pen renderer,
 // but they all reserve this shared lane so only the earliest unfinished object can
@@ -57,14 +58,19 @@ export class ComposedFeed {
     this.scrollSettleToken = 0;
     this.suppressPaging = false;
 
+    this.scrollEl = document.createElement('div');
+    this.scrollEl.className = 'cy-scroll';
     this.flow = document.createElement('div');
     this.flow.className = 'cy-flow';
-    this.root.appendChild(this.flow);
-    this.root.addEventListener('scroll', () => {
+    this.scrollEl.appendChild(this.flow);
+    this.root.appendChild(this.scrollEl);
+    this.jumpControl = createJumpToLatest(this.root, this.scrollEl, () => this.scrollToEnd());
+    this.scrollEl.addEventListener('scroll', () => {
       if (this.root.hidden || this.suppressPaging) return;
-      const gap = this.root.scrollHeight - this.root.scrollTop - this.root.clientHeight;
+      const gap = this.scrollEl.scrollHeight - this.scrollEl.scrollTop - this.scrollEl.clientHeight;
       this.following = gap < 48;
-      if (this.root.scrollTop < 80 && this.loadingEarlier) this.loadingEarlier();
+      this.jumpControl.sync(this.following);
+      if (this.scrollEl.scrollTop < 80 && this.loadingEarlier) this.loadingEarlier();
       if (gap < 80 && this.loadingLater) this.loadingLater();
     });
   }
@@ -343,6 +349,7 @@ export class ComposedFeed {
     this.lane.reset();
     this.flow.textContent = '';
     this._setScrollTop(0, true);
+    this.jumpControl.hide();
   }
 
   whenIdle() {
@@ -351,24 +358,28 @@ export class ComposedFeed {
 
   scrollToStart() {
     this._setScrollTop(0, false);
+    this.jumpControl.show();
   }
 
   scrollToEnd() {
-    this._setScrollTop(this.root.scrollHeight, true);
+    this._setScrollTop(this.scrollEl.scrollHeight, true);
+    this.jumpControl.hide();
   }
 
   scrollState() {
-    return { top: this.root.scrollTop, height: this.root.scrollHeight };
+    return { top: this.scrollEl.scrollTop, height: this.scrollEl.scrollHeight };
   }
 
   restoreAfterPrepend(state) {
     if (!state) return;
-    this._setScrollTop(Math.max(0, this.root.scrollHeight - state.height + state.top), false);
+    this._setScrollTop(Math.max(0, this.scrollEl.scrollHeight - state.height + state.top), false);
+    this.jumpControl.show();
   }
 
   restorePosition(state) {
     if (!state) return;
     this._setScrollTop(Math.max(0, state.top), false);
+    this.jumpControl.show();
   }
 
   _appendEndpoint(block, ts, label, edge) {
@@ -386,14 +397,14 @@ export class ComposedFeed {
   }
 
   _follow() {
-    if (this.following) this.root.scrollTop = this.root.scrollHeight;
+    if (this.following) this.scrollEl.scrollTop = this.scrollEl.scrollHeight;
   }
 
   _setScrollTop(top, following) {
     const token = ++this.scrollSettleToken;
     this.following = !!following;
     this.suppressPaging = true;
-    this.root.scrollTop = top;
+    this.scrollEl.scrollTop = top;
     const release = () => {
       if (token === this.scrollSettleToken) this.suppressPaging = false;
     };
