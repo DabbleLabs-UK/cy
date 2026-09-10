@@ -88,6 +88,22 @@ assert.ok(feed.current && feed.current.static, 'replay tail is lightweight text'
 feed.setInstant(false);
 assert.equal(feed.current, null, 'switching to live closes the historical segment');
 
+const fallbackRoot = makeEl('div');
+const fallbackFeed = new ComposedFeed(fallbackRoot, { chars: [] });
+fallbackFeed.setInstant(true);
+fallbackFeed.write('continuing after replay', 'journal', false, false, '2026-09-10 18:32:28.843');
+const fallbackEntry = fallbackFeed.flow.children[0];
+assert.match(
+  fallbackEntry.children[0].children[0].textContent,
+  /^18:32:28 \(/,
+  'an internally recreated writing card inherits the triggering token time',
+);
+assert.notEqual(
+  fallbackEntry.children[0].children[0].textContent,
+  '--:--:--',
+  'a timestamped token never creates an undated writing endpoint',
+);
+
 const chronologyRoot = makeEl('div');
 const chronology = new ComposedFeed(chronologyRoot, { chars: [] });
 chronology.setInstant(true);
@@ -160,6 +176,8 @@ assert.equal(liveFeed.flow.children[0].children[2].children.length, 1, 'the live
 
 const here = dirname(fileURLToPath(import.meta.url));
 const css = await readFile(join(here, '..', 'public', 'assets', 'style.css'), 'utf8');
+const app = await readFile(join(here, '..', 'public', 'assets', 'app.js'), 'utf8');
+assert.match(app, /pen\.write\(p\.s, p\.mode, p\.lucid, p\.shout, ev\.ts\)/, 'dispatch preserves token time for a recreated handwritten card');
 const trayRule = css.match(/(?:^|\n)\.paper \{([\s\S]*?)\n\}/);
 const journalRule = css.match(/(?:^|\n)\.cy-journal-entry \{([\s\S]*?)\n\}/);
 assert.ok(trayRule, 'chronology tray has an explicit surface rule');

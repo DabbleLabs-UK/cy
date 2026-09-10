@@ -202,9 +202,14 @@ export class ComposedFeed {
     this._follow();
   }
 
-  write(text, mode, lucid, shout) {
+  write(text, mode, lucid, shout, ts = '') {
     if (!text) return;
-    if (!this.current) this.beginEntry('', mode);
+    // The replay-to-live transition deliberately closes its lightweight static
+    // segment before animated tokens resume. The app-level boundary flag can
+    // still describe that same logical generation as open, so write() must be
+    // able to recreate the physical card from the token's own timestamp. Never
+    // manufacture an undated "--:--:--" endpoint when the event supplied one.
+    if (!this.current) this.beginEntry(ts, mode);
     if (this.current.static) {
       this.current.text += String(text);
       this.current.surface.textContent = this.current.text;

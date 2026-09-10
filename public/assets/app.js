@@ -563,7 +563,10 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
           pen.beginEntry(ev.ts, p.mode);
           penEntryOpen = true;
         }
-        pen.write(p.s, p.mode, p.lucid, p.shout);
+        // Pass the token time through even when the logical entry is already
+        // marked open. ComposedFeed may have closed a static replay surface while
+        // switching to live animation and must then recreate it with a real time.
+        pen.write(p.s, p.mode, p.lucid, p.shout, ev.ts);
       }
       break;
 
