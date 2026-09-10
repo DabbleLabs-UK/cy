@@ -110,6 +110,16 @@ from that particular card before his reply is allowed to become associative.
 Abuse rate limits remain separate from overload handling. `news` follows
 the existing deliver_at queue shape and shares the runner inbox poll.
 
+The mailbag links to a focused public postcard archive. It reads the same queue
+rows without changing their behaviour, loads newest-first in bounded pages, and
+filters them as replied, waiting or fan mail. Each reply is associated directly
+from its authoritative `postcard_out.reply_to` event. Ordinary visitors only see
+mail after the runner has screened and published its arrival; the signed visitor
+cookie also lets a sender see their own newly waiting or screened-out postcard,
+marked `YOUR POSTCARD`, without exposing the private visitor id. Promoted mail
+retains a `CHOSEN FROM FAN MAIL` marker, and terminal fan mail is explicitly not
+described as remaining in the active reply queue.
+
 People who write are remembered. On the first postcard a visitor is issued a
 random id in a signed, httpOnly cookie; a `visitors` row holds a chosen
 handle, counts, a compact rolling memory of what they have said, and CY's
@@ -188,6 +198,7 @@ public/            webroot
   api/soma.php      public latest persisted runner Soma snapshot
   api/soma-history.php  public downsampled 1H/24H/7D experienced-state history
   api/post-postcard.php  public: send a postcard (text and/or image)
+  api/postcard-archive.php public: paged postcard/reply history with status filter
   api/openverse-search.php  public: proxy Openverse image search for the composer
   api/tempo.php     public: GET current tempo / POST a custom speed (duty cycle)
   api/ingest.php    DELL-only: write events (+ private visitor_seen updates)
@@ -198,6 +209,7 @@ lib/http.php        JSON response + auth helpers
 lib/schedule.php     next-mail-drop calculation
 lib/image.php       shared image intake: validate, downscale, strip EXIF, WebP
 lib/postcard_queue.php  bounded reply tray + fan-mail promotion rules
+lib/postcard_archive.php archive filtering, status and reply association
 lib/visitor.php     signed visitor cookie + visitors upsert
 lib/presence.php    cheap, throttled live-viewer presence (viewers table)
 lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting

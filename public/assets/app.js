@@ -14,6 +14,7 @@ import { BrainHud } from './brain.js';
 import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
+import { PostcardArchive } from './postcard-archive.js';
 import {
   advanceStreamCursor,
   fetchDayPage,
@@ -40,6 +41,7 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const $ = (sel) => document.querySelector(sel);
 
 let pen, postcards, brain, hud, power, tempo;
+let postcardArchive;
 let postcardWait = null;
 let lastSeq = 0;
 let polling = false;
@@ -172,6 +174,19 @@ async function boot() {
   if (powerEl) power = new Power(powerEl);
   const tempoEl = $('#tempo');
   if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT, $('#watchers'));
+  const archiveDialog = $('#postcard-archive');
+  if (archiveDialog && CFG.postcardArchive) {
+    postcardArchive = new PostcardArchive({
+      dialog: archiveDialog,
+      openButton: $('#postcard-archive-open'),
+      closeButton: $('#postcard-archive-close'),
+      filterRoot: $('#postcard-archive-filters'),
+      list: $('#postcard-archive-list'),
+      status: $('#postcard-archive-status'),
+      moreButton: $('#postcard-archive-more'),
+      endpoint: CFG.postcardArchive,
+    });
+  }
 
   wireForms();
   initViewSwitch();

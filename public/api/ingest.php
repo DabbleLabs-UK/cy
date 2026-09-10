@@ -55,6 +55,13 @@ try {
          WHERE id = :id AND mail_class = \'reply\' AND replied_at IS NULL
            AND delivered_at IS NOT NULL AND blocked = 0'
     );
+    // Marks a screened arrival as safe for the general public archive. This is
+    // written in the same transaction as its public event, so unscreened content
+    // cannot briefly appear in archive browsing.
+    $postcardPublished = $db->prepare(
+        'UPDATE postcards SET public_at = COALESCE(public_at, :public_at)
+         WHERE id = :id'
+    );
     // Persist a completed drawing. Like visitor_seen this is a side-channel: the
     // per-pass `draw` events already carry the animation into the public stream,
     // and this writes the durable record. ON DUPLICATE keeps a re-sent batch
@@ -202,6 +209,16 @@ try {
         $insert->bindValue(':payload', $payloadJson, PDO::PARAM_STR);
         $insert->execute();
         $inserted++;
+
+        if (($kind === 'postcard_in' || $kind === 'fan_mail_in') && is_array($payload)) {
+            $postcardId = (int)($payload['id'] ?? 0);
+            if ($postcardId > 0) {
+                $postcardPublished->execute([
+                    ':public_at' => (string)$event['ts'],
+                    ':id' => $postcardId,
+                ]);
+            }
+        }
     }
 
     $maxSeq = (int)$db->query('SELECT COALESCE(MAX(seq), 0) FROM events')->fetchColumn();

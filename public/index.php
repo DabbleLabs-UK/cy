@@ -126,6 +126,7 @@ function cy_import_map(): string
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
   postPostcard: 'api/post-postcard.php',
+  postcardArchive: 'api/postcard-archive.php',
   openverseSearch: 'api/openverse-search.php',
   tempo: 'api/tempo.php',
   // HISTORY MODE: the aggregate day index the calendar dialog draws itself from,
@@ -290,12 +291,38 @@ window.CY = {
     </div>
 
     <div class="panel">
-      <div class="panel-title">THE MAILBAG</div>
+      <div class="panel-heading-row">
+        <div class="panel-title">THE MAILBAG</div>
+        <button type="button" id="postcard-archive-open" class="panel-heading-action">VIEW ARCHIVE</button>
+      </div>
       <div id="mail" class="mailbag"></div>
     </div>
   </aside>
 
 </main>
+
+<dialog id="postcard-archive" class="postcard-archive" aria-labelledby="postcard-archive-title">
+  <div class="pcar-shell">
+    <header class="pcar-head">
+      <div>
+        <div id="postcard-archive-title" class="pcar-title">POSTCARD ARCHIVE</div>
+        <p class="pcar-intro">Historical postcards and Cy's replies. Fan mail is kept here, but a reply is never promised.</p>
+      </div>
+      <button type="button" id="postcard-archive-close" class="pcar-close" aria-label="Close postcard archive">&times;</button>
+    </header>
+    <nav id="postcard-archive-filters" class="pcar-filters" aria-label="Filter postcard archive">
+      <button type="button" class="active" data-archive-filter="all" aria-pressed="true">ALL</button>
+      <button type="button" data-archive-filter="replied" aria-pressed="false">REPLIED</button>
+      <button type="button" data-archive-filter="waiting" aria-pressed="false">WAITING</button>
+      <button type="button" data-archive-filter="fan_mail" aria-pressed="false">FAN MAIL</button>
+    </nav>
+    <div class="pcar-scroll">
+      <div id="postcard-archive-status" class="pcar-load-status" role="status" aria-live="polite"></div>
+      <div id="postcard-archive-list" class="pcar-list"></div>
+      <button type="button" id="postcard-archive-more" class="pcar-more" hidden>LOAD OLDER</button>
+    </div>
+  </div>
+</dialog>
 
 <script type="module" src="<?= htmlspecialchars(cy_asset('shell-layout.js'), ENT_QUOTES) ?>"></script>
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/app.js'), ENT_QUOTES) ?>"></script>
