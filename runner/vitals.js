@@ -1,5 +1,7 @@
 // vitals.js - the state engine.
 //
+// Every physical/mental default, drift, event delta, derived-state coefficient
+// and brain-region weight here is ARBITRARY / HEURISTIC and LEGACY.
 // A single mutable state object is ticked every 5s and persisted to
 // state/vitals.json. Physical and mental scalars are all 0..1. Everything
 // derived (heart rate, old brain-region activations) is computed on demand.

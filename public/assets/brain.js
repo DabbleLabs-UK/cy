@@ -22,6 +22,48 @@ export const BRAIN_REGIONS = [
   { key: 'temporalSocial', label: 'Temporal / social analogy', path: 'M218 125 C246 119 278 129 291 151 C276 174 244 184 213 176 C225 157 228 143 218 125 Z' },
 ];
 
+export const IMPLEMENTATION_STATUS = Object.freeze({
+  IMPLEMENTED: 'IMPLEMENTED',
+  PROVISIONAL: 'PROVISIONAL',
+  NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
+});
+
+const STATUS_LABEL = Object.freeze({
+  IMPLEMENTED: 'LIVE',
+  PROVISIONAL: 'PROVISIONAL',
+  NOT_IMPLEMENTED: 'NOT MODELLED',
+});
+
+export function implementationStatus(registry, scope, id) {
+  const entries = registry && Array.isArray(registry[scope]) ? registry[scope] : [];
+  const entry = entries.find((item) => item && item.id === id) || null;
+  const status = entry && Object.values(IMPLEMENTATION_STATUS).includes(entry.implementation_status)
+    ? entry.implementation_status
+    : IMPLEMENTATION_STATUS.NOT_IMPLEMENTED;
+  return {
+    id,
+    displayName: entry && entry.display_name ? entry.display_name : id.replaceAll('_', ' ').toUpperCase(),
+    status,
+    publicLabel: registry && registry.statuses && registry.statuses[status] && registry.statuses[status].public_label
+      ? registry.statuses[status].public_label
+      : STATUS_LABEL[status],
+    note: entry && entry.status_note ? entry.status_note : 'No implementation registry entry exists for this system.',
+    dependencies: entry && Array.isArray(entry.data_dependencies) ? entry.data_dependencies : [],
+    version: entry && entry.version ? entry.version : null,
+  };
+}
+
+export function canRenderDynamicActivity(status) {
+  return status === IMPLEMENTATION_STATUS.IMPLEMENTED;
+}
+
+export function overallImplementationLabel(registry) {
+  const entries = registry && Array.isArray(registry.soma_variables) ? registry.soma_variables : [];
+  if (entries.length && entries.every((entry) => entry.implementation_status === IMPLEMENTATION_STATUS.IMPLEMENTED)) return 'LIVE';
+  if (entries.some((entry) => [IMPLEMENTATION_STATUS.IMPLEMENTED, IMPLEMENTATION_STATUS.PROVISIONAL].includes(entry.implementation_status))) return 'PROVISIONAL';
+  return 'NOT MODELLED';
+}
+
 const CIRCUITS = [
   ['actionSelection', 'ACTION SELECTION'], ['selfModel', 'SELF MODEL'],
   ['predictionError', 'PREDICTION ERROR'], ['interoception', 'INTEROCEPTION'],
@@ -127,9 +169,24 @@ function historyMarkup() {
 }
 
 export class BrainHud {
-  constructor(root, { historyUrl = '' } = {}) {
+  constructor(root, { historyUrl = '', registry = null } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
+    this.registry = registry || {};
+    const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
+    this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
+      ...definition,
+      status: implementationStatus(this.registry, 'soma_variables', definition.key),
+    }));
+    const registeredRegions = Array.isArray(this.registry.brain_regions) && this.registry.brain_regions.length
+      ? this.registry.brain_regions
+      : BRAIN_REGIONS.map((region) => ({ id: region.key, display_name: region.label }));
+    this.regionDefinitions = registeredRegions.map((registered) => ({
+      ...(regionGeometry.get(registered.id) || {}),
+      key: registered.id,
+      label: registered.display_name || (regionGeometry.get(registered.id) || {}).label || registered.id,
+      status: implementationStatus(this.registry, 'brain_regions', registered.id),
+    }));
     this.metrics = {};
     this.latestBrain = {};
     this.rows = {};
@@ -146,9 +203,9 @@ export class BrainHud {
         <span class="measure-dot"></span><span class="measure-label">MODEL INFERENCE</span>
         <span class="measure-value">IDLE</span><span class="measure-kind">MEASURED</span>
       </div>
-      <div class="soma-implemented" hidden>
-        <div class="soma-head"><span class="soma-badge">SOMA EXPERIENCED STATE</span><span class="soma-live available" aria-label="Soma state available"></span></div>
-        <p class="soma-caveat">Persistent state computed before language from body, time, events, memory and social contact. Select any reading for its causes and history. Brain regions are functional analogies, not measured physiology.</p>
+      <div class="soma-scaffold">
+        <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
+        <p class="soma-caveat">The displayed values come from an older heuristic model and are marked accordingly. Brain regions are functional analogies, not measured physiology; unfinished mappings do not display activation.</p>
         <div class="soma-public-readout"></div>
         <div class="brain-figure">
           <svg class="brain-svg" viewBox="0 0 340 230" role="group" aria-label="Soma functional brain analogy">
@@ -160,10 +217,10 @@ export class BrainHud {
           <div class="brain-key">SOMA / FUNCTIONAL ANALOGY</div>
         </div>
         <div class="soma-region-list" aria-label="Functional brain region states"></div>
-        <details class="soma-diagnostics"><summary>SOMA DIAGNOSTICS</summary><div class="soma-diagnostic-rows"></div><div class="soma-selection"></div></details>
+        <details class="soma-diagnostics"><summary>LEGACY SOMA DIAGNOSTICS - PROVISIONAL</summary><div class="soma-diagnostic-rows"></div><div class="soma-selection"></div></details>
       </div>
       <details class="legacy-box"><summary>PLANNED STATS</summary>
-        <p class="soma-pending-note"><strong>Experienced state:</strong> waiting for an implemented runner snapshot.</p>
+        <p class="soma-pending-note"><strong>Implementation registry:</strong> unavailable systems remain blank rather than displaying fake zeroes.</p>
         <p>Legacy synthetic values are retained only for compatibility and are not observations or clinical measures.</p>
         <dl><div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
         <div><dt>legacy mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
@@ -173,50 +230,62 @@ export class BrainHud {
         <div><dt>cast standing</dt><dd class="legacy-cast">unavailable</dd></div></dl>
       </details>`;
 
+    this.root.querySelector('.soma-overall-status').textContent = overallImplementationLabel(this.registry);
+
     const readout = this.root.querySelector('.soma-public-readout');
-    for (const definition of EXPERIENCED_METRICS) {
+    for (const definition of this.metricDefinitions) {
       const entry = document.createElement('details');
-      entry.className = 'soma-state-entry soma-reading-entry';
+      entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
       entry.dataset.metric = definition.key;
-      entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.label}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">Awaiting Soma state.</p><p class="soma-influences-title">RECENT INFLUENCES</p><ul class="soma-contributors"></ul>${historyMarkup()}</div>`;
+      entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
     const svg = this.root.querySelector('.brain-svg');
     const regionList = this.root.querySelector('.soma-region-list');
-    for (const definition of BRAIN_REGIONS) {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', definition.path);
-      path.setAttribute('class', 'soma-region');
-      path.setAttribute('tabindex', '0');
-      path.setAttribute('role', 'button');
-      path.setAttribute('aria-controls', `soma-region-${definition.key}`);
-      path.setAttribute('aria-expanded', 'false');
-      path.dataset.region = definition.key;
-      path.addEventListener('click', () => this.openRegion(definition.key));
-      path.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.openRegion(definition.key); }
-      });
-      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = 'Awaiting Soma state';
-      path.appendChild(title);
-      svg.appendChild(path);
-      this.regions[definition.key] = path;
+    for (const definition of this.regionDefinitions) {
+      let path = null;
+      if (definition.path) {
+        path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', definition.path);
+        path.setAttribute('class', `soma-region status-${definition.status.status.toLowerCase().replace('_', '-')}`);
+        path.setAttribute('tabindex', '0');
+        path.setAttribute('role', 'button');
+        path.setAttribute('aria-controls', `soma-region-${definition.key}`);
+        path.setAttribute('aria-expanded', 'false');
+        path.dataset.region = definition.key;
+        path.dataset.implementationStatus = definition.status.status;
+        path.addEventListener('click', () => this.openRegion(definition.key));
+        path.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.openRegion(definition.key); }
+        });
+        const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        title.textContent = `${definition.status.displayName}. ${definition.status.publicLabel}. ${definition.status.note}`;
+        path.appendChild(title);
+        svg.appendChild(path);
+        this.regions[definition.key] = path;
+      }
 
       const entry = document.createElement('details');
-      entry.className = 'soma-region-entry';
+      entry.className = `soma-region-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
       entry.id = `soma-region-${definition.key}`;
       entry.dataset.region = definition.key;
-      entry.innerHTML = `<summary><span class="soma-region-name">${definition.label}</span><strong class="soma-region-state">--</strong></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">Awaiting Soma state.</p>${historyMarkup()}</div>`;
-      entry.addEventListener('toggle', () => path.setAttribute('aria-expanded', String(entry.open)));
+      entry.dataset.implementationStatus = definition.status.status;
+      const regionHistory = canRenderDynamicActivity(definition.status.status)
+        ? historyMarkup()
+        : '<p class="soma-history-note">No activation history is displayed until this mapping is LIVE.</p>';
+      entry.innerHTML = `<summary><span class="soma-region-name">${definition.status.displayName}</span><strong class="soma-region-state">${definition.status.publicLabel}</strong></summary>
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p>${regionHistory}</div>`;
+      entry.addEventListener('toggle', () => {
+        if (path) path.setAttribute('aria-expanded', String(entry.open));
+      });
       this._wireReading(entry, 'brain', definition.key);
       regionList.appendChild(entry);
       this.regionRows[definition.key] = entry;
 
-      for (const item of [path, entry]) {
+      for (const item of [path, entry].filter(Boolean)) {
         item.addEventListener('mouseenter', () => this.setRegionAssociation(definition.key, true));
         item.addEventListener('mouseleave', () => this.setRegionAssociation(definition.key, false));
         item.addEventListener('focusin', () => this.setRegionAssociation(definition.key, true));
@@ -240,7 +309,12 @@ export class BrainHud {
     entry.dataset.readingKey = key;
     entry.addEventListener('toggle', () => {
       if (!entry.open) return;
+      const registryScope = scope === 'metric' ? 'soma_variables' : 'brain_regions';
+      const registered = implementationStatus(this.registry, registryScope, key);
+      if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
+      if (registered.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED) return;
       const active = entry.querySelector('.soma-ranges button.active');
+      if (!active) return;
       this.loadHistory(entry, scope, key, active ? active.dataset.range : '24h');
     });
     entry.querySelectorAll('.soma-ranges button').forEach((button) => button.addEventListener('click', () => {
@@ -250,46 +324,65 @@ export class BrainHud {
   }
 
   setSoma(soma) {
-    if (!soma || soma.status !== 'implemented' || !soma.experienced || !soma.experienced.metrics) return;
-    this.root.querySelector('.soma-implemented').hidden = false;
-    this.root.querySelector('.soma-pending-note').hidden = true;
+    if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
-    for (const definition of EXPERIENCED_METRICS) {
+    for (const definition of this.metricDefinitions) {
       const metric = this.metrics[definition.key];
       const row = this.rows[definition.key];
-      if (!metric || !row) continue;
+      if (!row) continue;
+      if (definition.status.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED || !metric) {
+        row.querySelector('.soma-state-value').textContent = '--';
+        row.querySelector('.soma-state-trend').textContent = definition.status.publicLabel;
+        row.querySelector('.soma-state-bar i').style.width = '0%';
+        row.querySelector('summary').title = `${definition.status.displayName}. ${definition.status.publicLabel}. ${definition.status.note}`;
+        continue;
+      }
       const value = clamp100(metric.value);
       row.querySelector('.soma-state-value').textContent = value == null ? '--' : String(Math.round(value));
       row.querySelector('.soma-state-trend').textContent = metric.trend === 'rising' ? 'rising' : metric.trend === 'falling' ? 'falling' : 'steady';
       row.querySelector('.soma-state-bar i').style.width = `${value || 0}%`;
       row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor((value || 0) / 100);
-      row.querySelector('summary').title = metricExplanation(metric);
+      row.querySelector('summary').title = `${definition.status.displayName}. ${definition.status.publicLabel}. ${definition.status.note} ${metricExplanation(metric)}`;
       this.renderMetric(definition.key);
     }
-    for (const definition of BRAIN_REGIONS) {
+    for (const definition of this.regionDefinitions) {
       const reading = this.latestBrain[definition.key];
       const region = this.regions[definition.key];
       const entry = this.regionRows[definition.key];
-      if (!reading || !region || !entry) continue;
+      if (!entry) continue;
+      const dynamic = canRenderDynamicActivity(definition.status.status) && reading && region;
+      const description = `${definition.status.displayName}. ${definition.status.publicLabel}. ${definition.status.note}`;
+      entry.querySelector('.soma-region-name').textContent = definition.status.displayName;
+      entry.querySelector('.soma-reading-description').textContent = description;
+      if (!dynamic) {
+        entry.querySelector('.soma-region-state').textContent = definition.status.publicLabel;
+        if (region) {
+          region.style.removeProperty('fill');
+          region.style.removeProperty('fill-opacity');
+          region.classList.remove('active');
+          region.querySelector('title').textContent = description;
+          region.setAttribute('aria-label', `${definition.status.displayName}: ${definition.status.publicLabel}`);
+        }
+        continue;
+      }
       const value = clamp01(reading.value) || 0;
       const percentage = Math.round(value * 100);
-      const description = `${reading.label}: ${reading.level}. ${reading.explanation} Current activity: ${percentage}%.`;
+      const liveDescription = `${description} Current functional activity: ${percentage}%.`;
       region.style.fill = activityColor(value);
       region.style.fillOpacity = String(0.25 + value * 0.75);
       region.classList.toggle('active', value >= 0.5);
-      region.querySelector('title').textContent = description;
-      region.setAttribute('aria-label', `${reading.label}: ${reading.level}`);
-      entry.querySelector('.soma-region-name').textContent = reading.label;
-      entry.querySelector('.soma-region-state').textContent = `${String(reading.level).toUpperCase()} ${percentage}%`;
-      entry.querySelector('.soma-reading-description').textContent = description;
+      region.querySelector('title').textContent = liveDescription;
+      region.setAttribute('aria-label', `${definition.status.displayName}: ${percentage}%`);
+      entry.querySelector('.soma-region-state').textContent = `LIVE ${percentage}%`;
+      entry.querySelector('.soma-reading-description').textContent = liveDescription;
     }
     for (const [key] of CIRCUITS) {
       const reading = soma.circuits && soma.circuits[key];
       const row = this.root.querySelector(`.soma-diagnostic-row[data-circuit="${key}"]`);
       if (!reading || !row) continue;
       row.querySelector('strong').textContent = `${Math.round((clamp01(reading.value) || 0) * 100)}%`;
-      row.querySelector('small').textContent = reading.source || 'implemented Soma state';
+      row.querySelector('small').textContent = `PROVISIONAL - ${reading.source || 'legacy Soma state'}`;
     }
     const action = soma.action || {};
     const attention = soma.attention || {};
@@ -322,7 +415,8 @@ export class BrainHud {
     const entry = this.rows[key];
     if (!metric || !entry) return;
     const detail = entry.querySelector('.soma-reading-detail');
-    detail.querySelector('.soma-reading-description').textContent = metricStateSummary(metric);
+    const status = implementationStatus(this.registry, 'soma_variables', key);
+    detail.querySelector('.soma-reading-description').textContent = `${status.publicLabel}. ${status.note} ${metricStateSummary(metric)}`;
     const list = detail.querySelector('.soma-contributors');
     const contributors = visibleContributors(metric);
     detail.querySelector('.soma-influences-title').hidden = contributors.length === 0;

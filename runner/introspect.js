@@ -7,6 +7,11 @@
 // TEXT, not a clock. If he writes himself into a spiral, the numbers follow the
 // words down.
 //
+// MODEL STATUS: LEGACY / PROVISIONAL. Every numerical language-feature weight,
+// threshold, cap and state delta below is ARBITRARY / HEURISTIC. This module is
+// not imported by the current runner. It does not call an LLM, but its retained
+// formulas must not be mistaken for an approved model of affect.
+//
 // Returns { deltas, rel, signals }:
 //   deltas  - {axis: d} primitive mental/physical nudges (small; a burst nudges,
 //             it does not swing). Applied by the caller WITHOUT amplification.

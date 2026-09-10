@@ -4,6 +4,11 @@
 // contributors. Event impulses decay with their own half-lives; body-clock and
 // cross-state contributors are explicit levels. The public explanation, prompt
 // directive and brain analogy all read this same ledger.
+//
+// MODEL STATUS: PROVISIONAL. Every numerical psychological coefficient,
+// threshold, baseline, decay rate, clamp and brain-region weight in this file
+// is ARBITRARY / HEURISTIC. None has an approved scientific or computational
+// model citation.
 
 export const EXPERIENCED_VERSION = 2;
 export const HISTORY_INTERVAL_MS = 2 * 60 * 1000;

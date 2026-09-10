@@ -1,4 +1,7 @@
 // incidents.js - the incident ledger.
+// MODEL STATUS: grudge salience, mail-silence and incident-selection thresholds
+// are ARBITRARY / HEURISTIC and PROVISIONAL. Ledger size and text-length limits
+// are engineering constraints.
 //
 // Ambient events used to move only numbers, so the model had a mood but no
 // SUBSTANCE - nothing concrete to write about. This turns every ambient / social

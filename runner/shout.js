@@ -19,6 +19,10 @@
 // The capitalised form is a RENDERING only. It must never be fed back into the
 // model's context (see run.js onChunk) - otherwise he imitates his own shouting
 // and it compounds into permanent caps.
+//
+// MODEL STATUS: PROVISIONAL. Every affect-dynamics and rendering weight,
+// threshold, lag and probability below is ARBITRARY / HEURISTIC. This remains
+// live behaviour but is not a validated psychological model.
 
 import { clamp, ampOf } from './vitals.js';
 import { CAST, OFFICERS } from './cast.js';

@@ -5,6 +5,7 @@ require __DIR__ . '/../lib/db.php';
 require __DIR__ . '/../lib/http.php';
 require __DIR__ . '/../lib/admin.php';
 require __DIR__ . '/../lib/tempo.php';
+require __DIR__ . '/../lib/implementation_registry.php';
 
 // Point the viewer at the fake replay feed with ?stream=test so the renderer
 // can be exercised with no database present.
@@ -36,6 +37,7 @@ try {
     $day = 1;
 }
 $today = (new DateTimeImmutable('now', new DateTimeZone('Europe/London')))->format('Y-m-d');
+$implementationRegistry = captive_implementation_registry();
 
 // The view switch (handwritten / plain / raw) is a LOCAL async-select in app.js
 // that remembers the session's choice. ?view= is an optional deep-link that forces
@@ -134,6 +136,8 @@ window.CY = {
   history: 'api/history.php',
   range: 'api/range.php',
   somaHistory: 'api/soma-history.php',
+  environmentEvent: <?= $rawEnabled ? "'api/environment-event.php'" : 'null' ?>,
+  implementationRegistry: <?= json_encode($implementationRegistry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>,
   // Hershey glyph data app.js fetches (not a JS import, so the import map below
   // does not cover it) with `cache: 'force-cache'` - versioned the same way so
   // an edit to the glyph set cannot be masked by that hard caching.

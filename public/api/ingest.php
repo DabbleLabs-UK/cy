@@ -6,6 +6,7 @@ require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/admin.php';
 require __DIR__ . '/../../lib/tempo.php';
 require __DIR__ . '/../../lib/postcard_queue.php';
+require __DIR__ . '/../../lib/environment_event.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -23,6 +24,11 @@ try {
     $db->beginTransaction();
 
     $insert = $db->prepare('INSERT INTO events (ts, kind, payload) VALUES (:ts, :kind, :payload)');
+    $environmentInsert = $db->prepare(
+        'INSERT INTO environment_events (event_id, occurred_at, event_type, event_family, record)
+         VALUES (:event_id, :occurred_at, :event_type, :event_family, :record)
+         ON DUPLICATE KEY UPDATE record = VALUES(record)'
+    );
     // Persist Cy's updated standing/memory toward a visitor after he replies.
     // This is private and never enters the public event log or stream.
     $visitorUpd = $db->prepare(
@@ -76,6 +82,27 @@ try {
         $kind = (string)$event['kind'];
         if ($kind === '' || strlen($kind) > 24) {
             throw new InvalidArgumentException('invalid kind');
+        }
+
+        // A private structured world record. It is stored separately and never
+        // inserted into the public events stream.
+        if ($kind === 'world_event_record') {
+            $record = is_array($event['payload'])
+                ? captive_environment_record_validate($event['payload'])
+                : throw new InvalidArgumentException('invalid environment event record');
+            $world = $record['world_event'];
+            $recordJson = json_encode($record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($recordJson === false) {
+                throw new InvalidArgumentException('invalid environment event record');
+            }
+            $environmentInsert->execute([
+                ':event_id' => (string)$world['id'],
+                ':occurred_at' => (string)$event['ts'],
+                ':event_type' => (string)$world['event_type'],
+                ':event_family' => (string)$world['event_family'],
+                ':record' => $recordJson,
+            ]);
+            continue;
         }
 
         // The authoritative public reply also closes the server-side queue item.

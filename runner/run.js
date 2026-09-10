@@ -6,11 +6,17 @@
 // every 5s. A deterministic (non-LLM) scheduler fires ambient prison events on
 // a Europe/London clock; inbound letters interrupt the stream mid-word.
 //
+// MODEL STATUS: numerical appraisal floors, event probabilities, legacy state
+// deltas, affect-to-rendering gates and brain-display mappings retained in this
+// orchestrator are ARBITRARY / HEURISTIC and PROVISIONAL or LEGACY. The new
+// structured environment record contains none of those values.
+//
 //   node runner/run.js            # uses runner/config.json (falls back to sample)
 //
 // SIGINT flushes the batch queue and persists vitals before exiting.
 
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -109,6 +115,7 @@ import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, materialiseScheduledEvent } from './environment.js';
+import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -558,12 +565,84 @@ async function main() {
         body: ctx.body,
         social: ctx.social,
         effects: ctx.effects,
+        somaInput: ctx.somaInput || null,
+        environmentEventId: ctx.environmentEventId || null,
         outcome: ctx.evType || ctx.sub || null,
         ts: inc.ts,
       },
       { now: Date.now() },
     );
     return inc;
+  }
+
+  // Persist the facts, the observation and the normalized Soma input as one
+  // private side-channel record. This record contains no legacy numeric
+  // appraisal. The current numeric engine is named as a PROVISIONAL consumer
+  // only when the caller also passes the old compatibility fields to Soma.
+  function captureEnvironmentEvent(archetypeId, {
+    eventType = archetypeId,
+    summary = null,
+    world = {},
+    observation = {},
+    durationMs = null,
+    provisionalConsumer = true,
+  } = {}) {
+    const worldWithDescription = {
+      ...world,
+      context: {
+        ...(world.context || {}),
+        description: world.context && world.context.description != null
+          ? world.context.description
+          : summary,
+      },
+    };
+    const event = createEnvironmentEvent(archetypeId, {
+      id: `env-${randomUUID()}`,
+      timestamp: tsNow(),
+      eventType,
+      durationMs,
+      world: worldWithDescription,
+      observation: { summary, ...observation },
+    });
+    const record = createEnvironmentRecord(event, {
+      consumedBy: provisionalConsumer
+        ? ['soma-input-staging-v1', 'legacy-experienced-state-v2']
+        : ['soma-input-staging-v1'],
+    });
+    emit({ kind: 'world_event_record', payload: record });
+    return record;
+  }
+
+  function structuredEventForName(name, summary = null) {
+    if (name === 'injury') {
+      return captureEnvironmentEvent('minor_injury', { eventType: name, summary });
+    }
+    if (name === 'cell_search') {
+      return captureEnvironmentEvent('cell_search', { eventType: name, summary });
+    }
+    if (name === 'lockdown') {
+      return captureEnvironmentEvent('lockdown', { eventType: name, summary });
+    }
+    if (name === 'noise_night') {
+      return captureEnvironmentEvent('persistent_night_noise', { eventType: name, summary });
+    }
+    if (name === 'no_mail_24h') {
+      return captureEnvironmentEvent('prolonged_social_absence', { eventType: name, summary });
+    }
+    if (name === 'assoc_cancelled') {
+      return captureEnvironmentEvent('cancelled_activity', { eventType: name, summary });
+    }
+    if (name === 'no_eggs' || name === 'cold_tea') {
+      return captureEnvironmentEvent('meal', {
+        eventType: name,
+        summary,
+        world: {
+          physical: { food: { offered: 'yes', consumed: 'unknown' } },
+          situation: { deprivation_outcome: name === 'no_eggs' ? 'partial' : 'unknown' },
+        },
+      });
+    }
+    return null;
   }
 
   // Capture a piece of memory into the dream pool: a postcard image/caption or a
@@ -1602,11 +1681,32 @@ async function main() {
     const hostile = isHostile(pc.body);
     const warm = isWarm(pc.body);
     const evName = hostile ? 'letter_hostile' : 'letter_arrives';
-    fireEvent(evName, { from: pc.from_name || null }, { observe: false });
+    const postcardText = [pc.body, pc.caption, pc.image_attrib].filter(Boolean).join(' | ')
+      || 'a postcard arrived without words';
+    const postcardRecord = captureEnvironmentEvent(
+      hostile ? 'hostile_postcard' : warm ? 'supportive_postcard' : 'ordinary_postcard',
+      {
+        eventType: pc.image_path ? 'postcard_with_image' : 'postcard',
+        summary: postcardText,
+        world: {
+          participants: { actor: pc.from_name || null, target: 'cy', relationship_ref: pc.visitor_id || null },
+          context: { location: 'cell' },
+        },
+        observation: {
+          modality: pc.image_path && !pc.body ? 'seen' : 'read',
+          observed_facts: { has_text: !!pc.body, has_image: !!pc.image_path },
+        },
+      },
+    );
+    fireEvent(
+      evName,
+      { from: pc.from_name || null },
+      { observe: false, environmentRecord: postcardRecord },
+    );
     soma.observe(
       {
         name: pc.image_path ? 'postcard_with_image' : 'postcard',
-        text: [pc.body, pc.caption, pc.image_attrib].filter(Boolean).join(' | ') || 'a postcard arrived without words',
+        text: postcardText,
         tags: ['mail', 'postcard', hostile ? 'hostile' : (warm ? 'warm' : 'neutral'), pc.image_path ? 'image' : 'text'],
         entities: [pc.from_name].filter(Boolean),
         appraisal: {
@@ -1615,6 +1715,8 @@ async function main() {
           controlLoss: hostile ? 0.3 : 0.08,
           deprivation: 0.03,
         },
+        somaInput: postcardRecord.soma_input,
+        environmentEventId: postcardRecord.world_event.id,
         outcome: 'postcard received',
         ts: tsNow(),
       },
@@ -1655,6 +1757,7 @@ async function main() {
         visitor_id: pc.visitor_id || null,
         visit_count: pc.visitor ? pc.visitor.visit_count : null,
         promoted: !!pc.promoted,
+        environment_event_id: postcardRecord.world_event.id,
       },
     });
 
@@ -2087,15 +2190,19 @@ async function main() {
   // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
   // it was a trivial thing landing under high amplification, arm the "this is the
   // day" cue. Returns the amp that was applied.
-  function fireEvent(name, extra = {}, { observe = true, observation = null } = {}) {
+  function fireEvent(name, extra = {}, { observe = true, observation = null, environmentRecord = null } = {}) {
     const a = ampOf(vitals);
     applyEvent(vitals, name, { now: Date.now() });
     const detail = Object.entries(extra)
       .filter(([, value]) => value != null)
       .map(([key, value]) => `${key} ${value}`)
       .join(', ');
+    const observed = observation || {};
+    const structured = environmentRecord || structuredEventForName(
+      name,
+      observed.text || (detail ? `${name}: ${detail}` : name.replaceAll('_', ' ')),
+    );
     if (observe) {
-      const observed = observation || {};
       soma.observe(
         {
           name,
@@ -2106,6 +2213,8 @@ async function main() {
           body: observed.body,
           social: observed.social,
           effects: observed.effects,
+          somaInput: structured ? structured.soma_input : null,
+          environmentEventId: structured ? structured.world_event.id : null,
           outcome: observed.outcome || extra.outcome || null,
           ts: tsNow(),
         },
@@ -2115,7 +2224,15 @@ async function main() {
     if (TRIVIAL_EVENTS.has(name) && a > 2.0) {
       amplifiedCue = { label: TRIVIAL_LABELS[name] || name, until: Date.now() + 3 * 60 * 1000 };
     }
-    emit({ kind: 'event', payload: { name, amp: Number(a.toFixed(3)), ...extra } });
+    emit({
+      kind: 'event',
+      payload: {
+        name,
+        amp: Number(a.toFixed(3)),
+        ...extra,
+        ...(structured ? { environment_event_id: structured.world_event.id } : {}),
+      },
+    });
     return a;
   }
 
@@ -2128,9 +2245,29 @@ async function main() {
     applySocialEvent(vitals.relations, castKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
     const { mins } = londonParts();
+    const quality = ev.social && ev.social.quality ? ev.social.quality : 'unknown';
+    const archetypeId = quality === 'supportive' || quality === 'ordinary'
+      ? 'friendly_interaction'
+      : quality === 'rejecting' ? 'social_rejection' : 'hostile_interaction';
+    const structured = captureEnvironmentEvent(archetypeId, {
+      eventType: `social_${ev.type}`,
+      summary: ev.slight,
+      world: {
+        participants: { actor: castKey, target: 'cy', relationship_ref: castKey },
+        situation: {
+          social_contact: 'present',
+          social_contact_quality: quality,
+          rejection_support: quality === 'supportive' ? 'support' : quality === 'rejecting' || quality === 'hostile' ? 'rejection' : 'none',
+          intent: quality === 'supportive' ? 'supportive' : quality === 'hostile' ? 'hostile' : 'ambiguous',
+        },
+        context: { location: 'association' },
+      },
+      observation: { observed_facts: { interaction_type: ev.type } },
+    });
     recordIncident('social', {
       actorKey: castKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins,
       appraisal: ev.appraisal, social: ev.social,
+      somaInput: structured.soma_input, environmentEventId: structured.world_event.id,
     });
     const r = vitals.relations[castKey];
     emit({
@@ -2142,6 +2279,7 @@ async function main() {
         type: ev.type,
         amp: Number(a.toFixed(3)),
         standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
+        environment_event_id: structured.world_event.id,
       },
     });
   }
@@ -2154,9 +2292,24 @@ async function main() {
     applyOfficerEvent(vitals.relations, officerKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.25);
     const { mins } = londonParts();
+    const officerName = (BY_KEY[officerKey] || {}).name || officerKey;
+    const officerArchetype = ev.type === 'kindness'
+      ? 'friendly_interaction' : ev.type === 'search' ? 'cell_search'
+        : ev.type === 'refusal' ? 'cancelled_activity' : 'officer_instruction';
+    const structured = captureEnvironmentEvent(officerArchetype, {
+      eventType: `officer_${ev.type}`,
+      summary: `${officerName} ${ev.slight}`,
+      world: {
+        participants: { actor: officerKey, target: 'cy', relationship_ref: officerKey },
+        situation: { agency: 'officer' },
+        context: { location: ev.type === 'search' ? 'cell' : 'wing' },
+      },
+      observation: { observed_facts: { interaction_type: ev.type } },
+    });
     recordIncident('officer', {
       actorKey: officerKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins,
       appraisal: ev.appraisal, social: ev.social,
+      somaInput: structured.soma_input, environmentEventId: structured.world_event.id,
     });
     officerCue = { key: officerKey, ev, until: Date.now() + 3 * 60 * 1000 };
     const r = vitals.relations[officerKey];
@@ -2169,6 +2322,7 @@ async function main() {
         type: ev.type,
         amp: Number(a.toFixed(3)),
         standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
+        environment_event_id: structured.world_event.id,
       },
     });
   }
@@ -2189,11 +2343,23 @@ async function main() {
     const misheard = Math.random() < p;
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
     const { mins } = londonParts();
-    recordIncident('overheard', { phase: currentRegime(mins).phase, mins });
+    const structured = captureEnvironmentEvent('ambiguous_overheard_remark', {
+      eventType: 'overheard',
+      summary: misheard ? item.mis : item.heard,
+      world: {
+        participants: { actor: item.source || null, target: null, relationship_ref: null },
+        context: { location: 'wing', description: item.heard, associated_entities: item.who || [] },
+      },
+      observation: { certainty: misheard ? 'uncertain' : 'probable', observed_facts: { source: item.source || 'unknown', misheard } },
+    });
+    recordIncident('overheard', {
+      phase: currentRegime(mins).phase, mins,
+      somaInput: structured.soma_input, environmentEventId: structured.world_event.id,
+    });
     overheardCue = { item, misheard, until: Date.now() + 3 * 60 * 1000 };
     emit({
       kind: 'event',
-      payload: { name: 'overheard', source: item.source, misheard },
+      payload: { name: 'overheard', source: item.source, misheard, environment_event_id: structured.world_event.id },
     });
   }
 
@@ -2253,16 +2419,25 @@ async function main() {
 
   function fireScheduled(slot) {
     const event = materialiseScheduledEvent(slot);
+    const structured = captureEnvironmentEvent(event.archetypeId, {
+      eventType: event.name,
+      summary: event.text,
+      world: event.world,
+      observation: event.observation,
+    });
+    const provisional = event.provisional || {};
     recordIncident('environment', {
       text: event.text,
       tags: event.tags,
       evType: event.name,
-      appraisal: event.appraisal,
-      body: event.body,
-      social: event.social,
-      effects: event.effects,
+      appraisal: provisional.appraisal,
+      body: provisional.body,
+      social: provisional.social,
+      effects: provisional.effects,
+      somaInput: structured.soma_input,
+      environmentEventId: structured.world_event.id,
     });
-    fireEvent(event.name, event.public || {}, { observe: false });
+    fireEvent(event.name, event.public || {}, { observe: false, environmentRecord: structured });
   }
 
   // ---- deterministic environment scheduler (runs each vitals tick) ----

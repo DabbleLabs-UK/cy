@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { EXPERIENCED_METRICS, BRAIN_REGIONS } from '../public/assets/brain.js';
+import {
+  EXPERIENCED_METRICS,
+  BRAIN_REGIONS,
+  IMPLEMENTATION_STATUS,
+  canRenderDynamicActivity,
+} from '../public/assets/brain.js';
 import { reconcileSoma, somaSnapshot, tickSoma } from './soma.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,15 +32,23 @@ const source = await readFile(join(here, '..', 'public', 'assets', 'brain.js'), 
 assert.match(source, /PLANNED STATS/);
 assert.match(source, /SOMA DIAGNOSTICS/);
 assert.match(source, /Brain regions are functional analogies, not measured physiology/);
-assert.match(source, /class="soma-implemented" hidden/);
-assert.match(source, /Experienced state:<\/strong> waiting for an implemented runner snapshot/);
-assert.match(source, /this\.root\.querySelector\('\.soma-implemented'\)\.hidden = false/);
+assert.match(source, /class="soma-scaffold"/);
+assert.match(source, /SOMA MODEL STATUS/);
+assert.match(source, /LEGACY SOMA DIAGNOSTICS - PROVISIONAL/);
+assert.equal(canRenderDynamicActivity(IMPLEMENTATION_STATUS.PROVISIONAL), false);
+assert.equal(canRenderDynamicActivity(IMPLEMENTATION_STATUS.NOT_IMPLEMENTED), false);
+assert.equal(canRenderDynamicActivity(IMPLEMENTATION_STATUS.IMPLEMENTED), true);
+assert.match(
+  source,
+  /definition\.status\.status === IMPLEMENTATION_STATUS\.NOT_IMPLEMENTED[\s\S]*?querySelector\('\.soma-state-value'\)\.textContent = '--'/,
+  'a NOT_IMPLEMENTED Soma row must render no numeric value',
+);
 assert.match(source, /data-range="1h"/);
 assert.match(source, /data-range="24h"/);
 assert.match(source, /data-range="7d"/);
 assert.match(source, /class="soma-region-list"/);
-assert.match(source, /className = 'soma-region-entry'/);
-assert.match(source, /className = 'soma-state-entry soma-reading-entry'/);
+assert.match(source, /className = `soma-region-entry/);
+assert.match(source, /className = `soma-state-entry soma-reading-entry/);
 assert.doesNotMatch(source, /class="soma-detail"/, 'the old shared bottom-mounted inspector must not return');
 assert.match(source, /<summary class="soma-state-row"[\s\S]*?<div class="soma-reading-detail">/, 'a Soma detail is nested immediately after its own summary');
 assert.match(source, /<summary><span class="soma-region-name"[\s\S]*?<div class="soma-reading-detail">/, 'a brain-region detail is nested immediately after its own summary');

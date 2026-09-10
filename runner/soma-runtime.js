@@ -1,4 +1,4 @@
-// soma-runtime.js - fault boundary around Cy's implemented Soma engine.
+// soma-runtime.js - fault boundary around Cy's provisional Soma engine.
 //
 // The runner must keep writing if persisted cognition is corrupt or a Soma
 // operation throws. This adapter owns the live state reference, disables Soma

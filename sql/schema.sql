@@ -18,6 +18,20 @@ CREATE TABLE events (
     INDEX idx_kind_ts (kind, ts)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Private structured prison-world records. Unlike the public events table,
+-- these keep objective facts, observation and Soma input as separate stages
+-- for the admin-only event inspector.
+CREATE TABLE environment_events (
+    event_id     VARCHAR(96) PRIMARY KEY,
+    occurred_at  DATETIME(3) NOT NULL,
+    event_type   VARCHAR(64) NOT NULL,
+    event_family VARCHAR(32) NOT NULL,
+    record       JSON NOT NULL,
+    created_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    INDEX idx_environment_occurred (occurred_at),
+    INDEX idx_environment_type (event_type, occurred_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- People who write to Cy. Keyed by a random visitor_id carried in a signed,
 -- httpOnly cookie issued on the first postcard. We store NOTHING identifying
 -- beyond a chosen handle and a compact rolling summary of what they have said;

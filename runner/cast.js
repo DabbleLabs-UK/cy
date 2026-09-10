@@ -1,4 +1,6 @@
 // cast.js - the other inmates of HMP ThinkPad.
+// MODEL STATUS: every relationship delta, social strength, appraisal value,
+// threshold and weighting here is ARBITRARY / HEURISTIC and PROVISIONAL.
 //
 // These are NOT separate LLMs. They are deterministic state (a relations map,
 // persisted on the vitals object) plus prompt text. Each name is an aptronym

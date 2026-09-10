@@ -3,6 +3,12 @@
 // The clock decides when an opportunity happens. The selected outcome records
 // what actually happened and carries explicit body/social meaning into Soma.
 // Nothing here reads or writes language-model output.
+//
+// IMPORTANT: every numeric appraisal/effect/social-strength field below is
+// ARBITRARY / HEURISTIC and PROVISIONAL. materialiseScheduledEvent() isolates
+// them under the provisional compatibility field.
+// The `world` and `observation` fields contain facts only and are the source for
+// the new structured environment record.
 
 const pick = (items, rnd) => items[Math.min(items.length - 1, Math.floor(rnd() * items.length))];
 
@@ -47,13 +53,35 @@ export function chooseMealEvent(meal, rnd = Math.random) {
     text = `${label} came but he could not make himself eat it`;
     appraisal = { deprivation: 0.5, controlLoss: 0.2 };
   }
+  const consumed = outcome === 'eaten' ? 'full' : outcome === 'partial' ? 'partial' : outcome;
   return {
     name: `${label}_${outcome}`,
     text,
     tags: ['meal', 'food', label, outcome],
     public: { meal: label, outcome },
-    body: { meal: { name: label, outcome, amount } },
-    appraisal,
+    archetypeId: 'meal',
+    world: {
+      physical: {
+        food: {
+          offered: outcome === 'missed' ? 'no' : 'yes',
+          consumed,
+          portion_fraction: amount,
+        },
+      },
+      situation: {
+        deprivation_outcome: outcome,
+        agency: outcome === 'refused' ? 'self' : outcome === 'missed' ? 'institution' : 'routine',
+        resolution_status: outcome === 'eaten' ? 'resolved' : 'unresolved',
+      },
+      context: { location: 'cell' },
+    },
+    observation: { summary: text, observed_facts: { meal: label, outcome } },
+    provisional: {
+      body: { meal: { name: label, outcome, amount } },
+      appraisal,
+      social: null,
+      effects: [],
+    },
     outcome: `${label} ${outcome}`,
   };
 }
@@ -170,14 +198,51 @@ export function chooseRoutineEvent(routine, rnd = Math.random) {
   const choices = ROUTINES[routine];
   if (!choices || !choices.length) throw new Error(`unknown prison routine: ${routine}`);
   const chosen = pick(choices, rnd);
+  const { effects = [], social = null, appraisal = {}, ...worldFacing } = chosen;
+  const facts = routineFacts(routine, chosen.name, chosen.text);
   return {
-    ...chosen,
+    ...worldFacing,
     tags: [...chosen.tags],
-    effects: (chosen.effects || []).map((effect) => ({ ...effect })),
-    social: chosen.social ? { ...chosen.social } : null,
-    appraisal: { ...(chosen.appraisal || {}) },
+    archetypeId: facts.archetypeId,
+    world: facts.world,
+    observation: { summary: chosen.text, observed_facts: { routine, outcome: chosen.name } },
+    provisional: {
+      effects: effects.map((effect) => ({ ...effect })),
+      social: social ? { ...social } : null,
+      appraisal: { ...appraisal },
+      body: null,
+    },
     public: { routine, outcome: chosen.name },
     outcome: chosen.name,
+  };
+}
+
+function routineFacts(routine, outcome, text) {
+  if (outcome === 'association_shared_joke' || outcome === 'phone_call_connected'
+    || outcome === 'yard_bench_company' || outcome === 'association_quiet_company') {
+    return {
+      archetypeId: 'friendly_interaction',
+      world: { situation: { social_contact: 'present', social_contact_quality: outcome.includes('shared_joke') || outcome.includes('connected') ? 'supportive' : 'ordinary' }, context: { location: routine } },
+    };
+  }
+  if (outcome === 'association_kept_apart' || outcome === 'phone_no_answer') {
+    return {
+      archetypeId: 'social_rejection',
+      world: { situation: { social_contact: outcome === 'phone_no_answer' ? 'attempted' : 'present', social_contact_quality: 'rejecting' }, context: { location: routine } },
+    };
+  }
+  if (outcome.endsWith('_missed') || outcome.endsWith('_cancelled')) {
+    return {
+      archetypeId: 'cancelled_activity',
+      world: { situation: { deprivation_outcome: 'missed' }, context: { location: routine } },
+    };
+  }
+  return {
+    archetypeId: 'calm_routine',
+    world: {
+      physical: { environmental_discomfort: outcome === 'shower_cold' ? 'present' : 'none' },
+      context: { location: routine },
+    },
   };
 }
 
@@ -187,11 +252,19 @@ export function materialiseScheduledEvent(slot, rnd = Math.random) {
   if (slot.kind === 'wake') {
     return {
       name: 'lights_on', text: 'lights on and the night ended', tags: ['regime', 'sleep', 'wake'],
-      body: { sleep: { outcome: 'ended' } }, public: {}, appraisal: { controlLoss: 0.08 }, outcome: 'awake',
+      archetypeId: 'sleep_normal',
+      world: { physical: { sleep: { state: 'awake', interruption: 'none' } }, context: { location: 'cell' } },
+      observation: { summary: 'lights on and the night ended', observed_facts: { sleep: 'ended' } },
+      public: {}, outcome: 'awake',
+      provisional: { body: { sleep: { outcome: 'ended' } }, appraisal: { controlLoss: 0.08 }, social: null, effects: [] },
     };
   }
   return {
     name: 'lights_out', text: 'lights out and the cell settled into night', tags: ['regime', 'sleep', 'night'],
-    body: { sleep: { outcome: 'started' } }, public: {}, appraisal: { controlLoss: 0.05 }, outcome: 'asleep',
+    archetypeId: 'sleep_normal',
+    world: { physical: { sleep: { state: 'sleep_period', interruption: 'none' } }, context: { location: 'cell' } },
+    observation: { summary: 'lights out and the cell settled into night', observed_facts: { sleep: 'started' } },
+    public: {}, outcome: 'asleep',
+    provisional: { body: { sleep: { outcome: 'started' } }, appraisal: { controlLoss: 0.05 }, social: null, effects: [] },
   };
 }

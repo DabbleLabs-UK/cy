@@ -3,8 +3,10 @@
 //
 // The system prompt fixes who CY is. The live volatile block receives the
 // action and attention selected by Soma before language. Sampling is derived
-// from implemented Soma circuits. Legacy mood/style helpers remain exported
+// from PROVISIONAL heuristic Soma circuits. Legacy mood/style helpers remain exported
 // only for old diagnostics and tests; the live runner does not use them.
+// Every numerical mood-to-style rule retained below is ARBITRARY / HEURISTIC
+// and LEGACY unless the comment at that section says it is operational plumbing.
 
 import { BY_KEY, CAST, OFFICERS } from './cast.js';
 import { somaSampling } from './soma.js';

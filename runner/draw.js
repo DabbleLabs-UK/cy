@@ -9,6 +9,10 @@
 //
 // Nothing here talks to ollama or the network; run.js drives the generations and
 // emits the events. Pure functions, so selftest.js can exercise the lot.
+//
+// MODEL STATUS: every affect-to-drawing probability, threshold and weighting in
+// this module is ARBITRARY / HEURISTIC and LEGACY or PROVISIONAL. Geometry and
+// parser limits are engineering constraints, not a psychological model.
 
 import { clamp } from './vitals.js';
 

@@ -82,9 +82,12 @@ observable.
 ## Model
 
 `hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q4_K_M`, served by
-ollama, measured at ~3.4 tok/s on DELL. The runner owns cognition; the model is
-an expression engine. It reads the selected Soma action, attended episode, and
-any prediction error, but its generated text never writes back into Soma.
+ollama, measured at ~3.4 tok/s on DELL. The runner owns the provisional
+cognition path; the model is an expression engine. It reads the selected Soma
+action, attended episode, and any prediction error. Screened generated text is
+then observed by deterministic heuristic code for repetition, punctuation,
+commitments and learned-token reactivation. There is no second model call and
+the language model does not assign emotional magnitudes.
 
 ## dryRun
 
@@ -139,31 +142,34 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
 | `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
-`soma` is the implemented state snapshot: sourced circuit activity, current
+`soma` is the PROVISIONAL state snapshot: sourced heuristic circuit activity, current
 attention and action, prediction error, episodic-memory count, drives, and the
 self-model question. `brain`, `hr`, `mental`, `derived`, `relations`, `monotony`,
 and `amp` are legacy dramatic mappings kept for compatibility and explicitly
 identified by `legacy.status = "placeholder"`; they are not measured physiology
-or implemented Soma circuits.
+or approved Soma circuits.
 
 ## Mechanics
 
-- **Soma v1** (`soma.js`) with **experienced state v2** (`experienced-state.js`) - observes real runner events, appraises threat,
+- **Provisional Soma v1** (`soma.js`) with **provisional experienced state v2** (`experienced-state.js`) - observes real runner events, appraises threat,
   affiliation, deprivation, control loss, and novelty, updates per-family
   expectations, retains a bounded episodic memory, selects attention, derives
   competing drives, and chooses investigate/remember/connect/attend-body/draw/
   write/silence/rest. Meal outcomes, sleep periods and interruptions, and the
   last supportive social contact are persisted. Recovering event impulses use a
-  soft ceiling instead of unlimited addition. Every public circuit value includes
-  its computational source.
+  soft ceiling instead of unlimited addition. These mechanisms and their numeric
+  parameters are unapproved heuristics; the public registry labels them PROVISIONAL.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
-  Each outcome carries explicit body, social and appraisal meaning; the language
-  model does not decide what happened or infer state from its own prose.
-- **Hard language seam** - `run.js` computes Soma before a generation and
-  `prompt.js` exposes the selected action and material. Output text is never fed
-  into state or relations. Provider changes and runner restarts enter as machine
-  evidence, allowing the software hypothesis to develop from experience.
+  Each outcome now carries objective/categorical world facts and a separate
+  observation. Older numeric body, social and appraisal fields remain isolated
+  under a provisional compatibility property. The language model does not
+  decide what happened or assign the appraisal values.
+- **Language seam** - `run.js` computes provisional Soma before a generation
+  and `prompt.js` exposes the selected action and material. After screening,
+  deterministic heuristic code observes text features; no LLM call scores the
+  output or writes emotion values. Provider changes and runner restarts enter as
+  machine evidence, allowing the software hypothesis to develop from experience.
 
 - **Amplification** - `monotony` (0..1) creeps up every empty tick and drops on
   any input. Event deltas are multiplied by `amp = 1 + 2.5*monotony`, so after a

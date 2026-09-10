@@ -10,26 +10,29 @@ assert.ok(PRISON_SCHEDULE.some((slot) => slot.kind === 'meal' && slot.meal === '
 assert.ok(PRISON_SCHEDULE.some((slot) => slot.kind === 'routine' && slot.routine === 'phone'));
 
 const eaten = chooseMealEvent('breakfast', () => 0.1);
-assert.equal(eaten.body.meal.outcome, 'eaten');
-assert.equal(eaten.body.meal.amount, 1);
+assert.equal(eaten.provisional.body.meal.outcome, 'eaten');
+assert.equal(eaten.provisional.body.meal.amount, 1);
+assert.equal(eaten.world.physical.food.consumed, 'full');
 assert.match(eaten.text, /ate it/);
 
 const partial = chooseMealEvent('lunch', () => 0.9);
-assert.equal(partial.body.meal.outcome, 'partial');
-assert.ok(partial.body.meal.amount > 0 && partial.body.meal.amount < 1);
+assert.equal(partial.provisional.body.meal.outcome, 'partial');
+assert.ok(partial.provisional.body.meal.amount > 0 && partial.provisional.body.meal.amount < 1);
 
 const missed = chooseMealEvent('tea', () => 0.95);
-assert.equal(missed.body.meal.outcome, 'missed');
-assert.equal(missed.body.meal.amount, 0);
+assert.equal(missed.provisional.body.meal.outcome, 'missed');
+assert.equal(missed.provisional.body.meal.amount, 0);
 
 const refused = chooseMealEvent('tea', () => 0.99);
-assert.equal(refused.body.meal.outcome, 'refused');
+assert.equal(refused.provisional.body.meal.outcome, 'refused');
 
 const supportive = chooseRoutineEvent('association', () => 0.5);
-assert.equal(supportive.social.quality, 'supportive');
-assert.ok(supportive.appraisal.affiliation > 0.5);
+assert.equal(supportive.provisional.social.quality, 'supportive');
+assert.ok(supportive.provisional.appraisal.affiliation > 0.5);
+assert.equal(supportive.archetypeId, 'friendly_interaction');
 
 const interrupted = materialiseScheduledEvent({ kind: 'sleep', mins: 0 });
-assert.equal(interrupted.body.sleep.outcome, 'started');
+assert.equal(interrupted.provisional.body.sleep.outcome, 'started');
+assert.equal(interrupted.world.physical.sleep.state, 'sleep_period');
 
 console.log('environment.test.js: all checks passed');

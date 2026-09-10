@@ -2,7 +2,7 @@
   "_comment": "Source of truth for Cy data handling. Update this whenever collection, storage, transmission, retention, or deletion changes. Policy wording requires human approval before release.",
   "product": "Cy",
   "service": "cy.dabblelabs.uk",
-  "stage": "continuous-prisoner-with-canonical-experienced-soma-state",
+  "stage": "continuous-prisoner-with-provisional-soma-and-structured-environment-scaffold",
   "collects": [
     "Postcard text, an optional chosen handle, and an optional uploaded or Openverse-selected image voluntarily submitted by a visitor",
     "A random visitor identifier in a signed HttpOnly cookie, used to recognise a returning postcard writer",
@@ -12,6 +12,7 @@
   ],
   "stores": [
     "The ordered public event stream, including screened Cy prose, prison events, public postcard fields, drawings, operational telemetry, and Soma snapshots containing current experienced-state values and their causal contributors",
+    "Private structured prison-world records separating objective event facts, Cy's observation, normalized categorical Soma input, and named consuming systems for the admin-only event inspector",
     "Queued and delivered postcards, their reply-tray or fan-mail class, delivery, promotion and reply timestamps, submitted text, optional handle, moderation state, and rate-limit metadata",
     "Uploaded or remotely selected postcard images re-encoded as WebP with metadata removed, plus source attribution when applicable",
     "A returning visitor's postcard count, compact rolling notes, and legacy synthetic standing values",
@@ -29,7 +30,7 @@
     {
       "recipient": "cy.dabblelabs.uk server",
       "purpose": "Publish the screened experience and maintain queued visitor interactions",
-      "data": "Batched public events and private visitor or drawing write-backs from the Dell runner"
+      "data": "Batched public events and private visitor, drawing, or structured prison-world write-backs from the Dell runner"
     },
     {
       "recipient": "DeepSeek, only while the owner has selected the optional remote provider",
@@ -44,7 +45,7 @@
     {
       "recipient": "Public viewers",
       "purpose": "Render and replay the live or historical Cy experience",
-      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, implemented Soma snapshots, and clearly labelled planned synthetic values"
+      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, and Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED"
     }
   ],
   "does_not_store": [

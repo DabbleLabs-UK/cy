@@ -24,6 +24,8 @@
 // a [redacted by warden: <category>] marker - the mechanism is visible, the
 // blocked text is not.
 
+import { loadEnvironmentInspection, renderEnvironmentInspection } from './event-inspector.js';
+
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
 const RANGE = CFG.range || 'api/range.php';
@@ -361,18 +363,30 @@ function render(ev, { prepend = false, follow = true } = {}) {
   const drops = ev.kind === 'gen' ? (prepend ? [] : wardenSinceGen.slice()) : null;
   if (!prepend && ev.kind === 'gen') wardenSinceGen = [];
 
-  const showStructured = () => {
+  const showStructured = async () => {
     if (!builtStructured) {
       detail.textContent = '';
       if (ev.kind === 'gen') detail.appendChild(burstDetail(ev, drops));
-      else detail.appendChild(jsonBlock(ev));
+      else if (ev.payload && ev.payload.environment_event_id && CFG.environmentEvent) {
+        detail.textContent = 'loading structured environment event...';
+        try {
+          const inspection = await loadEnvironmentInspection(
+            CFG.environmentEvent,
+            ev.payload.environment_event_id,
+          );
+          detail.textContent = '';
+          detail.appendChild(renderEnvironmentInspection(inspection));
+        } catch (error) {
+          detail.textContent = error && error.message ? error.message : 'environment event unavailable';
+        }
+      } else detail.appendChild(jsonBlock(ev));
       builtStructured = true;
       jsonShown = ev.kind !== 'gen';
     }
   };
   head.addEventListener('click', (e) => {
     if (e.target === jbtn) return; // the {} button has its own handler
-    showStructured();
+    void showStructured();
     detail.hidden = !detail.hidden;
   });
   jbtn.addEventListener('click', () => {

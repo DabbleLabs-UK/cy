@@ -133,7 +133,7 @@ assert.ok(soma.attention.memoryId);
 assert.match(soma.attention.source, /^memory:/);
 
 const snapshot = somaSnapshot(soma);
-assert.equal(snapshot.status, 'implemented');
+assert.equal(snapshot.status, 'provisional');
 assert.ok(snapshot.memory.episodes >= 4);
 assert.ok(snapshot.memory.selected);
 assert.equal(snapshot.circuits.predictionError.source.includes('expectation'), true);

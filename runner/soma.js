@@ -15,6 +15,12 @@ import {
   experiencedDirective,
 } from './experienced-state.js';
 
+import { somaImplementationStatus } from './implementation-registry.js';
+
+// MODEL STATUS: PROVISIONAL. Every numerical psychological coefficient,
+// threshold, prior, decay rate and action weight in this file is ARBITRARY /
+// HEURISTIC. None has an approved scientific or computational model citation.
+
 const VERSION = 1;
 const MEMORY_MAX = 512;
 const ASSOCIATION_MAX = 128;
@@ -95,6 +101,7 @@ function blank(now, legacyPhysical = null) {
       observedAtMs: 0,
       themes: [],
     },
+    environmentInput: null,
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -134,6 +141,9 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     selfModel: { ...base.selfModel, ...(raw.selfModel || {}) },
     associations: boundAssociations({ ...base.associations, ...(raw.associations || {}) }),
     expression: { ...base.expression, ...(raw.expression || {}) },
+    environmentInput: raw.environmentInput && raw.environmentInput.schema === 'cy.soma-input'
+      ? JSON.parse(JSON.stringify(raw.environmentInput))
+      : null,
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -406,6 +416,12 @@ function addSelfEvidence(state, name, text, now) {
 
 export function observeSoma(state, observation, { now = Date.now() } = {}) {
   if (!state || !observation) return state;
+  if (observation.somaInput && observation.somaInput.schema === 'cy.soma-input') {
+    // This is plumbing, not an appraisal model. Preserve the latest normalized
+    // categorical input so an approved model can consume it later. The legacy
+    // heuristic path below continues to use the explicitly separate fields.
+    state.environmentInput = JSON.parse(JSON.stringify(observation.somaInput));
+  }
   const tags = Array.isArray(observation.tags) ? observation.tags : [];
   const family = familyOf(observation.name, tags);
   const exp = state.prediction.expectations[family] || { probability: 0.2, observations: 0 };
@@ -800,7 +816,7 @@ export function somaSnapshot(state) {
   };
   const circuits = {};
   for (const [key, value] of Object.entries(state.circuits)) {
-    circuits[key] = { value: round(value), source: sources[key] || 'implemented Soma state' };
+    circuits[key] = { value: round(value), source: sources[key] || 'legacy provisional Soma state' };
   }
   const learnedAssociations = Object.entries(state.associations || {})
     .filter(([, assoc]) => finite(assoc && assoc.exposures, 0) >= 2)
@@ -812,7 +828,7 @@ export function somaSnapshot(state) {
     .sort((a, b) => b.activation - a.activation || b.exposures - a.exposures || a.token.localeCompare(b.token));
   return {
     version: VERSION,
-    status: 'implemented',
+    status: somaImplementationStatus(),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),
@@ -851,6 +867,9 @@ export function somaSnapshot(state) {
       themes: normaliseList(state.expression.themes, 8),
       observedAtMs: finite(state.expression.observedAtMs, 0),
     },
+    environmentInput: state.environmentInput
+      ? JSON.parse(JSON.stringify(state.environmentInput))
+      : null,
     associations: {
       learned: learnedAssociations.length,
       candidates: Object.keys(state.associations || {}).length,
