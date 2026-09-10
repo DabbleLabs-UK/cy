@@ -5,7 +5,7 @@
 //   node runner/power.test.js
 
 import assert from 'node:assert/strict';
-import { Power, formatCost } from '../public/assets/power.js';
+import { Power, formatCost, splitPowerSegments } from '../public/assets/power.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -20,7 +20,14 @@ assert.deepEqual(formatCost(150), { text: '150.00', cur: 'GBP' });
 ok('formatCost shows pence below GBP 1 and pounds at/above, switching at 1.00');
 
 // ---- a headless DOM stub: just enough for Power to build and render ----
-function stub() { return { textContent: '', style: {}, setAttribute() {} }; }
+function stub() {
+  return {
+    textContent: '',
+    style: {},
+    attrs: {},
+    setAttribute(name, value) { this.attrs[name] = String(value); },
+  };
+}
 function fakeRoot() {
   const els = {};
   return {
@@ -56,5 +63,26 @@ p.push({ ...feed, cost_total: 1.23 }, (t += 30000));
 assert.equal(p.costEl.textContent, '1.23', 'over a pound reads in pounds');
 assert.equal(p.curEl.textContent, 'GBP', 'GBP prefix shown in pounds mode');
 ok('pence/pounds switch works either side of GBP 1.00 as the total moves');
+
+// ---- 5. runner outages break every plotted path instead of drawing diagonals ----
+const outagePoints = [
+  { t: 0 },
+  { t: 3000 },
+  { t: 60000 },
+  { t: 63000 },
+];
+assert.equal(splitPowerSegments(outagePoints).length, 2, 'a long sample gap starts a new segment');
+
+const outageRoot = fakeRoot();
+const outagePower = new Power(outageRoot);
+const sample = { watts: 30, watts_min: 25, watts_max: 35, watts_inst: 30, cost_total: 0.1, cost_per_hour: 0.01, kwh_total: 1 };
+outagePower.push({ ...sample, t_ms: 1_700_000_000_000 });
+outagePower.push({ ...sample, t_ms: 1_700_000_003_000 });
+outagePower.push({ ...sample, t_ms: 1_700_000_060_000 });
+outagePower.push({ ...sample, t_ms: 1_700_000_063_000 });
+assert.equal((outagePower.lineEl.attrs.d.match(/M/g) || []).length, 2, 'line has two move-to starts');
+assert.equal((outagePower.areaEl.attrs.d.match(/Z/g) || []).length, 2, 'area has two closed regions');
+assert.equal((outagePower.bandEl.attrs.d.match(/Z/g) || []).length, 2, 'min/max band has two closed regions');
+ok('power paths stop at outages instead of bridging them with diagonal lines');
 
 console.log(`\npower.test.js: all ${n} checks passed`);
