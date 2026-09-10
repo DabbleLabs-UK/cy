@@ -170,6 +170,7 @@ async function boot() {
   postcards = new Postcards(pen.contentRoot(), font, { inline: true, lane: pen.animationLane() });
   brain = new BrainHud($('#brain'), {
     historyUrl: CFG.somaHistory,
+    threatLearningUrl: CFG.threatLearning,
     registry: CFG.implementationRegistry,
     admin: !!CFG.admin,
   });

@@ -87,6 +87,14 @@ export function createSomaRuntime(rawState, {
     observe(observation, options) {
       return mutate('observation', (current) => engine.observeSoma(current, observation, options));
     },
+    observeThreatLearningRecord(record) {
+      let result = null;
+      mutate('probabilistic threat learning', (current) => {
+        result = engine.observeSomaThreatLearningRecord(current, record);
+        return current;
+      });
+      return result;
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

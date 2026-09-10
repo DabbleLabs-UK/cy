@@ -104,6 +104,13 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Uses only observed sleep/wake state and elapsed time in the Borbely/Daan Process S equations. It does not assign an emotional magnitude.',
             ];
+        } elseif ($consumer === 'probabilistic-threat-learning-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Examines only explicit structured cue/outcome links. Resolved occurred or did-not-occur trials update independent Beta-Bernoulli posteriors; unknown outcomes do not update.',
+            ];
         } elseif ($consumer === 'legacy-experienced-state-v2') {
             $consumers[] = [
                 'id' => $consumer,
@@ -126,6 +133,10 @@ function captive_environment_record_inspection(array $record, array $registry): 
         'what_happened' => $record['world_event'],
         'what_cy_observed' => $record['observation'],
         'what_soma_received' => $record['soma_input'],
+        'what_threat_learning_did' => $record['threat_learning'] ?? [
+            'status' => 'not_recorded',
+            'detail' => 'This record predates the probabilistic threat-learning implementation or did not reach that consumer.',
+        ],
         'what_systems_consumed_it' => [
             'consumers' => $consumers,
             'registry_relevance' => $relevant,

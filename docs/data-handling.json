@@ -20,6 +20,7 @@
     "On the Dell runner, learned event-family expectations, up to 128 bounded word associations learned from lived input, current attention and action, self-output action feedback, self-model evidence, eight experienced-state values with their causal contributor ledgers, and up to seven days of downsampled experienced-state history in the gitignored runtime state file",
     "On the Dell runner, normalized homeostatic sleep pressure (Process S), its explicit uncertainty interval, current observed sleep state, model and provenance identifiers, last integration details, and up to seven days of post-installation Process S history",
     "On the Dell runner, published circadian Process C metadata and evaluations, including the configured habitual wake basis, schedule-estimated CBTmin interval, mathematically derived circular phase interval, explicit phase uncertainty, model and provenance identifiers, and up to seven days of post-installation evaluation history",
+    "On the Dell runner, independent Beta-Bernoulli posteriors for structured cue and categorical adverse-outcome pairs, plus the complete post-installation sequence of resolved updates with exact before and after parameters, outcome status, information-theoretic surprisal, timestamp, and source environment event identifiers",
     "On the Dell runner, a rolling context of screened Cy-generated prose, operational logs, electricity and paid-provider spend totals, and retry queues",
     "In the visitor's browser, only the numeric IDs, submission times, and waiting/responding state of that browser's postcards awaiting a reply, retained for at most 24 hours so waiting state survives a refresh"
   ],
@@ -32,7 +33,7 @@
     {
       "recipient": "cy.dabblelabs.uk server",
       "purpose": "Publish the screened experience and maintain queued visitor interactions",
-      "data": "Batched public events and private visitor, drawing, or structured prison-world write-backs from the Dell runner"
+      "data": "Batched public events and private visitor, drawing, structured prison-world, and exact probabilistic threat-learning trace write-backs from the Dell runner"
     },
     {
       "recipient": "DeepSeek, only while the owner has selected the optional remote provider",
@@ -47,7 +48,7 @@
     {
       "recipient": "Public viewers",
       "purpose": "Render and replay the live or historical Cy experience",
-      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, and Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED"
+      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED, and qualitative cue-outcome associations from the probabilistic threat learner"
     }
   ],
   "does_not_store": [
@@ -60,6 +61,9 @@
     "Process S consumes categorical sleep onset, waking, interruption, return-to-sleep and forced-wakefulness records. It is a sleep-homeostasis construct, not a biological measurement or validated subjective-fatigue score, and no old fatigue values are used to backfill it.",
     "Process C is a deterministic published circadian waveform evaluated from clock time. Its biological phase is not observed; a phase interval is estimated from the configured habitual wake schedule, and public history curves are mathematically reconstructed from that stored basis rather than presented as biological measurements.",
     "Process S and Process C remain separate. No equation combines them into the provisional fatigue value, and Process C does not alter Cy's language, mood, action selection, or other visitor-facing Soma variables.",
+    "Probabilistic threat learning uses an uninformative Beta(1,1) prior and exact Bernoulli updates only for explicit, self-contained, resolved structured trials. Unknown outcomes do not update. Exact posteriors and update history are owner-only; public viewers receive qualitative association summaries.",
+    "The threat learner does not read generated prose, sentiment, legacy appraisal magnitudes, relationship scores, or existing anxiety values, and it does not currently alter anxiety, arousal, language, action selection, or brain-region activation.",
+    "Legacy warm or hostile postcard word matching is not admissible threat-learning evidence and does not update the grounded learner.",
     "Screened model text returns to Soma only as a bounded efference copy of Cy's action: repetition, intensity, commitments, and activation of word associations previously learned from lived input. Text sentiment cannot directly manufacture appraisal or emotional state.",
     "Fan mail is retained and made publicly replayable after runner-side screening, but it is not treated as something Cy perceived and does not affect Soma unless it is later promoted into the reply tray.",
     "Soma memory is bounded by count and preferentially retains salient older episodes alongside recent ones; a time-based deletion period is not currently implemented.",

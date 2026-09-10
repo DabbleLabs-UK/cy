@@ -189,6 +189,51 @@ entrainment, free-running phase drift, chronotype, direct biological phase,
 SCN neuronal firing, subjective-fatigue mapping and Process C effects on language,
 mood or actions are NOT MODELLED.
 
+## Grounded probabilistic threat learning
+
+The authoritative specification is
+config/model-specs/probabilistic-threat-learning.json. The implementation is in
+runner/probabilistic-threat-learning.js and follows the parameter-free
+Beta-Bernoulli learner described by Tzovara, Korn and Bach (2018), DOI
+10.1371/journal.pcbi.1006243.
+
+Each structured cue and categorical adverse-outcome class has an independent
+Beta(1,1) prior. For a resolved observation u in {0,1}, alpha is incremented by
+u and beta by 1-u. The posterior mean is alpha/(alpha+beta), and posterior
+variance is alpha*beta/((alpha+beta)^2*(alpha+beta+1)). Outcome surprisal is
+recorded before the update as -ln(p) for an adverse outcome or -ln(1-p) for a
+safe outcome. It is labelled information-theoretic and has no behavioural
+effect.
+
+Eligible cues are canonical actor, event-type, location/context and explicit
+signal identifiers derived only from the structured environment record. The
+outcome classes are PHYSICAL_HARM, COERCIVE_LOSS_OF_CONTROL,
+SOCIAL_HOSTILITY and DEPRIVATION_OR_LOSS. The record must explicitly say that
+the outcome occurred or did not occur and that the linkage is self-contained.
+Unknown or absent outcome fields produce no update.
+
+The learner begins empty when first installed. Existing prose, incidents and
+legacy scores are not replayed. Generated language, sentiment regexes,
+relationship threat scores and the provisional experienced-state threat value
+cannot initialize or update it.
+
+The older hostile/warm postcard word regexes do not create learner trials. A
+postcard can update this model only if a later structured event supplies an
+explicit linked outcome independently of those textual heuristics.
+
+The full resolved update sequence is persisted in the runner's Soma state and
+each exact update trace is stored with its private environment record. Public
+Soma state contains qualitative associations only. Owner-only inspection shows
+exact alpha, beta, mean, variance, surprisal and before/after history.
+
+This is learned outcome probability, not fear, anxiety, arousal, stress,
+general harm, amygdala activation or a clinical quantity. Stationarity,
+binary outcomes and independent resolved observations are explicit model
+assumptions. Volatility, forgetting, recency weighting, context switching and
+cue generalisation are NOT MODELLED. Anxiety and the amygdala and
+anterior-cingulate analogies remain PROVISIONAL and receive no numerical input
+from this learner.
+
 ## Previous event representation
 
 Before this scaffold, public prison events were rows in events with a timestamp,

@@ -5,6 +5,7 @@ assert.deepEqual(INSPECTION_HEADINGS.map((entry) => entry[1]), [
   'WHAT HAPPENED',
   'WHAT CY OBSERVED',
   'WHAT SOMA RECEIVED',
+  'WHAT THREAT LEARNING DID',
   'WHAT SYSTEMS CONSUMED IT',
 ]);
 

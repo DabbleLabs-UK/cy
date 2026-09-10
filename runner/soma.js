@@ -31,6 +31,12 @@ import {
   tickCircadianProcessC,
 } from './circadian-process-c.js';
 import {
+  createThreatLearning,
+  observeThreatLearningRecord as applyThreatLearningRecord,
+  reconcileThreatLearning,
+  threatLearningSnapshot,
+} from './probabilistic-threat-learning.js';
+import {
   PRISON_SCHEDULE,
   PRISON_SCHEDULE_TIME_ZONE,
   habitualWakeMinutes,
@@ -128,6 +134,7 @@ function blank(now, legacyPhysical = null) {
       habitualWakeMinutes: configuredHabitualWakeMinutes,
       timeZone: PRISON_SCHEDULE_TIME_ZONE,
     }),
+    threatLearning: createThreatLearning(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -176,6 +183,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
       habitualWakeMinutes: habitualWakeMinutes(PRISON_SCHEDULE),
       timeZone: PRISON_SCHEDULE_TIME_ZONE,
     }),
+    threatLearning: reconcileThreatLearning(raw.threatLearning, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -203,6 +211,13 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
       : 0;
   }
   return out;
+}
+
+// This is the only input route into the grounded threat learner. It accepts a
+// structured environment record, never free text or the provisional appraisal.
+export function observeSomaThreatLearningRecord(state, record) {
+  if (!state || !record) return null;
+  return applyThreatLearningRecord(state.threatLearning, record);
 }
 
 function familyOf(name, tags = []) {
@@ -885,6 +900,7 @@ export function somaSnapshot(state) {
     status: somaImplementationStatus(),
     sleepHomeostasis: sleepHomeostasisSnapshot(state.sleepHomeostasis),
     circadianProcessC: circadianProcessCSnapshot(state.circadianProcessC),
+    threatLearning: threatLearningSnapshot(state.threatLearning),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

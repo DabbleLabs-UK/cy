@@ -15,6 +15,13 @@ assert.equal(implementationEntry('soma_subsystems', 'sleep_homeostasis').impleme
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').phase_basis, 'schedule_estimated');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'probabilistic_threat_learning').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'threat_volatility').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'threat_generalisation').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'threat_contextual_inference').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_variables', 'anxiety').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('brain_regions', 'amygdala').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('brain_regions', 'acc').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');

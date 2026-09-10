@@ -21,8 +21,9 @@
       "display_name": "ANXIETY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Currently produced by the older heuristic experienced-state model. No grounded threat-learning/appraisal specification has been approved.",
+      "status_note": "The displayed anxiety value is still produced by the older heuristic experienced-state model. A separate grounded probabilistic threat-prediction dependency is LIVE, but no approved mapping converts it into anxiety.",
       "data_dependencies": ["possible_harm", "uncertainty", "control", "learned_context"],
+      "available_future_dependencies": ["probabilistic_threat_learning"],
       "version": "legacy-experienced-state-v2"
     },
     {
@@ -91,6 +92,43 @@
   ],
   "soma_subsystems": [
     {
+      "id": "probabilistic_threat_learning",
+      "display_name": "PROBABILISTIC THREAT LEARNING",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "tzovara-beta-bernoulli-threat-learning",
+      "status_note": "A parameter-free Beta-Bernoulli learner updates separate structured cue and adverse-outcome associations from resolved environment trials. It predicts outcomes; it is not anxiety, fear intensity, arousal, or brain activation.",
+      "data_dependencies": ["structured_cue", "categorical_adverse_outcome", "resolved_binary_outcome"],
+      "version": "probabilistic-threat-learning-v1",
+      "provenance": "config/model-specs/probabilistic-threat-learning.json"
+    },
+    {
+      "id": "threat_volatility",
+      "display_name": "THREAT CONTINGENCY VOLATILITY",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The live learner assumes stationary cue-outcome contingencies. No volatility, reversal, forgetting, or dynamic learning-rate model is implemented.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "threat_generalisation",
+      "display_name": "THREAT CUE GENERALISATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No similarity, cue generalisation, latent-context inference, or context-switching model is implemented.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "threat_contextual_inference",
+      "display_name": "THREAT CONTEXTUAL INFERENCE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The learner updates explicitly identified cue and outcome pairs independently. No latent-context or contextual-inference model is implemented.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
       "id": "sleep_homeostasis",
       "display_name": "HOMEOSTATIC SLEEP PRESSURE",
       "implementation_status": "IMPLEMENTED",
@@ -136,8 +174,8 @@
       "display_name": "AMYGDALA-CENTRED THREAT / SALIENCE ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent threat-learning and threat-salience processes. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
-      "data_dependencies": ["anxiety", "anger", "threat_learning"],
+      "status_note": "A grounded probabilistic threat-prediction subsystem is LIVE, but no approved mapping turns it into amygdala firing or activation. The older displayed mapping remains an unapproved linear heuristic and is not shown as live activation.",
+      "data_dependencies": ["probabilistic_threat_learning", "expected_outcome", "uncertainty", "outcome_surprisal", "anxiety", "anger"],
       "version": "legacy-brain-map-v1"
     },
     {
@@ -164,8 +202,8 @@
       "display_name": "ANTERIOR-CINGULATE CONFLICT / CONTROL ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent conflict and control-related processing. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
-      "data_dependencies": ["rumination", "pain", "goal_obstruction", "control"],
+      "status_note": "The live threat learner provides expected outcome, uncertainty, and outcome surprisal as possible future dependencies, but no approved anterior-cingulate mapping exists. The older displayed mapping remains an unapproved linear heuristic and is not shown as live activation.",
+      "data_dependencies": ["expected_outcome", "uncertainty", "outcome_surprisal", "rumination", "pain", "goal_obstruction", "control"],
       "version": "legacy-brain-map-v1"
     },
     {

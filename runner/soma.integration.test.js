@@ -7,6 +7,7 @@ import { createSomaRuntime } from './soma-runtime.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import { buildDirectives, buildPrompt, options } from './prompt.js';
 import { loadVitals, saveVitals, vitalsLoadIssue } from './vitals.js';
+import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 
 const t0 = Date.parse('2026-09-10T12:00:00Z');
 let persisted = null;
@@ -16,6 +17,13 @@ const runtime = createSomaRuntime(null, {
 });
 assert.equal(runtime.available, true);
 assert.equal(persisted.memory.episodes.length, 0);
+
+const groundedSearch = createEnvironmentRecord(createEnvironmentEvent('cell_search', {
+  id: 'env-grounded-search', timestamp: '2026-09-10 12:00:00.000',
+  world: { participants: { actor: 'proctor', relationship_ref: 'proctor' } },
+}));
+runtime.observeThreatLearningRecord(groundedSearch);
+assert.equal(runtime.state.threatLearning.pairs['actor:proctor'].COERCIVE_LOSS_OF_CONTROL.alpha, 2);
 
 runtime.observe({
   name: 'cell_search',
@@ -79,8 +87,10 @@ assert.match(prompt, /officer was expected next/i);
 assert.ok(prompt.indexOf('SOMA - computed before language') > prompt.indexOf('ONE THING'));
 
 const appraisalBeforeOutput = { ...runtime.state.appraisal };
+const threatBeforeOutput = JSON.stringify(runtime.state.threatLearning);
 runtime.observeOutput('locke and the blue postcard again. i will not forget it.', { mode: 'journal', now: t0 + 7000 });
 assert.deepEqual(runtime.state.appraisal, appraisalBeforeOutput, 'own prose did not become an external event');
+assert.equal(JSON.stringify(runtime.state.threatLearning), threatBeforeOutput, 'own prose did not update threat learning');
 assert.ok(runtime.state.expression.themes.includes('locke') || runtime.state.expression.themes.includes('postcard'));
 
 const persistenceDir = await mkdtemp(join(tmpdir(), 'cy-soma-persist-'));
@@ -99,6 +109,7 @@ assert.equal(restarted.available, true);
 assert.equal(restarted.state.memory.episodes.length, runtime.state.memory.episodes.length);
 assert.equal(restarted.state.memory.selectedId, runtime.state.memory.selectedId);
 assert.equal(restarted.state.expression.lastText, runtime.state.expression.lastText);
+assert.deepEqual(restarted.state.threatLearning, runtime.state.threatLearning);
 
 const failures = [];
 const broken = createSomaRuntime(null, {

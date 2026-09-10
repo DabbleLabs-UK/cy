@@ -1,0 +1,46 @@
+{
+  "schema": "cy.model-spec",
+  "version": 1,
+  "id": "tzovara-beta-bernoulli-threat-learning",
+  "implementation_version": "probabilistic-threat-learning-v1",
+  "locked": true,
+  "public_name": "Probabilistic threat learning",
+  "implementation_status": "IMPLEMENTED",
+  "source": {
+    "authors": "Tzovara, Korn and Bach",
+    "year": 2018,
+    "title": "Human Pavlovian fear conditioning conforms to probabilistic learning",
+    "journal": "PLOS Computational Biology",
+    "doi": "10.1371/journal.pcbi.1006243",
+    "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1006243"
+  },
+  "model": {
+    "likelihood": "Bernoulli",
+    "prior": "Beta",
+    "alpha_0": 1,
+    "beta_0": 1,
+    "update_alpha": "alpha_t = alpha_(t-1) + u_t",
+    "update_beta": "beta_t = beta_(t-1) + (1 - u_t)",
+    "posterior_mean": "alpha_t / (alpha_t + beta_t)",
+    "posterior_variance": "alpha_t * beta_t / ((alpha_t + beta_t)^2 * (alpha_t + beta_t + 1))",
+    "adverse_outcome_surprisal": "-ln(p_before)",
+    "safe_outcome_surprisal": "-ln(1 - p_before)",
+    "free_parameters": []
+  },
+  "interpretation": "Learned probability that one structured environmental cue predicts one categorical adverse outcome class under a stationary binary-outcome model.",
+  "outcome_classes": [
+    "PHYSICAL_HARM",
+    "COERCIVE_LOSS_OF_CONTROL",
+    "SOCIAL_HOSTILITY",
+    "DEPRIVATION_OR_LOSS"
+  ],
+  "outcome_statuses": ["occurred", "did_not_occur", "unknown"],
+  "cue_types": ["actor", "event", "location", "signal"],
+  "assumptions": ["known cue", "binary outcome", "stationary contingency", "independent resolved observations"],
+  "not_modelled": ["anxiety", "fear intensity", "arousal", "volatility", "forgetting", "recency weighting", "context switching", "contextual inference", "cue generalisation", "brain activation", "amygdala firing"],
+  "engineering_constants": [
+    { "name": "state_schema_version", "value": 1, "classification": "storage compatibility; not a model parameter" },
+    { "name": "public_associations_per_outcome_class", "value": 1, "classification": "display cardinality; the owner-only inspector retains every association" }
+  ],
+  "arbitrary_or_heuristic_constants": []
+}

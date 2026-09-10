@@ -14,14 +14,20 @@ assert.equal(eaten.provisional.body.meal.outcome, 'eaten');
 assert.equal(eaten.provisional.body.meal.amount, 1);
 assert.equal(eaten.world.physical.food.consumed, 'full');
 assert.match(eaten.text, /ate it/);
+assert.deepEqual(eaten.world.associative_learning.outcomes,
+  [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'did_not_occur' }]);
 
 const partial = chooseMealEvent('lunch', () => 0.9);
 assert.equal(partial.provisional.body.meal.outcome, 'partial');
 assert.ok(partial.provisional.body.meal.amount > 0 && partial.provisional.body.meal.amount < 1);
+assert.deepEqual(partial.world.associative_learning.outcomes,
+  [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'unknown' }]);
 
 const missed = chooseMealEvent('tea', () => 0.95);
 assert.equal(missed.provisional.body.meal.outcome, 'missed');
 assert.equal(missed.provisional.body.meal.amount, 0);
+assert.deepEqual(missed.world.associative_learning.outcomes,
+  [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'occurred' }]);
 
 const refused = chooseMealEvent('tea', () => 0.99);
 assert.equal(refused.provisional.body.meal.outcome, 'refused');

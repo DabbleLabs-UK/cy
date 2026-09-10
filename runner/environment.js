@@ -82,6 +82,14 @@ export function chooseMealEvent(meal, rnd = Math.random) {
         resolution_status: outcome === 'eaten' ? 'resolved' : 'unresolved',
       },
       context: { location: 'cell' },
+      associative_learning: {
+        linkage: 'self_contained_event',
+        outcomes: [{
+          outcome_class: 'DEPRIVATION_OR_LOSS',
+          status: outcome === 'eaten' ? 'did_not_occur'
+            : outcome === 'missed' || outcome === 'refused' ? 'occurred' : 'unknown',
+        }],
+      },
     },
     observation: { summary: text, observed_facts: { meal: label, outcome } },
     provisional: {

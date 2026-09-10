@@ -919,6 +919,19 @@ body.cy-paused::after {
 .sleep-homeostasis-inspector { margin-top: 8px; border-top: 1px solid rgba(80, 105, 94, 0.35); padding-top: 6px; }
 .sleep-homeostasis-inspector summary { cursor: pointer; color: #86a99a; font-size: 8px; letter-spacing: 0.06em; }
 .sleep-homeostasis-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; font-size: 8px; line-height: 1.45; }
+.threat-learning-card { margin-top: 9px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
+.threat-learning-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
+.threat-learning-status { color: #65d59a; font-size: 8px; }
+.threat-learning-explanation,
+.threat-learning-empty { margin: 5px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
+.threat-learning-associations { display: grid; gap: 6px; margin-top: 7px; }
+.threat-learning-association { padding: 6px; border: 1px solid rgba(80, 105, 94, 0.45); background: rgba(5, 12, 10, 0.34); }
+.threat-learning-association > strong { display: block; color: #c7e1d4; font: 8px/1.35 var(--mono); text-transform: uppercase; }
+.threat-learning-association p { margin: 3px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
+.threat-learning-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 7.5px; line-height: 1.4; }
+.threat-learning-limits strong { color: #788693; }
+.threat-learning-inspector { margin-top: 7px; color: #86a99a; font-size: 8px; }
+.threat-learning-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
 .circadian-process-card { padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
 .circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 8px; letter-spacing: 0.08em; }
 .circadian-process-status { color: #65d59a; font-size: 8px; }

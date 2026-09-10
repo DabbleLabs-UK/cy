@@ -54,6 +54,30 @@ $sleepInspection = captive_environment_record_inspection($sleepRecord, captive_i
 check_environment($sleepInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'Process S consumer must be LIVE');
 check_environment(str_contains($sleepInspection['what_systems_consumed_it']['consumers'][1]['detail'], 'Process S'), 'Process S consumer provenance is missing');
 
+$threatRecord = $record;
+$threatRecord['consumed_by'] = ['soma-input-staging-v1', 'probabilistic-threat-learning-v1'];
+$threatRecord['threat_learning'] = [
+    'modelVersion' => 'probabilistic-threat-learning-v1',
+    'trialsExamined' => 1,
+    'updatesApplied' => 1,
+    'results' => [[
+        'updated' => true,
+        'update' => [
+            'cueId' => 'event:cell_search',
+            'outcomeClass' => 'COERCIVE_LOSS_OF_CONTROL',
+            'u' => 1,
+            'before' => ['alpha' => 1, 'beta' => 1, 'mean' => 0.5],
+            'after' => ['alpha' => 2, 'beta' => 1, 'mean' => 2 / 3],
+        ],
+    ]],
+];
+$threatInspection = captive_environment_record_inspection($threatRecord, captive_implementation_registry());
+check_environment($threatInspection['what_threat_learning_did']['updatesApplied'] === 1, 'threat-learning trace was not exposed');
+check_environment($threatInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'threat learner consumer must be LIVE');
+$threatApiSource = file_get_contents(__DIR__ . '/../public/api/threat-learning.php');
+check_environment(str_contains($threatApiSource, 'captive_is_admin'), 'exact threat-learning inspection must be admin-only');
+check_environment(str_contains($threatApiSource, "'history' => \$history"), 'exact threat-learning history must be exposed to admin');
+
 $source = file_get_contents(__DIR__ . '/../public/api/ingest.php');
 check_environment(str_contains($source, "if (\$kind === 'world_event_record')"), 'ingest must handle private records');
 check_environment(str_contains($source, 'continue;'), 'private records must not fall through to public events');

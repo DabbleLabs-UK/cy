@@ -19,6 +19,7 @@ assert.equal(snapshot.sleepHomeostasis.publicLabel, 'LIVE');
 assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'probabilistic_threat_learning').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
@@ -76,6 +77,10 @@ assert.match(source, /This is not SCN activation/);
 assert.match(source, /class="circadian-history-band"/);
 assert.match(source, /setAttribute\('class', 'scn-phase-hand'\)/);
 assert.match(source, /class="soma-region-list"/);
+assert.match(source, /probabilistic_threat_learning/);
+assert.match(source, /predicts outcomes; it is not an anxiety or fear-intensity score/);
+assert.match(source, /threat-learning-inspector/);
+assert.doesNotMatch(source, /Learned outcome probability/);
 assert.match(source, /className = `soma-region-entry/);
 assert.match(source, /className = `soma-state-entry soma-reading-entry/);
 assert.doesNotMatch(source, /class="soma-detail"/, 'the old shared bottom-mounted inspector must not return');

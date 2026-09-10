@@ -255,14 +255,29 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
   </section></div>`;
 }
 
+function threatLearningMarkup(status, volatilityStatus, generalisationStatus, contextualStatus, admin) {
+  return `<section class="threat-learning-card status-${status.status.toLowerCase().replace('_', '-')}">
+    <div class="threat-learning-head"><span>${status.displayName}</span><strong class="threat-learning-status">${status.publicLabel}</strong></div>
+    <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome. This predicts outcomes; it is not an anxiety or fear-intensity score.</p>
+    <div class="threat-learning-associations"><p class="threat-learning-empty">No resolved post-installation trials have been observed yet.</p></div>
+    <div class="threat-learning-limits"><span>STATIONARY CUE-OUTCOME LEARNING</span><strong>${status.publicLabel}</strong><span>${volatilityStatus.displayName}</span><strong>${volatilityStatus.publicLabel}</strong><span>${generalisationStatus.displayName}</span><strong>${generalisationStatus.publicLabel}</strong><span>${contextualStatus.displayName}</span><strong>${contextualStatus.publicLabel}</strong></div>
+    ${admin ? '<details class="threat-learning-inspector"><summary>THREAT LEARNING INSPECTION</summary><pre>Waiting for a threat-learning snapshot.</pre></details>' : ''}
+  </section>`;
+}
+
 export class BrainHud {
-  constructor(root, { historyUrl = '', registry = null, admin = false } = {}) {
+  constructor(root, { historyUrl = '', threatLearningUrl = '', registry = null, admin = false } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
+    this.threatLearningUrl = threatLearningUrl;
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
     this.circadianStatus = implementationStatus(this.registry, 'soma_subsystems', 'circadian_process_c');
+    this.threatLearningStatus = implementationStatus(this.registry, 'soma_subsystems', 'probabilistic_threat_learning');
+    this.threatVolatilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_volatility');
+    this.threatGeneralisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_generalisation');
+    this.threatContextualStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_contextual_inference');
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
@@ -333,11 +348,15 @@ export class BrainHud {
       const sleepHomeostasis = definition.key === 'fatigue'
         ? sleepHomeostasisMarkup(this.sleepHomeostasisStatus, this.circadianStatus, this.admin)
         : '';
+      const threatLearning = definition.key === 'anxiety'
+        ? threatLearningMarkup(this.threatLearningStatus, this.threatVolatilityStatus, this.threatGeneralisationStatus, this.threatContextualStatus, this.admin)
+        : '';
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${sleepHomeostasis}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${sleepHomeostasis}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       if (definition.key === 'fatigue') this._wireCircadian(entry);
+      if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
@@ -454,10 +473,29 @@ export class BrainHud {
     }));
   }
 
+  _wireThreatLearning(entry) {
+    const inspector = entry.querySelector('.threat-learning-inspector');
+    if (!inspector) return;
+    inspector.addEventListener('toggle', async () => {
+      if (!inspector.open || !this.threatLearningUrl) return;
+      const target = inspector.querySelector('pre');
+      target.textContent = 'Loading exact posterior state and update history...';
+      try {
+        const response = await fetch(this.threatLearningUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`threat learning ${response.status}`);
+        const data = await response.json();
+        target.textContent = JSON.stringify(data.inspection || data, null, 2);
+      } catch (error) {
+        target.textContent = error && error.message ? error.message : 'Threat-learning inspection unavailable.';
+      }
+    });
+  }
+
   setSoma(soma) {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.sleepHomeostasis = soma.sleepHomeostasis || null;
     this.circadianProcessC = soma.circadianProcessC || null;
+    this.threatLearning = soma.threatLearning || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
     for (const definition of this.metricDefinitions) {
@@ -481,6 +519,7 @@ export class BrainHud {
     }
     this.renderSleepHomeostasis();
     this.renderCircadianProcessC();
+    this.renderThreatLearning();
     for (const definition of this.regionDefinitions) {
       const reading = definition.key === 'scnCircadian'
         ? this.circadianProcessC && this.circadianProcessC.scnAnalogy
@@ -585,6 +624,48 @@ export class BrainHud {
       const item = document.createElement('li');
       item.textContent = contributorExplanation(contributor);
       list.appendChild(item);
+    }
+  }
+
+  renderThreatLearning() {
+    const entry = this.rows.anxiety;
+    const card = entry && entry.querySelector('.threat-learning-card');
+    if (!card) return;
+    const snapshot = this.threatLearning;
+    const live = this.threatLearningStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.threat-learning-status').textContent = live ? this.threatLearningStatus.publicLabel : 'UNAVAILABLE';
+    const root = card.querySelector('.threat-learning-associations');
+    root.textContent = '';
+    if (!live || !Array.isArray(snapshot.associations) || !snapshot.associations.length) {
+      const empty = document.createElement('p');
+      empty.className = 'threat-learning-empty';
+      empty.textContent = live
+        ? 'No resolved post-installation trials have been observed yet.'
+        : 'No grounded threat-learning state has reached this view.';
+      root.appendChild(empty);
+    } else {
+      const selected = [];
+      const seenOutcomes = new Set();
+      for (const association of snapshot.associations) {
+        if (seenOutcomes.has(association.outcomeClass)) continue;
+        seenOutcomes.add(association.outcomeClass);
+        selected.push(association);
+      }
+      for (const association of selected) {
+        const item = document.createElement('article');
+        item.className = 'threat-learning-association';
+        const heading = document.createElement('strong');
+        heading.textContent = `${String(association.cueId).replace(':', ' ')} -> ${String(association.outcomeClass).replaceAll('_', ' ')}`;
+        const summary = document.createElement('p');
+        summary.textContent = association.evidenceBalance === 'adverse_more_often'
+          ? 'This cue has more often been followed by this adverse outcome than not.'
+          : association.evidenceBalance === 'safe_more_often'
+            ? 'This cue has more often not been followed by this adverse outcome.'
+            : 'Resolved observations are evenly split between this outcome occurring and not occurring.';
+        item.append(heading, summary);
+        root.appendChild(item);
+      }
     }
   }
 

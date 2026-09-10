@@ -89,6 +89,14 @@ then observed by deterministic heuristic code for repetition, punctuation,
 commitments and learned-token reactivation. There is no second model call and
 the language model does not assign emotional magnitudes.
 
+The separate grounded threat-learning path is implemented in
+`probabilistic-threat-learning.js`. It consumes only explicit self-contained
+cue and resolved categorical outcome links from private structured environment
+records. It persists independent Beta-Bernoulli posteriors and a complete
+post-installation update history. It does not consume generated prose or legacy
+appraisal values and has no current effect on language, action selection,
+anxiety, or brain activity.
+
 ## dryRun
 
 With `dryRun: true` the runner never touches the network:
