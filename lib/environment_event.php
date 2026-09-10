@@ -97,6 +97,13 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Stores the categorical input without assigning an emotional magnitude.',
             ];
+        } elseif ($consumer === 'process-s-normalized-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Uses only observed sleep/wake state and elapsed time in the Borbely/Daan Process S equations. It does not assign an emotional magnitude.',
+            ];
         } elseif ($consumer === 'legacy-experienced-state-v2') {
             $consumers[] = [
                 'id' => $consumer,

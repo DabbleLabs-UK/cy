@@ -19,6 +19,96 @@ The brain remains a functional analogy, not a biological measurement. A
 provisional or unfinished brain mapping has no percentage and no dynamic
 illumination.
 
+One narrower subsystem is now IMPLEMENTED and shown as LIVE: normalized
+homeostatic sleep pressure (Process S). It is displayed inside the still
+PROVISIONAL fatigue detail. It does not make fatigue or any brain analogy LIVE.
+
+## Grounded homeostatic sleep pressure (Process S)
+
+The authoritative machine-readable model specification is
+config/model-specs/sleep-homeostasis.json. runner/sleep-homeostasis.js implements
+exactly these elapsed-time equations:
+
+```text
+wake:  S(t + dt) = 1 - (1 - S(t)) * exp(-dt / tau_w)
+sleep: S(t + dt) = S(t) * exp(-dt / tau_s)
+```
+
+The two scientific parameters are tau_w = 18.18 hours and tau_s = 4.2 hours.
+They are literature parameters and must not be tuned for visual effect. The
+repository model specification records the following sources and links:
+
+- Borbely AA, A two process model of sleep regulation, 1982.
+- Daan S, Beersma DGM and Borbely AA, Timing of human sleep: recovery process
+  gated by a circadian pacemaker, 1984, DOI 10.1152/ajpregu.1984.246.2.R161.
+- Borbely AA and Achermann P, Sleep homeostasis and models of sleep regulation,
+  1999, DOI 10.1177/074873099129000894.
+- Borbely AA, The two-process model of sleep regulation: Beginnings and outlook,
+  2022, DOI 10.1111/jsr.13598.
+
+Process S means sleep-wake-dependent homeostatic sleep pressure only. It is not
+subjective fatigue, stress, mood, motivation, depression or a circadian signal.
+Process C is explicitly NOT MODELLED.
+
+### Initialization and unknown intervals
+
+No legacy fatigue value seeds Process S. A newly installed model starts with the
+explicit uncertainty interval S_min = 0 and S_max = 1. The internal estimate is
+only the derived midpoint `(S_min + S_max) / 2`; the initial 0.5 midpoint is not
+asserted to be a known state. Both bounds are propagated through the applicable
+equation. For a downtime interval whose sleep state is unknown, the lower
+reachable bound follows the all-sleep trajectory and the upper reachable bound
+follows the all-wake trajectory. No schedule is invented for the gap.
+
+### Environmental routing
+
+Structured `sleep_normal`, `sleep_interrupted` and `forced_wakefulness` records
+carry categorical sleep state into the Process S consumer. Scheduled lights-out
+and waking transitions remain the source events. Night noise records a real
+interruption; returning to the scheduled sleep state creates a return-to-sleep
+record. Owner-forced waking is recorded as forced wakefulness. The runner uses
+the latest recorded state rather than treating clock time alone as sleep.
+
+The structured record names `process-s-normalized-v1` as a LIVE consumer. The
+same record can still be consumed by `legacy-experienced-state-v2`, but that
+consumer remains PROVISIONAL and cannot write into Process S.
+
+### Persistence, history and inspection
+
+The runner's persisted Soma state contains the model ID and version, estimate,
+S_min, S_max, install time, last integration time, current sleep state, bounded
+seven-day history and the last exact integration inspection. Restore integrates
+elapsed downtime. A known state uses its equation; an unknown state widens to
+the reachable sleep/wake envelope. History begins only after installation and
+never backfills values from legacy fatigue.
+
+The public fatigue detail contains HOMEOSTATIC SLEEP PRESSURE / LIVE, its index
+`round(100 * S)`, current sleep state, uncertainty/calibration text and its own
+1H, 24H and 7D graph. Missing data renders as unavailable, not zero. The
+admin-only detail exposes interval state and elapsed time, S before and after,
+S_min/S_max, model ID and both literature time constants. Relevant brain-region
+registry entries list Process S only as a possible future dependency and remain
+PROVISIONAL or NOT_IMPLEMENTED.
+
+### New Process S numerical inventory
+
+- 18.18 hours: LITERATURE, waking time constant.
+- 4.2 hours: LITERATURE, sleeping time constant.
+- 0 and 1: EXPLICIT NORMALIZED BOUNDS supplied by this implementation handoff.
+- 0.5: DERIVED midpoint of the initial [0,1] interval; not an assumed state.
+- 100: SCALE CONVERSION for the public index only.
+- 0.05: ENGINEERING / DISPLAY uncertainty-width threshold for replacing the
+  calibration message. It does not affect Process S.
+- 120000 ms: ENGINEERING / STORAGE ordinary history-sample interval. State
+  transitions are sampled immediately.
+- 604800000 ms: ENGINEERING / STORAGE seven-day history retention.
+- 3 decimal places: ENGINEERING / DISPLAY public uncertainty precision.
+- 6 decimal places: ENGINEERING / DISPLAY admin-inspection precision.
+- 60 seconds/minute, 60 minutes/hour and 1000 ms/second: UNIT CONVERSIONS only.
+
+No emotional coefficient, circadian parameter, behavioural threshold or brain
+activation coefficient was added by this subsystem.
+
 ## Previous event representation
 
 Before this scaffold, public prison events were rows in events with a timestamp,
@@ -66,7 +156,7 @@ environmentInput. This is input staging only. It does not calculate a state.
 
 ## Reference event archetypes
 
-The 18 reference archetypes are:
+The 19 reference archetypes are:
 
 1. meal
 2. sleep_normal
@@ -86,6 +176,7 @@ The 18 reference archetypes are:
 16. ordinary_postcard
 17. hostile_postcard
 18. prolonged_social_absence
+19. forced_wakefulness
 
 Scheduled meals, sleep transitions and routines now materialize one of these
 archetypes. Cell searches, lockdowns, injuries, selected meal problems, night

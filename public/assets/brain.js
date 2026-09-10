@@ -168,11 +168,34 @@ function historyMarkup() {
   </div>`;
 }
 
+function sleepHomeostasisMarkup(status, circadianStatus, admin) {
+  return `<section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
+    <div class="sleep-homeostasis-head"><span>${status.displayName}</span><strong class="sleep-homeostasis-status">${status.publicLabel}</strong></div>
+    <div class="sleep-pressure-reading"><strong class="sleep-pressure-value">--</strong><span>SLEEP PRESSURE INDEX</span></div>
+    <p class="sleep-homeostasis-explanation">Sleep pressure accumulates while Cy is awake and dissipates during sleep.</p>
+    <p class="sleep-homeostasis-state">Current sleep state unavailable.</p>
+    <p class="sleep-homeostasis-calibration">Waiting for observed sleep history.</p>
+    <p class="sleep-homeostasis-range">S range unavailable.</p>
+    <div class="sleep-homeostasis-history-wrap">
+      <div class="sleep-ranges" aria-label="Sleep pressure history range">
+        <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+      </div>
+      <svg class="soma-history sleep-homeostasis-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored Process S history"><path></path></svg>
+      <p class="sleep-history-note">Open this reading to load stored Process S history.</p>
+    </div>
+    <p class="circadian-status"><span>${circadianStatus.displayName}</span><strong>${circadianStatus.publicLabel}</strong></p>
+    ${admin ? '<details class="sleep-homeostasis-inspector"><summary>SLEEP HOMEOSTASIS INSPECTION</summary><pre>Waiting for a Process S integration.</pre></details>' : ''}
+  </section>`;
+}
+
 export class BrainHud {
-  constructor(root, { historyUrl = '', registry = null } = {}) {
+  constructor(root, { historyUrl = '', registry = null, admin = false } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
     this.registry = registry || {};
+    this.admin = admin;
+    this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
+    this.circadianStatus = implementationStatus(this.registry, 'soma_subsystems', 'circadian_component');
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
@@ -193,6 +216,7 @@ export class BrainHud {
     this.regions = {};
     this.regionRows = {};
     this.historyRequests = new WeakMap();
+    this.sleepHistoryRequests = new WeakMap();
     this._build();
   }
 
@@ -237,9 +261,13 @@ export class BrainHud {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
       entry.dataset.metric = definition.key;
+      const sleepHomeostasis = definition.key === 'fatigue'
+        ? sleepHomeostasisMarkup(this.sleepHomeostasisStatus, this.circadianStatus, this.admin)
+        : '';
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${sleepHomeostasis}</div>`;
       this._wireReading(entry, 'metric', definition.key);
+      if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
@@ -323,8 +351,21 @@ export class BrainHud {
     }));
   }
 
+  _wireSleepHomeostasis(entry) {
+    entry.addEventListener('toggle', () => {
+      if (!entry.open || this.sleepHomeostasisStatus.status !== IMPLEMENTATION_STATUS.IMPLEMENTED) return;
+      const active = entry.querySelector('.sleep-ranges button.active');
+      this.loadSleepHomeostasisHistory(entry, active ? active.dataset.range : '24h');
+    });
+    entry.querySelectorAll('.sleep-ranges button').forEach((button) => button.addEventListener('click', () => {
+      entry.querySelectorAll('.sleep-ranges button').forEach((item) => item.classList.toggle('active', item === button));
+      this.loadSleepHomeostasisHistory(entry, button.dataset.range);
+    }));
+  }
+
   setSoma(soma) {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
+    this.sleepHomeostasis = soma.sleepHomeostasis || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
     for (const definition of this.metricDefinitions) {
@@ -346,6 +387,7 @@ export class BrainHud {
       row.querySelector('summary').title = `${definition.status.displayName}. ${definition.status.publicLabel}. ${definition.status.note} ${metricExplanation(metric)}`;
       this.renderMetric(definition.key);
     }
+    this.renderSleepHomeostasis();
     for (const definition of this.regionDefinitions) {
       const reading = this.latestBrain[definition.key];
       const region = this.regions[definition.key];
@@ -428,6 +470,49 @@ export class BrainHud {
     }
   }
 
+  renderSleepHomeostasis() {
+    const entry = this.rows.fatigue;
+    const card = entry && entry.querySelector('.sleep-homeostasis-card');
+    if (!card) return;
+    const snapshot = this.sleepHomeostasis;
+    const live = this.sleepHomeostasisStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.sleep-homeostasis-status').textContent = live ? this.sleepHomeostasisStatus.publicLabel : 'UNAVAILABLE';
+    if (!live) {
+      card.querySelector('.sleep-pressure-value').textContent = '--';
+      card.querySelector('.sleep-homeostasis-state').textContent = 'Current sleep state unavailable.';
+      card.querySelector('.sleep-homeostasis-calibration').textContent = 'No grounded Process S state has reached this view.';
+      card.querySelector('.sleep-homeostasis-range').textContent = 'S range unavailable.';
+      return;
+    }
+    card.querySelector('.sleep-pressure-value').textContent = Number.isFinite(snapshot.sleepPressureIndex)
+      ? String(snapshot.sleepPressureIndex)
+      : '--';
+    card.querySelector('.sleep-homeostasis-state').textContent = `Current state: ${String(snapshot.currentSleepState || 'unknown').toUpperCase()}`;
+    card.querySelector('.sleep-homeostasis-calibration').textContent = snapshot.calibrating
+      ? 'CALIBRATING FROM OBSERVED SLEEP HISTORY'
+      : 'ESTABLISHED FROM OBSERVED SLEEP HISTORY';
+    card.querySelector('.sleep-homeostasis-range').textContent = Number.isFinite(snapshot.sMin) && Number.isFinite(snapshot.sMax)
+      ? `Current uncertainty: S ${snapshot.sMin.toFixed(3)} to ${snapshot.sMax.toFixed(3)}`
+      : 'S range unavailable.';
+    const inspector = card.querySelector('.sleep-homeostasis-inspector pre');
+    if (inspector) {
+      const detail = snapshot.inspection;
+      inspector.textContent = detail ? [
+        `current state: ${detail.currentState}`,
+        `elapsed interval used: ${detail.elapsedIntervalMs} ms`,
+        `interval state: ${detail.intervalState}`,
+        `Process S before: ${JSON.stringify(detail.processSBefore)}`,
+        `Process S after: ${JSON.stringify(detail.processSAfter)}`,
+        `S_min / S_max: ${snapshot.sMin.toFixed(6)} / ${snapshot.sMax.toFixed(6)}`,
+        `model: ${detail.model}`,
+        `tau wake: ${detail.tauWakeHours} h - literature`,
+        `tau sleep: ${detail.tauSleepHours} h - literature`,
+        `source: ${detail.source}`,
+      ].join('\n') : 'Waiting for a Process S integration.';
+    }
+  }
+
   openRegion(key) {
     const entry = this.regionRows[key];
     if (!entry) return;
@@ -462,6 +547,29 @@ export class BrainHud {
     }
   }
 
+  async loadSleepHomeostasisHistory(entry, range) {
+    const note = entry.querySelector('.sleep-history-note');
+    const path = entry.querySelector('.sleep-homeostasis-history path');
+    if (!this.historyUrl) { note.textContent = 'History endpoint unavailable.'; return; }
+    const request = {};
+    this.sleepHistoryRequests.set(entry, request);
+    note.textContent = 'Loading stored Process S history...';
+    try {
+      const response = await fetch(buildHistoryUrl(this.historyUrl, 'sleep', 'sleepPressure', range), { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
+      if (this.sleepHistoryRequests.get(entry) !== request) return;
+      path.setAttribute('d', buildHistoryPath(data.points));
+      note.textContent = data.points.length
+        ? `${data.points.length} stored ${range} Process S readings. Gaps mean no runner data was recorded.`
+        : `No Process S readings in the last ${range}; history begins when the grounded model becomes operational.`;
+    } catch (error) {
+      if (this.sleepHistoryRequests.get(entry) !== request) return;
+      path.setAttribute('d', '');
+      note.textContent = `History unavailable: ${error.message}`;
+    }
+  }
+
   setInference(phase) {
     const value = ['eval', 'gen'].includes(phase) ? phase : 'idle';
     this.measure.value.textContent = value.toUpperCase();
@@ -475,5 +583,5 @@ export class BrainHud {
   setAmp(monotony, amp) { this.root.querySelector('.legacy-amp').textContent = clamp01(monotony) == null || !Number.isFinite(amp) ? 'unavailable' : `monotony ${Math.round(monotony * 100)} / x${amp.toFixed(1)}`; }
   setCast(relations) { this.root.querySelector('.legacy-cast').textContent = relations && Object.keys(relations).length ? `${Object.keys(relations).length} synthetic standings` : 'unavailable'; }
 
-  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this._build(); }
+  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this.sleepHistoryRequests = new WeakMap(); this._build(); }
 }

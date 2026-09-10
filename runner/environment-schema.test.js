@@ -7,8 +7,8 @@ import {
   serializeEnvironmentRecord,
 } from './environment-schema.js';
 
-assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 18);
-assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 18);
+assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 19);
+assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 19);
 
 const event = createEnvironmentEvent('meal', {
   id: 'env-test-meal',
@@ -47,6 +47,13 @@ const persistent = createEnvironmentEvent('persistent_night_noise', {
 });
 assert.equal(persistent.world.temporal.persistence, 'ongoing');
 assert.equal(createEnvironmentRecord(persistent).soma_input.recurrence, 'repeated');
+
+const forcedWake = createEnvironmentEvent('forced_wakefulness', {
+  id: 'env-test-forced-wake',
+  timestamp: '2026-09-10 23:15:00.000',
+});
+assert.equal(createEnvironmentRecord(forcedWake).soma_input.sleep_period, 'forced_wakefulness');
+assert.equal(createEnvironmentRecord(forcedWake).soma_input.sleep_interruption, 'present');
 
 const encoded = JSON.stringify(record);
 for (const forbidden of ['threat_score', 'emotion_score', 'brain_activation', 'appraisal_magnitude']) {

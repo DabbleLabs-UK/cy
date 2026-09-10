@@ -142,12 +142,15 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
 | `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
-`soma` is the PROVISIONAL state snapshot: sourced heuristic circuit activity, current
-attention and action, prediction error, episodic-memory count, drives, and the
-self-model question. `brain`, `hr`, `mental`, `derived`, `relations`, `monotony`,
-and `amp` are legacy dramatic mappings kept for compatibility and explicitly
-identified by `legacy.status = "placeholder"`; they are not measured physiology
-or approved Soma circuits.
+`soma` contains the PROVISIONAL experienced-state snapshot plus one narrower LIVE
+subsystem: normalized homeostatic sleep pressure (Process S). Process S uses the
+published elapsed-time rise/decay equations and is not a subjective-fatigue or
+circadian claim. Current attention and action, prediction error, episodic-memory
+count, drives and the self-model question remain provisional. `brain`, `hr`,
+`mental`, `derived`, `relations`, `monotony`, and `amp` are legacy dramatic
+mappings kept for compatibility and explicitly identified by
+`legacy.status = "placeholder"`; they are not measured physiology or approved
+Soma circuits.
 
 ## Mechanics
 
@@ -159,6 +162,14 @@ or approved Soma circuits.
   last supportive social contact are persisted. Recovering event impulses use a
   soft ceiling instead of unlimited addition. These mechanisms and their numeric
   parameters are unapproved heuristics; the public registry labels them PROVISIONAL.
+- **LIVE homeostatic Process S** (`sleep-homeostasis.js`) - consumes structured
+  observed sleep/wake transitions and integrates `S` with tau_w = 18.18 hours
+  while awake and tau_s = 4.2 hours while asleep. It persists an explicit
+  uncertainty interval, integrates runner downtime, and records genuine 1H/24H/7D
+  history. It does not consume legacy fatigue, implement Process C, alter behaviour
+  through thresholds, or activate a brain analogy. The complete provenance and
+  engineering/display constants are in
+  `config/model-specs/sleep-homeostasis.json` and `docs/soma-scaffold.md`.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
   Each outcome now carries objective/categorical world facts and a separate

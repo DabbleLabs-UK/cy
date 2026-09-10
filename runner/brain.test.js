@@ -9,11 +9,16 @@ import {
   canRenderDynamicActivity,
 } from '../public/assets/brain.js';
 import { reconcileSoma, somaSnapshot, tickSoma } from './soma.js';
+import { implementationRegistry, implementationEntry } from './implementation-registry.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const soma = reconcileSoma(null, { now: 1 });
 tickSoma(soma, { physical: { hunger: 0.7 }, monotony: 0.2, now: 5001 });
 const snapshot = somaSnapshot(soma);
+assert.equal(snapshot.sleepHomeostasis.publicLabel, 'LIVE');
+assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('soma_subsystems', 'circadian_component').implementation_status, 'NOT_IMPLEMENTED');
+assert.ok(implementationRegistry.brain_regions.every((entry) => entry.implementation_status !== 'IMPLEMENTED'));
 
 assert.deepEqual(EXPERIENCED_METRICS.map((metric) => metric.key),
   ['anxiety', 'arousal', 'pain', 'hunger', 'fatigue', 'loneliness', 'anger', 'rumination']);
@@ -46,6 +51,20 @@ assert.match(
 assert.match(source, /data-range="1h"/);
 assert.match(source, /data-range="24h"/);
 assert.match(source, /data-range="7d"/);
+assert.equal(
+  implementationEntry('soma_subsystems', 'sleep_homeostasis').display_name,
+  'HOMEOSTATIC SLEEP PRESSURE',
+  'the public subsystem heading is supplied by the authoritative implementation registry',
+);
+assert.match(source, /SLEEP PRESSURE INDEX/);
+assert.match(source, /CALIBRATING FROM OBSERVED SLEEP HISTORY/);
+assert.equal(
+  implementationEntry('soma_subsystems', 'circadian_component').display_name,
+  'CIRCADIAN COMPONENT',
+  'the public placeholder heading is supplied by the authoritative implementation registry',
+);
+assert.match(source, /buildHistoryUrl\(this\.historyUrl, 'sleep', 'sleepPressure', range\)/);
+assert.match(source, /sleepHomeostasisStatus\.status === IMPLEMENTATION_STATUS\.IMPLEMENTED/);
 assert.match(source, /class="soma-region-list"/);
 assert.match(source, /className = `soma-region-entry/);
 assert.match(source, /className = `soma-state-entry soma-reading-entry/);

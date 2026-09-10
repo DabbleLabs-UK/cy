@@ -16,6 +16,14 @@ import {
 } from './experienced-state.js';
 
 import { somaImplementationStatus } from './implementation-registry.js';
+import {
+  createSleepHomeostasis,
+  observeSleepState,
+  reconcileSleepHomeostasis,
+  sleepHomeostasisSnapshot,
+  sleepStateFromSomaInput,
+  tickSleepHomeostasis,
+} from './sleep-homeostasis.js';
 
 // MODEL STATUS: PROVISIONAL. Every numerical psychological coefficient,
 // threshold, prior, decay rate and action weight in this file is ARBITRARY /
@@ -102,6 +110,7 @@ function blank(now, legacyPhysical = null) {
       themes: [],
     },
     environmentInput: null,
+    sleepHomeostasis: createSleepHomeostasis(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -144,6 +153,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     environmentInput: raw.environmentInput && raw.environmentInput.schema === 'cy.soma-input'
       ? JSON.parse(JSON.stringify(raw.environmentInput))
       : null,
+    sleepHomeostasis: reconcileSleepHomeostasis(raw.sleepHomeostasis, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -421,6 +431,13 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
     // categorical input so an approved model can consume it later. The legacy
     // heuristic path below continues to use the explicitly separate fields.
     state.environmentInput = JSON.parse(JSON.stringify(observation.somaInput));
+    const observedSleepState = sleepStateFromSomaInput(observation.somaInput);
+    if (observedSleepState) {
+      observeSleepState(state.sleepHomeostasis, observedSleepState, {
+        now,
+        source: `structured-environment-record:${observation.environmentEventId || observation.somaInput.event_id || 'unknown'}`,
+      });
+    }
   }
   const tags = Array.isArray(observation.tags) ? observation.tags : [];
   const family = familyOf(observation.name, tags);
@@ -555,6 +572,7 @@ export function tickSoma(state, {
   physical = {},
   monotony = 0,
   asleep = false,
+  sleepHomeostasisAsleep = asleep,
   lastMailMs = Date.now(),
   now = Date.now(),
 } = {}) {
@@ -565,6 +583,11 @@ export function tickSoma(state, {
   for (const key of Object.keys(state.appraisal)) state.appraisal[key] = round(state.appraisal[key] * decay);
   state.prediction.error = round(state.prediction.error * Math.exp(-elapsed / 900));
   state.attention.salience = round(state.attention.salience * Math.exp(-elapsed / 1800));
+
+  // Grounded Process S runs beside the unsupported subjective-fatigue index.
+  // Nothing in Process S reads legacy fatigue, and its result does not feed any
+  // behavioural threshold or legacy fatigue equation in this task.
+  tickSleepHomeostasis(state.sleepHomeostasis, { now, asleep: sleepHomeostasisAsleep });
 
   tickExperienced(state.experienced, {
     now,
@@ -829,6 +852,7 @@ export function somaSnapshot(state) {
   return {
     version: VERSION,
     status: somaImplementationStatus(),
+    sleepHomeostasis: sleepHomeostasisSnapshot(state.sleepHomeostasis),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

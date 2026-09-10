@@ -11,7 +11,7 @@ export function validateImplementationRegistry(registry) {
   if (!registry || registry.schema !== 'cy.implementation-registry') {
     throw new Error('implementation registry has an invalid schema');
   }
-  for (const scope of ['soma_variables', 'brain_regions']) {
+  for (const scope of ['soma_variables', 'soma_subsystems', 'brain_regions']) {
     if (!Array.isArray(registry[scope])) throw new Error(`implementation registry has no ${scope}`);
     const ids = new Set();
     for (const entry of registry[scope]) {

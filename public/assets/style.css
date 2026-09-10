@@ -898,6 +898,28 @@ body.cy-paused::after {
 .soma-history path { fill: none; stroke: #d99d45; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .soma-reading-entry[data-reading-scope="brain"] .soma-history path { stroke: #8fb2c9; }
 .soma-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
+
+.sleep-homeostasis-card { margin-top: 10px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
+.sleep-homeostasis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
+.sleep-homeostasis-status { color: #65d59a; font-size: 8px; }
+.sleep-pressure-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
+.sleep-pressure-value { color: #d9f1e4; font-size: 22px; line-height: 1; }
+.sleep-pressure-reading span { color: #8caa9b; font-size: 7px; letter-spacing: 0.08em; }
+.sleep-homeostasis-explanation,
+.sleep-homeostasis-state,
+.sleep-homeostasis-calibration,
+.sleep-homeostasis-range { margin: 4px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
+.sleep-homeostasis-calibration { color: #d8b56d; letter-spacing: 0.04em; }
+.sleep-ranges { display: flex; gap: 4px; margin: 7px 0 4px; }
+.sleep-ranges button { border: 1px solid var(--line); background: transparent; color: #8294a1; font: inherit; font-size: 7px; padding: 2px 6px; }
+.sleep-ranges button.active { border-color: #65d59a; color: #bce9d3; }
+.sleep-homeostasis-history path { stroke: #65d59a; }
+.sleep-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
+.circadian-status { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #8294a1; font-size: 8px; }
+.circadian-status strong { color: #a0a8ad; }
+.sleep-homeostasis-inspector { margin-top: 8px; border-top: 1px solid rgba(80, 105, 94, 0.35); padding-top: 6px; }
+.sleep-homeostasis-inspector summary { cursor: pointer; color: #86a99a; font-size: 8px; letter-spacing: 0.06em; }
+.sleep-homeostasis-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; font-size: 8px; line-height: 1.45; }
 .soma-diagnostics { border-top: 1px solid var(--line); padding-top: 5px; }
 .soma-diagnostics > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
 .soma-diagnostic-rows { display: grid; gap: 4px; margin-top: 8px; }

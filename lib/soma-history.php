@@ -36,6 +36,14 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scale' => 100.0,
         ];
     }
+    if ($scope === 'sleep' && $key === 'sleepPressure') {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.sleepHomeostasis.sleepPressure',
+            'scale' => 100.0,
+        ];
+    }
     throw new InvalidArgumentException($scope === 'brain' ? 'unknown Soma brain region' : 'unknown Soma metric');
 }
 
@@ -56,8 +64,12 @@ function captive_soma_history_points(
         $value = $row['value'] ?? null;
         if ($value === null && isset($row['payload'])) {
             $payload = json_decode((string)$row['payload'], true);
-            $group = $scope === 'brain' ? 'brain' : 'metrics';
-            $value = $payload['soma']['experienced'][$group][$key]['value'] ?? null;
+            if ($scope === 'sleep') {
+                $value = $payload['soma']['sleepHomeostasis']['sleepPressure'] ?? null;
+            } else {
+                $group = $scope === 'brain' ? 'brain' : 'metrics';
+                $value = $payload['soma']['experienced'][$group][$key]['value'] ?? null;
+            }
         }
         if (!is_numeric($value)) {
             continue;

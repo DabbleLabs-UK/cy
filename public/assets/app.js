@@ -171,6 +171,7 @@ async function boot() {
   brain = new BrainHud($('#brain'), {
     historyUrl: CFG.somaHistory,
     registry: CFG.implementationRegistry,
+    admin: !!CFG.admin,
   });
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');

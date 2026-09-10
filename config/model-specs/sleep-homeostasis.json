@@ -1,0 +1,94 @@
+{
+  "schema": "cy.model-specification",
+  "version": 1,
+  "id": "borbely-daan-process-s-normalized",
+  "implementation_version": "process-s-normalized-v1",
+  "display_name": "Homeostatic sleep pressure",
+  "construct": "Process S",
+  "construct_scope": "Sleep-wake-dependent homeostatic sleep pressure. This is not subjective fatigue, mood, stress, depression, motivation, or a circadian model.",
+  "state_space": {
+    "minimum": 0,
+    "maximum": 1,
+    "provenance": "Normalized state space specified for this implementation handoff. These are normalization bounds, not fitted psychological thresholds."
+  },
+  "equations": {
+    "wake": "S(t + dt) = 1 - (1 - S(t)) * exp(-dt / tau_w)",
+    "sleep": "S(t + dt) = S(t) * exp(-dt / tau_s)"
+  },
+  "parameters": {
+    "tau_w_hours": {
+      "value": 18.18,
+      "classification": "LITERATURE",
+      "meaning": "Time constant for the saturating rise of Process S during wakefulness."
+    },
+    "tau_s_hours": {
+      "value": 4.2,
+      "classification": "LITERATURE",
+      "meaning": "Time constant for the exponential dissipation of Process S during sleep."
+    }
+  },
+  "initialization": {
+    "s_min": 0,
+    "s_max": 1,
+    "classification": "EXPLICIT UNCERTAINTY",
+    "meaning": "No initial point estimate is asserted when prior sleep-wake history is unavailable. Both possible endpoints are propagated."
+  },
+  "engineering_parameters": {
+    "display_convergence_width": {
+      "value": 0.05,
+      "classification": "ENGINEERING / DISPLAY",
+      "meaning": "The UI stops saying calibrating when S_max - S_min is no greater than this width. It does not affect Process S."
+    },
+    "history_interval_ms": {
+      "value": 120000,
+      "classification": "ENGINEERING / STORAGE",
+      "meaning": "Minimum interval between ordinary persisted history samples. State transitions are sampled immediately."
+    },
+    "history_retention_ms": {
+      "value": 604800000,
+      "classification": "ENGINEERING / STORAGE",
+      "meaning": "Seven-day retention matching the existing 1H, 24H and 7D graph interface."
+    },
+    "display_scale": {
+      "value": 100,
+      "classification": "SCALE CONVERSION",
+      "meaning": "The public index is round(100 * S_estimate); it is not a percentage of tiredness."
+    },
+    "public_range_decimal_places": {
+      "value": 3,
+      "classification": "ENGINEERING / DISPLAY",
+      "meaning": "Decimal precision used only for the public uncertainty range."
+    },
+    "admin_inspection_decimal_places": {
+      "value": 6,
+      "classification": "ENGINEERING / DISPLAY",
+      "meaning": "Decimal precision used only in the admin inspection readout."
+    }
+  },
+  "provenance": [
+    {
+      "citation": "Borbely AA. A two process model of sleep regulation. Human Neurobiology. 1982;1(3):195-204.",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/7185792/"
+    },
+    {
+      "citation": "Daan S, Beersma DGM, Borbely AA. Timing of human sleep: recovery process gated by a circadian pacemaker. American Journal of Physiology. 1984;246(2):R161-R183.",
+      "doi": "10.1152/ajpregu.1984.246.2.R161",
+      "url": "https://journals.physiology.org/doi/10.1152/ajpregu.1984.246.2.R161"
+    },
+    {
+      "citation": "Borbely AA, Achermann P. Sleep homeostasis and models of sleep regulation. Journal of Biological Rhythms. 1999;14(6):559-570.",
+      "doi": "10.1177/074873099129000894",
+      "url": "https://journals.sagepub.com/doi/10.1177/074873099129000894"
+    },
+    {
+      "citation": "Borbely AA. The two-process model of sleep regulation: Beginnings and outlook. Journal of Sleep Research. 2022;31(4):e13598.",
+      "doi": "10.1111/jsr.13598",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9540767/"
+    }
+  ],
+  "excluded": {
+    "process_c": "NOT MODELLED",
+    "subjective_fatigue_mapping": "PROVISIONAL",
+    "brain_localization": "NOT MODELLED"
+  }
+}

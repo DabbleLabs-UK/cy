@@ -43,6 +43,17 @@ check_environment($inspection['what_soma_received']['possible_harm'] === 'possib
 check_environment(count($inspection['what_systems_consumed_it']['consumers']) === 2, 'wrong consumer count');
 check_environment($inspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'PROVISIONAL', 'legacy consumer must be provisional');
 
+$sleepRecord = $record;
+$sleepRecord['world_event']['id'] = 'env-sleep-test';
+$sleepRecord['world_event']['event_type'] = 'sleep_state_asleep';
+$sleepRecord['world_event']['event_family'] = 'homeostasis';
+$sleepRecord['soma_input']['event_id'] = 'env-sleep-test';
+$sleepRecord['soma_input']['sleep_period'] = 'sleep_period';
+$sleepRecord['consumed_by'] = ['soma-input-staging-v1', 'process-s-normalized-v1'];
+$sleepInspection = captive_environment_record_inspection($sleepRecord, captive_implementation_registry());
+check_environment($sleepInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'Process S consumer must be LIVE');
+check_environment(str_contains($sleepInspection['what_systems_consumed_it']['consumers'][1]['detail'], 'Process S'), 'Process S consumer provenance is missing');
+
 $source = file_get_contents(__DIR__ . '/../public/api/ingest.php');
 check_environment(str_contains($source, "if (\$kind === 'world_event_record')"), 'ingest must handle private records');
 check_environment(str_contains($source, 'continue;'), 'private records must not fall through to public events');

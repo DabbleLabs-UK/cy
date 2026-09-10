@@ -605,9 +605,13 @@ async function main() {
       observation: { summary, ...observation },
     });
     const record = createEnvironmentRecord(event, {
-      consumedBy: provisionalConsumer
-        ? ['soma-input-staging-v1', 'legacy-experienced-state-v2']
-        : ['soma-input-staging-v1'],
+      consumedBy: [
+        'soma-input-staging-v1',
+        ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
+          ? ['process-s-normalized-v1']
+          : []),
+        ...(provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
+      ],
     });
     emit({ kind: 'world_event_record', payload: record });
     return record;
@@ -624,7 +628,18 @@ async function main() {
       return captureEnvironmentEvent('lockdown', { eventType: name, summary });
     }
     if (name === 'noise_night') {
-      return captureEnvironmentEvent('persistent_night_noise', { eventType: name, summary });
+      return captureEnvironmentEvent('sleep_interrupted', {
+        eventType: name,
+        summary,
+        world: {
+          physical: {
+            sleep: { state: 'interrupted', interruption: 'present' },
+            environmental_discomfort: 'present',
+          },
+          context: { location: 'cell' },
+        },
+        observation: { observed_facts: { sleep: 'interrupted' } },
+      });
     }
     if (name === 'no_mail_24h') {
       return captureEnvironmentEvent('prolonged_social_absence', { eventType: name, summary });
@@ -2156,6 +2171,40 @@ async function main() {
     return isAsleep(mins);
   }
 
+  // Process S follows observed sleep, not the unsupported legacy fatigue clock.
+  // A night noise keeps this input awake until its lucid interruption has been
+  // handled; the next observed asleep state becomes a return-to-sleep record.
+  function processSAsleep(now, scheduledAsleep) {
+    return scheduledAsleep && !(wingNoiseCue && wingNoiseCue.wake && now < wingNoiseCue.until);
+  }
+
+  function syncSleepHomeostasisObservation(now, asleep) {
+    const current = soma.state && soma.state.sleepHomeostasis
+      ? soma.state.sleepHomeostasis.currentSleepState
+      : 'unknown';
+    const target = asleep ? 'asleep' : 'awake';
+    if (current === target) return;
+    const summary = asleep ? 'Cy returned to or remained in observed sleep' : 'Cy was observed awake';
+    const structured = captureEnvironmentEvent('sleep_normal', {
+      eventType: asleep ? 'sleep_state_asleep' : 'sleep_state_awake',
+      summary,
+      world: {
+        physical: { sleep: { state: asleep ? 'sleep_period' : 'awake', interruption: 'none' } },
+        context: { location: 'cell' },
+      },
+      observation: { observed_facts: { sleep: target } },
+      provisionalConsumer: false,
+    });
+    soma.observe({
+      name: asleep ? 'sleep_state_asleep' : 'sleep_state_awake',
+      text: summary,
+      tags: ['sleep', target],
+      somaInput: structured.soma_input,
+      environmentEventId: structured.world_event.id,
+      ts: tsNow(),
+    }, { now });
+  }
+
   // ---- owner regime override: force day/night mid-loop, no restart -------------
   // The override rides the tempo poll (client.regime), owner-set via /api/admin.php.
   // On a real transition cut the in-flight burst with the same abort machinery a
@@ -2173,15 +2222,33 @@ async function main() {
   client.onRegimeChange = (to) => {
     const from = activeRegimeId;
     activeRegimeId = to;
-    soma.observe(
-      {
-        name: 'regime_change',
-        text: `the prison day was externally changed from ${from} to ${to}`,
-        tags: ['regime', 'control'],
-        ts: tsNow(),
+    const now = Date.now();
+    const observedAsleep = to === 'night' || (to === 'auto' && isAsleep(londonParts(new Date(now)).mins));
+    const archetypeId = to === 'day' ? 'forced_wakefulness' : 'sleep_normal';
+    const summary = `the prison day was externally changed from ${from} to ${to}`;
+    const structured = captureEnvironmentEvent(archetypeId, {
+      eventType: 'regime_change',
+      summary,
+      world: {
+        physical: {
+          sleep: {
+            state: observedAsleep ? 'sleep_period' : (to === 'day' ? 'forced_wakefulness' : 'awake'),
+            interruption: to === 'day' ? 'present' : 'none',
+          },
+        },
+        context: { location: 'cell' },
       },
-      { now: Date.now() },
-    );
+      observation: { observed_facts: { sleep: observedAsleep ? 'asleep' : 'awake', regime: to } },
+      provisionalConsumer: false,
+    });
+    soma.observe({
+      name: 'regime_change',
+      text: summary,
+      tags: ['regime', 'control', observedAsleep ? 'sleep' : 'wake'],
+      somaInput: structured.soma_input,
+      environmentEventId: structured.world_event.id,
+      ts: tsNow(),
+    }, { now });
     emit({ kind: 'event', payload: { name: 'regime', from, to } });
     client.kick(); // priority flush: the admin control is waiting on this
     if (currentAbort) currentAbort.abort(); // cut the burst; the loop re-decides asleep now
@@ -2510,10 +2577,13 @@ async function main() {
     const asleep = effectiveAsleep(mins);
     tick(vitals, { asleep, now });
     scheduler(now);
+    const homeostasisAsleep = processSAsleep(now, asleep);
+    syncSleepHomeostasisObservation(now, homeostasisAsleep);
     soma.tick({
       physical: vitals.physical,
       monotony: vitals.monotony,
       asleep,
+      sleepHomeostasisAsleep: homeostasisAsleep,
       lastMailMs: vitals.lastMailMs,
       now,
     });

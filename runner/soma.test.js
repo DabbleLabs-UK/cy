@@ -144,6 +144,34 @@ const restored = reconcileSoma(JSON.parse(JSON.stringify(soma)), { now: t0 + 900
 assert.equal(restored.memory.episodes.length, soma.memory.episodes.length);
 assert.equal(restored.selfModel.evidence.length, soma.selfModel.evidence.length);
 
+// Grounded Process S is independent of the legacy fatigue index. A pre-model
+// state with maximum heuristic fatigue starts with explicit [0,1] uncertainty,
+// never legacyFatigue / 100.
+const legacyFatigueState = JSON.parse(JSON.stringify(soma));
+delete legacyFatigueState.sleepHomeostasis;
+legacyFatigueState.experienced.body.sleep.fatigueLoad = 88;
+const grounded = reconcileSoma(legacyFatigueState, { now: t0 + 10000 });
+assert.equal(grounded.sleepHomeostasis.sMin, 0);
+assert.equal(grounded.sleepHomeostasis.sMax, 1);
+assert.equal(grounded.sleepHomeostasis.sEstimate, 0.5);
+observeSoma(grounded, {
+  name: 'lights_out',
+  text: 'lights out',
+  environmentEventId: 'env-sleep-test',
+  somaInput: {
+    schema: 'cy.soma-input',
+    event_id: 'env-sleep-test',
+    sleep_period: 'sleep_period',
+    sleep_interruption: 'none',
+  },
+}, { now: t0 + 11000 });
+assert.equal(grounded.sleepHomeostasis.currentSleepState, 'asleep');
+tickSoma(grounded, { asleep: true, sleepHomeostasisAsleep: true, now: t0 + 3601000 });
+const groundedSnapshot = somaSnapshot(grounded);
+assert.equal(groundedSnapshot.sleepHomeostasis.publicLabel, 'LIVE');
+assert.equal(groundedSnapshot.sleepHomeostasis.circadianComponent.publicLabel, 'NOT MODELLED');
+assert.equal(groundedSnapshot.experienced.metrics.fatigue.value > 0, true, 'legacy fatigue remains separate and provisional');
+
 // Maximum fatigue may select a real period of silence, but that action cannot
 // immediately select itself forever. The last silence survives intervening
 // actions and becomes eligible again only after its cooldown.

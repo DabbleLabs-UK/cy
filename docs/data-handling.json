@@ -18,6 +18,7 @@
     "A returning visitor's postcard count, compact rolling notes, and legacy synthetic standing values",
     "On the Dell runner, a bounded Soma episodic memory of up to 512 selected environmental events. An episode may contain postcard text or caption, a prison incident, a warden notice, or machine-continuity evidence, together with time, category, tags, and computed salience",
     "On the Dell runner, learned event-family expectations, up to 128 bounded word associations learned from lived input, current attention and action, self-output action feedback, self-model evidence, eight experienced-state values with their causal contributor ledgers, and up to seven days of downsampled experienced-state history in the gitignored runtime state file",
+    "On the Dell runner, normalized homeostatic sleep pressure (Process S), its explicit uncertainty interval, current observed sleep state, model and provenance identifiers, last integration details, and up to seven days of post-installation Process S history",
     "On the Dell runner, a rolling context of screened Cy-generated prose, operational logs, electricity and paid-provider spend totals, and retry queues",
     "In the visitor's browser, only the numeric IDs, submission times, and waiting/responding state of that browser's postcards awaiting a reply, retained for at most 24 hours so waiting state survives a refresh"
   ],
@@ -55,6 +56,7 @@
     "A biological or clinical measurement of Cy; brain locations and legacy vitals are explicit analogies or planned synthetic values"
   ],
   "notes": [
+    "Process S consumes categorical sleep onset, waking, interruption, return-to-sleep and forced-wakefulness records. It is a sleep-homeostasis construct, not a biological measurement or validated subjective-fatigue score, and no old fatigue values are used to backfill it.",
     "Screened model text returns to Soma only as a bounded efference copy of Cy's action: repetition, intensity, commitments, and activation of word associations previously learned from lived input. Text sentiment cannot directly manufacture appraisal or emotional state.",
     "Fan mail is retained and made publicly replayable after runner-side screening, but it is not treated as something Cy perceived and does not affect Soma unless it is later promoted into the reply tray.",
     "Soma memory is bounded by count and preferentially retains salient older episodes alongside recent ones; a time-based deletion period is not currently implemented.",
