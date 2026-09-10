@@ -17,6 +17,13 @@ if (count($points) !== 2 || $points[0]['value'] !== 22.0 || $points[1]['value'] 
     fwrite(STDERR, "FAIL: stored points were not downsampled by taking the last real reading\n");
     exit(1);
 }
+$londonPoint = captive_soma_history_points([
+    ['ts' => '2026-09-10 15:38:05.515', 'value' => '41.5'],
+], 'anxiety', 1789051080000, 1789051090000, 10);
+if (count($londonPoint) !== 1 || $londonPoint[0]['ts'] !== 1789051085515) {
+    fwrite(STDERR, "FAIL: Europe/London event time was not converted with DST\n");
+    exit(1);
+}
 try {
     captive_soma_history_config('month', 'anxiety');
     fwrite(STDERR, "FAIL: invalid range accepted\n");

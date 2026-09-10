@@ -13,17 +13,19 @@ $metric = strtolower(trim((string)($_GET['metric'] ?? 'anxiety')));
 try {
     $config = captive_soma_history_config($range, $metric);
     $db = captive_db();
-    $toMs = (int)round((float)$db->query('SELECT UNIX_TIMESTAMP(UTC_TIMESTAMP(3)) * 1000')->fetchColumn());
+    $toMs = (int)round(microtime(true) * 1000);
     $fromMs = $toMs - $config['seconds'] * 1000;
+    $fromSql = (new DateTimeImmutable('@' . (string)floor($fromMs / 1000)))
+        ->setTimezone(new DateTimeZone('Europe/London'))
+        ->format('Y-m-d H:i:s');
     $jsonPath = '$.soma.experienced.metrics.' . $metric . '.value';
     $stmt = $db->prepare(
-        "SELECT UNIX_TIMESTAMP(ts) * 1000 AS ts_ms,
-                JSON_UNQUOTE(JSON_EXTRACT(payload, '$jsonPath')) AS value
+        "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$jsonPath')) AS value
          FROM events
-         WHERE kind = 'vitals' AND ts >= FROM_UNIXTIME(?)
+         WHERE kind = 'vitals' AND ts >= ?
          ORDER BY ts ASC"
     );
-    $stmt->execute([$fromMs / 1000]);
+    $stmt->execute([$fromSql]);
     $points = captive_soma_history_points($stmt->fetchAll(), $metric, $fromMs, $toMs, $config['points']);
     captive_json_response([
         'ok' => true,

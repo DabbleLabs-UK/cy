@@ -36,9 +36,18 @@ function captive_soma_history_points(array $rows, string $metric, int $fromMs, i
         if (!is_numeric($value)) {
             continue;
         }
-        $tsMs = isset($row['ts_ms']) && is_numeric($row['ts_ms'])
-            ? (int)round((float)$row['ts_ms'])
-            : (int)round(strtotime((string)($row['ts'] ?? '')) * 1000);
+        if (isset($row['ts_ms']) && is_numeric($row['ts_ms'])) {
+            $tsMs = (int)round((float)$row['ts_ms']);
+        } else {
+            $rawTs = (string)($row['ts'] ?? '');
+            $zone = new DateTimeZone('Europe/London');
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $rawTs, $zone)
+                ?: DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $rawTs, $zone);
+            if ($date === false) {
+                continue;
+            }
+            $tsMs = $date->getTimestamp() * 1000 + (int)floor((int)$date->format('u') / 1000);
+        }
         if ($tsMs < $fromMs || $tsMs > $toMs) {
             continue;
         }
