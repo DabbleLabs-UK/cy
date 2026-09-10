@@ -184,13 +184,20 @@ function captive_postcard_archive_fetch(
     $conditions = [];
     $params = [];
 
-    // public_at is written only after runner screening produced a public arrival
-    // event. The signed sender may also see their own pre-screening or rejected
-    // item; no other visitor can see it.
+    // A public arrival event exists only after runner screening. The signed sender
+    // may also see their own pre-screening or rejected item; no other visitor can.
+    // The derived join reads only the two arrival kinds (covered by idx_kind_seq),
+    // not the high-volume telemetry event stream.
+    $publicJoin = "LEFT JOIN (
+        SELECT CAST(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.id')) AS UNSIGNED) AS postcard_id
+        FROM events
+        WHERE kind IN ('postcard_in', 'fan_mail_in')
+        GROUP BY postcard_id
+    ) published ON published.postcard_id = p.id";
     if ($visitorId === null) {
-        $conditions[] = 'p.public_at IS NOT NULL AND p.blocked = 0';
+        $conditions[] = 'published.postcard_id IS NOT NULL AND p.blocked = 0';
     } else {
-        $conditions[] = '((p.public_at IS NOT NULL AND p.blocked = 0) OR p.visitor_id = :visitor_id)';
+        $conditions[] = '((published.postcard_id IS NOT NULL AND p.blocked = 0) OR p.visitor_id = :visitor_id)';
         $params[':visitor_id'] = [$visitorId, PDO::PARAM_STR];
     }
 
@@ -211,6 +218,7 @@ function captive_postcard_archive_fetch(
                    p.image_attrib, p.posted_at, p.mail_class, p.promoted_at,
                    p.replied_at, p.blocked
             FROM postcards p
+            ' . $publicJoin . '
             WHERE ' . implode(' AND ', $conditions) . '
             ORDER BY p.id DESC
             LIMIT :fetch';

@@ -57,13 +57,11 @@ CREATE TABLE postcards (
     promoted_at   DATETIME NULL,
     replied_at    DATETIME NULL,
     reply_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    public_at     DATETIME(3) NULL,
     blocked       TINYINT DEFAULT 0,
     block_reason  VARCHAR(80) NULL,
     INDEX idx_delivered_deliver (delivered_at, deliver_at),
     INDEX idx_mail_reply (mail_class, replied_at, blocked, posted_at),
     INDEX idx_mail_archive (mail_class, delivered_at, blocked, posted_at),
-    INDEX idx_postcard_archive (public_at, blocked, id),
     INDEX idx_visitor (visitor_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

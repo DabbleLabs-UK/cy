@@ -59,16 +59,14 @@ try {
 }
 $checks['invalid cursor is rejected'] = $invalidCursor;
 
-$migration = file_get_contents(__DIR__ . '/../sql/014_postcard_archive.sql');
-$ingest = file_get_contents(__DIR__ . '/../public/api/ingest.php');
-$checks['migration backfills screened public arrivals'] =
-    is_string($migration)
-    && str_contains($migration, "kind IN ('postcard_in', 'fan_mail_in')")
-    && str_contains($migration, 'SET p.public_at = admitted.public_at');
-$checks['ingest marks future screened arrivals transactionally'] =
-    is_string($ingest)
-    && str_contains($ingest, "\$kind === 'postcard_in' || \$kind === 'fan_mail_in'")
-    && str_contains($ingest, 'SET public_at = COALESCE(public_at, :public_at)');
+$archiveSource = file_get_contents(__DIR__ . '/../lib/postcard_archive.php');
+$checks['public browsing is gated by screened arrival events'] =
+    is_string($archiveSource)
+    && str_contains($archiveSource, "kind IN ('postcard_in', 'fan_mail_in')")
+    && str_contains($archiveSource, 'published.postcard_id IS NOT NULL AND p.blocked = 0');
+$checks['signed sender can see their own row without exposing it generally'] =
+    is_string($archiveSource)
+    && str_contains($archiveSource, 'OR p.visitor_id = :visitor_id');
 
 $failed = 0;
 foreach ($checks as $label => $ok) {
