@@ -97,6 +97,16 @@ const observe = (subject, name, appraisal, tags = [], at = T0 + 1000) => observe
   assert.equal(experiencedSnapshot(restored).metrics.anxiety.contributors[0].description,
     experiencedSnapshot(s).metrics.anxiety.contributors[0].description);
   assert.ok(experiencedHistory(restored).length >= 2);
+
+  const unqualified = JSON.parse(JSON.stringify(s));
+  unqualified.contributors.loneliness.push({
+    id: 'old:contact', sourceId: 'old', sourceType: 'social_event',
+    description: 'contact from an interaction not checked for hostility', amount: -20,
+    mode: 'impulse', startedAtMs: T0, updatedAtMs: T0, halfLifeMs: 5 * HOUR,
+  });
+  const cleaned = reconcileExperienced(unqualified, { now: T0 + 2000 });
+  assert.ok(!cleaned.contributors.loneliness.some((item) => item.id === 'old:contact'),
+    'unqualified reassurance from the brief pre-fix state is removed on restart');
 }
 
 // I: the public explanation and compact prompt name the same stored cause and

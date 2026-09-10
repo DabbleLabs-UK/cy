@@ -99,8 +99,11 @@ export function reconcileExperienced(raw, { now = Date.now(), legacyPhysical = n
       startedAtMs: finite(item.startedAtMs, state.updatedAtMs),
       updatedAtMs: finite(item.updatedAtMs, item.startedAtMs || state.updatedAtMs),
       halfLifeMs: Math.max(1000, finite(item.halfLifeMs, HALF_LIFE[key] || 3600000)),
+      qualifiedReassurance: item.qualifiedReassurance === true,
     })) : [];
   }
+  state.contributors.loneliness = state.contributors.loneliness.filter((item) =>
+    !(item.sourceType === 'social_event' && item.id.endsWith(':contact') && !item.qualifiedReassurance));
   state.history = Array.isArray(raw.history) ? raw.history.filter((point) => point && Number.isFinite(point.ts))
     .slice(-5040).map((point) => ({
       ts: point.ts,
@@ -118,11 +121,13 @@ function contributionAt(item, now) {
 
 function addImpulse(state, metric, id, amount, description, now, sourceType = 'event', halfLifeMs = null) {
   if (!METRICS[metric] || !amount) return;
-  state.contributors[metric].push({
+  const item = {
     id: clean(id, 100), sourceId: clean(id, 100), sourceType, description: clean(description), amount,
     mode: 'impulse', startedAtMs: now, updatedAtMs: now,
     halfLifeMs: halfLifeMs || HALF_LIFE[metric] || 3600000,
-  });
+  };
+  state.contributors[metric].push(item);
+  return item;
 }
 
 function setLevel(state, metric, id, amount, description, now, sourceType = 'body_clock') {
@@ -208,8 +213,9 @@ export function observeExperienced(state, { observation = {}, appraisal = {}, pr
   // warmth only relieves social need when the same interaction is not appraised
   // as threatening or controlling.
   if (affiliation >= 0.22 && threat < 0.35 && control < 0.5) {
-    addImpulse(state, 'loneliness', `${id}:contact`, -32 * affiliation,
+    const contact = addImpulse(state, 'loneliness', `${id}:contact`, -32 * affiliation,
       `social contact from: ${subject}`, now, 'social_event', HALF_LIFE.loneliness);
+    contact.qualifiedReassurance = true;
     if (threat < 0.25) addImpulse(state, 'anxiety', `${id}:reassurance`, -10 * affiliation,
       `reassurance from: ${subject}`, now, 'social_event');
   }
