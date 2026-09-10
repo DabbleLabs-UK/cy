@@ -89,7 +89,8 @@ assert.ok(sleepHomeostasisHistory(fresh).every((point) => !Object.hasOwn(point, 
 
 const snapshot = sleepHomeostasisSnapshot(fresh);
 assert.equal(snapshot.publicLabel, 'LIVE');
-assert.equal(snapshot.circadianComponent.publicLabel, 'NOT MODELLED');
+assert.equal(snapshot.circadianComponent.publicLabel, 'LIVE');
+assert.equal(snapshot.circadianComponent.source, 'soma.circadianProcessC');
 assert.equal(snapshot.sleepPressureIndex, Math.round(100 * snapshot.sleepPressure));
 
 console.log('sleep-homeostasis.test.js: all checks passed');

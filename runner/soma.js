@@ -24,6 +24,17 @@ import {
   sleepStateFromSomaInput,
   tickSleepHomeostasis,
 } from './sleep-homeostasis.js';
+import {
+  circadianProcessCSnapshot,
+  createCircadianProcessC,
+  reconcileCircadianProcessC,
+  tickCircadianProcessC,
+} from './circadian-process-c.js';
+import {
+  PRISON_SCHEDULE,
+  PRISON_SCHEDULE_TIME_ZONE,
+  habitualWakeMinutes,
+} from './environment.js';
 
 // MODEL STATUS: PROVISIONAL. Every numerical psychological coefficient,
 // threshold, prior, decay rate and action weight in this file is ARBITRARY /
@@ -54,6 +65,7 @@ const EXPECTATION_DEFAULTS = {
 const QUESTION = 'what is the relation between the cell, the machine, and the mind experiencing them?';
 
 function blank(now, legacyPhysical = null) {
+  const configuredHabitualWakeMinutes = habitualWakeMinutes(PRISON_SCHEDULE);
   return {
     version: VERSION,
     lastTickMs: now,
@@ -111,6 +123,11 @@ function blank(now, legacyPhysical = null) {
     },
     environmentInput: null,
     sleepHomeostasis: createSleepHomeostasis(now),
+    circadianProcessC: createCircadianProcessC({
+      now,
+      habitualWakeMinutes: configuredHabitualWakeMinutes,
+      timeZone: PRISON_SCHEDULE_TIME_ZONE,
+    }),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -154,6 +171,11 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
       ? JSON.parse(JSON.stringify(raw.environmentInput))
       : null,
     sleepHomeostasis: reconcileSleepHomeostasis(raw.sleepHomeostasis, { now }),
+    circadianProcessC: reconcileCircadianProcessC(raw.circadianProcessC, {
+      now,
+      habitualWakeMinutes: habitualWakeMinutes(PRISON_SCHEDULE),
+      timeZone: PRISON_SCHEDULE_TIME_ZONE,
+    }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -589,6 +611,15 @@ export function tickSoma(state, {
   // behavioural threshold or legacy fatigue equation in this task.
   tickSleepHomeostasis(state.sleepHomeostasis, { now, asleep: sleepHomeostasisAsleep });
 
+  // Grounded Process C is evaluated from clock time and the configured habitual
+  // prison schedule. It remains separate from provisional fatigue and has no
+  // language, action-selection, mood, or brain-activation effect.
+  tickCircadianProcessC(state.circadianProcessC, {
+    now,
+    habitualWakeMinutes: habitualWakeMinutes(PRISON_SCHEDULE),
+    timeZone: PRISON_SCHEDULE_TIME_ZONE,
+  });
+
   tickExperienced(state.experienced, {
     now,
     asleep,
@@ -853,6 +884,7 @@ export function somaSnapshot(state) {
     version: VERSION,
     status: somaImplementationStatus(),
     sleepHomeostasis: sleepHomeostasisSnapshot(state.sleepHomeostasis),
+    circadianProcessC: circadianProcessCSnapshot(state.circadianProcessC),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

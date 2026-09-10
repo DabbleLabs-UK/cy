@@ -21,6 +21,34 @@ try {
     $fromSql = (new DateTimeImmutable('@' . (string)floor($fromMs / 1000)))
         ->setTimezone(new DateTimeZone('Europe/London'))
         ->format('Y-m-d H:i:s');
+    if ($scope === 'circadian') {
+        $latest = $db->query("SELECT payload FROM events WHERE kind = 'vitals' ORDER BY seq DESC LIMIT 1")->fetch();
+        $payload = $latest ? json_decode((string)$latest['payload'], true) : null;
+        $circadian = is_array($payload) && isset($payload['soma']['circadianProcessC'])
+            && is_array($payload['soma']['circadianProcessC'])
+            ? $payload['soma']['circadianProcessC']
+            : [];
+        $points = captive_circadian_history_points(
+            $circadian,
+            $fromMs,
+            $toMs,
+            $config['points']
+        );
+        captive_json_response([
+            'ok' => true,
+            'scope' => $scope,
+            'key' => $key,
+            'range' => $range,
+            'fromMs' => $fromMs,
+            'toMs' => $toMs,
+            'points' => $points,
+            'sampledFromStoredVitals' => false,
+            'mathematicallyReconstructed' => true,
+            'phaseBasisSource' => 'latest stored habitual schedule estimate',
+            'directBiologicalPhaseObserved' => false,
+            'waveformRange' => $circadian['waveformRange'] ?? null,
+        ]);
+    }
     $jsonPath = $config['jsonPath'];
     $stmt = $db->prepare(
         "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$jsonPath')) AS value

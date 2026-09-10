@@ -255,7 +255,11 @@ export function sleepHomeostasisSnapshot(state) {
     historyBeganAtMs: state.historyBeganAtMs,
     provenance: { ...state.provenance },
     inspection: state.lastInspection ? { ...state.lastInspection } : null,
-    circadianComponent: { status: 'not_implemented', publicLabel: 'NOT MODELLED' },
+    circadianComponent: {
+      status: 'implemented_separately',
+      publicLabel: 'LIVE',
+      source: 'soma.circadianProcessC',
+    },
   };
 }
 

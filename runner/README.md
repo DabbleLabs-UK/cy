@@ -142,10 +142,12 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
 | `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
-`soma` contains the PROVISIONAL experienced-state snapshot plus one narrower LIVE
-subsystem: normalized homeostatic sleep pressure (Process S). Process S uses the
-published elapsed-time rise/decay equations and is not a subjective-fatigue or
-circadian claim. Current attention and action, prediction error, episodic-memory
+`soma` contains the PROVISIONAL experienced-state snapshot plus two narrower LIVE
+subsystems: normalized homeostatic sleep pressure (Process S) and the published
+five-harmonic circadian Process C waveform. Process C carries an explicit
+schedule-estimated phase interval because biological phase is not observed.
+Process S and Process C remain separate and are not a subjective-fatigue claim.
+Current attention and action, prediction error, episodic-memory
 count, drives and the self-model question remain provisional. `brain`, `hr`,
 `mental`, `derived`, `relations`, `monotony`, and `amp` are legacy dramatic
 mappings kept for compatibility and explicitly identified by
@@ -166,10 +168,19 @@ Soma circuits.
   observed sleep/wake transitions and integrates `S` with tau_w = 18.18 hours
   while awake and tau_s = 4.2 hours while asleep. It persists an explicit
   uncertainty interval, integrates runner downtime, and records genuine 1H/24H/7D
-  history. It does not consume legacy fatigue, implement Process C, alter behaviour
-  through thresholds, or activate a brain analogy. The complete provenance and
+  history. It does not consume legacy fatigue or alter behaviour through
+  thresholds. The complete provenance and
   engineering/display constants are in
   `config/model-specs/sleep-homeostasis.json` and `docs/soma-scaffold.md`.
+- **LIVE circadian Process C** (`circadian-process-c.js`) - evaluates the
+  published Borbely/Achermann 24-hour five-harmonic waveform from clock time.
+  The phase interval is derived by placing the waveform minimum in an estimated
+  CBTmin window 2-3 hours before the configured habitual wake time. The current
+  value and uncertainty are exposed separately from provisional fatigue, and
+  public 1H/24H/7D curves are mathematically reconstructed from the stored phase
+  basis. Light entrainment, drift, direct biological phase, and language/action
+  effects are not modelled. A specific SCN phase analogy is live without
+  presenting the value as neural activation.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
   Each outcome now carries objective/categorical world facts and a separate

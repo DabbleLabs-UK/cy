@@ -1,0 +1,116 @@
+{
+  "schema": "cy.model-specification",
+  "version": 1,
+  "id": "borbely-achermann-process-c-five-harmonic",
+  "implementation_version": "process-c-schedule-estimated-v1",
+  "display_name": "Circadian Process C",
+  "construct": "Process C",
+  "construct_scope": "A modelled circadian component of sleep/wake regulation. It is not subjective fatigue, energy, mood, stress, melatonin concentration, core body temperature, SCN firing rate, or generic brain activity.",
+  "formula": "C(T, phi) = sum(k=1..5, a_k * sin(2*pi*k*(T-phi)/24))",
+  "parameters": {
+    "period_hours": {
+      "value": 24,
+      "classification": "LITERATURE",
+      "meaning": "Entrained circadian period used by the published Process C formulation."
+    },
+    "harmonic_coefficients": [
+      { "k": 1, "value": 0.97, "classification": "LITERATURE" },
+      { "k": 2, "value": 0.22, "classification": "LITERATURE" },
+      { "k": 3, "value": 0.07, "classification": "LITERATURE" },
+      { "k": 4, "value": 0.03, "classification": "LITERATURE" },
+      { "k": 5, "value": 0.001, "classification": "LITERATURE" }
+    ]
+  },
+  "phase": {
+    "definition": "phi determines the circadian phase position in clock hours. It is not assumed to equal CBTmin.",
+    "basis": "habitual_schedule_estimate",
+    "direct_biological_phase_observed": false,
+    "schedule_source": "The habitual wake entry in the configured prison regime schedule.",
+    "cbtmin_estimation": {
+      "formula": "estimated CBTmin interval = [habitual wake - 3 h, habitual wake - 2 h]",
+      "classification": "SCHEDULE-BASED ESTIMATE",
+      "qualification": "This interval is not a melatonin assay, core-body-temperature measurement, or direct circadian biomarker."
+    },
+    "alignment": {
+      "method": "The implementation differentiates the published five-harmonic equation, numerically locates all stationary points over one 24-hour period, selects the global minimum, and subtracts that derived offset from the CBTmin interval to obtain a circular phi interval.",
+      "derived_waveform_minimum_offset_hours_after_phi": 20.00817428402744,
+      "derived_waveform_minimum_value": -1.0037261206164403,
+      "derived_waveform_maximum_offset_hours_after_phi": 3.991825715972558,
+      "derived_waveform_maximum_value": 1.0037261206164405,
+      "classification": "DERIVED MATHEMATICALLY",
+      "not_a_tuned_constant": true
+    },
+    "current_schedule_example": {
+      "habitual_wake": "06:30 Europe/London",
+      "estimated_cbtmin_interval": "03:30 to 04:30",
+      "derived_phi_interval_hours": [7.49182571597256, 8.49182571597256],
+      "classification": "OBSERVED CONFIGURATION plus SCHEDULE-BASED ESTIMATE plus DERIVED MATHEMATICALLY",
+      "note": "This is an inspectable example for the current configuration, not a universal phase constant."
+    }
+  },
+  "history": {
+    "stored_evaluations": "Actual runner evaluations are retained from installation onward; no older values are backfilled.",
+    "public_graph": "The 1H, 24H and 7D curves are mathematically reconstructed from the latest stored schedule phase basis and are labelled as reconstructed rather than observed samples."
+  },
+  "engineering_parameters": {
+    "extremum_scan_steps": { "value": 4096, "classification": "ENGINEERING / NUMERICAL" },
+    "phase_range_scan_steps": { "value": 256, "classification": "ENGINEERING / NUMERICAL" },
+    "root_bisection_iterations": { "value": 80, "classification": "ENGINEERING / NUMERICAL" },
+    "root_deduplication_hours": { "value": 0.0000000001, "classification": "ENGINEERING / NUMERICAL" },
+    "history_interval_ms": { "value": 120000, "classification": "ENGINEERING / STORAGE" },
+    "history_retention_ms": { "value": 604800000, "classification": "ENGINEERING / STORAGE" },
+    "public_display_decimal_places": { "value": 3, "classification": "ENGINEERING / DISPLAY" },
+    "history_value_decimal_places": { "value": 6, "classification": "ENGINEERING / DISPLAY" },
+    "inspector_standard_decimal_places": { "value": 6, "classification": "ENGINEERING / DISPLAY" },
+    "inspector_derived_offset_decimal_places": { "value": 12, "classification": "ENGINEERING / DISPLAY" },
+    "graph_coordinate_decimal_places": { "value": 1, "classification": "ENGINEERING / DISPLAY", "note": "Inherited shared Soma graph rendering precision." },
+    "graph_viewbox": { "value": { "width": 280, "height": 80 }, "classification": "ENGINEERING / DISPLAY", "note": "Inherited shared Soma graph geometry." },
+    "graph_minimum_point_count": { "value": 2, "classification": "ENGINEERING / DISPLAY" },
+    "graph_minimum_span_ms": { "value": 1, "classification": "ENGINEERING / DISPLAY" },
+    "scn_phase_rotation_degrees_per_cycle": { "value": 360, "classification": "ENGINEERING / DISPLAY", "note": "Direct circular unit conversion, not an activation coefficient." },
+    "history_ranges_seconds": {
+      "value": { "1h": 3600, "24h": 86400, "7d": 604800 },
+      "classification": "ENGINEERING / DISPLAY"
+    },
+    "history_points": {
+      "value": { "1h": 120, "24h": 144, "7d": 168 },
+      "classification": "ENGINEERING / DISPLAY",
+      "note": "Existing shared Soma graph resolution."
+    }
+  },
+  "provenance": [
+    {
+      "citation": "Borbely AA, Achermann P. Sleep homeostasis and models of sleep regulation. Journal of Biological Rhythms. 1999;14(6):557-568.",
+      "doi": "10.1177/074873099129000894",
+      "url": "https://journals.sagepub.com/doi/10.1177/074873099129000894",
+      "supports": "Published five-harmonic Process C form, coefficients, and 24-hour period."
+    },
+    {
+      "citation": "Daan S, Beersma DGM, Borbely AA. Timing of human sleep: recovery process gated by a circadian pacemaker. American Journal of Physiology. 1984;246(2):R161-R178.",
+      "doi": "10.1152/ajpregu.1984.246.2.R161",
+      "url": "https://journals.physiology.org/doi/10.1152/ajpregu.1984.246.2.R161",
+      "supports": "Two-Process framework and circadian gating of sleep timing."
+    },
+    {
+      "citation": "Borbely AA. The two-process model of sleep regulation: Beginnings and outlook. Journal of Sleep Research. 2022;31(4):e13598.",
+      "doi": "10.1111/jsr.13598",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9540767/",
+      "supports": "Modern review of the Two-Process model and its scope."
+    },
+    {
+      "citation": "Duffy JF et al. Sex difference in the near-24-hour intrinsic period of the human circadian timing system. Proceedings of the National Academy of Sciences. 2011;108(Suppl 3):15602-15608.",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3176605/",
+      "supports": "Measured CBT nadir occurred on average about three hours before habitual wake, with substantial individual variation; used only to justify a broad schedule-based estimate, not direct phase observation."
+    }
+  ],
+  "explicit_limitations": {
+    "subjective_fatigue_mapping": "PROVISIONAL - Process S and Process C are exposed separately; no weights, intercept, threshold, or combined fatigue equation is implemented.",
+    "light_zeitgeber_entrainment": "NOT MODELLED",
+    "free_running_phase_drift": "NOT MODELLED",
+    "chronotype": "NOT MODELLED",
+    "meals_activity_postcards_and_noise_as_phase_shifters": "NOT MODELLED",
+    "direct_biological_phase": "NOT OBSERVED",
+    "scn_neuronal_firing": "NOT MODELLED",
+    "behavioural_and_language_effects": "NOT MODELLED"
+  }
+}

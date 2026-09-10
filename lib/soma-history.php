@@ -15,6 +15,13 @@ const CAPTIVE_SOMA_BRAIN_REGIONS = [
     'amygdala', 'insula', 'acc', 'hippocampal', 'prefrontal', 'temporalSocial',
 ];
 
+const CAPTIVE_PROCESS_C_MODEL_ID = 'borbely-achermann-process-c-five-harmonic';
+const CAPTIVE_PROCESS_C_MODEL_VERSION = 'process-c-schedule-estimated-v1';
+const CAPTIVE_PROCESS_C_PERIOD_HOURS = 24.0;
+const CAPTIVE_PROCESS_C_HARMONICS = [0.97, 0.22, 0.07, 0.03, 0.001];
+const CAPTIVE_PROCESS_C_PHASE_RANGE_SCAN_STEPS = 256;
+const CAPTIVE_PROCESS_C_ROOT_BISECTION_ITERATIONS = 80;
+
 function captive_soma_history_config(string $range, string $key, string $scope = 'metric'): array
 {
     if (!isset(CAPTIVE_SOMA_RANGES[$range])) {
@@ -44,7 +51,138 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scale' => 100.0,
         ];
     }
+    if ($scope === 'circadian' && $key === 'processC') {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.circadianProcessC.processCEstimate',
+            'scale' => 1.0,
+            'mathematicallyReconstructed' => true,
+        ];
+    }
     throw new InvalidArgumentException($scope === 'brain' ? 'unknown Soma brain region' : 'unknown Soma metric');
+}
+
+function captive_circadian_normalize_hour(float $hours): float
+{
+    $value = fmod($hours, CAPTIVE_PROCESS_C_PERIOD_HOURS);
+    return $value < 0.0 ? $value + CAPTIVE_PROCESS_C_PERIOD_HOURS : $value;
+}
+
+function captive_process_c_value(float $clockHours, float $phiHours, array $harmonics): float
+{
+    $phase = 2.0 * M_PI * ($clockHours - $phiHours) / CAPTIVE_PROCESS_C_PERIOD_HOURS;
+    $value = 0.0;
+    foreach ($harmonics as $index => $coefficient) {
+        $value += (float)$coefficient * sin(((int)$index + 1) * $phase);
+    }
+    return $value;
+}
+
+function captive_process_c_derivative(float $clockHours, float $phiHours, array $harmonics): float
+{
+    $phase = 2.0 * M_PI * ($clockHours - $phiHours) / CAPTIVE_PROCESS_C_PERIOD_HOURS;
+    $value = 0.0;
+    foreach ($harmonics as $index => $coefficient) {
+        $harmonic = (int)$index + 1;
+        $value += (float)$coefficient * (2.0 * M_PI * $harmonic / CAPTIVE_PROCESS_C_PERIOD_HOURS) * cos($harmonic * $phase);
+    }
+    return $value;
+}
+
+function captive_process_c_phase_range(float $clockHours, float $startPhi, float $width, array $harmonics): array
+{
+    // ENGINEERING / NUMERICAL: matches the locked model specification and the
+    // runner root finder. These values cannot change the published waveform.
+    $steps = CAPTIVE_PROCESS_C_PHASE_RANGE_SCAN_STEPS;
+    $iterations = CAPTIVE_PROCESS_C_ROOT_BISECTION_ITERATIONS;
+    $candidates = [$startPhi, $startPhi + $width];
+    $left = $startPhi;
+    $fLeft = captive_process_c_derivative($clockHours, $left, $harmonics);
+    for ($index = 1; $index <= $steps; $index++) {
+        $right = $startPhi + $width * $index / $steps;
+        $fRight = captive_process_c_derivative($clockHours, $right, $harmonics);
+        if ($fLeft == 0.0) {
+            $candidates[] = $left;
+        }
+        if ($fRight == 0.0) {
+            $candidates[] = $right;
+        }
+        if ($fLeft != 0.0 && $fRight != 0.0 && (($fLeft < 0.0) !== ($fRight < 0.0))) {
+            $lo = $left;
+            $hi = $right;
+            $fLo = $fLeft;
+            for ($iteration = 0; $iteration < $iterations; $iteration++) {
+                $mid = ($lo + $hi) / 2.0;
+                $fMid = captive_process_c_derivative($clockHours, $mid, $harmonics);
+                if (($fLo < 0.0) === ($fMid < 0.0)) {
+                    $lo = $mid;
+                    $fLo = $fMid;
+                } else {
+                    $hi = $mid;
+                }
+            }
+            $candidates[] = ($lo + $hi) / 2.0;
+        }
+        $left = $right;
+        $fLeft = $fRight;
+    }
+    $values = array_map(
+        static fn(float $phi): float => captive_process_c_value($clockHours, $phi, $harmonics),
+        $candidates
+    );
+    return ['minimum' => min($values), 'maximum' => max($values)];
+}
+
+function captive_circadian_clock_hours(int $timestampMs, string $timeZone): float
+{
+    $seconds = (int)floor($timestampMs / 1000);
+    $milliseconds = $timestampMs - $seconds * 1000;
+    $date = (new DateTimeImmutable('@' . (string)$seconds))->setTimezone(new DateTimeZone($timeZone));
+    return (int)$date->format('H') + (int)$date->format('i') / 60.0
+        + (int)$date->format('s') / 3600.0 + $milliseconds / 3600000.0;
+}
+
+function captive_circadian_history_points(
+    array $circadian,
+    int $fromMs,
+    int $toMs,
+    int $maximum
+): array {
+    if (($circadian['modelId'] ?? null) !== CAPTIVE_PROCESS_C_MODEL_ID
+        || ($circadian['modelVersion'] ?? null) !== CAPTIVE_PROCESS_C_MODEL_VERSION
+        || ($circadian['phaseBasis'] ?? null) !== 'habitual_schedule_estimate') {
+        return [];
+    }
+    $harmonics = $circadian['harmonics'] ?? null;
+    $phi = $circadian['phiInterval'] ?? null;
+    $timeZone = (string)($circadian['schedule']['timeZone'] ?? '');
+    if ($harmonics !== CAPTIVE_PROCESS_C_HARMONICS || !is_array($phi)
+        || !is_numeric($phi['startHour'] ?? null) || !is_numeric($phi['durationHours'] ?? null)
+        || $timeZone === '') {
+        return [];
+    }
+    $points = [];
+    $count = max(2, $maximum);
+    $span = max(1, $toMs - $fromMs);
+    for ($index = 0; $index < $count; $index++) {
+        $timestampMs = (int)round($fromMs + $span * $index / ($count - 1));
+        $clockHours = captive_circadian_clock_hours($timestampMs, $timeZone);
+        $estimate = captive_process_c_value($clockHours, (float)$phi['midpointHour'], CAPTIVE_PROCESS_C_HARMONICS);
+        $range = captive_process_c_phase_range(
+            $clockHours,
+            (float)$phi['startHour'],
+            (float)$phi['durationHours'],
+            CAPTIVE_PROCESS_C_HARMONICS
+        );
+        $points[] = [
+            'ts' => $timestampMs,
+            'value' => round($estimate, 6),
+            'minimum' => round($range['minimum'], 6),
+            'maximum' => round($range['maximum'], 6),
+        ];
+    }
+    return $points;
 }
 
 function captive_soma_history_points(
@@ -66,6 +204,8 @@ function captive_soma_history_points(
             $payload = json_decode((string)$row['payload'], true);
             if ($scope === 'sleep') {
                 $value = $payload['soma']['sleepHomeostasis']['sleepPressure'] ?? null;
+            } elseif ($scope === 'circadian') {
+                $value = $payload['soma']['circadianProcessC']['processCEstimate'] ?? null;
             } else {
                 $group = $scope === 'brain' ? 'brain' : 'metrics';
                 $value = $payload['soma']['experienced'][$group][$key]['value'] ?? null;

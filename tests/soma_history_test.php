@@ -78,4 +78,52 @@ if ($sleepConfig['jsonPath'] !== '$.soma.sleepHomeostasis.sleepPressure' || $sle
     fwrite(STDERR, "FAIL: Process S history config is incorrect\n");
     exit(1);
 }
+
+$circadianConfig = captive_soma_history_config('24h', 'processC', 'circadian');
+if ($circadianConfig['jsonPath'] !== '$.soma.circadianProcessC.processCEstimate'
+    || $circadianConfig['mathematicallyReconstructed'] !== true
+    || $circadianConfig['points'] !== 144) {
+    fwrite(STDERR, "FAIL: Process C history config is incorrect\n");
+    exit(1);
+}
+$harmonics = [0.97, 0.22, 0.07, 0.03, 0.001];
+$circadian = [
+    'modelId' => 'borbely-achermann-process-c-five-harmonic',
+    'modelVersion' => 'process-c-schedule-estimated-v1',
+    'phaseBasis' => 'habitual_schedule_estimate',
+    'harmonics' => $harmonics,
+    'phiInterval' => [
+        'startHour' => 7.49182571597256,
+        'endHour' => 8.49182571597256,
+        'midpointHour' => 7.99182571597256,
+        'durationHours' => 1.0,
+    ],
+    'schedule' => ['timeZone' => 'Europe/London'],
+];
+$historyStart = (int)(new DateTimeImmutable('2026-09-10 00:00:00', new DateTimeZone('Europe/London')))->format('Uv');
+$circadianPoints = captive_circadian_history_points(
+    $circadian,
+    $historyStart,
+    $historyStart + 24 * 3600 * 1000,
+    145
+);
+if (count($circadianPoints) !== 145) {
+    fwrite(STDERR, "FAIL: Process C did not reconstruct the requested graph resolution\n");
+    exit(1);
+}
+if (abs($circadianPoints[0]['value'] - $circadianPoints[144]['value']) > 0.000002) {
+    fwrite(STDERR, "FAIL: reconstructed Process C graph is not 24-hour periodic\n");
+    exit(1);
+}
+$values = array_column($circadianPoints, 'value');
+if (max($values) <= 1.0 || min($values) >= -1.0) {
+    fwrite(STDERR, "FAIL: reconstructed 24-hour graph does not contain the complete waveform\n");
+    exit(1);
+}
+foreach ($circadianPoints as $point) {
+    if ($point['value'] < $point['minimum'] - 0.000002 || $point['value'] > $point['maximum'] + 0.000002) {
+        fwrite(STDERR, "FAIL: Process C estimate escaped its phase-uncertainty band\n");
+        exit(1);
+    }
+}
 echo "ALL PASS\n";

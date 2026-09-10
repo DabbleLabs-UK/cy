@@ -14,6 +14,7 @@ export const EXPERIENCED_METRICS = [
 ];
 
 export const BRAIN_REGIONS = [
+  { key: 'scnCircadian', label: 'SCN / circadian pacemaker analogy', path: 'M164 127 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0' },
   { key: 'amygdala', label: 'Amygdala analogy', path: 'M48 70 C68 48 99 40 125 48 L130 92 C103 98 77 104 54 96 Z' },
   { key: 'prefrontal', label: 'Prefrontal analogy', path: 'M60 104 C82 87 107 87 132 97 L137 126 C107 130 80 127 58 117 Z' },
   { key: 'acc', label: 'Anterior cingulate analogy', path: 'M119 67 C150 54 190 59 213 79 L202 93 C178 78 148 76 126 89 Z' },
@@ -158,6 +159,50 @@ export function buildHistoryUrl(base, scope, key, range) {
   return `${base}${separator}scope=${encodeURIComponent(scope)}&key=${encodeURIComponent(key)}&range=${encodeURIComponent(range)}`;
 }
 
+function signed(value, digits = 3) {
+  if (!Number.isFinite(value)) return '--';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
+}
+
+function clockLabel(decimalHours) {
+  if (!Number.isFinite(decimalHours)) return '--:--';
+  const totalMinutes = Math.round((((decimalHours % 24) + 24) % 24) * 60) % (24 * 60);
+  return `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
+}
+
+export function buildCircadianHistoryPaths(points, width = 280, height = 80, waveformRange = null) {
+  const clean = (Array.isArray(points) ? points : []).filter((point) => Number.isFinite(point.ts)
+    && Number.isFinite(point.value) && Number.isFinite(point.minimum) && Number.isFinite(point.maximum));
+  if (!clean.length) return { estimate: '', band: '', minimum: null, maximum: null };
+  const minTs = clean[0].ts;
+  const maxTs = clean[clean.length - 1].ts;
+  const span = Math.max(1, maxTs - minTs);
+  const minimum = Number.isFinite(waveformRange && waveformRange.minimum)
+    ? waveformRange.minimum
+    : Math.min(...clean.map((point) => point.minimum));
+  const maximum = Number.isFinite(waveformRange && waveformRange.maximum)
+    ? waveformRange.maximum
+    : Math.max(...clean.map((point) => point.maximum));
+  const valueSpan = Math.max(Number.EPSILON, maximum - minimum);
+  const xy = (point, field) => ({
+    x: ((point.ts - minTs) / span) * width,
+    y: height - ((point[field] - minimum) / valueSpan) * height,
+  });
+  const estimate = clean.map((point, index) => {
+    const position = xy(point, 'value');
+    return `${index === 0 ? 'M' : 'L'}${position.x.toFixed(1)} ${position.y.toFixed(1)}`;
+  }).join(' ');
+  const upper = clean.map((point, index) => {
+    const position = xy(point, 'maximum');
+    return `${index === 0 ? 'M' : 'L'}${position.x.toFixed(1)} ${position.y.toFixed(1)}`;
+  }).join(' ');
+  const lower = [...clean].reverse().map((point) => {
+    const position = xy(point, 'minimum');
+    return `L${position.x.toFixed(1)} ${position.y.toFixed(1)}`;
+  }).join(' ');
+  return { estimate, band: `${upper} ${lower} Z`, minimum, maximum };
+}
+
 function historyMarkup() {
   return `<div class="soma-reading-history">
     <div class="soma-ranges" aria-label="History range">
@@ -168,8 +213,20 @@ function historyMarkup() {
   </div>`;
 }
 
+function circadianHistoryMarkup() {
+  return `<div class="circadian-history-wrap">
+    <div class="circadian-ranges" aria-label="Circadian Process C history range">
+      <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+    </div>
+    <svg class="circadian-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Mathematically reconstructed Circadian Process C history and phase uncertainty">
+      <path class="circadian-history-band"></path><path class="circadian-history-line"></path>
+    </svg>
+    <p class="circadian-history-note">Open this reading to reconstruct the published waveform from the stored schedule phase basis.</p>
+  </div>`;
+}
+
 function sleepHomeostasisMarkup(status, circadianStatus, admin) {
-  return `<section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
+  return `<div class="sleep-regulation-stack"><section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="sleep-homeostasis-head"><span>${status.displayName}</span><strong class="sleep-homeostasis-status">${status.publicLabel}</strong></div>
     <div class="sleep-pressure-reading"><strong class="sleep-pressure-value">--</strong><span>SLEEP PRESSURE INDEX</span></div>
     <p class="sleep-homeostasis-explanation">Sleep pressure accumulates while Cy is awake and dissipates during sleep.</p>
@@ -183,9 +240,19 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
       <svg class="soma-history sleep-homeostasis-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored Process S history"><path></path></svg>
       <p class="sleep-history-note">Open this reading to load stored Process S history.</p>
     </div>
-    <p class="circadian-status"><span>${circadianStatus.displayName}</span><strong>${circadianStatus.publicLabel}</strong></p>
     ${admin ? '<details class="sleep-homeostasis-inspector"><summary>SLEEP HOMEOSTASIS INSPECTION</summary><pre>Waiting for a Process S integration.</pre></details>' : ''}
-  </section>`;
+  </section>
+  <section class="circadian-process-card status-${circadianStatus.status.toLowerCase().replace('_', '-')}">
+    <div class="circadian-process-head"><span>${circadianStatus.displayName}</span><strong class="circadian-process-status">${circadianStatus.publicLabel}</strong></div>
+    <div class="circadian-process-reading"><strong class="circadian-process-value">--</strong><span>MODEL OUTPUT C</span></div>
+    <p class="circadian-process-explanation">The circadian component follows a published 24-hour waveform. Cy's exact biological phase cannot be observed, so its phase is estimated from his habitual sleep schedule.</p>
+    <p class="circadian-process-phase">Phase basis unavailable.</p>
+    <p class="circadian-process-cbtmin">Estimated CBTmin unavailable.</p>
+    <p class="circadian-process-range">C uncertainty unavailable.</p>
+    ${circadianHistoryMarkup()}
+    <p class="circadian-entrainment"><span>CIRCADIAN ENTRAINMENT</span><strong>NOT MODELLED</strong></p>
+    ${admin ? '<details class="circadian-process-inspector"><summary>CIRCADIAN PROCESS C INSPECTION</summary><pre>Waiting for a Process C evaluation.</pre></details>' : ''}
+  </section></div>`;
 }
 
 export class BrainHud {
@@ -195,7 +262,7 @@ export class BrainHud {
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
-    this.circadianStatus = implementationStatus(this.registry, 'soma_subsystems', 'circadian_component');
+    this.circadianStatus = implementationStatus(this.registry, 'soma_subsystems', 'circadian_process_c');
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
@@ -217,6 +284,8 @@ export class BrainHud {
     this.regionRows = {};
     this.historyRequests = new WeakMap();
     this.sleepHistoryRequests = new WeakMap();
+    this.circadianHistoryRequests = new WeakMap();
+    this.scnPhaseHand = null;
     this._build();
   }
 
@@ -268,6 +337,7 @@ export class BrainHud {
         <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${sleepHomeostasis}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
+      if (definition.key === 'fatigue') this._wireCircadian(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
@@ -294,6 +364,14 @@ export class BrainHud {
         path.appendChild(title);
         svg.appendChild(path);
         this.regions[definition.key] = path;
+        if (definition.key === 'scnCircadian') {
+          const hand = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          hand.setAttribute('d', 'M164 127 L164 121');
+          hand.setAttribute('class', 'scn-phase-hand');
+          hand.setAttribute('aria-hidden', 'true');
+          svg.appendChild(hand);
+          this.scnPhaseHand = hand;
+        }
       }
 
       const entry = document.createElement('details');
@@ -302,14 +380,15 @@ export class BrainHud {
       entry.dataset.region = definition.key;
       entry.dataset.implementationStatus = definition.status.status;
       const regionHistory = canRenderDynamicActivity(definition.status.status)
-        ? historyMarkup()
+        ? (definition.key === 'scnCircadian' ? circadianHistoryMarkup() : historyMarkup())
         : '<p class="soma-history-note">No activation history is displayed until this mapping is LIVE.</p>';
       entry.innerHTML = `<summary><span class="soma-region-name">${definition.status.displayName}</span><strong class="soma-region-state">${definition.status.publicLabel}</strong></summary>
         <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p>${regionHistory}</div>`;
       entry.addEventListener('toggle', () => {
         if (path) path.setAttribute('aria-expanded', String(entry.open));
       });
-      this._wireReading(entry, 'brain', definition.key);
+      if (definition.key === 'scnCircadian') this._wireCircadian(entry);
+      else this._wireReading(entry, 'brain', definition.key);
       regionList.appendChild(entry);
       this.regionRows[definition.key] = entry;
 
@@ -363,9 +442,22 @@ export class BrainHud {
     }));
   }
 
+  _wireCircadian(entry) {
+    entry.addEventListener('toggle', () => {
+      if (!entry.open || this.circadianStatus.status !== IMPLEMENTATION_STATUS.IMPLEMENTED) return;
+      const active = entry.querySelector('.circadian-ranges button.active');
+      this.loadCircadianHistory(entry, active ? active.dataset.range : '24h');
+    });
+    entry.querySelectorAll('.circadian-ranges button').forEach((button) => button.addEventListener('click', () => {
+      entry.querySelectorAll('.circadian-ranges button').forEach((item) => item.classList.toggle('active', item === button));
+      this.loadCircadianHistory(entry, button.dataset.range);
+    }));
+  }
+
   setSoma(soma) {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.sleepHomeostasis = soma.sleepHomeostasis || null;
+    this.circadianProcessC = soma.circadianProcessC || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
     for (const definition of this.metricDefinitions) {
@@ -388,8 +480,11 @@ export class BrainHud {
       this.renderMetric(definition.key);
     }
     this.renderSleepHomeostasis();
+    this.renderCircadianProcessC();
     for (const definition of this.regionDefinitions) {
-      const reading = this.latestBrain[definition.key];
+      const reading = definition.key === 'scnCircadian'
+        ? this.circadianProcessC && this.circadianProcessC.scnAnalogy
+        : this.latestBrain[definition.key];
       const region = this.regions[definition.key];
       const entry = this.regionRows[definition.key];
       if (!entry) continue;
@@ -397,6 +492,29 @@ export class BrainHud {
       const description = `${definition.status.displayName}. ${definition.status.publicLabel}. ${definition.status.note}`;
       entry.querySelector('.soma-region-name').textContent = definition.status.displayName;
       entry.querySelector('.soma-reading-description').textContent = description;
+      if (definition.key === 'scnCircadian') {
+        const liveScn = canRenderDynamicActivity(definition.status.status)
+          && reading && reading.displayMode === 'circadian_phase';
+        if (!liveScn) {
+          entry.querySelector('.soma-region-state').textContent = 'UNAVAILABLE';
+          if (region) region.classList.remove('circadian-phase-live');
+          continue;
+        }
+        const cValue = signed(reading.processCEstimate);
+        const phaseHours = Number(reading.circadianPhasePositionHours);
+        const liveDescription = `${description} Current model output C ${cValue}; phase position ${clockLabel(phaseHours)} after estimated phi. This is not SCN activation.`;
+        entry.querySelector('.soma-region-state').textContent = `LIVE - C ${cValue}`;
+        entry.querySelector('.soma-reading-description').textContent = liveDescription;
+        if (region) {
+          region.classList.add('circadian-phase-live');
+          region.querySelector('title').textContent = liveDescription;
+          region.setAttribute('aria-label', `${definition.status.displayName}: Process C ${cValue}`);
+        }
+        if (this.scnPhaseHand && Number.isFinite(phaseHours)) {
+          this.scnPhaseHand.setAttribute('transform', `rotate(${(phaseHours / 24) * 360} 164 127)`);
+        }
+        continue;
+      }
       if (!dynamic) {
         entry.querySelector('.soma-region-state').textContent = definition.status.publicLabel;
         if (region) {
@@ -513,6 +631,45 @@ export class BrainHud {
     }
   }
 
+  renderCircadianProcessC() {
+    const entry = this.rows.fatigue;
+    const card = entry && entry.querySelector('.circadian-process-card');
+    if (!card) return;
+    const snapshot = this.circadianProcessC;
+    const live = this.circadianStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.circadian-process-status').textContent = live ? this.circadianStatus.publicLabel : 'UNAVAILABLE';
+    if (!live) {
+      card.querySelector('.circadian-process-value').textContent = '--';
+      card.querySelector('.circadian-process-phase').textContent = 'No grounded Process C state has reached this view.';
+      card.querySelector('.circadian-process-cbtmin').textContent = 'Estimated CBTmin unavailable.';
+      card.querySelector('.circadian-process-range').textContent = 'C uncertainty unavailable.';
+      return;
+    }
+    card.querySelector('.circadian-process-value').textContent = signed(snapshot.processCEstimate);
+    card.querySelector('.circadian-process-phase').textContent = `PHASE SCHEDULE-ESTIMATED - habitual wake ${clockLabel(snapshot.schedule && snapshot.schedule.habitualWakeHour)}`;
+    card.querySelector('.circadian-process-cbtmin').textContent = `Estimated CBTmin ${clockLabel(snapshot.estimatedCbtmin && snapshot.estimatedCbtmin.startHour)} to ${clockLabel(snapshot.estimatedCbtmin && snapshot.estimatedCbtmin.endHour)} - direct biological phase is not observed.`;
+    card.querySelector('.circadian-process-range').textContent = `Current uncertainty: C ${signed(snapshot.processCMin)} to ${signed(snapshot.processCMax)}`;
+    const inspector = card.querySelector('.circadian-process-inspector pre');
+    if (inspector) {
+      inspector.textContent = [
+        `model: ${snapshot.modelName}`,
+        `clock time: ${clockLabel(snapshot.clockHours)} (${snapshot.clockHours.toFixed(6)} h)`,
+        `habitual wake: ${clockLabel(snapshot.schedule.habitualWakeHour)} ${snapshot.schedule.timeZone} - observed configuration`,
+        `phase basis: habitual schedule estimate`,
+        `estimated CBTmin: ${clockLabel(snapshot.estimatedCbtmin.startHour)} to ${clockLabel(snapshot.estimatedCbtmin.endHour)} - schedule-based estimate`,
+        `derived phi: ${snapshot.phiInterval.startHour.toFixed(6)} to ${snapshot.phiInterval.endHour.toFixed(6)} h - mathematically derived`,
+        `waveform minimum offset: ${snapshot.waveformMinimumOffsetHours.toFixed(12)} h after phi - mathematically derived`,
+        `harmonics: ${snapshot.harmonics.map((value, index) => `a${index + 1} ${value}`).join(' / ')} - literature`,
+        `period: ${snapshot.periodHours} h - literature`,
+        `C estimate: ${signed(snapshot.processCEstimate, 6)}`,
+        `C uncertainty range: ${signed(snapshot.processCMin, 6)} to ${signed(snapshot.processCMax, 6)}`,
+        `entrainment: ${snapshot.entrainment.publicLabel}`,
+        `free-running phase drift: ${snapshot.freeRunningPhaseDrift.publicLabel}`,
+      ].join('\n');
+    }
+  }
+
   openRegion(key) {
     const entry = this.regionRows[key];
     if (!entry) return;
@@ -570,6 +727,33 @@ export class BrainHud {
     }
   }
 
+  async loadCircadianHistory(entry, range) {
+    const note = entry.querySelector('.circadian-history-note');
+    const line = entry.querySelector('.circadian-history-line');
+    const band = entry.querySelector('.circadian-history-band');
+    if (!this.historyUrl) { note.textContent = 'History endpoint unavailable.'; return; }
+    const request = {};
+    this.circadianHistoryRequests.set(entry, request);
+    note.textContent = 'Reconstructing Process C from the stored schedule phase basis...';
+    try {
+      const response = await fetch(buildHistoryUrl(this.historyUrl, 'circadian', 'processC', range), { cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
+      if (this.circadianHistoryRequests.get(entry) !== request) return;
+      const paths = buildCircadianHistoryPaths(data.points, 280, 80, data.waveformRange);
+      line.setAttribute('d', paths.estimate);
+      band.setAttribute('d', paths.band);
+      note.textContent = data.points.length
+        ? `${data.points.length} ${range} waveform points mathematically reconstructed from the latest stored schedule phase basis; the band is phase uncertainty, not observed biology.`
+        : 'No valid stored schedule phase basis is available.';
+    } catch (error) {
+      if (this.circadianHistoryRequests.get(entry) !== request) return;
+      line.setAttribute('d', '');
+      band.setAttribute('d', '');
+      note.textContent = `History unavailable: ${error.message}`;
+    }
+  }
+
   setInference(phase) {
     const value = ['eval', 'gen'].includes(phase) ? phase : 'idle';
     this.measure.value.textContent = value.toUpperCase();
@@ -583,5 +767,5 @@ export class BrainHud {
   setAmp(monotony, amp) { this.root.querySelector('.legacy-amp').textContent = clamp01(monotony) == null || !Number.isFinite(amp) ? 'unavailable' : `monotony ${Math.round(monotony * 100)} / x${amp.toFixed(1)}`; }
   setCast(relations) { this.root.querySelector('.legacy-cast').textContent = relations && Object.keys(relations).length ? `${Object.keys(relations).length} synthetic standings` : 'unavailable'; }
 
-  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this.sleepHistoryRequests = new WeakMap(); this._build(); }
+  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this.sleepHistoryRequests = new WeakMap(); this.circadianHistoryRequests = new WeakMap(); this._build(); }
 }

@@ -13,15 +13,17 @@ are:
   heuristic exists, but no grounded model has been approved.
 - NOT_IMPLEMENTED, shown publicly as NOT MODELLED: no valid live model exists.
 
-All eight visitor-facing Soma variables are PROVISIONAL. The six existing brain
+All eight visitor-facing Soma variables are PROVISIONAL. The six older brain
 mappings are PROVISIONAL. The hypothalamic/homeostatic analogy is NOT_IMPLEMENTED.
-The brain remains a functional analogy, not a biological measurement. A
-provisional or unfinished brain mapping has no percentage and no dynamic
+One specific SCN/circadian-pacemaker analogy is IMPLEMENTED as a phase display;
+it is not SCN activation, neuronal firing or biological measurement. Other
+provisional or unfinished brain mappings have no percentage and no dynamic
 illumination.
 
-One narrower subsystem is now IMPLEMENTED and shown as LIVE: normalized
-homeostatic sleep pressure (Process S). It is displayed inside the still
-PROVISIONAL fatigue detail. It does not make fatigue or any brain analogy LIVE.
+Two narrower subsystems are IMPLEMENTED and shown separately as LIVE: normalized
+homeostatic sleep pressure (Process S) and the published five-harmonic circadian
+Process C waveform. They are displayed inside the still PROVISIONAL fatigue
+detail. No equation combines them into fatigue.
 
 ## Grounded homeostatic sleep pressure (Process S)
 
@@ -48,7 +50,6 @@ repository model specification records the following sources and links:
 
 Process S means sleep-wake-dependent homeostatic sleep pressure only. It is not
 subjective fatigue, stress, mood, motivation, depression or a circadian signal.
-Process C is explicitly NOT MODELLED.
 
 ### Initialization and unknown intervals
 
@@ -106,8 +107,87 @@ PROVISIONAL or NOT_IMPLEMENTED.
 - 6 decimal places: ENGINEERING / DISPLAY admin-inspection precision.
 - 60 seconds/minute, 60 minutes/hour and 1000 ms/second: UNIT CONVERSIONS only.
 
-No emotional coefficient, circadian parameter, behavioural threshold or brain
-activation coefficient was added by this subsystem.
+No emotional coefficient, behavioural threshold or brain activation coefficient
+was added by this subsystem.
+
+## Grounded circadian component (Process C)
+
+The authoritative machine-readable model specification is
+config/model-specs/circadian-process-c.json. runner/circadian-process-c.js
+implements the published five-harmonic representation:
+
+```text
+C(T, phi) = sum from k=1 to 5 of a_k * sin(2*pi*k*(T-phi)/24)
+a_1..a_5 = 0.97, 0.22, 0.07, 0.03, 0.001
+```
+
+The 24-hour period and five coefficients are literature parameters from the
+Borbely/Achermann Process C formulation. Process C is a circadian component of
+sleep/wake regulation. It is not fatigue, energy, stress, mood, melatonin, core
+body temperature, SCN firing rate or generic brain activity.
+
+### Schedule-estimated phase and uncertainty
+
+Cy has no direct biological circadian measurement. The authoritative configured
+prison regime supplies a habitual wake time of 06:30 Europe/London. The estimated
+CBTmin interval is habitual wake minus 3 to 2 hours, currently 03:30 to 04:30.
+This is a SCHEDULE-BASED ESTIMATE, not an observation.
+
+The implementation differentiates the published waveform, locates all stationary
+points over one period, and derives the global minimum at
+20.00817428402744 hours after phi. Subtracting that derived offset from the
+CBTmin interval gives the circular phi interval 7.49182571597256 to
+8.49182571597256 hours. The midpoint is used only for the displayed estimate.
+At every time, the implementation also finds the minimum and maximum C values
+over the full one-hour phi interval. Circular intervals retain their duration,
+midpoint and midnight-wrap status.
+
+### Persistence, history and inspection
+
+The persisted Soma state records model/version identifiers, coefficients, the
+configured schedule basis, estimated CBTmin interval, derived phi interval,
+phase-basis type, current estimate and uncertainty, last evaluation, provenance,
+and bounded post-installation evaluations. Evaluation uses the current clock, so
+runner downtime cannot freeze the oscillator. An isolated early or late waking
+does not change the phase anchor.
+
+The public fatigue detail exposes Process S and Process C separately. Process C
+has 1H, 24H and 7D curves mathematically reconstructed from the latest stored
+schedule phase basis. The central curve is the midpoint estimate and the band is
+phase uncertainty. It is labelled as reconstruction, not observed biology. The
+admin inspector exposes clock time, wake basis, CBTmin and phi intervals,
+harmonics, current estimate/range and unmodelled features.
+
+The brain graphic contains a specific SCN/circadian-pacemaker phase marker. Its
+rotation is a direct 24-hour phase-position display and its text says that it is
+not SCN activation, firing or measurement. The broader hypothalamic analogy
+remains NOT MODELLED.
+
+### New Process C numerical inventory
+
+- 24 hours and coefficients 0.97, 0.22, 0.07, 0.03 and 0.001: LITERATURE.
+- Habitual wake minus 3 to 2 hours: SCHEDULE ESTIMATE for CBTmin.
+- 06:30 and Europe/London: OBSERVED CONFIGURATION from the prison schedule.
+- 20.00817428402744 hours, -1.0037261206164403 minimum,
+  1.0037261206164405 maximum, and the current phi interval: DERIVED from the
+  equation and schedule estimate.
+- 4096 extremum scan steps, 256 uncertainty-range scan steps, 80 bisection
+  iterations and 0.0000000001 hours root deduplication tolerance: ENGINEERING /
+  NUMERICAL.
+- 120000 ms history sampling and 604800000 ms retention: ENGINEERING / STORAGE.
+- Graph ranges 3600, 86400 and 604800 seconds with 120, 144 and 168 points;
+  minimum two points and one millisecond span; 280 by 80 shared graph units;
+  one graph-coordinate decimal, three public decimals, six history/standard
+  inspector decimals and 12 derived-offset inspector decimals: ENGINEERING /
+  DISPLAY.
+- 60 seconds/minute, 60 minutes/hour, 1000 ms/second and 360 degrees per cycle:
+  UNIT/DISPLAY CONVERSIONS.
+
+No ARBITRARY / HEURISTIC circadian, fatigue, behavioural or brain coefficient
+was introduced. Process S and Process C are not combined. Light/zeitgeber
+entrainment, free-running phase drift, chronotype, direct biological phase,
+SCN neuronal firing, subjective-fatigue mapping and Process C effects on language,
+mood or actions are NOT MODELLED.
 
 ## Previous event representation
 

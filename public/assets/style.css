@@ -899,7 +899,8 @@ body.cy-paused::after {
 .soma-reading-entry[data-reading-scope="brain"] .soma-history path { stroke: #8fb2c9; }
 .soma-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
 
-.sleep-homeostasis-card { margin-top: 10px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
+.sleep-regulation-stack { display: grid; gap: 8px; margin-top: 10px; }
+.sleep-homeostasis-card { padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
 .sleep-homeostasis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
 .sleep-homeostasis-status { color: #65d59a; font-size: 8px; }
 .sleep-pressure-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
@@ -915,11 +916,37 @@ body.cy-paused::after {
 .sleep-ranges button.active { border-color: #65d59a; color: #bce9d3; }
 .sleep-homeostasis-history path { stroke: #65d59a; }
 .sleep-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
-.circadian-status { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #8294a1; font-size: 8px; }
-.circadian-status strong { color: #a0a8ad; }
 .sleep-homeostasis-inspector { margin-top: 8px; border-top: 1px solid rgba(80, 105, 94, 0.35); padding-top: 6px; }
 .sleep-homeostasis-inspector summary { cursor: pointer; color: #86a99a; font-size: 8px; letter-spacing: 0.06em; }
 .sleep-homeostasis-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; font-size: 8px; line-height: 1.45; }
+.circadian-process-card { padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
+.circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 8px; letter-spacing: 0.08em; }
+.circadian-process-status { color: #65d59a; font-size: 8px; }
+.circadian-process-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
+.circadian-process-value { color: #e2f0f8; font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; }
+.circadian-process-reading span { color: #8ca6b8; font-size: 7px; letter-spacing: 0.08em; }
+.circadian-process-explanation,
+.circadian-process-phase,
+.circadian-process-cbtmin,
+.circadian-process-range { margin: 4px 0; color: #9eb2c0; font-size: 8px; line-height: 1.45; }
+.circadian-process-phase { color: #b8d3e4; letter-spacing: 0.03em; }
+.circadian-process-cbtmin { color: #d8b56d; }
+.circadian-ranges { display: flex; gap: 4px; margin: 7px 0 4px; }
+.circadian-ranges button { border: 1px solid var(--line); background: transparent; color: #8294a1; font: inherit; font-size: 7px; padding: 2px 6px; }
+.circadian-ranges button.active { border-color: #75aac9; color: #cbe8f7; }
+.circadian-history { width: 100%; height: 80px; display: block; background: repeating-linear-gradient(to bottom, transparent 0 19px, rgba(75,98,116,0.15) 20px); border: 1px solid var(--line); margin-bottom: 5px; }
+.circadian-history path { vector-effect: non-scaling-stroke; }
+.circadian-history-band { fill: rgba(117,170,201,0.15); stroke: none; }
+.circadian-history-line { fill: none; stroke: #75aac9; stroke-width: 1.5; }
+.circadian-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
+.circadian-entrainment { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid rgba(80, 105, 120, 0.4); color: #8294a1; font-size: 8px; }
+.circadian-entrainment strong { color: #a0a8ad; }
+.circadian-process-inspector { margin-top: 8px; border-top: 1px solid rgba(80, 105, 120, 0.4); padding-top: 6px; }
+.circadian-process-inspector summary { cursor: pointer; color: #91b3c7; font-size: 8px; letter-spacing: 0.06em; }
+.circadian-process-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b4c4ce; font: inherit; font-size: 8px; line-height: 1.45; }
+.soma-region[data-region="scnCircadian"] { fill: rgba(117,170,201,0.2); stroke: #75aac9; stroke-dasharray: none; }
+.soma-region[data-region="scnCircadian"].circadian-phase-live { filter: drop-shadow(0 0 3px rgba(117,170,201,0.7)); }
+.scn-phase-hand { fill: none; stroke: #d9edf8; stroke-width: 1.5; stroke-linecap: round; pointer-events: none; }
 .soma-diagnostics { border-top: 1px solid var(--line); padding-top: 5px; }
 .soma-diagnostics > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
 .soma-diagnostic-rows { display: grid; gap: 4px; margin-top: 8px; }

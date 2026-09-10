@@ -169,7 +169,11 @@ assert.equal(grounded.sleepHomeostasis.currentSleepState, 'asleep');
 tickSoma(grounded, { asleep: true, sleepHomeostasisAsleep: true, now: t0 + 3601000 });
 const groundedSnapshot = somaSnapshot(grounded);
 assert.equal(groundedSnapshot.sleepHomeostasis.publicLabel, 'LIVE');
-assert.equal(groundedSnapshot.sleepHomeostasis.circadianComponent.publicLabel, 'NOT MODELLED');
+assert.equal(groundedSnapshot.sleepHomeostasis.circadianComponent.publicLabel, 'LIVE');
+assert.equal(groundedSnapshot.circadianProcessC.publicLabel, 'LIVE');
+assert.equal(groundedSnapshot.circadianProcessC.phaseBasis, 'habitual_schedule_estimate');
+assert.equal(groundedSnapshot.circadianProcessC.directBiologicalPhaseObserved, false);
+assert.equal(groundedSnapshot.circadianProcessC.entrainment.publicLabel, 'NOT MODELLED');
 assert.equal(groundedSnapshot.experienced.metrics.fatigue.value > 0, true, 'legacy fatigue remains separate and provisional');
 
 // Maximum fatigue may select a real period of silence, but that action cannot

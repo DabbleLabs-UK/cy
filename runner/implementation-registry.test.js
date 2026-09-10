@@ -12,8 +12,11 @@ assert.equal(registry.soma_variables.length, 8);
 assert.ok(registry.soma_variables.every((entry) => entry.implementation_status === 'PROVISIONAL'));
 assert.equal(somaImplementationStatus(), 'provisional');
 assert.equal(implementationEntry('soma_subsystems', 'sleep_homeostasis').implementation_status, 'IMPLEMENTED');
-assert.equal(implementationEntry('soma_subsystems', 'circadian_component').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').phase_basis, 'schedule_estimated');
+assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 assert.ok(registry.brain_regions.filter((entry) => entry.implementation_status === 'PROVISIONAL').length >= 1);
 

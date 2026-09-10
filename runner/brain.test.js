@@ -17,20 +17,23 @@ tickSoma(soma, { physical: { hunger: 0.7 }, monotony: 0.2, now: 5001 });
 const snapshot = somaSnapshot(soma);
 assert.equal(snapshot.sleepHomeostasis.publicLabel, 'LIVE');
 assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
-assert.equal(implementationEntry('soma_subsystems', 'circadian_component').implementation_status, 'NOT_IMPLEMENTED');
-assert.ok(implementationRegistry.brain_regions.every((entry) => entry.implementation_status !== 'IMPLEMENTED'));
+assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
 assert.deepEqual(EXPERIENCED_METRICS.map((metric) => metric.key),
   ['anxiety', 'arousal', 'pain', 'hunger', 'fatigue', 'loneliness', 'anger', 'rumination']);
 assert.deepEqual(
-  [...BRAIN_REGIONS.map((region) => region.key)].sort(),
+  [...BRAIN_REGIONS.map((region) => region.key).filter((key) => key !== 'scnCircadian')].sort(),
   [...Object.keys(snapshot.experienced.brain)].sort(),
-  'every public functional analogy is derived by the experienced-state snapshot',
+  'every provisional public functional analogy is derived by the experienced-state snapshot',
 );
 for (const region of BRAIN_REGIONS) {
   assert.match(region.path, /^M\d/);
   assert.ok(region.label);
-  assert.ok(snapshot.experienced.brain[region.key].explanation);
+  if (region.key === 'scnCircadian') assert.ok(snapshot.circadianProcessC.scnAnalogy.statement);
+  else assert.ok(snapshot.experienced.brain[region.key].explanation);
 }
 
 const source = await readFile(join(here, '..', 'public', 'assets', 'brain.js'), 'utf8');
@@ -59,12 +62,19 @@ assert.equal(
 assert.match(source, /SLEEP PRESSURE INDEX/);
 assert.match(source, /CALIBRATING FROM OBSERVED SLEEP HISTORY/);
 assert.equal(
-  implementationEntry('soma_subsystems', 'circadian_component').display_name,
-  'CIRCADIAN COMPONENT',
-  'the public placeholder heading is supplied by the authoritative implementation registry',
+  implementationEntry('soma_subsystems', 'circadian_process_c').display_name,
+  'CIRCADIAN PROCESS C',
+  'the public Process C heading is supplied by the authoritative implementation registry',
 );
 assert.match(source, /buildHistoryUrl\(this\.historyUrl, 'sleep', 'sleepPressure', range\)/);
+assert.match(source, /buildHistoryUrl\(this\.historyUrl, 'circadian', 'processC', range\)/);
 assert.match(source, /sleepHomeostasisStatus\.status === IMPLEMENTATION_STATUS\.IMPLEMENTED/);
+assert.match(source, /circadianStatus\.status === IMPLEMENTATION_STATUS\.IMPLEMENTED/);
+assert.match(source, /PHASE SCHEDULE-ESTIMATED/);
+assert.match(source, /direct biological phase is not observed/);
+assert.match(source, /This is not SCN activation/);
+assert.match(source, /class="circadian-history-band"/);
+assert.match(source, /setAttribute\('class', 'scn-phase-hand'\)/);
 assert.match(source, /class="soma-region-list"/);
 assert.match(source, /className = `soma-region-entry/);
 assert.match(source, /className = `soma-state-entry soma-reading-entry/);
@@ -73,6 +83,7 @@ assert.match(source, /<summary class="soma-state-row"[\s\S]*?<div class="soma-re
 assert.match(source, /<summary><span class="soma-region-name"[\s\S]*?<div class="soma-reading-detail">/, 'a brain-region detail is nested immediately after its own summary');
 assert.match(source, /this\._wireReading\(entry, 'metric', definition\.key\)/);
 assert.match(source, /this\._wireReading\(entry, 'brain', definition\.key\)/);
+assert.match(source, /this\._wireCircadian\(entry\)/);
 assert.match(source, /buildHistoryUrl\(this\.historyUrl, scope, key, range\)/);
 assert.match(source, /setRegionAssociation\(definition\.key, true\)/);
 assert.match(source, /region\.classList\.toggle\('is-associated', associated\)/);

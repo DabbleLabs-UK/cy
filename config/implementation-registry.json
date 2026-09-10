@@ -57,7 +57,7 @@
       "display_name": "FATIGUE",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Grounded homeostatic Process S is implemented separately. Circadian contribution and mapping to subjective fatigue are not validated; this existing fatigue index remains an unapproved heuristic.",
+      "status_note": "Grounded Process S and schedule-estimated Process C are implemented separately. No approved mapping combines them into subjective fatigue; this existing fatigue index remains an unapproved heuristic.",
       "data_dependencies": ["sleep_period", "sleep_interruption", "duration_ms"],
       "version": "legacy-experienced-state-v2"
     },
@@ -101,16 +101,36 @@
       "provenance": "config/model-specs/sleep-homeostasis.json"
     },
     {
-      "id": "circadian_component",
-      "display_name": "CIRCADIAN COMPONENT",
+      "id": "circadian_process_c",
+      "display_name": "CIRCADIAN PROCESS C",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "borbely-achermann-process-c-five-harmonic",
+      "status_note": "Published five-harmonic Process C waveform. Biological phase is not observed; a circular phase interval is estimated from the configured habitual wake schedule and shown with uncertainty.",
+      "data_dependencies": ["configured_habitual_wake_time", "clock_time"],
+      "version": "process-c-schedule-estimated-v1",
+      "phase_basis": "schedule_estimated",
+      "provenance": "config/model-specs/circadian-process-c.json"
+    },
+    {
+      "id": "circadian_entrainment",
+      "display_name": "CIRCADIAN ENTRAINMENT",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Process C has not been specified or implemented. No phase, amplitude or chronotype is assumed.",
+      "status_note": "No light/zeitgeber phase-response model or free-running phase drift is implemented. Process C is treated as stably entrained to the configured prison schedule.",
       "data_dependencies": [],
       "version": null
     }
   ],
   "brain_regions": [
+    {
+      "id": "scnCircadian",
+      "display_name": "SCN / CIRCADIAN PACEMAKER ANALOGY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "borbely-achermann-process-c-five-harmonic",
+      "status_note": "The mammalian SCN is the principal circadian pacemaker. This specific display represents Cy's modelled Process C phase and output; it is not simulated neuronal firing, activation, or biological measurement.",
+      "data_dependencies": ["circadian_process_c"],
+      "version": "process-c-schedule-estimated-v1"
+    },
     {
       "id": "amygdala",
       "display_name": "AMYGDALA-CENTRED THREAT / SALIENCE ANALOGY",
@@ -134,7 +154,7 @@
       "display_name": "HYPOTHALAMIC / HOMEOSTATIC ANALOGY",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Intended to represent active homeostatic regulation. No valid activation model is currently running.",
+      "status_note": "Intended to represent active homeostatic regulation. No valid activation model is currently running. The separate specific SCN circadian analogy is implemented, but that does not validate this broader hypothalamic representation.",
       "data_dependencies": ["hunger", "fatigue", "homeostatic_state"],
       "available_future_dependencies": ["sleep_homeostasis"],
       "version": null

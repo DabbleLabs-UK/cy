@@ -12,6 +12,8 @@
 
 const pick = (items, rnd) => items[Math.min(items.length - 1, Math.floor(rnd() * items.length))];
 
+export const PRISON_SCHEDULE_TIME_ZONE = 'Europe/London';
+
 export const PRISON_SCHEDULE = [
   { kind: 'wake', mins: 6 * 60 + 30 },
   { kind: 'meal', meal: 'breakfast', mins: 7 * 60 + 30 },
@@ -23,6 +25,12 @@ export const PRISON_SCHEDULE = [
   { kind: 'routine', routine: 'phone', mins: 19 * 60 },
   { kind: 'sleep', mins: 22 * 60 + 30 },
 ];
+
+export function habitualWakeMinutes(schedule = PRISON_SCHEDULE) {
+  const wake = schedule.find((entry) => entry && entry.kind === 'wake' && Number.isFinite(entry.mins));
+  if (!wake) throw new Error('configured prison regime has no habitual wake time');
+  return wake.mins;
+}
 
 const MEAL_LABELS = {
   breakfast: 'breakfast',
