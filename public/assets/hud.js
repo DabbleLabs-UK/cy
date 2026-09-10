@@ -207,13 +207,12 @@ export class Hud {
     const age = Date.now() - this._genAt;
     this.g.genage.textContent = fmtAge(age) + ' ago';
     if (!this.snap) return;
-    // past a couple of minutes the group is STALE - mark it and fade it so the old
-    // numbers can never be mistaken for current readings. A gentle progressive fade
-    // begins earlier and bottoms out at 0.45 so it stays just readable.
+    // Past a couple of minutes the group is STALE. Keep the label, but never fade
+    // diagnostic text: age and the STALE badge communicate recency without making
+    // the values inaccessible precisely when someone is investigating a problem.
     const stale = age > 120000;
     this.snap.classList.toggle('stale', stale);
-    const op = Math.max(0.45, 1 - Math.max(0, age - 15000) / 240000);
-    this.snap.style.opacity = op.toFixed(2);
+    this.snap.style.opacity = '1';
   }
 
   // Render the cycle-outcome tally (from the continuous host channel, so it updates
