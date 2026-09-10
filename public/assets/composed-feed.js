@@ -101,9 +101,10 @@ export class ComposedFeed {
 
   beginEntry(ts, mode) {
     this.closeEntry(ts);
+    const entryMode = mode || 'journal';
     const block = document.createElement('article');
-    block.className = 'cy-writing-segment';
-    block.dataset.kind = mode || 'journal';
+    block.className = 'cy-writing-segment ' + (entryMode === 'journal' ? 'cy-journal-entry' : 'cy-writing-note');
+    block.dataset.kind = entryMode;
     const label = mode === 'dream' ? 'dream' : mode === 'warden' ? 'notice' : 'writing';
     this._appendEndpoint(block, ts, label + ' starts', 'start');
     const surface = document.createElement('div');
@@ -119,7 +120,7 @@ export class ComposedFeed {
     if (this.instant) {
       surface.classList.add('cy-writing-static');
       this.current = {
-        block, surface, text: '', mode: mode || 'journal', label,
+        block, surface, text: '', mode: entryMode, label,
         startMs: timestampMs(ts), static: true,
       };
       this._follow();
@@ -129,9 +130,9 @@ export class ComposedFeed {
     const pen = new Pen(surface, this.font);
     pen.setInstant(this.instant);
     if (this.vitals) pen.setVitals(this.vitals);
-    pen.beginEntry('', mode || 'journal');
+    pen.beginEntry('', entryMode);
     this.pens.push(pen);
-    this.current = { block, pen, mode: mode || 'journal', label, startMs: timestampMs(ts) };
+    this.current = { block, pen, mode: entryMode, label, startMs: timestampMs(ts) };
     this._follow();
   }
 

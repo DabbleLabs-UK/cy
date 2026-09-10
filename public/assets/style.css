@@ -1,5 +1,5 @@
-/* CY viewer - dark instrument-panel chrome around a warm paper sheet.
-   The paper is the star; everything else is understated telemetry. */
+/* CY viewer - dark instrument-panel chrome around a chronological evidence tray.
+   Ruled paper belongs only to Cy's journal entries. */
 
 :root {
   --chrome-0: #0a0c10;   /* deepest panel */
@@ -366,7 +366,7 @@ body.cy-paused::after {
   padding-bottom: 6px;
 }
 
-/* ================= PAPER ================= */
+/* ================= CHRONOLOGY TRAY ================= */
 .col-paper { position: sticky; top: 14px; }
 .paper {
   position: relative;
@@ -376,24 +376,15 @@ body.cy-paused::after {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  background-color: var(--paper);
+  background-color: #11151a;
   background-image:
-    /* subtle fibre noise */
+    /* restrained surface grain, with no paper ruling */
     url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.36  0 0 0 0 0.30  0 0 0 0 0.18  0 0 0 0.05 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>"),
-    /* ruled lines */
-    repeating-linear-gradient(180deg, transparent 0 30px, var(--rule) 30px 31px),
-    /* warm vignette */
-    radial-gradient(120% 80% at 50% 0%, #fbf5e6 0%, #f0e6cd 60%, #e7dabb 100%);
+    radial-gradient(120% 80% at 50% 0%, #20262d 0%, #151a20 58%, #0d1115 100%);
   box-shadow:
     0 18px 50px -20px var(--paper-shadow),
-    inset 0 0 60px rgba(120,90,40,0.06);
-  border: 1px solid #cbbd97;
-}
-/* letter mode: drop the ruled lines */
-.paper.paper-unruled {
-  background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.36  0 0 0 0 0.30  0 0 0 0 0.18  0 0 0 0.05 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>"),
-    radial-gradient(120% 80% at 50% 0%, #fbf5e6 0%, #f0e6cd 60%, #e7dabb 100%);
+    inset 0 0 70px rgba(0,0,0,0.2);
+  border: 1px solid #343d47;
 }
 .ink-svg { display: block; width: 100%; height: auto; min-height: 100%; }
 
@@ -413,19 +404,19 @@ body.cy-paused::after {
   align-items: stretch;
   gap: 6px;
   padding: 6px 8px;
-  color: #2e2a21;
-  background: rgba(232, 220, 188, 0.96);
-  border-bottom: 1px solid rgba(112, 91, 51, 0.3);
-  box-shadow: 0 6px 14px rgba(72, 55, 27, 0.08);
+  color: #d2dbe2;
+  background: rgba(24, 30, 36, 0.97);
+  border-bottom: 1px solid #3a454f;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
 .cy-day-step,
 .cy-day-choose {
   min-height: 34px;
-  border: 1px solid rgba(112, 91, 51, 0.28);
+  border: 1px solid #414c57;
   border-radius: 4px;
-  color: #514832;
-  background: rgba(255, 252, 242, 0.25);
+  color: #bdc8d1;
+  background: #20272e;
   font: inherit;
   cursor: pointer;
 }
@@ -439,19 +430,32 @@ body.cy-paused::after {
   padding: 5px 8px;
 }
 .cy-day-step:hover:not(:disabled),
-.cy-day-choose:hover { border-color: rgba(90, 66, 25, 0.65); background: rgba(255, 252, 242, 0.55); }
+.cy-day-choose:hover { border-color: #748391; background: #29323a; }
 .cy-day-step:focus-visible,
-.cy-day-choose:focus-visible { outline: 2px solid #826b3d; outline-offset: 1px; }
+.cy-day-choose:focus-visible { outline: 2px solid #8fb2c9; outline-offset: 1px; }
 .cy-day-step:disabled { opacity: 0.38; cursor: default; }
-.cy-day-banner .cy-day-cap { font-size: 8px; letter-spacing: 0.18em; color: #7c6e52; }
+.cy-day-banner .cy-day-cap { font-size: 8px; letter-spacing: 0.18em; color: #788896; }
 .cy-day-banner strong { font-size: 12px; font-weight: 600; }
 .cy-writing-segment {
   margin: 14px 16px 4px;
-  border: 1px solid rgba(112, 91, 51, 0.22);
+  border: 1px solid rgba(112, 91, 51, 0.34);
   border-radius: 3px;
-  background: rgba(255, 252, 242, 0.22);
+  background-color: #eee6d3;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.36  0 0 0 0 0.30  0 0 0 0 0.18  0 0 0 0.04 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>"),
+    radial-gradient(120% 80% at 50% 0%, #f5efdf 0%, #e8ddc4 100%);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.2);
   overflow: hidden;
 }
+/* The only ruled object in the chronology: Cy's journal entry card. */
+.cy-journal-entry {
+  background-color: var(--paper);
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.36  0 0 0 0 0.30  0 0 0 0 0.18  0 0 0 0.05 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>"),
+    repeating-linear-gradient(180deg, transparent 0 30px, var(--rule) 30px 31px),
+    radial-gradient(120% 80% at 50% 0%, #fbf5e6 0%, #f0e6cd 60%, #e7dabb 100%);
+}
+.cy-writing-note { border-color: rgba(124, 133, 139, 0.42); }
 .cy-writing-surface {
   position: relative;
   min-height: 120px;
@@ -488,20 +492,24 @@ body.cy-paused::after {
 .cy-event-block {
   margin: 16px 28px;
   padding: 10px 13px;
-  border-left: 2px solid rgba(92, 79, 55, 0.36);
-  color: #514832;
-  background: rgba(242, 234, 211, 0.62);
+  border: 1px solid #343e47;
+  border-left: 3px solid #64717c;
+  border-radius: 2px;
+  color: #c2cbd2;
+  background: #1b2127;
+  box-shadow: 0 5px 12px rgba(0,0,0,0.15);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
-.cy-event-block .cy-moment-meta { padding: 0 0 6px; }
+.cy-event-block .cy-moment-meta { padding: 0 0 6px; color: #7f8d99; }
+.cy-event-block .cy-moment-meta time { color: #aeb9c2; }
 .cy-event-block .cy-moment-end { padding: 6px 0 0; }
-.cy-event-title { font-size: 11px; letter-spacing: 0.045em; color: #756545; }
+.cy-event-title { font-size: 11px; letter-spacing: 0.045em; color: #aeb9c2; }
 .cy-event-detail { margin-top: 8px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-.cy-event-silence { text-align: center; border-left: 0; background: transparent; color: #91836a; }
-.cy-event-silence .cy-moment-meta { justify-content: center; border-color: rgba(112, 91, 51, 0.14); }
-.cy-event-postcard { border-left-color: #846b9b; background: rgba(238, 226, 207, 0.88); }
+.cy-event-silence { text-align: center; border: 0; box-shadow: none; background: transparent; color: #84919c; }
+.cy-event-silence .cy-moment-meta { justify-content: center; border-color: #343e47; }
+.cy-event-postcard { border-left-color: #8f79a3; background: #211f29; }
 .cy-event-postcard-reply { padding-block: 6px; opacity: 0.72; }
-.cy-event-fan-mail { border: 1px dashed rgba(114, 78, 40, 0.48); border-left: 5px solid #8e6138; background: rgba(218, 191, 143, 0.45); }
+.cy-event-fan-mail { border: 1px dashed #6f5438; border-left: 5px solid #9d6d3f; background: #282118; }
 .cy-event-image { display: block; max-width: min(100%, 300px); max-height: 240px; margin-top: 10px; border: 5px solid #f7f0de; box-shadow: 0 4px 14px rgba(48, 37, 20, 0.18); }
 .cy-flow > .pcard-obj { align-self: center; margin: 20px 12px; flex: 0 0 auto; }
 

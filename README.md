@@ -29,9 +29,11 @@ not a biological measurement. Older heartbeat, mood, composite, amplification,
 brain-region, and relationship figures are retained under a collapsed
 `PLANNED STATS` section so implementation status is unambiguous.
 
-The live paper is a chronological composition of writing bursts, drawings,
-postcards, prison events and exact silence spans. It is vertically scrollable to
-the start of its selected day; it never mixes dates in one scroll surface. A
+The central chronology is a composition of writing bursts, drawings, postcards,
+prison events and exact silence spans. Ruled paper appears only on journal-entry
+cards; other handwriting uses unruled stock and event records use unlined strips.
+It is vertically scrollable to the start of its selected day; it never mixes
+dates in one scroll surface. A
 sticky day banner and a day-only month/date chooser open another date from its
 start. Duration events show independently ageing start and end timestamps, while
 point events show one timestamp.

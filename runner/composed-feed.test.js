@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function makeEl(tag) {
   const el = {
@@ -47,6 +50,7 @@ for (let i = 0; i < 4130; i++) {
 assert.equal(feed.pens.length, 0, 'high-volume history creates no SVG Pen instances');
 assert.equal(feed.flow.children.length, 4130, 'every historical writing period remains present');
 assert.ok(feed.flow.children.every((block) => block.children[1]._classes.has('cy-writing-static')));
+assert.ok(feed.flow.children.every((block) => block._classes.has('cy-journal-entry')), 'journal entries alone receive the ruled-card class');
 assert.equal(feed.flow.children[0].children[1].textContent.length, 160);
 
 feed.beginEntry('2026-09-09 12:01:00', 'journal');
@@ -67,6 +71,11 @@ chronology.write('after search', 'journal');
 assert.equal(chronology.flow.children.length, 3, 'ambient events remain between surrounding writing periods');
 assert.equal(chronology.flow.children[1].dataset.kind, 'prison');
 assert.equal(chronology.flow.children[1].children[1].textContent, '[the cell is searched]');
+assert.equal(chronology.flow.children[1]._classes.has('cy-journal-entry'), false, 'event records never receive journal paper');
+
+chronology.beginEntry('2026-09-09 10:25:00', 'dream');
+assert.ok(chronology.current.block._classes.has('cy-writing-note'), 'dream writing uses unruled note stock');
+assert.equal(chronology.current.block._classes.has('cy-journal-entry'), false, 'dream writing is not presented as a journal entry');
 
 const spanRoot = makeEl('div');
 const spans = new ComposedFeed(spanRoot, { chars: [] });
@@ -81,5 +90,14 @@ assert.ok(entry.children[2]._classes.has('cy-moment-end'), 'writing shows its en
 assert.match(entry.children[0].children[0].textContent, /^20:15:45 \(/);
 assert.match(entry.children[2].children[0].textContent, /^20:20:48 \(/);
 assert.equal(spans.flow.children[0].children.length, 3, 'day banner exposes previous, chooser, and next controls');
+
+const here = dirname(fileURLToPath(import.meta.url));
+const css = await readFile(join(here, '..', 'public', 'assets', 'style.css'), 'utf8');
+const trayRule = css.match(/(?:^|\n)\.paper \{([\s\S]*?)\n\}/);
+const journalRule = css.match(/(?:^|\n)\.cy-journal-entry \{([\s\S]*?)\n\}/);
+assert.ok(trayRule, 'chronology tray has an explicit surface rule');
+assert.doesNotMatch(trayRule[1], /repeating-linear-gradient/, 'chronology tray has no ruled-paper lines');
+assert.ok(journalRule, 'journal cards have an explicit surface rule');
+assert.match(journalRule[1], /repeating-linear-gradient/, 'ruled lines belong to journal cards');
 
 console.log('composed-feed.test.js: all checks passed');
