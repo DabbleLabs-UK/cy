@@ -50,9 +50,9 @@ export class Power {
         <div class="pw-sub">total electrical expenses due to incarceration</div>
       </div>
       <div class="pw-figs">
-        <div class="pw-fig"><span class="pw-fk">RATE</span><span class="pw-fv" id="pw-rate">-- p/h</span></div>
-        <div class="pw-fig"><span class="pw-fk">DRAW</span><span class="pw-fv" id="pw-watts">-- W</span></div>
-        <div class="pw-fig"><span class="pw-fk">ENERGY</span><span class="pw-fv" id="pw-kwh">-- kWh</span></div>
+        <div class="pw-fig"><span class="pw-fk">CURRENT RATE</span><span class="pw-fv" id="pw-rate">-- p/h</span></div>
+        <div class="pw-fig"><span class="pw-fk">CURRENT DRAW</span><span class="pw-fv" id="pw-watts">-- W</span></div>
+        <div class="pw-fig"><span class="pw-fk">TOTAL ENERGY</span><span class="pw-fv" id="pw-kwh">-- kWh</span></div>
       </div>
       <div class="pw-chartwrap">
         <svg class="pw-svg" viewBox="0 0 300 120" preserveAspectRatio="none">
