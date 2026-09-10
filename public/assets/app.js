@@ -158,7 +158,7 @@ async function boot() {
   if (window.__cyPlain) window.__cyPlain.setFont(font);
 
   pen = new ComposedFeed($('#paper'), font);
-  postcards = new Postcards(pen.contentRoot(), font, { inline: true });
+  postcards = new Postcards(pen.contentRoot(), font, { inline: true, lane: pen.animationLane() });
   brain = new BrainHud($('#brain'));
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');

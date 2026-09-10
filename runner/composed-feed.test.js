@@ -36,7 +36,34 @@ globalThis.document = {
   createElement: (tag) => makeEl(tag),
 };
 
-const { ComposedFeed } = await import('../public/assets/composed-feed.js');
+const { ComposedFeed, HandwritingLane } = await import('../public/assets/composed-feed.js');
+
+const lane = new HandwritingLane();
+let releaseFirst;
+const firstIdle = new Promise((resolve) => { releaseFirst = resolve; });
+const firstPen = {
+  gate: null,
+  waitFor(gate) { this.gate = gate; },
+  whenIdle() { return firstIdle; },
+};
+const secondPen = {
+  gate: null,
+  waitFor(gate) { this.gate = gate; },
+  whenIdle() { return Promise.resolve(); },
+};
+const finishFirst = lane.begin(firstPen);
+finishFirst();
+const finishSecond = lane.begin(secondPen);
+let secondStarted = false;
+secondPen.gate.then(() => { secondStarted = true; });
+await Promise.resolve();
+assert.equal(secondStarted, false, 'a later physical pen waits while the first is active');
+releaseFirst();
+await secondPen.gate;
+assert.equal(secondStarted, true, 'the later physical pen starts when the first becomes idle');
+finishSecond();
+await lane.whenIdle();
+
 const root = makeEl('div');
 const feed = new ComposedFeed(root, { chars: [] });
 

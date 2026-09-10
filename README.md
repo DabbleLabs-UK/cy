@@ -32,6 +32,8 @@ brain-region, and relationship figures are retained under a collapsed
 The central chronology is a composition of writing bursts, drawings, postcards,
 prison events and exact silence spans. Ruled paper appears only on journal-entry
 cards; other handwriting uses unruled stock and event records use unlined strips.
+All live handwriting shares one chronological animation lane, so a later journal
+entry, drawing, or postcard reply waits for the earlier physical object to finish.
 It is vertically scrollable to the start of its selected day; it never mixes
 dates in one scroll surface. A
 sticky day banner and a day-only month/date chooser open another date from its

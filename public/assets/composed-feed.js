@@ -7,6 +7,38 @@
 import { Pen } from './pen.js';
 import { bindEndpointTime, dayLabel, formatDuration, shiftTimestamp, timestampMs } from './timeline.js';
 
+// One person has one hand. Each visible writing object owns its own Pen renderer,
+// but they all reserve this shared lane so only the earliest unfinished object can
+// animate. Historical/static objects never enter the lane.
+export class HandwritingLane {
+  constructor() {
+    this.tail = Promise.resolve();
+    this.generation = 0;
+  }
+
+  begin(pen) {
+    const before = this.tail;
+    const generation = this.generation;
+    if (pen && typeof pen.waitFor === 'function') pen.waitFor(before);
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      if (generation !== this.generation || !pen || typeof pen.whenIdle !== 'function') return;
+      this.tail = before.then(() => pen.whenIdle()).catch(() => undefined);
+    };
+  }
+
+  whenIdle() {
+    return this.tail;
+  }
+
+  reset() {
+    this.generation++;
+    this.tail = Promise.resolve();
+  }
+}
+
 export class ComposedFeed {
   constructor(root, font) {
     this.root = root;
@@ -14,6 +46,7 @@ export class ComposedFeed {
     this.instant = false;
     this.current = null;
     this.pens = [];
+    this.lane = new HandwritingLane();
     this.vitals = null;
     this.following = true;
     this.loadingEarlier = null;
@@ -37,6 +70,10 @@ export class ComposedFeed {
 
   contentRoot() {
     return this.flow;
+  }
+
+  animationLane() {
+    return this.lane;
   }
 
   onNearStart(fn) {
@@ -130,9 +167,10 @@ export class ComposedFeed {
     const pen = new Pen(surface, this.font);
     pen.setInstant(this.instant);
     if (this.vitals) pen.setVitals(this.vitals);
+    const finishLane = this.lane.begin(pen);
     pen.beginEntry('', entryMode);
     this.pens.push(pen);
-    this.current = { block, pen, mode: entryMode, label, startMs: timestampMs(ts) };
+    this.current = { block, pen, mode: entryMode, label, startMs: timestampMs(ts), finishLane };
     this._follow();
   }
 
@@ -154,6 +192,7 @@ export class ComposedFeed {
     if (entry && endMs != null && (entry.startMs == null || endMs >= entry.startMs)) {
       this._appendEndpoint(entry.block, endTs, entry.label + ' ends', 'end');
     }
+    if (entry && entry.finishLane) entry.finishLane();
     this.current = null;
   }
 
@@ -229,7 +268,9 @@ export class ComposedFeed {
     const pen = new Pen(surface, this.font);
     pen.setInstant(this.instant);
     if (this.vitals) pen.setVitals(this.vitals);
+    const finishLane = this.instant ? null : this.lane.begin(pen);
     pen.draw(drawing);
+    if (finishLane) finishLane();
     this.pens.push(pen);
     this._follow();
   }
@@ -266,12 +307,13 @@ export class ComposedFeed {
     }
     this.pens = [];
     this.current = null;
+    this.lane.reset();
     this.flow.textContent = '';
     this._setScrollTop(0, true);
   }
 
   whenIdle() {
-    return Promise.all(this.pens.map((pen) => pen.whenIdle()));
+    return Promise.all([this.lane.whenIdle(), ...this.pens.map((pen) => pen.whenIdle())]);
   }
 
   scrollToStart() {

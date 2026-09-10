@@ -28,10 +28,11 @@ const HANDS = -2.4; // base tilt (deg); each card jitters around it for an objec
 const MAX_CARDS = 6; // keep a short stack of recent cards; prune the oldest
 
 export class Postcards {
-  constructor(root, font, { inline = false } = {}) {
+  constructor(root, font, { inline = false, lane = null } = {}) {
     this.root = root; // #postcards overlay container over the paper
     this.font = font;
     this.inline = !!inline;
+    this.lane = lane;
     this.instant = false;
     this.active = null; // { el, pen, body, fullBody }
     this.cards = []; // settled/active cards, newest last; capped at MAX_CARDS
@@ -46,6 +47,7 @@ export class Postcards {
 
   reset() {
     for (const card of this.cards) {
+      if (card.finishLane) card.finishLane();
       try { if (card.pen) { card.pen.abort(); card.pen.destroy(); } } catch { /* best effort */ }
       if (card.el && card.el.remove) card.el.remove();
     }
@@ -190,8 +192,11 @@ export class Postcards {
     const pen = new Pen(msg, this.font);
     pen.setCardLayout();
     pen.setInstant(this.instant);
+    const finishLane = !this.instant && this.lane && typeof this.lane.begin === 'function'
+      ? this.lane.begin(pen)
+      : null;
 
-    this.active = { el, pen, msg, handleEl: handle, hasPic, body: '', fullBody: '', id: pend.id };
+    this.active = { el, pen, msg, handleEl: handle, hasPic, body: '', fullBody: '', id: pend.id, finishLane };
     this.cards.push(this.active);
     this._prune();
     this._pending = null;
@@ -234,6 +239,10 @@ export class Postcards {
     }
     a.el.classList.remove('writing');
     a.el.classList.add('settled');
+    if (a.finishLane) {
+      a.finishLane();
+      a.finishLane = null;
+    }
     this.active = null;
   }
 

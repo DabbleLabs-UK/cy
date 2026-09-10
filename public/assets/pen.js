@@ -320,6 +320,10 @@ export class Pen {
     this._remeasureQueued = false;
     this._remeasureTries = 0;
     this._idleWaiters = [];
+    // Optional shared animation gate. Composed surfaces use this to ensure a
+    // later physical pen cannot start while an earlier card or entry is still
+    // being written.
+    this._startAfter = null;
     this.following = true;
 
     this._buildSvg();
@@ -562,6 +566,16 @@ export class Pen {
   whenIdle() {
     if (!this.running && !this.jobs.length && !this._reflowRequested) return Promise.resolve();
     return new Promise((resolve) => this._idleWaiters.push(resolve));
+  }
+
+  // Hold this pen's first queued job behind another physical pen. The gate is
+  // consumed once; every later job on this same surface remains in its own
+  // strictly ordered queue.
+  waitFor(promise) {
+    const next = Promise.resolve(promise);
+    this._startAfter = this._startAfter
+      ? Promise.all([this._startAfter, next]).then(() => undefined)
+      : next;
   }
 
   scrollToStart() {
@@ -931,6 +945,12 @@ export class Pen {
         // valid _resize() resumes us, and the ResizeObserver covers a later reveal.
         if (!this._laidOut) break;
         if (!this.jobs.length) break;
+        if (this._startAfter) {
+          const gate = this._startAfter;
+          this._startAfter = null;
+          try { await gate; } catch { /* a failed earlier pen must not deadlock this one */ }
+          continue;
+        }
         const job = this.jobs.shift();
         if (job.type === 'entry') {
           await this._beginEntry(job.ts, job.mode);

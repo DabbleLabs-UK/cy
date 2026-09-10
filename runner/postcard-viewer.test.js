@@ -132,6 +132,22 @@ async function drain(pen, cap = 4000) {
   }
 }
 
+// ---- 0. a Pen can be held behind an earlier physical object ----
+await (async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const held = new Pen(newRoot(), FONT);
+  held.waitFor(gate);
+  held.write('a');
+  for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0));
+  assert.equal(inkStrokes(held).length, 0, 'a gated pen lays down no stroke while the earlier object is active');
+  release();
+  for (let i = 0; i < 80 && !inkStrokes(held).length; i++) await new Promise((r) => setTimeout(r, 0));
+  assert.ok(inkStrokes(held).length > 0, 'the gated pen starts after the earlier object releases it');
+  held.abort();
+  ok('a physical pen waits at the shared animation gate before drawing');
+})();
+
 // ---- 1. the reply renders on a franked, censored, addressed CARD ----
 await (async () => {
   const pcRoot = newRoot();
@@ -166,6 +182,26 @@ await (async () => {
   const handle = findAll(card, 'pcard-handle')[0];
   assert.ok(handle && handle._text === 'Mum', `address panel shows the sender handle [${handle && handle._text}]`);
   ok('reply renders on a franked, censored postcard addressed back to the sender');
+})();
+
+// ---- 1a. a live reply reserves and releases the shared handwriting lane ----
+await (async () => {
+  const calls = [];
+  const lane = {
+    begin(pen) {
+      calls.push({ type: 'begin', pen });
+      return () => calls.push({ type: 'finish', pen });
+    },
+  };
+  const pc = new Postcards(newRoot(), FONT, { lane });
+  pc.begin();
+  const cardPen = pc.active.pen;
+  assert.equal(calls.length, 1, 'opening a live reply reserves the shared lane');
+  assert.equal(calls[0].pen, cardPen, 'the card pen owns that reservation');
+  pc.settle();
+  assert.equal(calls.length, 2, 'settling the reply releases the shared lane');
+  assert.equal(calls[1].pen, cardPen, 'the same card pen is released');
+  ok('a live reply participates in the single shared handwriting lane');
 })();
 
 // ---- 1b. an incoming picture is pinned to the card ----
