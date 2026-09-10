@@ -1,0 +1,7 @@
+/* The identity and live-state controls remain visible while the page scrolls. */
+#topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.45);
+}
