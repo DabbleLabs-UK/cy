@@ -80,6 +80,21 @@ export function buildHistoryPath(points, width = 280, height = 80) {
   }).join(' ');
 }
 
+export function buildHistoryUrl(base, scope, key, range) {
+  const separator = String(base || '').includes('?') ? '&' : '?';
+  return `${base}${separator}scope=${encodeURIComponent(scope)}&key=${encodeURIComponent(key)}&range=${encodeURIComponent(range)}`;
+}
+
+function historyMarkup() {
+  return `<div class="soma-reading-history">
+    <div class="soma-ranges" aria-label="History range">
+      <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+    </div>
+    <svg class="soma-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored state history"><path></path></svg>
+    <p class="soma-history-note">Open this reading to load stored history.</p>
+  </div>`;
+}
+
 export class BrainHud {
   constructor(root, { historyUrl = '' } = {}) {
     this.root = root;
@@ -89,7 +104,7 @@ export class BrainHud {
     this.rows = {};
     this.regions = {};
     this.regionRows = {};
-    this.activeMetric = null;
+    this.historyRequests = new WeakMap();
     this._build();
   }
 
@@ -114,15 +129,6 @@ export class BrainHud {
           <div class="brain-key">SOMA / FUNCTIONAL ANALOGY</div>
         </div>
         <div class="soma-region-list" aria-label="Functional brain region states"></div>
-        <section class="soma-detail" hidden aria-live="polite">
-          <button class="soma-detail-close" type="button" aria-label="Close state details">x</button>
-          <h3></h3><p class="soma-detail-text"></p><ul class="soma-contributors"></ul>
-          <div class="soma-ranges" aria-label="History range">
-            <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
-          </div>
-          <svg class="soma-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored state history"><path></path></svg>
-          <p class="soma-history-note">Select a state to load stored history.</p>
-        </section>
         <details class="soma-diagnostics"><summary>SOMA DIAGNOSTICS</summary><div class="soma-diagnostic-rows"></div><div class="soma-selection"></div></details>
       </div>
       <details class="legacy-box"><summary>PLANNED STATS</summary>
@@ -138,14 +144,14 @@ export class BrainHud {
 
     const readout = this.root.querySelector('.soma-public-readout');
     for (const definition of EXPERIENCED_METRICS) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'soma-state-row';
-      button.dataset.metric = definition.key;
-      button.innerHTML = `<span class="soma-state-label">${definition.label}</span><span class="soma-state-trend">--</span><strong>--</strong><span class="soma-state-bar"><i></i></span>`;
-      button.addEventListener('click', () => this.openMetric(definition.key));
-      readout.appendChild(button);
-      this.rows[definition.key] = button;
+      const entry = document.createElement('details');
+      entry.className = 'soma-state-entry soma-reading-entry';
+      entry.dataset.metric = definition.key;
+      entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.label}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
+        <div class="soma-reading-detail"><p class="soma-reading-description">Awaiting Soma state.</p><ul class="soma-contributors"></ul>${historyMarkup()}</div>`;
+      this._wireReading(entry, 'metric', definition.key);
+      readout.appendChild(entry);
+      this.rows[definition.key] = entry;
     }
     const svg = this.root.querySelector('.brain-svg');
     const regionList = this.root.querySelector('.soma-region-list');
@@ -172,8 +178,10 @@ export class BrainHud {
       entry.className = 'soma-region-entry';
       entry.id = `soma-region-${definition.key}`;
       entry.dataset.region = definition.key;
-      entry.innerHTML = `<summary><span class="soma-region-name">${definition.label}</span><strong class="soma-region-state">--</strong></summary><p>Awaiting Soma state.</p>`;
+      entry.innerHTML = `<summary><span class="soma-region-name">${definition.label}</span><strong class="soma-region-state">--</strong></summary>
+        <div class="soma-reading-detail"><p class="soma-reading-description">Awaiting Soma state.</p>${historyMarkup()}</div>`;
       entry.addEventListener('toggle', () => path.setAttribute('aria-expanded', String(entry.open)));
+      this._wireReading(entry, 'brain', definition.key);
       regionList.appendChild(entry);
       this.regionRows[definition.key] = entry;
 
@@ -192,12 +200,22 @@ export class BrainHud {
       row.innerHTML = `<span>${label}</span><strong>--</strong><small>awaiting source</small>`;
       diagnostics.appendChild(row);
     }
-    this.root.querySelector('.soma-detail-close').addEventListener('click', () => { this.root.querySelector('.soma-detail').hidden = true; });
-    this.root.querySelectorAll('.soma-ranges button').forEach((button) => button.addEventListener('click', () => {
-      this.root.querySelectorAll('.soma-ranges button').forEach((item) => item.classList.toggle('active', item === button));
-      if (this.activeMetric) this.loadHistory(this.activeMetric, button.dataset.range);
-    }));
     this.measure = { root: this.root.querySelector('.inference-measured'), value: this.root.querySelector('.measure-value') };
+  }
+
+  _wireReading(entry, scope, key) {
+    entry.classList.add('soma-reading-entry');
+    entry.dataset.readingScope = scope;
+    entry.dataset.readingKey = key;
+    entry.addEventListener('toggle', () => {
+      if (!entry.open) return;
+      const active = entry.querySelector('.soma-ranges button.active');
+      this.loadHistory(entry, scope, key, active ? active.dataset.range : '24h');
+    });
+    entry.querySelectorAll('.soma-ranges button').forEach((button) => button.addEventListener('click', () => {
+      entry.querySelectorAll('.soma-ranges button').forEach((item) => item.classList.toggle('active', item === button));
+      this.loadHistory(entry, scope, key, button.dataset.range);
+    }));
   }
 
   setSoma(soma) {
@@ -211,11 +229,12 @@ export class BrainHud {
       const row = this.rows[definition.key];
       if (!metric || !row) continue;
       const value = clamp100(metric.value);
-      row.querySelector('strong').textContent = value == null ? '--' : String(Math.round(value));
+      row.querySelector('.soma-state-value').textContent = value == null ? '--' : String(Math.round(value));
       row.querySelector('.soma-state-trend').textContent = metric.trend === 'rising' ? 'rising' : metric.trend === 'falling' ? 'falling' : 'steady';
       row.querySelector('.soma-state-bar i').style.width = `${value || 0}%`;
       row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor((value || 0) / 100);
-      row.title = metricExplanation(metric);
+      row.querySelector('summary').title = metricExplanation(metric);
+      this.renderMetric(definition.key);
     }
     for (const definition of BRAIN_REGIONS) {
       const reading = this.latestBrain[definition.key];
@@ -232,7 +251,7 @@ export class BrainHud {
       region.setAttribute('aria-label', `${reading.label}: ${reading.level}`);
       entry.querySelector('.soma-region-name').textContent = reading.label;
       entry.querySelector('.soma-region-state').textContent = `${String(reading.level).toUpperCase()} ${percentage}%`;
-      entry.querySelector('p').textContent = description;
+      entry.querySelector('.soma-reading-description').textContent = description;
     }
     for (const [key] of CIRCUITS) {
       const reading = soma.circuits && soma.circuits[key];
@@ -265,23 +284,14 @@ export class BrainHud {
       item.append(span, strong);
       selection.appendChild(item);
     }
-    if (this.activeMetric) this.renderMetric(this.activeMetric);
-  }
-
-  openMetric(key) {
-    this.activeMetric = key;
-    this.renderMetric(key);
-    this.root.querySelector('.soma-detail').hidden = false;
-    const active = this.root.querySelector('.soma-ranges button.active');
-    this.loadHistory(key, active ? active.dataset.range : '24h');
   }
 
   renderMetric(key) {
     const metric = this.metrics[key];
-    if (!metric) return;
-    const detail = this.root.querySelector('.soma-detail');
-    detail.querySelector('h3').textContent = metric.label;
-    detail.querySelector('.soma-detail-text').textContent = metricExplanation(metric);
+    const entry = this.rows[key];
+    if (!metric || !entry) return;
+    const detail = entry.querySelector('.soma-reading-detail');
+    detail.querySelector('.soma-reading-description').textContent = metricExplanation(metric);
     const list = detail.querySelector('.soma-contributors');
     list.textContent = '';
     for (const contributor of metric.contributors || []) {
@@ -305,18 +315,22 @@ export class BrainHud {
     if (entry) entry.classList.toggle('is-associated', associated);
   }
 
-  async loadHistory(key, range) {
-    const note = this.root.querySelector('.soma-history-note');
-    const path = this.root.querySelector('.soma-history path');
+  async loadHistory(entry, scope, key, range) {
+    const note = entry.querySelector('.soma-history-note');
+    const path = entry.querySelector('.soma-history path');
     if (!this.historyUrl) { note.textContent = 'History endpoint unavailable.'; return; }
+    const request = {};
+    this.historyRequests.set(entry, request);
     note.textContent = 'Loading stored history...';
     try {
-      const response = await fetch(`${this.historyUrl}?metric=${encodeURIComponent(key)}&range=${encodeURIComponent(range)}`, { cache: 'no-store' });
+      const response = await fetch(buildHistoryUrl(this.historyUrl, scope, key, range), { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
+      if (this.historyRequests.get(entry) !== request) return;
       path.setAttribute('d', buildHistoryPath(data.points));
-      note.textContent = data.points.length ? `${data.points.length} stored readings. Gaps mean no runner data was recorded.` : 'No stored readings in this range.';
+      note.textContent = data.points.length ? `${data.points.length} stored ${range} readings. Gaps mean no runner data was recorded.` : `No stored readings in the last ${range}.`;
     } catch (error) {
+      if (this.historyRequests.get(entry) !== request) return;
       path.setAttribute('d', '');
       note.textContent = `History unavailable: ${error.message}`;
     }
@@ -335,5 +349,5 @@ export class BrainHud {
   setAmp(monotony, amp) { this.root.querySelector('.legacy-amp').textContent = clamp01(monotony) == null || !Number.isFinite(amp) ? 'unavailable' : `monotony ${Math.round(monotony * 100)} / x${amp.toFixed(1)}`; }
   setCast(relations) { this.root.querySelector('.legacy-cast').textContent = relations && Object.keys(relations).length ? `${Object.keys(relations).length} synthetic standings` : 'unavailable'; }
 
-  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this._build(); }
+  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this._build(); }
 }

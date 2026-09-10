@@ -11,18 +11,43 @@ const CAPTIVE_SOMA_METRICS = [
     'anxiety', 'arousal', 'pain', 'hunger', 'fatigue', 'loneliness', 'anger', 'rumination',
 ];
 
-function captive_soma_history_config(string $range, string $metric): array
+const CAPTIVE_SOMA_BRAIN_REGIONS = [
+    'amygdala', 'insula', 'acc', 'hippocampal', 'prefrontal', 'temporalSocial',
+];
+
+function captive_soma_history_config(string $range, string $key, string $scope = 'metric'): array
 {
     if (!isset(CAPTIVE_SOMA_RANGES[$range])) {
         throw new InvalidArgumentException('range must be 1h, 24h, or 7d');
     }
-    if (!in_array($metric, CAPTIVE_SOMA_METRICS, true)) {
-        throw new InvalidArgumentException('unknown Soma metric');
+    if ($scope === 'metric' && in_array($key, CAPTIVE_SOMA_METRICS, true)) {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.experienced.metrics.' . $key . '.value',
+            'scale' => 1.0,
+        ];
     }
-    return CAPTIVE_SOMA_RANGES[$range];
+    if ($scope === 'brain' && in_array($key, CAPTIVE_SOMA_BRAIN_REGIONS, true)) {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.experienced.brain.' . $key . '.value',
+            'scale' => 100.0,
+        ];
+    }
+    throw new InvalidArgumentException($scope === 'brain' ? 'unknown Soma brain region' : 'unknown Soma metric');
 }
 
-function captive_soma_history_points(array $rows, string $metric, int $fromMs, int $toMs, int $maximum): array
+function captive_soma_history_points(
+    array $rows,
+    string $key,
+    int $fromMs,
+    int $toMs,
+    int $maximum,
+    string $scope = 'metric',
+    float $scale = 1.0
+): array
 {
     $span = max(1, $toMs - $fromMs);
     $bucketMs = max(1, (int)ceil($span / max(1, $maximum)));
@@ -31,7 +56,8 @@ function captive_soma_history_points(array $rows, string $metric, int $fromMs, i
         $value = $row['value'] ?? null;
         if ($value === null && isset($row['payload'])) {
             $payload = json_decode((string)$row['payload'], true);
-            $value = $payload['soma']['experienced']['metrics'][$metric]['value'] ?? null;
+            $group = $scope === 'brain' ? 'brain' : 'metrics';
+            $value = $payload['soma']['experienced'][$group][$key]['value'] ?? null;
         }
         if (!is_numeric($value)) {
             continue;
@@ -54,7 +80,7 @@ function captive_soma_history_points(array $rows, string $metric, int $fromMs, i
         $bucket = (int)floor(($tsMs - $fromMs) / $bucketMs);
         // Keep the last real reading in each bucket. No interpolation or fake
         // samples are introduced when the runner was offline.
-        $buckets[$bucket] = ['ts' => $tsMs, 'value' => round((float)$value, 1)];
+        $buckets[$bucket] = ['ts' => $tsMs, 'value' => round((float)$value * $scale, 1)];
     }
     ksort($buckets, SORT_NUMERIC);
     return array_values($buckets);

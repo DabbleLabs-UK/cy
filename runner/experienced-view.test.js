@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { metricExplanation, buildHistoryPath } from '../public/assets/brain.js';
+import { metricExplanation, buildHistoryPath, buildHistoryUrl } from '../public/assets/brain.js';
 
 const metric = {
   label: 'ANXIETY', value: 64, baseline: 18, trend: 'rising', trendDelta: 4.2,
@@ -16,4 +16,9 @@ const path = buildHistoryPath([
 ]);
 assert.equal((path.match(/M/g) || []).length, 2, 'a missing-data interval must remain a visible graph gap');
 assert.ok((path.match(/L/g) || []).length >= 2, 'contiguous real readings must remain connected');
+assert.equal(
+  buildHistoryUrl('/api/soma-history.php', 'brain', 'temporalSocial', '7d'),
+  '/api/soma-history.php?scope=brain&key=temporalSocial&range=7d',
+  'brain regions and Soma metrics share the same history URL builder',
+);
 console.log('experienced-view.test.js: all checks passed');

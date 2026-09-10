@@ -30,4 +30,31 @@ try {
     exit(1);
 } catch (InvalidArgumentException $e) {
 }
+$brainPayload = json_encode([
+    'soma' => ['experienced' => ['brain' => ['amygdala' => ['value' => 0.64]]]],
+], JSON_THROW_ON_ERROR);
+$brainPoints = captive_soma_history_points(
+    [['ts_ms' => 5000, 'payload' => $brainPayload]],
+    'amygdala',
+    0,
+    10000,
+    10,
+    'brain',
+    100.0
+);
+if (count($brainPoints) !== 1 || $brainPoints[0]['value'] !== 64.0) {
+    fwrite(STDERR, "FAIL: brain-region readings were not converted to the shared 0-100 graph scale\n");
+    exit(1);
+}
+$brainConfig = captive_soma_history_config('7d', 'amygdala', 'brain');
+if ($brainConfig['jsonPath'] !== '$.soma.experienced.brain.amygdala.value' || $brainConfig['scale'] !== 100.0) {
+    fwrite(STDERR, "FAIL: brain-region history config is incorrect\n");
+    exit(1);
+}
+try {
+    captive_soma_history_config('24h', 'unknown', 'brain');
+    fwrite(STDERR, "FAIL: invalid brain region accepted\n");
+    exit(1);
+} catch (InvalidArgumentException $e) {
+}
 echo "ALL PASS\n";
