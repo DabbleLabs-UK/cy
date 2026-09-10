@@ -16,10 +16,6 @@ const ACCENT = '#e6b45e'; // warm amber - the colour of the money
 // larger buffer to still show a useful stretch of history at the finer cadence.
 const MAX_POINTS = 1200; // ~60min at one windowed point per 3s
 const KEEP_MS = 60 * 60 * 1000; // trim to the last hour
-// Do not imply measurements during an outage or runner restart. Normal samples
-// are 3s apart; 15s tolerates a few missed windows without drawing a long,
-// misleading diagonal bridge across a real gap.
-const MAX_JOIN_GAP_MS = 15 * 1000;
 
 // parse the runner's "YYYY-MM-DD HH:MM:SS.mmm" local timestamp to ms
 function parseTs(ts) {
@@ -195,31 +191,27 @@ export class Power {
     const x = (t) => ((t - t0) / span) * W;
     const y = (w) => H - Math.max(0, Math.min(1, w / wMax)) * H;
 
-    // Build separate paths for each continuous run. Connecting samples across a
-    // runner outage invents a diagonal ramp that was never measured.
-    const segments = splitPowerSegments(pts);
-    const line = segments.map((segment) => segment.map((q, i) =>
-      `${i === 0 ? 'M' : 'L'}${x(q.t).toFixed(1)} ${y(q.w).toFixed(1)}`
-    ).join(' ')).join(' ');
-    const area = segments.map((segment) => {
-      const first = segment[0];
-      const end = segment[segment.length - 1];
-      return `M${x(first.t).toFixed(1)} ${H} ` +
-        segment.map((q) => `L${x(q.t).toFixed(1)} ${y(q.w).toFixed(1)}`).join(' ') +
-        ` L${x(end.t).toFixed(1)} ${H} Z`;
-    }).join(' ');
-
-    // min/max ENVELOPE: a ribbon from the peak line across, then back along the
-    // trough line. This is what stops the fast swings being smoothed away - the
-    // width of the band at any moment is the real range the load covered there.
-    const band = segments.map((segment) => {
-      const top = segment.map((q) => `${x(q.t).toFixed(1)} ${y(q.wmax).toFixed(1)}`);
-      const bot = segment
-        .slice()
-        .reverse()
-        .map((q) => `${x(q.t).toFixed(1)} ${y(q.wmin).toFixed(1)}`);
-      return 'M' + top.join(' L') + ' L' + bot.join(' L') + ' Z';
-    }).join(' ');
+    // Use a held-value step across every interval, including a missing-sample
+    // interval. The chart therefore stays continuous without inventing a
+    // diagonal ramp between two measurements that were taken far apart.
+    const first = pts[0];
+    let line = `M${x(first.t).toFixed(1)} ${y(first.w).toFixed(1)}`;
+    let area = `M${x(first.t).toFixed(1)} ${H} V${y(first.w).toFixed(1)}`;
+    let band = `M${x(first.t).toFixed(1)} ${y(first.wmax).toFixed(1)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const q = pts[i];
+      const qx = x(q.t).toFixed(1);
+      line += ` H${qx} V${y(q.w).toFixed(1)}`;
+      area += ` H${qx} V${y(q.w).toFixed(1)}`;
+      band += ` H${qx} V${y(q.wmax).toFixed(1)}`;
+    }
+    area += ` V${H} Z`;
+    band += ` V${y(last.wmin).toFixed(1)}`;
+    for (let i = pts.length - 2; i >= 0; i--) {
+      const q = pts[i];
+      band += ` H${x(q.t).toFixed(1)} V${y(q.wmin).toFixed(1)}`;
+    }
+    band += ' Z';
 
     this.lineEl.setAttribute('d', line.trim());
     this.areaEl.setAttribute('d', area);
@@ -228,22 +220,6 @@ export class Power {
     // x span label (only when we have a real time range)
     this.xSpanEl.textContent = span > 60000 ? fmtClock(t0) + ' - ' + fmtClock(t1) : '';
   }
-}
-
-export function splitPowerSegments(points, maxGapMs = MAX_JOIN_GAP_MS) {
-  const segments = [];
-  let current = [];
-  for (const point of points) {
-    const previous = current[current.length - 1];
-    const gap = previous ? point.t - previous.t : 0;
-    if (previous && (gap < 0 || gap > maxGapMs)) {
-      segments.push(current);
-      current = [];
-    }
-    current.push(point);
-  }
-  if (current.length) segments.push(current);
-  return segments;
 }
 
 function num(x) {
