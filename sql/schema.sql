@@ -14,7 +14,8 @@ CREATE TABLE events (
     ts      DATETIME(3) NOT NULL,
     kind    VARCHAR(24) NOT NULL,
     payload JSON NOT NULL,
-    INDEX idx_kind_seq (kind, seq)
+    INDEX idx_kind_seq (kind, seq),
+    INDEX idx_kind_ts (kind, ts)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- People who write to Cy. Keyed by a random visitor_id carried in a signed,

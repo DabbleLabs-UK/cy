@@ -27,11 +27,14 @@ and loss-of-control appraisal.
 The live pre-language boundary is `runner/soma-cycle.js`. Autonomous journal,
 postcard and warden generation all cross it after their new lived input has been
 observed. The resulting action and compact natural-language directive enter Zone
-C together. Hunger, fatigue and pain remain time-based inputs in `vitals.js` and
-feed Soma; the old mental/composite values no longer choose waking sampling,
-capitalisation, drawing fixation, request handling or mishearing in the live
-runner. Those paths now use Soma. Some legacy values still exist for compatibility,
-diagnostics and the separate dream mechanic, and remain labelled placeholders.
+C together. `runner/experienced-state.js` is the canonical 0-100 layer for
+anxiety, arousal, pain, hunger, fatigue, loneliness, anger and rumination. Each
+value is a resting tendency plus persistent, named causal contributors from body
+clocks, observed events, appraisal, memory, social contact and bounded self-output
+feedback. Impulses recover at different half-lives and body-clock levels change
+with real elapsed time and sleep. The old overlapping physical and mental values
+are now compatibility mirrors of this state rather than a competing simulation.
+Other legacy composites remain labelled placeholders.
 
 Generated prose returns only as bounded evidence of Cy's own action - repetition,
 intensity, commitment, recurring themes, and activation of associations learned
@@ -47,11 +50,14 @@ the legacy mood engine. Vitals snapshots and `api/soma.php` then report Soma as
 unavailable instead of manufacturing a replacement state. An invalid persisted
 vitals file is preserved once as `vitals.json.invalid.bak` for diagnosis.
 
-The left panel shows those implemented circuits and names the source of every
-dynamic value. Its brain-shaped rendering is explicitly a functional analogy,
-not a biological measurement. Older heartbeat, mood, composite, amplification,
-brain-region, and relationship figures are retained under a collapsed
-`PLANNED STATS` section so implementation status is unambiguous.
+The left panel leads with the eight experienced states. Selecting one shows its
+current value, resting tendency, trend, exact active causal contributors, and a
+real stored 1H, 24H or 7D graph. The brain-shaped rendering is derived from the
+same values and is explicitly a functional analogy, not a biological measurement.
+Appraisal, drives, prediction, memory, attention, action and learned associations
+are retained under collapsed `SOMA DIAGNOSTICS`; older heartbeat, mood, composite,
+amplification, brain-region and relationship figures remain under collapsed
+`PLANNED STATS` so implementation status is unambiguous.
 
 The central chronology is a composition of writing bursts, drawings, postcards,
 prison events and exact silence spans. Ruled paper appears only on journal-entry
@@ -166,6 +172,7 @@ public/            webroot
   index.php         viewer page + postcard composer
   api/stream.php    public event feed (polling; also records viewer presence)
   api/soma.php      public latest persisted runner Soma snapshot
+  api/soma-history.php  public downsampled 1H/24H/7D experienced-state history
   api/post-postcard.php  public: send a postcard (text and/or image)
   api/openverse-search.php  public: proxy Openverse image search for the composer
   api/tempo.php     public: GET current tempo / POST a custom speed (duty cycle)
@@ -180,6 +187,7 @@ lib/postcard_queue.php  bounded reply tray + fan-mail promotion rules
 lib/visitor.php     signed visitor cookie + visitors upsert
 lib/presence.php    cheap, throttled live-viewer presence (viewers table)
 lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting
+lib/soma-history.php  validates and downsamples stored Soma history without interpolation
 config/config.sample.php   template; copy to config/config.php (gitignored)
 sql/schema.sql       MariaDB schema (events, postcards, queue state, visitors, news, rate limits, viewers, tempo, drawings)
 tests/postcard_queue_test.php  pure reply-tray admission checks

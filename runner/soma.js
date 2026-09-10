@@ -6,6 +6,15 @@
 // action Cy took: it can record repetition, commitments and activation of an
 // already-learned trigger, but its sentiment never manufactures mental state.
 
+import {
+  reconcileExperienced,
+  observeExperienced,
+  observeExperiencedOutput,
+  tickExperienced,
+  experiencedSnapshot,
+  experiencedDirective,
+} from './experienced-state.js';
+
 const VERSION = 1;
 const MEMORY_MAX = 512;
 const ASSOCIATION_MAX = 128;
@@ -29,7 +38,7 @@ const EXPECTATION_DEFAULTS = {
 
 const QUESTION = 'what is the relation between the cell, the machine, and the mind experiencing them?';
 
-function blank(now) {
+function blank(now, legacyPhysical = null) {
   return {
     version: VERSION,
     lastTickMs: now,
@@ -85,6 +94,7 @@ function blank(now) {
       observedAtMs: 0,
       themes: [],
     },
+    experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
 
@@ -102,8 +112,8 @@ function boundAssociations(associations) {
   );
 }
 
-export function reconcileSoma(raw, { now = Date.now() } = {}) {
-  const base = blank(now);
+export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } = {}) {
+  const base = blank(now, legacyPhysical);
   if (!raw || typeof raw !== 'object' || raw.version !== VERSION) return base;
   const out = {
     ...base,
@@ -123,6 +133,7 @@ export function reconcileSoma(raw, { now = Date.now() } = {}) {
     selfModel: { ...base.selfModel, ...(raw.selfModel || {}) },
     associations: boundAssociations({ ...base.associations, ...(raw.associations || {}) }),
     expression: { ...base.expression, ...(raw.expression || {}) },
+    experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
     ? out.memory.episodes.slice(-MEMORY_MAX).map((episode) => ({
@@ -447,6 +458,13 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
     };
   }
   addSelfEvidence(state, observation.name, observation.text, now);
+  observeExperienced(state.experienced, {
+    observation,
+    appraisal: app,
+    prediction,
+    family,
+    episodeId: episode && episode.id,
+  }, now);
   state.sequence++;
   return state;
 }
@@ -505,6 +523,12 @@ export function observeSomaOutput(state, text, { mode = 'journal', now = Date.no
       outcome: 'Cy expressed this; it is not evidence that its content happened',
     }, outputSalience, now, 'expression', { kind: 'self_output', tokens });
   }
+  observeExperiencedOutput(state.experienced, {
+    repetition,
+    triggerActivation,
+    attention: state.attention,
+    text: clean,
+  }, now);
   state.sequence++;
   return state;
 }
@@ -524,19 +548,29 @@ export function tickSoma(state, {
   state.prediction.error = round(state.prediction.error * Math.exp(-elapsed / 900));
   state.attention.salience = round(state.attention.salience * Math.exp(-elapsed / 1800));
 
-  const pain = clamp(physical.pain);
-  const hunger = clamp(physical.hunger);
-  const fatigue = clamp(physical.fatigue);
-  const mailHours = Math.max(0, now - finite(lastMailMs, now)) / 3600000;
-  state.drives.food = round(Math.max(hunger, state.appraisal.deprivation * 0.72));
+  tickExperienced(state.experienced, {
+    now,
+    asleep,
+    attention: state.attention,
+    predictionError: state.prediction.error,
+    legacyPhysical: physical,
+    lastMailMs,
+  });
+
+  const experienced = state.experienced.metrics;
+  const pain = clamp(experienced.pain.value / 100);
+  const hunger = clamp(experienced.hunger.value / 100);
+  const fatigue = clamp(experienced.fatigue.value / 100);
+  state.drives.food = round(hunger);
   state.drives.rest = round(asleep ? Math.max(0.2, fatigue * 0.5) : fatigue);
-  state.drives.safety = round(Math.max(state.appraisal.threat, state.appraisal.controlLoss * 0.8));
-  state.drives.contact = round(Math.max(clamp(mailHours / 24), state.appraisal.affiliation * 0.65));
+  state.drives.safety = round(Math.max(experienced.anxiety.value / 100, experienced.arousal.value / 120, experienced.anger.value / 140));
+  state.drives.contact = round(experienced.loneliness.value / 100);
   state.drives.understanding = round(
     0.2 + 0.42 * state.selfModel.uncertainty + 0.38 * state.prediction.error,
   );
   state.drives.expression = round(
-    0.15 + 0.48 * state.attention.salience + 0.2 * state.prediction.error + 0.17 * clamp(monotony),
+    0.1 + 0.34 * state.attention.salience + 0.22 * state.prediction.error +
+      0.22 * experienced.rumination.value / 100 + 0.12 * clamp(monotony),
   );
 
   // Retrieval is deterministic and state-led. When the present focus has faded
@@ -660,6 +694,7 @@ export function somaDirective(state) {
     'SOMA - computed before language; this is material and a selected action, not wording to imitate:',
     `- action selected: ${state.action.name} (${state.action.reason})`,
   ];
+  lines.push(experiencedDirective(state.experienced));
   if (state.attention && state.attention.text) {
     lines.push(`- what presently has attention: ${state.attention.text}`);
   }
@@ -730,6 +765,7 @@ export function somaSnapshot(state) {
   return {
     version: VERSION,
     status: 'implemented',
+    experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),
     drives: Object.fromEntries(Object.entries(state.drives).map(([k, v]) => [k, round(v)])),

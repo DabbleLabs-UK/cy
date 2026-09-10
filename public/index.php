@@ -132,6 +132,7 @@ window.CY = {
   // and the raw-event range endpoint it touches ONLY to resolve a chosen moment's seq.
   history: 'api/history.php',
   range: 'api/range.php',
+  somaHistory: 'api/soma-history.php',
   // Hershey glyph data app.js fetches (not a JS import, so the import map below
   // does not cover it) with `cache: 'force-cache'` - versioned the same way so
   // an edit to the glyph set cannot be masked by that hard caching.

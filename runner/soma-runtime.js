@@ -20,6 +20,7 @@ function cleanReason(error) {
 
 export function createSomaRuntime(rawState, {
   now = Date.now(),
+  reconcileOptions = {},
   engine = defaultEngine,
   logger = console,
   onState = () => {},
@@ -66,7 +67,7 @@ export function createSomaRuntime(rawState, {
     if (rawState != null && (!rawState || typeof rawState !== 'object' || rawState.version !== engine.SOMA_VERSION)) {
       throw new Error('persisted Soma state has an unsupported or missing version');
     }
-    state = engine.reconcileSoma(rawState, { now });
+    state = engine.reconcileSoma(rawState, { now, ...reconcileOptions });
     if (!state || typeof state !== 'object') throw new Error('reconciliation returned no state');
     onState(state);
   } catch (error) {

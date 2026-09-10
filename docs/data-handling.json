@@ -2,7 +2,7 @@
   "_comment": "Source of truth for Cy data handling. Update this whenever collection, storage, transmission, retention, or deletion changes. Policy wording requires human approval before release.",
   "product": "Cy",
   "service": "cy.dabblelabs.uk",
-  "stage": "continuous-prisoner-with-soma-v1",
+  "stage": "continuous-prisoner-with-canonical-experienced-soma-state",
   "collects": [
     "Postcard text, an optional chosen handle, and an optional uploaded or Openverse-selected image voluntarily submitted by a visitor",
     "A random visitor identifier in a signed HttpOnly cookie, used to recognise a returning postcard writer",
@@ -11,12 +11,12 @@
     "Owner-selected runner controls including tempo, day or night regime, pause state, and model provider"
   ],
   "stores": [
-    "The ordered public event stream, including screened Cy prose, prison events, public postcard fields, drawings, operational telemetry, and sourced Soma circuit snapshots",
+    "The ordered public event stream, including screened Cy prose, prison events, public postcard fields, drawings, operational telemetry, and Soma snapshots containing current experienced-state values and their causal contributors",
     "Queued and delivered postcards, their reply-tray or fan-mail class, delivery, promotion and reply timestamps, submitted text, optional handle, moderation state, and rate-limit metadata",
     "Uploaded or remotely selected postcard images re-encoded as WebP with metadata removed, plus source attribution when applicable",
     "A returning visitor's postcard count, compact rolling notes, and legacy synthetic standing values",
     "On the Dell runner, a bounded Soma episodic memory of up to 512 selected environmental events. An episode may contain postcard text or caption, a prison incident, a warden notice, or machine-continuity evidence, together with time, category, tags, and computed salience",
-    "On the Dell runner, learned event-family expectations, up to 128 bounded word associations learned from lived input, current attention and action, self-output action feedback, self-model evidence, and other implemented Soma state in the gitignored runtime state file",
+    "On the Dell runner, learned event-family expectations, up to 128 bounded word associations learned from lived input, current attention and action, self-output action feedback, self-model evidence, eight experienced-state values with their causal contributor ledgers, and up to seven days of downsampled experienced-state history in the gitignored runtime state file",
     "On the Dell runner, a rolling context of screened Cy-generated prose, operational logs, electricity and paid-provider spend totals, and retry queues",
     "In the visitor's browser, only the numeric IDs, submission times, and waiting/responding state of that browser's postcards awaiting a reply, retained for at most 24 hours so waiting state survives a refresh"
   ],
@@ -34,7 +34,7 @@
     {
       "recipient": "DeepSeek, only while the owner has selected the optional remote provider",
       "purpose": "Generate Cy's prose or drawing instructions",
-      "data": "The current prompt, which can include recent screened Cy prose, selected Soma attention and action, recent incidents, incoming postcard text, and compact returning-visitor context"
+      "data": "The current prompt, which can include recent screened Cy prose, selected Soma attention and action, compact qualitative consequences of the strongest experienced-state contributors, recent incidents, incoming postcard text, and compact returning-visitor context"
     },
     {
       "recipient": "Openverse and the host of a selected public image",

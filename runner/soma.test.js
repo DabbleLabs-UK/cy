@@ -93,7 +93,8 @@ assert.ok(soma.drives.understanding < before);
 const directive = somaDirective(soma);
 assert.match(directive, /computed before language/);
 assert.match(directive, /related lived memory/);
-assert.doesNotMatch(directive, /anxiety|despair|STATE:/i);
+assert.match(directive, /EXPERIENCED STATE/);
+assert.doesNotMatch(directive, /(?:anxiety|arousal|pain|hunger|fatigue|loneliness|anger|rumination)\s+\d+/i);
 const sampling = somaSampling(soma);
 assert.ok(sampling.temperature >= 0.58 && sampling.temperature <= 1.05);
 const legacyHot = {

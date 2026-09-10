@@ -17,6 +17,7 @@ $state = [
     'version' => 1,
     'status' => 'implemented',
     'circuits' => ['attention' => ['value' => 0.71, 'source' => 'winner of current salience competition']],
+    'experienced' => ['metrics' => ['anxiety' => ['value' => 42]]],
     'attention' => ['text' => 'Mr Locke moved the postcard'],
     'memory' => ['episodes' => 2],
 ];

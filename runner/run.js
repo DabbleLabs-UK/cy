@@ -26,6 +26,7 @@ import {
   ampOf,
   heartRate,
   brainRegions,
+  computeDerived,
   clamp,
   TRIVIAL_EVENTS,
   vitalsLoadIssue,
@@ -334,6 +335,7 @@ async function main() {
   let reportSomaFailure = (failure) => { pendingSomaFailure = failure; };
   const soma = createSomaRuntime(vitals.cognition, {
     now: Date.now(),
+    reconcileOptions: { legacyPhysical: vitals.physical },
     initialFailure: vitalsLoadIssue(vitals),
     onState: (state) => { vitals.cognition = state; },
     onFailure: (failure) => reportSomaFailure(failure),
@@ -2302,9 +2304,6 @@ async function main() {
     const { mins } = londonParts(new Date(now));
     const asleep = effectiveAsleep(mins);
     tick(vitals, { asleep, now });
-    // live anger + expressed (the lagged, outward value that drives shouting).
-    // Runs every tick so the lag is smooth and a spike sulks down between bursts.
-    updateAffect(vitals, { amp: ampOf(vitals) });
     scheduler(now);
     soma.tick({
       physical: vitals.physical,
@@ -2313,6 +2312,24 @@ async function main() {
       lastMailMs: vitals.lastMailMs,
       now,
     });
+    // Overlapping legacy fields remain available to old rendering and dream
+    // code, but Soma's experienced state is authoritative. They are mirrors,
+    // not a second simulation deciding whether Cy is hungry, tired or tense.
+    const experienced = soma.state && soma.state.experienced && soma.state.experienced.metrics;
+    if (experienced) {
+      vitals.physical.pain = experienced.pain.value / 100;
+      vitals.physical.hunger = experienced.hunger.value / 100;
+      vitals.physical.fatigue = experienced.fatigue.value / 100;
+      vitals.mental.anxiety = experienced.anxiety.value / 100;
+      vitals.mental.stress = experienced.arousal.value / 100;
+      vitals.mental.agitation = experienced.arousal.value / 100;
+      vitals.mental.anger = experienced.anger.value / 100;
+      vitals.mental.longing = experienced.loneliness.value / 100;
+      vitals.derived = computeDerived(vitals);
+    }
+    // Expressed anger trails the canonical anger mirror so shouting responds
+    // to the same state the public panel explains.
+    updateAffect(vitals, { amp: ampOf(vitals) });
 
     const winMs = config.tickMs > 0 ? config.tickMs : 5000;
     const rate = tokenCount / (winMs / 1000); // tok/s over the window

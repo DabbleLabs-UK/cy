@@ -24,7 +24,9 @@ function captive_soma_api_payload(?array $row): array
     $implemented = $soma !== null
         && ($soma['status'] ?? null) === 'implemented'
         && isset($soma['circuits'])
-        && is_array($soma['circuits']);
+        && is_array($soma['circuits'])
+        && isset($soma['experienced']['metrics'])
+        && is_array($soma['experienced']['metrics']);
 
     if (!$implemented) {
         return [

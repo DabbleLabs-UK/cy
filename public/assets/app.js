@@ -166,7 +166,7 @@ async function boot() {
 
   pen = new ComposedFeed($('#paper'), font);
   postcards = new Postcards(pen.contentRoot(), font, { inline: true, lane: pen.animationLane() });
-  brain = new BrainHud($('#brain'));
+  brain = new BrainHud($('#brain'), { historyUrl: CFG.somaHistory });
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
   if (powerEl) power = new Power(powerEl);

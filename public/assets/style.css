@@ -727,6 +727,22 @@ body.cy-paused::after {
 .soma-live { width: 7px; height: 7px; border-radius: 50%; background: #34414d; }
 .soma-live.available { background: var(--good); box-shadow: 0 0 7px rgba(111,174,122,0.65); }
 .soma-caveat { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-public-readout { display: grid; gap: 5px; }
+.soma-state-row {
+  appearance: none; width: 100%; border: 0; padding: 4px 0; color: inherit;
+  background: transparent; display: grid; grid-template-columns: 1fr auto 3ch;
+  gap: 6px; align-items: center; text-align: left; cursor: pointer;
+}
+.soma-state-row:hover .soma-state-label,
+.soma-state-row:focus-visible .soma-state-label { color: #e8eef4; }
+.soma-state-label { color: var(--tel); font: 9px var(--mono); letter-spacing: 0.07em; }
+.soma-state-trend { color: #728493; font: 8px var(--mono); }
+.soma-state-row > strong { color: #e8eef4; font: 10px var(--mono); text-align: right; }
+.soma-state-bar {
+  grid-column: 1 / -1; display: block; height: 4px; background: #0b0e12;
+  border: 1px solid var(--line); overflow: hidden;
+}
+.soma-state-bar i { display: block; height: 100%; width: 0; transition: width 0.8s ease, background-color 0.8s ease; }
 .brain-figure { position: relative; border: 1px solid var(--line); background: radial-gradient(circle at 46% 45%, rgba(65,85,102,0.22), rgba(8,11,15,0.7) 68%); }
 .brain-svg { width: 100%; height: auto; display: block; }
 .brain-shell, .brain-cerebellum, .brain-stem {
@@ -737,8 +753,9 @@ body.cy-paused::after {
 .soma-region {
   fill: #263a4b; fill-opacity: 0.34; stroke: rgba(205,224,235,0.22); stroke-width: 0.9;
   transition: fill 0.8s ease, fill-opacity 0.8s ease, filter 0.8s ease;
-  mix-blend-mode: screen;
+  mix-blend-mode: screen; cursor: pointer;
 }
+.soma-region:focus-visible { outline: none; stroke: #eef6fb; stroke-width: 2; }
 .soma-region.active { filter: drop-shadow(0 0 5px rgba(240,137,70,0.55)); }
 .brain-key { position: absolute; right: 6px; bottom: 5px; color: rgba(186,203,215,0.5); font-size: 8px; letter-spacing: 0.14em; }
 .inference-measured { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 7px; border-block: 1px solid var(--line); padding: 7px 0; }
@@ -759,6 +776,29 @@ body.cy-paused::after {
 .soma-selection { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 7px; }
 .soma-selection div > span { display: block; color: var(--tel-dim); font-size: 8px; letter-spacing: 0.14em; margin-bottom: 2px; }
 .soma-selection strong { display: block; color: #c8d4de; font-size: 9.5px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
+.soma-detail {
+  position: relative; border: 1px solid #385267; background: #0b1016;
+  padding: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+.soma-detail h3 { margin: 0 24px 6px 0; color: #e8eef4; font-size: 10px; letter-spacing: 0.09em; }
+.soma-detail-text, .soma-history-note { margin: 0 0 8px; color: #9babb8; font-size: 9px; line-height: 1.45; }
+.soma-contributors { margin: 0 0 8px; padding-left: 15px; color: #91a4b2; font-size: 8px; line-height: 1.45; overflow-wrap: anywhere; }
+.soma-detail-close { position: absolute; right: 6px; top: 5px; border: 0; color: #8798a5; background: transparent; cursor: pointer; }
+.soma-ranges { display: flex; gap: 4px; margin-bottom: 5px; }
+.soma-ranges button {
+  border: 1px solid var(--line); background: #0c1117; color: #718391;
+  font: 8px var(--mono); padding: 3px 6px; cursor: pointer;
+}
+.soma-ranges button.active { color: #e8eef4; border-color: #50728b; background: #14202a; }
+.soma-history { width: 100%; height: 80px; display: block; background: repeating-linear-gradient(to bottom, transparent 0 19px, rgba(75,98,116,0.15) 20px); border: 1px solid var(--line); margin-bottom: 5px; }
+.soma-history path { fill: none; stroke: #d99d45; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.soma-diagnostics { border-top: 1px solid var(--line); padding-top: 5px; }
+.soma-diagnostics > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
+.soma-diagnostic-rows { display: grid; gap: 4px; margin-top: 8px; }
+.soma-diagnostic-row { display: grid; grid-template-columns: 1fr auto; gap: 5px; }
+.soma-diagnostic-row span { color: var(--tel); font-size: 8.5px; }
+.soma-diagnostic-row strong { color: #c8d4de; font-size: 8.5px; }
+.soma-diagnostic-row small { grid-column: 1 / -1; color: #5f7080; font-size: 8px; }
 .legacy-box { border: 1px solid rgba(190,138,67,0.35); background: rgba(72,48,23,0.12); padding: 7px 8px; }
 .legacy-box summary { cursor: pointer; color: #c28d4b; font-size: 9px; letter-spacing: 0.13em; }
 .legacy-box p { color: #8d795f; font-size: 9px; line-height: 1.4; }
