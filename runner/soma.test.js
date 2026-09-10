@@ -135,4 +135,43 @@ const restored = reconcileSoma(JSON.parse(JSON.stringify(soma)), { now: t0 + 900
 assert.equal(restored.memory.episodes.length, soma.memory.episodes.length);
 assert.equal(restored.selfModel.evidence.length, soma.selfModel.evidence.length);
 
+// Maximum fatigue may select a real period of silence, but that action cannot
+// immediately select itself forever. The last silence survives intervening
+// actions and becomes eligible again only after its cooldown.
+const tired = reconcileSoma(null, { now: t0 });
+tickSoma(tired, {
+  physical: { pain: 0, hunger: 0, fatigue: 1 },
+  monotony: 0,
+  asleep: false,
+  now: t0 + 1000,
+});
+assert.equal(chooseSomaAction(tired, { canDraw: false, now: t0 + 2000 }).name, 'silence');
+completeSomaAction(tired, 'silence');
+tickSoma(tired, {
+  physical: { pain: 0, hunger: 0, fatigue: 1 },
+  monotony: 0,
+  asleep: false,
+  now: t0 + 4 * 60000,
+});
+assert.notEqual(
+  chooseSomaAction(tired, { canDraw: false, now: t0 + 4 * 60000 }).name,
+  'silence',
+  'a completed silence cannot immediately repeat at maximum fatigue',
+);
+assert.equal(tired.action.lastSilenceAtMs, t0 + 2000, 'another action preserves the last silence time');
+assert.equal(
+  chooseSomaAction(tired, { canDraw: false, now: t0 + 16 * 60000 }).name,
+  'silence',
+  'silence becomes eligible again after fifteen minutes',
+);
+const legacySilence = JSON.parse(JSON.stringify(tired));
+delete legacySilence.action.lastSilenceAtMs;
+legacySilence.action.name = 'silence';
+legacySilence.action.chosenAtMs = t0 + 10 * 60000;
+assert.equal(
+  reconcileSoma(legacySilence, { now: t0 + 11 * 60000 }).action.lastSilenceAtMs,
+  t0 + 10 * 60000,
+  'a pre-cooldown saved silence is migrated from its selected time',
+);
+
 console.log('soma.test.js: all checks passed');

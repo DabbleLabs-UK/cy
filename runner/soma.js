@@ -12,6 +12,7 @@ const ASSOCIATION_MAX = 128;
 const MEMORY_SALIENCE_MIN = 0.32;
 const TRANSITION_MAX = 64;
 const RELATED_MEMORY_MIN = 0.22;
+const SILENCE_COOLDOWN_MS = 15 * 60 * 1000;
 
 const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(x) || 0));
 const round = (x) => Number(clamp(x).toFixed(3));
@@ -46,7 +47,7 @@ function blank(now) {
       ),
     },
     attention: { memoryId: null, text: '', source: '', salience: 0, sinceMs: now, tokens: [], entities: [] },
-    action: { name: 'observe', reason: 'nothing has won attention yet', chosenAtMs: now },
+    action: { name: 'observe', reason: 'nothing has won attention yet', chosenAtMs: now, lastSilenceAtMs: 0 },
     drives: { safety: 0, food: 0, rest: 0, contact: 0, understanding: 0.35, expression: 0.2 },
     circuits: {
       interoception: 0,
@@ -139,6 +140,14 @@ export function reconcileSoma(raw, { now = Date.now() } = {}) {
   out.attention.entities = normaliseList(out.attention.entities, 8);
   out.expression.themes = normaliseList(out.expression.themes, 8);
   out.prediction.transitions = boundTransitions(out.prediction.transitions);
+  // V1 states written before the silence cooldown existed still carry the last
+  // selected action. Preserve that evidence so a restart during a silence does
+  // not immediately select another full silence as though none had happened.
+  if (!raw.action || !Number.isFinite(raw.action.lastSilenceAtMs)) {
+    out.action.lastSilenceAtMs = out.action.name === 'silence'
+      ? finite(out.action.chosenAtMs, 0)
+      : 0;
+  }
   return out;
 }
 
@@ -600,13 +609,15 @@ export function chooseSomaAction(state, { asleep = false, canDraw = true, forceD
   if (!state) return { name: 'observe', reason: ACTION_REASON.observe, score: 0 };
   let name = 'observe';
   let score = 0.2;
+  const lastSilenceAtMs = finite(state.action && state.action.lastSilenceAtMs, 0);
+  const silenceReady = lastSilenceAtMs <= 0 || now - lastSilenceAtMs >= SILENCE_COOLDOWN_MS;
   if (asleep) {
     name = 'rest';
     score = Math.max(0.5, state.drives.rest);
   } else if (forceDraw) {
     name = 'draw';
     score = 1;
-  } else if (state.drives.rest > 0.82 && state.drives.expression < 0.45) {
+  } else if (silenceReady && state.drives.rest > 0.82 && state.drives.expression < 0.45) {
     name = 'silence';
     score = state.drives.rest;
   } else {
@@ -623,7 +634,13 @@ export function chooseSomaAction(state, { asleep = false, canDraw = true, forceD
     }
     [name, score] = Object.entries(scores).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
   }
-  state.action = { name, reason: ACTION_REASON[name], score: round(score), chosenAtMs: now };
+  state.action = {
+    name,
+    reason: ACTION_REASON[name],
+    score: round(score),
+    chosenAtMs: now,
+    lastSilenceAtMs: name === 'silence' ? now : lastSilenceAtMs,
+  };
   return state.action;
 }
 
