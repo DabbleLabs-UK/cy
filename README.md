@@ -83,6 +83,9 @@ explicit reply-tray or fan-mail receipt; only reply-tray receipts show a waiting
 spinner. The server never hands Dell a second postcard while a reply is in
 progress. A runner claim abandoned for more than 30 minutes becomes retained
 final fan mail rather than lingering or appearing as a fresh delivery again.
+The postcard prompt explicitly overrides the private-journal no-reader rule:
+Cy must begin by answering a direct question or reacting to one concrete detail
+from that particular card before his reply is allowed to become associative.
 Abuse rate limits remain separate from overload handling. `news` follows
 the existing deliver_at queue shape and shares the runner inbox poll.
 
