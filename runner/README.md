@@ -148,11 +148,18 @@ or implemented Soma circuits.
 
 ## Mechanics
 
-- **Soma v1** (`soma.js`) - observes real runner events, appraises threat,
+- **Soma v1** (`soma.js`) with **experienced state v2** (`experienced-state.js`) - observes real runner events, appraises threat,
   affiliation, deprivation, control loss, and novelty, updates per-family
   expectations, retains a bounded episodic memory, selects attention, derives
-  competing drives, and chooses investigate/remember/connect/draw/write/silence/
-  rest. Every public circuit value includes its computational source.
+  competing drives, and chooses investigate/remember/connect/attend-body/draw/
+  write/silence/rest. Meal outcomes, sleep periods and interruptions, and the
+  last supportive social contact are persisted. Recovering event impulses use a
+  soft ceiling instead of unlimited addition. Every public circuit value includes
+  its computational source.
+- **Prison environment** (`environment.js`) - turns clocked opportunities into
+  concrete outcomes for meals, showers, association, yard, phone calls and sleep.
+  Each outcome carries explicit body, social and appraisal meaning; the language
+  model does not decide what happened or infer state from its own prose.
 - **Hard language seam** - `run.js` computes Soma before a generation and
   `prompt.js` exposes the selected action and material. Output text is never fed
   into state or relations. Provider changes and runner restarts enter as machine

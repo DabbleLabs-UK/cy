@@ -120,4 +120,111 @@ const observe = (subject, name, appraisal, tags = [], at = T0 + 1000) => observe
   assert.doesNotMatch(experiencedDirective(s), /\b\d+(?:\.\d+)?\b/);
 }
 
+// J: old ungrounded body values and permanent migration contributors are
+// discarded instead of becoming causes in the new state.
+{
+  const legacy = blankExperienced(T0);
+  legacy.version = 1;
+  legacy.contributors.hunger.push({
+    id: 'migration:hunger', sourceType: 'migration', description: 'old value', amount: 82,
+    mode: 'level', startedAtMs: T0, updatedAtMs: T0, halfLifeMs: HOUR,
+  });
+  legacy.metrics.hunger.value = 100;
+  const restored = reconcileExperienced(legacy, {
+    now: T0 + 1000,
+    legacyPhysical: { pain: 1, hunger: 1, fatigue: 1 },
+  });
+  assert.equal(restored.version, 2);
+  assert.equal(experiencedSnapshot(restored).metrics.hunger.value, 18);
+  assert.ok(!restored.contributors.hunger.some((item) => item.sourceType === 'migration'));
+}
+
+// K: ordinary repeated incidents approach a soft ceiling and never pin a
+// visible variable at 100.
+{
+  const s = blankExperienced(T0);
+  for (let i = 0; i < 80; i++) {
+    observe(s, `search_${i}`, { threat: 0.65, controlLoss: 0.6 }, ['threat'], T0 + i * 1000);
+  }
+  const view = experiencedSnapshot(s, T0 + 80000);
+  assert.ok(view.metrics.anxiety.value < 100);
+  assert.ok(view.metrics.arousal.value < 100);
+  assert.ok(view.metrics.rumination.value < 100);
+}
+
+// L: a full day is grounded in recorded food and sleep. Hunger rises from the
+// last eaten meal, another meal lowers it, and actual sleep restores fatigue.
+{
+  const s = blankExperienced(T0);
+  observeExperienced(s, {
+    observation: {
+      name: 'breakfast_eaten', text: 'breakfast came and he ate it', tags: ['meal', 'food'],
+      body: { meal: { name: 'breakfast', outcome: 'eaten', amount: 1 } },
+    },
+    appraisal: {}, prediction: {}, family: 'meal',
+  }, T0);
+  const fed = experiencedSnapshot(s, T0).metrics.hunger.value;
+  tickExperienced(s, { now: T0 + 14 * HOUR, asleep: false });
+  const beforeTea = experiencedSnapshot(s, T0 + 14 * HOUR).metrics.hunger.value;
+  assert.ok(beforeTea > fed + 35);
+  observeExperienced(s, {
+    observation: {
+      name: 'tea_eaten', text: 'tea came and he ate it', tags: ['meal', 'food'],
+      body: { meal: { name: 'tea', outcome: 'eaten', amount: 1 } },
+    },
+    appraisal: {}, prediction: {}, family: 'meal',
+  }, T0 + 14 * HOUR);
+  assert.ok(experiencedSnapshot(s, T0 + 14 * HOUR).metrics.hunger.value < beforeTea);
+  const beforeSleep = experiencedSnapshot(s, T0 + 16 * HOUR).metrics.fatigue.value;
+  tickExperienced(s, { now: T0 + 24 * HOUR, asleep: true });
+  const afterSleep = experiencedSnapshot(s, T0 + 24 * HOUR).metrics.fatigue.value;
+  assert.ok(afterSleep < beforeSleep);
+  assert.ok(s.body.sleep.totalSleepMs >= 8 * HOUR);
+}
+
+// M: body history and the causal clocks survive a restart and continue from
+// the stored meal/sleep facts rather than re-reading legacy mirrors.
+{
+  const s = blankExperienced(T0);
+  observeExperienced(s, {
+    observation: {
+      name: 'lunch_partial', text: 'some lunch was eaten', tags: ['meal', 'food'],
+      body: { meal: { name: 'lunch', outcome: 'partial', amount: 0.45 } },
+    },
+    appraisal: {}, prediction: {}, family: 'meal',
+  }, T0 + HOUR);
+  tickExperienced(s, { now: T0 + 9 * HOUR, asleep: false });
+  const before = experiencedSnapshot(s, T0 + 9 * HOUR);
+  const restored = reconcileExperienced(JSON.parse(JSON.stringify(s)), { now: T0 + 9 * HOUR });
+  const after = experiencedSnapshot(restored, T0 + 9 * HOUR);
+  assert.equal(after.body.nutrition.lastMealAtMs, T0 + HOUR);
+  assert.equal(after.body.nutrition.lastOutcome, 'partial');
+  assert.equal(after.metrics.hunger.value, before.metrics.hunger.value);
+  assert.equal(experiencedHistory(restored).length, experiencedHistory(s).length);
+}
+
+// N: ordinary, non-threatening company is a real social input and lowers the
+// social-need value without pretending every nearby person is reassuring.
+{
+  const s = blankExperienced(T0);
+  observeExperienced(s, {
+    observation: {
+      name: 'quiet_company', text: 'someone sat with him for a while', tags: ['social'],
+      social: { quality: 'ordinary', strength: 0.45 },
+    },
+    appraisal: { affiliation: 0.45, threat: 0.02 }, prediction: {}, family: 'social',
+  }, T0);
+  tickExperienced(s, { now: T0 + 30 * HOUR, asleep: false });
+  const before = experiencedSnapshot(s).metrics.loneliness.value;
+  observeExperienced(s, {
+    observation: {
+      name: 'association_quiet_company', text: 'sat together without any trouble',
+      tags: ['social', 'company'], social: { quality: 'ordinary', strength: 0.5 },
+    },
+    appraisal: { affiliation: 0.5, threat: 0.03, controlLoss: 0.03 }, prediction: {}, family: 'social',
+  }, T0 + 30 * HOUR + 1000);
+  assert.ok(experiencedSnapshot(s).metrics.loneliness.value < before);
+  assert.equal(s.body.social.supportiveContacts, 2);
+}
+
 console.log('experienced-state.test.js: all checks passed');

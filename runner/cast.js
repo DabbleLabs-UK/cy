@@ -142,12 +142,16 @@ export function reconcileRelations(saved) {
 // what CY fixates on if the grudge hardens. Mostly negative (prison), with the
 // occasional bit of decency so it is not one-note.
 export const SOCIAL_EVENTS = [
-  { type: 'a_look', slight: 'gave you a look on association', d: { suspicion: +0.06, grudge: +0.05, warmth: -0.03 } },
-  { type: 'swapped_tray', slight: 'swapped your meal tray for a worse one', d: { grudge: +0.10, suspicion: +0.05, warmth: -0.06 } },
-  { type: 'unanswered', slight: 'asked you something and did not wait for the answer', d: { warmth: -0.05, suspicion: +0.03, grudge: +0.03 } },
-  { type: 'borrowed', slight: 'borrowed something off you and never gave it back', d: { grudge: +0.09, warmth: -0.05 } },
-  { type: 'talked_over', slight: 'talked over you at the servery', d: { grudge: +0.06, warmth: -0.04 } },
-  { type: 'kindness', slight: 'passed you a burn on the quiet', d: { warmth: +0.12, grudge: -0.06, suspicion: -0.04 } },
+  { type: 'a_look', slight: 'gave you a look on association', d: { suspicion: +0.06, grudge: +0.05, warmth: -0.03 }, social: { quality: 'hostile', strength: 0.3 }, appraisal: { threat: 0.3, affiliation: 0.02 } },
+  { type: 'swapped_tray', slight: 'swapped your meal tray for a worse one', d: { grudge: +0.10, suspicion: +0.05, warmth: -0.06 }, social: { quality: 'hostile', strength: 0.6 }, appraisal: { threat: 0.42, affiliation: 0.01, controlLoss: 0.45 } },
+  { type: 'unanswered', slight: 'asked you something and did not wait for the answer', d: { warmth: -0.05, suspicion: +0.03, grudge: +0.03 }, social: { quality: 'rejecting', strength: 0.46 }, appraisal: { affiliation: 0.01, controlLoss: 0.2 } },
+  { type: 'borrowed', slight: 'borrowed something off you and never gave it back', d: { grudge: +0.09, warmth: -0.05 }, social: { quality: 'hostile', strength: 0.44 }, appraisal: { threat: 0.22, affiliation: 0.01, controlLoss: 0.35 } },
+  { type: 'talked_over', slight: 'talked over you at the servery', d: { grudge: +0.06, warmth: -0.04 }, social: { quality: 'rejecting', strength: 0.38 }, appraisal: { affiliation: 0.01, controlLoss: 0.28 } },
+  { type: 'kindness', slight: 'passed you a tea bag on the quiet', d: { warmth: +0.12, grudge: -0.06, suspicion: -0.04 }, social: { quality: 'supportive', strength: 0.72 }, appraisal: { threat: 0.02, affiliation: 0.72, controlLoss: 0.02 } },
+  { type: 'shared_joke', slight: 'made you laugh in the queue and left it at that', d: { warmth: +0.09, grudge: -0.04, suspicion: -0.03 }, social: { quality: 'supportive', strength: 0.64 }, appraisal: { threat: 0.02, affiliation: 0.64 } },
+  { type: 'sat_with', slight: 'sat beside you on association without asking anything', d: { warmth: +0.07, suspicion: -0.03 }, social: { quality: 'ordinary', strength: 0.48 }, appraisal: { threat: 0.03, affiliation: 0.48 } },
+  { type: 'checked_in', slight: 'asked if you were all right and waited for the answer', d: { warmth: +0.10, grudge: -0.04, suspicion: -0.03 }, social: { quality: 'supportive', strength: 0.68 }, appraisal: { threat: 0.02, affiliation: 0.68 } },
+  { type: 'lent_book', slight: 'left a book by your door with your number inside it', d: { warmth: +0.08, suspicion: -0.02 }, social: { quality: 'supportive', strength: 0.58 }, appraisal: { threat: 0.03, affiliation: 0.58 } },
 ];
 
 // Pick a random inmate + social event. rnd defaults to Math.random; kept as an
@@ -176,12 +180,12 @@ export function applySocialEvent(relations, castKey, ev, amp = 1) {
 // standing (scaled by amp in run.js). `slight` is a name-LESS verb phrase so the
 // grudge directive can read "<Name> <slight>" without doubling the name.
 export const OFFICER_EVENTS = [
-  { type: 'order', slight: 'gave an order and stood there til it was done', d: { suspicion: +0.05, warmth: -0.03, grudge: +0.03 } },
-  { type: 'writeup', slight: 'wrote you up for something small', d: { grudge: +0.10, suspicion: +0.06, warmth: -0.05 } },
-  { type: 'refusal', slight: 'refused you a thing you are owed, no reason given', d: { grudge: +0.09, warmth: -0.06, suspicion: +0.04 } },
-  { type: 'search', slight: 'turned the cell over and left it worse', d: { suspicion: +0.08, grudge: +0.07, warmth: -0.04 } },
-  { type: 'lockup', slight: 'banged you up dead on time, not a second either way', d: { suspicion: +0.03, warmth: -0.02 } },
-  { type: 'kindness', slight: 'did you a quiet kindness, off the record', d: { warmth: +0.14, suspicion: -0.05, grudge: -0.06 } },
+  { type: 'order', slight: 'gave an order and stood there til it was done', d: { suspicion: +0.05, warmth: -0.03, grudge: +0.03 }, appraisal: { threat: 0.18, affiliation: 0.02, controlLoss: 0.55 } },
+  { type: 'writeup', slight: 'wrote you up for something small', d: { grudge: +0.10, suspicion: +0.06, warmth: -0.05 }, appraisal: { threat: 0.35, affiliation: 0.01, controlLoss: 0.68 } },
+  { type: 'refusal', slight: 'refused you a thing you are owed, no reason given', d: { grudge: +0.09, warmth: -0.06, suspicion: +0.04 }, social: { quality: 'rejecting', strength: 0.42 }, appraisal: { threat: 0.2, affiliation: 0.01, controlLoss: 0.64 } },
+  { type: 'search', slight: 'turned the cell over and left it worse', d: { suspicion: +0.08, grudge: +0.07, warmth: -0.04 }, appraisal: { threat: 0.66, affiliation: 0.01, controlLoss: 0.78 } },
+  { type: 'lockup', slight: 'banged you up dead on time, not a second either way', d: { suspicion: +0.03, warmth: -0.02 }, appraisal: { threat: 0.08, affiliation: 0.01, controlLoss: 0.32 } },
+  { type: 'kindness', slight: 'did you a quiet kindness, off the record', d: { warmth: +0.14, suspicion: -0.05, grudge: -0.06 }, social: { quality: 'supportive', strength: 0.5 }, appraisal: { threat: 0.02, affiliation: 0.5, controlLoss: 0.02 } },
 ];
 
 // The concrete line for an officer event, naming the officer.

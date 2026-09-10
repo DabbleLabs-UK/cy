@@ -51,6 +51,12 @@ const DAY_TIMES = ['half nine', 'gone eleven', 'dinner time', 'after lunch', 'mi
 // actorKey, slight, evType, sub }.
 
 const BUILDERS = {
+  // A scheduled prison routine with an outcome already selected by the
+  // environment engine. Keep its concrete wording intact in the memory ledger.
+  environment(ctx) {
+    return { actor: '', verb: '', object: '', detail: ctx.text || 'the routine moved on' };
+  },
+
   // an inmate did something to him. run.js supplies actorKey + the slight text.
   social(ctx) {
     const name = fullName(ctx.actorKey);

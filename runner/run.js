@@ -108,6 +108,7 @@ import { createWarden, sanitize, stripScaffold, stripScaffoldAccounted, narratio
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
+import { PRISON_SCHEDULE, materialiseScheduledEvent } from './environment.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -225,14 +226,6 @@ function londonParts(d = new Date()) {
 // asleep between lights_out (22:30) and lights_on (06:30). The predicate lives in
 // prompt.js so the loop and the dream tests read the window from one place.
 const isAsleep = isSleepWindow;
-
-const SCHEDULE = [
-  { name: 'lights_on', mins: 6 * 60 + 30 },
-  { name: 'meal', mins: 7 * 60 + 30 }, // slop
-  { name: 'meal', mins: 11 * 60 + 45 }, // lunch
-  { name: 'meal', mins: 16 * 60 + 45 }, // tea
-  { name: 'lights_out', mins: 22 * 60 + 30 },
-];
 
 // THE REGIME - the shape of a British prison day. The current phase is put in
 // every waking prompt so the day has structure; some transitions can DEVIATE
@@ -554,13 +547,17 @@ async function main() {
       affiliation: Math.max(0.05, standing.warmth || 0),
       controlLoss: kind === 'officer' ? Math.max(0.35, standing.suspicion || 0) : 0.08,
     } : undefined;
+    const appraisal = { ...(relationalAppraisal || {}), ...(ctx.appraisal || {}) };
     soma.observe(
       {
         name: kind,
-        text: incidentLine(inc),
-        tags: [kind, inc.sub, inc.verb].filter(Boolean),
+        text: ctx.text || incidentLine(inc),
+        tags: [kind, ctx.evType, ...(ctx.tags || []), inc.sub, inc.verb].filter(Boolean),
         entities: [inc.actor, inc.subject].filter(Boolean),
-        appraisal: relationalAppraisal,
+        appraisal,
+        body: ctx.body,
+        social: ctx.social,
+        effects: ctx.effects,
         outcome: ctx.evType || ctx.sub || null,
         ts: inc.ts,
       },
@@ -2090,7 +2087,7 @@ async function main() {
   // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
   // it was a trivial thing landing under high amplification, arm the "this is the
   // day" cue. Returns the amp that was applied.
-  function fireEvent(name, extra = {}, { observe = true } = {}) {
+  function fireEvent(name, extra = {}, { observe = true, observation = null } = {}) {
     const a = ampOf(vitals);
     applyEvent(vitals, name, { now: Date.now() });
     const detail = Object.entries(extra)
@@ -2098,13 +2095,18 @@ async function main() {
       .map(([key, value]) => `${key} ${value}`)
       .join(', ');
     if (observe) {
+      const observed = observation || {};
       soma.observe(
         {
           name,
-          text: detail ? `${name}: ${detail}` : name.replaceAll('_', ' '),
-          tags: [name, ...Object.keys(extra)],
+          text: observed.text || (detail ? `${name}: ${detail}` : name.replaceAll('_', ' ')),
+          tags: [name, ...Object.keys(extra), ...(observed.tags || [])],
           entities: [extra.from, extra.who].filter(Boolean),
-          outcome: extra.outcome || null,
+          appraisal: observed.appraisal,
+          body: observed.body,
+          social: observed.social,
+          effects: observed.effects,
+          outcome: observed.outcome || extra.outcome || null,
           ts: tsNow(),
         },
         { now: Date.now() },
@@ -2126,7 +2128,10 @@ async function main() {
     applySocialEvent(vitals.relations, castKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
     const { mins } = londonParts();
-    recordIncident('social', { actorKey: castKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins });
+    recordIncident('social', {
+      actorKey: castKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins,
+      appraisal: ev.appraisal, social: ev.social,
+    });
     const r = vitals.relations[castKey];
     emit({
       kind: 'event',
@@ -2149,7 +2154,10 @@ async function main() {
     applyOfficerEvent(vitals.relations, officerKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.25);
     const { mins } = londonParts();
-    recordIncident('officer', { actorKey: officerKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins });
+    recordIncident('officer', {
+      actorKey: officerKey, slight: ev.slight, evType: ev.type, phase: currentRegime(mins).phase, mins,
+      appraisal: ev.appraisal, social: ev.social,
+    });
     officerCue = { key: officerKey, ev, until: Date.now() + 3 * 60 * 1000 };
     const r = vitals.relations[officerKey];
     emit({
@@ -2223,7 +2231,15 @@ async function main() {
     let mid = false;
     if (asleep) {
       // a night noise is the exception - high impact, it wakes him
-      fireEvent('noise_night');
+      fireEvent('noise_night', {}, {
+        observation: {
+          text: line,
+          tags: ['sleep', 'interrupted', 'night'],
+          body: { sleep: { outcome: 'interrupted' } },
+          appraisal: { threat: 0.18, controlLoss: 0.42 },
+          outcome: 'sleep interrupted',
+        },
+      });
       wingNoiseCue = { line, mid: false, wake: true, until: now + 3 * 60 * 1000 };
     } else {
       // barely moves the needle awake - a small startle, no more
@@ -2233,6 +2249,20 @@ async function main() {
       if (mid && currentAbort) currentAbort.abort(); // cut across the thought mid-word
     }
     emit({ kind: 'event', payload: { name: 'wing_noise', line, asleep, mid } });
+  }
+
+  function fireScheduled(slot) {
+    const event = materialiseScheduledEvent(slot);
+    recordIncident('environment', {
+      text: event.text,
+      tags: event.tags,
+      evType: event.name,
+      appraisal: event.appraisal,
+      body: event.body,
+      social: event.social,
+      effects: event.effects,
+    });
+    fireEvent(event.name, event.public || {}, { observe: false });
   }
 
   // ---- deterministic environment scheduler (runs each vitals tick) ----
@@ -2245,8 +2275,8 @@ async function main() {
       emit({ kind: 'day', payload: { n: vitals.day, date } });
     }
 
-    for (const s of SCHEDULE) {
-      if (crossed(s.mins, mins, prevMins)) fireEvent(s.name);
+    for (const slot of PRISON_SCHEDULE) {
+      if (crossed(slot.mins, mins, prevMins)) fireScheduled(slot);
     }
     // regime boundary crossings that can DEVIATE (late unlock, cancelled
     // association). A deviation is an amplifiable event AND a concrete incident.

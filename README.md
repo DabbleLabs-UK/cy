@@ -27,14 +27,28 @@ and loss-of-control appraisal.
 The live pre-language boundary is `runner/soma-cycle.js`. Autonomous journal,
 postcard and warden generation all cross it after their new lived input has been
 observed. The resulting action and compact natural-language directive enter Zone
-C together. `runner/experienced-state.js` is the canonical 0-100 layer for
+C together. `runner/experienced-state.js` v2 is the canonical 0-100 layer for
 anxiety, arousal, pain, hunger, fatigue, loneliness, anger and rumination. Each
 value is a resting tendency plus persistent, named causal contributors from body
 clocks, observed events, appraisal, memory, social contact and bounded self-output
-feedback. Impulses recover at different half-lives and body-clock levels change
-with real elapsed time and sleep. The old overlapping physical and mental values
-are now compatibility mirrors of this state rather than a competing simulation.
-Other legacy composites remain labelled placeholders.
+feedback. The body record stores actual eaten, partial, missed and refused meal
+outcomes; the last food time and portion; sleep periods and interruptions; and
+supportive or rejecting social contact. Hunger changes from the recorded meal,
+fatigue changes across recorded waking and sleep time, and ordinary company can
+lower social need. Recovering event impulses pass through a soft ceiling, so
+ordinary repeated events cannot permanently pin values at 100. Old imported
+physical values and migration contributors are discarded. The old overlapping
+physical and mental values are compatibility mirrors of this state rather than a
+competing simulation. Other legacy composites remain labelled placeholders.
+
+`runner/environment.js` supplies structured outcomes for the daily prison world.
+Breakfast, lunch and tea can be eaten, partly eaten, missed or refused. Shower,
+association, yard and phone periods can provide relief, ordinary company,
+supportive contact, rejection, cancellation or discomfort. Night noise records a
+sleep interruption. These structured facts feed attention and action selection as
+well as the prompt: strong hunger or discomfort can select `attend_body`, fatigue
+can select silence, social need can select connection, and stored related events
+compete for recall.
 
 Generated prose returns only as bounded evidence of Cy's own action - repetition,
 intensity, commitment, recurring themes, and activation of associations learned

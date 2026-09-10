@@ -71,21 +71,29 @@ assert.equal(soma.memory.episodes.at(-1).kind, 'self_output');
 assert.match(soma.memory.episodes.at(-1).outcome, /not evidence/);
 
 tickSoma(soma, {
-  physical: { pain: 0.2, hunger: 0.8, fatigue: 0.35 },
+  physical: { pain: 1, hunger: 1, fatigue: 1 },
   monotony: 0.4,
   asleep: false,
   lastMailMs: t0 - 18 * 3600000,
   now: t0 + 5000,
 });
-assert.equal(soma.drives.food, 0.8);
-assert.ok(soma.circuits.interoception >= 0.8);
-assert.ok(soma.circuits.memoryRecall > 0);
+assert.equal(soma.drives.food, 0.18, 'legacy physical input is not imported into Soma');
+assert.ok(soma.circuits.interoception < 0.25);
 
 const action = chooseSomaAction(soma, { now: t0 + 6000 });
-assert.ok(['investigate', 'remember', 'connect', 'draw', 'write', 'observe'].includes(action.name));
+assert.ok(['investigate', 'remember', 'connect', 'attend_body', 'draw', 'write', 'observe'].includes(action.name));
 assert.ok(action.reason.length > 20);
 assert.notEqual(chooseSomaAction(soma, { canDraw: false, now: t0 + 7000 }).name, 'draw');
 assert.equal(chooseSomaAction(soma, { forceDraw: true, now: t0 + 8000 }).name, 'draw');
+
+const hungry = reconcileSoma(null, { now: t0 });
+observeSoma(hungry, {
+  name: 'tea_eaten', text: 'tea came and he ate it', tags: ['meal', 'food'],
+  body: { meal: { name: 'tea', outcome: 'eaten', amount: 1 } },
+}, { now: t0 });
+tickSoma(hungry, { asleep: false, now: t0 + 16 * 3600000 });
+assert.equal(hungry.attention.source, 'body:hunger');
+assert.equal(chooseSomaAction(hungry, { canDraw: false, now: t0 + 16 * 3600000 + 1 }).name, 'attend_body');
 const before = soma.drives.understanding;
 completeSomaAction(soma, 'investigate');
 assert.ok(soma.drives.understanding < before);
@@ -140,6 +148,7 @@ assert.equal(restored.selfModel.evidence.length, soma.selfModel.evidence.length)
 // immediately select itself forever. The last silence survives intervening
 // actions and becomes eligible again only after its cooldown.
 const tired = reconcileSoma(null, { now: t0 });
+tired.experienced.body.sleep.fatigueLoad = 88;
 tickSoma(tired, {
   physical: { pain: 0, hunger: 0, fatigue: 1 },
   monotony: 0,

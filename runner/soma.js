@@ -29,6 +29,7 @@ const round = (x) => Number(clamp(x).toFixed(3));
 const EXPECTATION_DEFAULTS = {
   meal: 0.55,
   mail: 0.18,
+  social: 0.34,
   conflict: 0.12,
   officer: 0.22,
   disruption: 0.16,
@@ -167,7 +168,8 @@ function familyOf(name, tags = []) {
   const all = [n, ...tags.map((t) => String(t).toLowerCase())].join(' ');
   if (/meal|food|egg|tea|canteen/.test(all)) return 'meal';
   if (/letter|mail|postcard|visitor|image/.test(all)) return 'mail';
-  if (/social|fight|injury|hostile|threat/.test(all)) return 'conflict';
+  if (/fight|injury|hostile|threat/.test(all)) return 'conflict';
+  if (/social|company|supportive|shared_joke|sat_with|checked_in|lent_book/.test(all)) return 'social';
   if (/officer|warden|search|lockdown|unlock|association|regime/.test(all)) return 'officer';
   if (/provider|restart|context|machine|power/.test(all)) return 'machine';
   if (/noise|overheard|wing|delay|cancel/.test(all)) return 'disruption';
@@ -573,6 +575,46 @@ export function tickSoma(state, {
       0.22 * experienced.rumination.value / 100 + 0.12 * clamp(monotony),
   );
 
+  // Body state competes for attention before language. This is not sentiment
+  // inferred from prose: it comes from the persisted meal, sleep and pain state.
+  const bodyCandidates = [];
+  const nutrition = state.experienced.body && state.experienced.body.nutrition;
+  if (state.drives.food > 0.62) {
+    bodyCandidates.push({
+      source: 'body:hunger',
+      salience: state.drives.food * 0.82,
+      text: nutrition && nutrition.lastMealName
+        ? `the ${nutrition.lastMealName} that was eaten is a long way behind him now`
+        : 'the empty pull in his stomach keeps interrupting everything else',
+    });
+  }
+  if (state.drives.rest > 0.72) {
+    bodyCandidates.push({
+      source: 'body:fatigue',
+      salience: state.drives.rest * 0.78,
+      text: 'tiredness keeps breaking concentration and making the next action harder',
+    });
+  }
+  if (pain > 0.45) {
+    bodyCandidates.push({
+      source: 'body:pain',
+      salience: pain * 0.86,
+      text: 'bodily discomfort keeps interrupting the present thought',
+    });
+  }
+  const bodyWinner = bodyCandidates.sort((a, b) => b.salience - a.salience)[0];
+  if (bodyWinner && bodyWinner.salience > finite(state.attention.salience, 0)) {
+    state.attention = {
+      memoryId: null,
+      text: bodyWinner.text,
+      source: bodyWinner.source,
+      salience: round(bodyWinner.salience),
+      sinceMs: now,
+      tokens: contentTokens(bodyWinner.text),
+      entities: [],
+    };
+  }
+
   // Retrieval is deterministic and state-led. When the present focus has faded
   // (or monotony is high), older episodes compete by stored salience, recency,
   // and relevance to the strongest current need. This is actual episodic recall,
@@ -582,6 +624,7 @@ export function tickSoma(state, {
     const familyDrive = {
       meal: state.drives.food,
       mail: state.drives.contact,
+      social: state.drives.contact,
       conflict: state.drives.safety,
       officer: state.drives.safety,
       machine: state.drives.understanding,
@@ -633,6 +676,7 @@ const ACTION_REASON = {
   investigate: 'uncertainty about the cell, machine, and continuity is strongest',
   remember: 'a stored episode has regained attention',
   connect: 'absence of contact is the strongest unmet need',
+  attend_body: 'hunger or discomfort has displaced the abstract train of thought',
   draw: 'expression and recalled imagery outweigh another written entry',
   write: 'the attended event still needs expression',
   silence: 'fatigue is stronger than the need to express anything',
@@ -659,6 +703,7 @@ export function chooseSomaAction(state, { asleep = false, canDraw = true, forceD
       investigate: state.drives.understanding * 0.78 + state.circuits.predictionError * 0.22,
       remember: state.circuits.memoryRecall * 0.75 + state.drives.expression * 0.25,
       connect: state.drives.contact * 0.8 + state.circuits.affiliation * 0.2,
+      attend_body: Math.max(state.drives.food, state.circuits.interoception) * 0.82 + state.drives.expression * 0.18,
       draw: state.drives.expression * 0.55 + state.circuits.memoryRecall * 0.45,
       write: state.drives.expression * 0.68 + state.circuits.attention * 0.32,
     };
@@ -715,6 +760,9 @@ export function somaDirective(state) {
   if (state.action.name === 'investigate') {
     lines.push(`- unresolved self-question: ${state.selfModel.question}`);
   }
+  if (state.action.name === 'attend_body') {
+    lines.push('- bodily need has won attention; begin from what the body interrupts or makes hard to ignore');
+  }
   if (state.expression && state.expression.themes && state.expression.themes.length) {
     lines.push(`- recent own wording kept returning to: ${state.expression.themes.slice(0, 4).join(', ')}; this is expression, not proof those things happened`);
   }
@@ -726,7 +774,7 @@ export function somaSampling(state) {
   const c = (state && state.circuits) || {};
   const action = (state && state.action && state.action.name) || 'observe';
   const temperature = clamp(0.64 + 0.22 * clamp(c.predictionError) + 0.12 * (1 - clamp(c.attention)), 0.58, 1.05);
-  const lengths = { investigate: 105, remember: 90, connect: 80, draw: 45, write: 78, observe: 62 };
+  const lengths = { investigate: 105, remember: 90, connect: 80, attend_body: 58, draw: 45, write: 78, observe: 62 };
   const pressure = Math.max(clamp(state && state.drives && state.drives.rest), clamp(state && state.drives && state.drives.food));
   const predicted = Math.round((lengths[action] || 70) * (1 - 0.42 * pressure));
   return {

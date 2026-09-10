@@ -5,7 +5,7 @@
 // cross-state contributors are explicit levels. The public explanation, prompt
 // directive and brain analogy all read this same ledger.
 
-export const EXPERIENCED_VERSION = 1;
+export const EXPERIENCED_VERSION = 2;
 export const HISTORY_INTERVAL_MS = 2 * 60 * 1000;
 export const HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -29,6 +29,11 @@ const HALF_LIFE = {
   rumination: 3 * 60 * 60 * 1000,
 };
 
+const MIN_VALUE = 2;
+const MAX_VALUE = 96;
+const MAX_LEVEL_VALUE = 90;
+const MAX_EVENT_IMPULSE = 36;
+
 const clamp = (value, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, Number(value) || 0));
 const finite = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
 const round = (value, digits = 1) => Number(Number(value).toFixed(digits));
@@ -46,41 +51,99 @@ export function blankExperienced(now = Date.now(), legacyPhysical = null) {
     updatedAtMs: now,
     lastTickMs: now,
     lastSampleMs: 0,
-    legacyImported: !!(legacyPhysical && typeof legacyPhysical === 'object'),
+    legacyImported: true,
     socialClockInitialised: false,
+    body: {
+      nutrition: {
+        lastOfferedAtMs: null,
+        lastMealAtMs: null,
+        lastMealName: '',
+        lastOutcome: 'unknown',
+        lastAmount: 0,
+        mealsEaten: 0,
+        mealsPartial: 0,
+        mealsMissed: 0,
+        mealsRefused: 0,
+      },
+      sleep: {
+        asleep: false,
+        currentStartedAtMs: null,
+        lastStartedAtMs: null,
+        lastEndedAtMs: null,
+        lastDurationMs: 0,
+        totalSleepMs: 0,
+        interruptions: 0,
+        lastInterruptedAtMs: null,
+        fatigueLoad: METRICS.fatigue.baseline,
+      },
+      social: {
+        lastSupportiveAtMs: null,
+        lastQuality: 'unknown',
+        supportiveContacts: 0,
+        rejectingContacts: 0,
+      },
+    },
     metrics: Object.fromEntries(Object.keys(METRICS).map((key) => [key, blankMetric(key, now)])),
     contributors: Object.fromEntries(Object.keys(METRICS).map((key) => [key, []])),
     history: [],
   };
-  if (legacyPhysical && typeof legacyPhysical === 'object') {
-    for (const key of ['pain', 'hunger', 'fatigue']) {
-      if (!Number.isFinite(legacyPhysical[key])) continue;
-      const amount = clamp(legacyPhysical[key] * 100) - METRICS[key].baseline;
-      if (key === 'pain') {
-        addImpulse(state, key, `migration:${key}`, amount,
-          'starting value migrated from the previous body-clock state', now, 'migration', HALF_LIFE.pain);
-      } else {
-        setLevel(state, key, `migration:${key}`, amount,
-          'starting value migrated from the previous body-clock state', now, 'migration');
-      }
-    }
-  }
+  // Legacy physical scalars are deliberately ignored. They were ungrounded,
+  // frequently saturated values and must not become permanent Soma causes.
+  void legacyPhysical;
   recompute(state, now);
   sample(state, now, true);
   return state;
 }
 
 export function reconcileExperienced(raw, { now = Date.now(), legacyPhysical = null } = {}) {
-  if (!raw || typeof raw !== 'object' || raw.version !== EXPERIENCED_VERSION) {
+  if (!raw || typeof raw !== 'object' || ![1, EXPERIENCED_VERSION].includes(raw.version)) {
     return blankExperienced(now, legacyPhysical);
   }
+  const migratingV1 = raw.version === 1;
   const state = blankExperienced(finite(raw.createdAtMs, now));
+  state.version = EXPERIENCED_VERSION;
   state.createdAtMs = finite(raw.createdAtMs, now);
   state.updatedAtMs = finite(raw.updatedAtMs, now);
-  state.lastTickMs = finite(raw.lastTickMs, now);
+  state.lastTickMs = migratingV1 ? now : finite(raw.lastTickMs, now);
   state.lastSampleMs = finite(raw.lastSampleMs, 0);
-  state.legacyImported = raw.legacyImported !== false;
+  state.legacyImported = true;
   state.socialClockInitialised = raw.socialClockInitialised === true;
+  if (!migratingV1 && raw.body && typeof raw.body === 'object') {
+    const nutrition = raw.body.nutrition || {};
+    const sleep = raw.body.sleep || {};
+    const social = raw.body.social || {};
+    state.body.nutrition = {
+      ...state.body.nutrition,
+      lastOfferedAtMs: finite(nutrition.lastOfferedAtMs, null),
+      lastMealAtMs: finite(nutrition.lastMealAtMs, null),
+      lastMealName: clean(nutrition.lastMealName, 32),
+      lastOutcome: clean(nutrition.lastOutcome || 'unknown', 24),
+      lastAmount: clamp(nutrition.lastAmount, 0, 1),
+      mealsEaten: Math.max(0, finite(nutrition.mealsEaten, 0)),
+      mealsPartial: Math.max(0, finite(nutrition.mealsPartial, 0)),
+      mealsMissed: Math.max(0, finite(nutrition.mealsMissed, 0)),
+      mealsRefused: Math.max(0, finite(nutrition.mealsRefused, 0)),
+    };
+    state.body.sleep = {
+      ...state.body.sleep,
+      asleep: sleep.asleep === true,
+      currentStartedAtMs: finite(sleep.currentStartedAtMs, null),
+      lastStartedAtMs: finite(sleep.lastStartedAtMs, null),
+      lastEndedAtMs: finite(sleep.lastEndedAtMs, null),
+      lastDurationMs: Math.max(0, finite(sleep.lastDurationMs, 0)),
+      totalSleepMs: Math.max(0, finite(sleep.totalSleepMs, 0)),
+      interruptions: Math.max(0, finite(sleep.interruptions, 0)),
+      lastInterruptedAtMs: finite(sleep.lastInterruptedAtMs, null),
+      fatigueLoad: clamp(sleep.fatigueLoad, MIN_VALUE, MAX_LEVEL_VALUE),
+    };
+    state.body.social = {
+      ...state.body.social,
+      lastSupportiveAtMs: finite(social.lastSupportiveAtMs, null),
+      lastQuality: clean(social.lastQuality || 'unknown', 24),
+      supportiveContacts: Math.max(0, finite(social.supportiveContacts, 0)),
+      rejectingContacts: Math.max(0, finite(social.rejectingContacts, 0)),
+    };
+  }
   for (const key of Object.keys(METRICS)) {
     const metric = raw.metrics && raw.metrics[key];
     state.metrics[key] = {
@@ -100,7 +163,10 @@ export function reconcileExperienced(raw, { now = Date.now(), legacyPhysical = n
       updatedAtMs: finite(item.updatedAtMs, item.startedAtMs || state.updatedAtMs),
       halfLifeMs: Math.max(1000, finite(item.halfLifeMs, HALF_LIFE[key] || 3600000)),
       qualifiedReassurance: item.qualifiedReassurance === true,
-    })) : [];
+    })).filter((item) => item.sourceType !== 'migration' && !item.id.startsWith('migration:')) : [];
+    if (migratingV1 && ['hunger', 'fatigue'].includes(key)) {
+      state.contributors[key] = state.contributors[key].filter((item) => item.mode !== 'level');
+    }
   }
   state.contributors.loneliness = state.contributors.loneliness.filter((item) =>
     !(item.sourceType === 'social_event' && item.id.endsWith(':contact') && !item.qualifiedReassurance));
@@ -121,6 +187,7 @@ function contributionAt(item, now) {
 
 function addImpulse(state, metric, id, amount, description, now, sourceType = 'event', halfLifeMs = null) {
   if (!METRICS[metric] || !amount) return;
+  amount = clamp(amount, -MAX_EVENT_IMPULSE, MAX_EVENT_IMPULSE);
   const item = {
     id: clean(id, 100), sourceId: clean(id, 100), sourceType, description: clean(description), amount,
     mode: 'impulse', startedAtMs: now, updatedAtMs: now,
@@ -132,7 +199,7 @@ function addImpulse(state, metric, id, amount, description, now, sourceType = 'e
 
 function setLevel(state, metric, id, amount, description, now, sourceType = 'body_clock') {
   if (!METRICS[metric]) return;
-  amount = clamp(amount, -METRICS[metric].baseline, 100 - METRICS[metric].baseline);
+  amount = clamp(amount, MIN_VALUE - METRICS[metric].baseline, MAX_LEVEL_VALUE - METRICS[metric].baseline);
   const ledger = state.contributors[metric];
   const old = ledger.find((item) => item.id === id);
   if (old) {
@@ -147,16 +214,23 @@ function setLevel(state, metric, id, amount, description, now, sourceType = 'bod
   }
 }
 
-function adjustLevel(state, metric, id, delta, description, now, sourceType = 'body_clock') {
-  const old = state.contributors[metric].find((item) => item.id === id);
-  setLevel(state, metric, id, finite(old && old.amount, 0) + delta, description, now, sourceType);
-}
-
 function recompute(state, now) {
   for (const key of Object.keys(METRICS)) {
     state.contributors[key] = state.contributors[key].filter((item) => item.mode === 'level' || Math.abs(contributionAt(item, now)) >= 0.15);
-    const value = clamp(METRICS[key].baseline + state.contributors[key]
-      .reduce((sum, item) => sum + contributionAt(item, now), 0));
+    const levels = state.contributors[key].filter((item) => item.mode === 'level')
+      .reduce((sum, item) => sum + finite(item.amount, 0), 0);
+    const anchor = clamp(METRICS[key].baseline + levels, MIN_VALUE, MAX_LEVEL_VALUE);
+    const impulses = state.contributors[key].filter((item) => item.mode !== 'level')
+      .map((item) => contributionAt(item, now));
+    const positive = impulses.filter((amount) => amount > 0).reduce((sum, amount) => sum + amount, 0);
+    const negative = -impulses.filter((amount) => amount < 0).reduce((sum, amount) => sum + amount, 0);
+    const upRoom = Math.max(0.001, MAX_VALUE - anchor);
+    const downRoom = Math.max(0.001, anchor - MIN_VALUE);
+    const value = clamp(
+      anchor + upRoom * (1 - Math.exp(-positive / upRoom)) - downRoom * (1 - Math.exp(-negative / downRoom)),
+      MIN_VALUE,
+      MAX_VALUE,
+    );
     if (Math.abs(value - state.metrics[key].value) >= 0.05) state.metrics[key].updatedAtMs = now;
     state.metrics[key].value = round(value);
     state.metrics[key].baseline = METRICS[key].baseline;
@@ -176,6 +250,110 @@ function eventIdentity(observation, episodeId, now) {
   return clean(observation.id || observation.seq || episodeId || `${observation.name || 'event'}:${now}`, 100);
 }
 
+function hungerTarget(nutrition, now) {
+  if (!Number.isFinite(nutrition.lastMealAtMs)) return METRICS.hunger.baseline;
+  const hours = Math.max(0, now - nutrition.lastMealAtMs) / 3600000;
+  const portionPenalty = (1 - clamp(nutrition.lastAmount, 0, 1)) * 12;
+  return clamp(10 + portionPenalty + 2.6 * hours + 0.15 * hours * hours, 8, 88);
+}
+
+function updateHungerClock(state, now) {
+  const nutrition = state.body.nutrition;
+  const target = hungerTarget(nutrition, now);
+  const meal = nutrition.lastMealName || 'recorded food';
+  const description = Number.isFinite(nutrition.lastMealAtMs)
+    ? `hunger is based on time since the ${meal} that was actually eaten`
+    : 'hunger is at its resting level until an actual meal is recorded';
+  setLevel(state, 'hunger', 'body:hunger-clock', target - METRICS.hunger.baseline, description, now, 'body_clock');
+}
+
+function recordMeal(state, meal, subject, now, id) {
+  if (!meal || typeof meal !== 'object') return false;
+  const nutrition = state.body.nutrition;
+  const outcome = ['eaten', 'partial', 'missed', 'refused'].includes(meal.outcome) ? meal.outcome : 'missed';
+  const amount = clamp(meal.amount, 0, 1);
+  nutrition.lastOfferedAtMs = now;
+  nutrition.lastMealName = clean(meal.name || 'meal', 32);
+  nutrition.lastOutcome = outcome;
+  if (outcome === 'eaten' || outcome === 'partial') {
+    nutrition.lastMealAtMs = now;
+    nutrition.lastAmount = amount || (outcome === 'eaten' ? 1 : 0.45);
+    if (outcome === 'eaten') nutrition.mealsEaten++;
+    else nutrition.mealsPartial++;
+    state.contributors.hunger = state.contributors.hunger.filter((item) => item.sourceType !== 'meal_deprivation');
+  } else {
+    nutrition.lastAmount = 0;
+    if (outcome === 'missed') nutrition.mealsMissed++;
+    else nutrition.mealsRefused++;
+    const amountAdded = outcome === 'missed' ? 12 : 8;
+    addImpulse(state, 'hunger', `${id}:${outcome}`, amountAdded,
+      `${nutrition.lastMealName} was ${outcome}: ${subject}`, now, 'meal_deprivation', 3 * 60 * 60 * 1000);
+  }
+  updateHungerClock(state, now);
+  return true;
+}
+
+function recordSleep(state, sleepEvent, subject, now, id) {
+  if (!sleepEvent || typeof sleepEvent !== 'object') return;
+  const sleep = state.body.sleep;
+  if (sleepEvent.outcome === 'started' && !sleep.asleep) {
+    sleep.asleep = true;
+    sleep.currentStartedAtMs = now;
+    sleep.lastStartedAtMs = now;
+  } else if (sleepEvent.outcome === 'ended' && sleep.asleep) {
+    const started = finite(sleep.currentStartedAtMs, now);
+    sleep.lastDurationMs = Math.max(0, now - started);
+    sleep.lastEndedAtMs = now;
+    sleep.asleep = false;
+    sleep.currentStartedAtMs = null;
+  } else if (sleepEvent.outcome === 'interrupted') {
+    sleep.interruptions++;
+    sleep.lastInterruptedAtMs = now;
+    addImpulse(state, 'fatigue', `${id}:interruption`, 9,
+      `sleep was interrupted by: ${subject}`, now, 'sleep_event', 5 * 60 * 60 * 1000);
+    addImpulse(state, 'arousal', `${id}:wake`, 8,
+      `woken by: ${subject}`, now, 'sleep_event', HALF_LIFE.arousal);
+  }
+}
+
+function recordSocial(state, social, subject, now, id, affiliation, threat, control) {
+  const socialState = state.body.social;
+  const quality = social && clean(social.quality, 24);
+  const strength = clamp(social && social.strength, 0, 1) || affiliation;
+  const supportive = ['supportive', 'ordinary'].includes(quality) || (!quality && affiliation >= 0.22);
+  const rejecting = ['rejecting', 'absent', 'hostile'].includes(quality);
+  if (supportive && threat < 0.35 && control < 0.5) {
+    socialState.lastSupportiveAtMs = now;
+    socialState.lastQuality = quality || 'reassuring';
+    socialState.supportiveContacts++;
+    setLevel(state, 'loneliness', 'body:social-clock', -10,
+      `recent ordinary contact: ${subject}`, now, 'social_clock');
+    const contact = addImpulse(state, 'loneliness', `${id}:contact`, -18 * strength,
+      `social contact from: ${subject}`, now, 'social_event', HALF_LIFE.loneliness);
+    if (contact) contact.qualifiedReassurance = true;
+    if (threat < 0.25) addImpulse(state, 'anxiety', `${id}:reassurance`, -8 * strength,
+      `reassurance from: ${subject}`, now, 'social_event');
+  } else if (rejecting) {
+    socialState.lastQuality = quality;
+    socialState.rejectingContacts++;
+    addImpulse(state, 'loneliness', `${id}:absence`, 14 * Math.max(0.35, strength),
+      `social disconnection in: ${subject}`, now, 'social_event', HALF_LIFE.loneliness);
+  }
+}
+
+function applyExplicitEffects(state, effects, subject, now, id) {
+  if (!Array.isArray(effects)) return;
+  for (const [index, effect] of effects.entries()) {
+    const metric = clean(effect && effect.metric, 24);
+    if (!METRICS[metric]) continue;
+    const amount = finite(effect.amount, 0);
+    if (!amount) continue;
+    addImpulse(state, metric, `${id}:effect:${index}`, amount,
+      clean(effect.description || `${subject} affected ${metric}`), now, 'environment_effect',
+      Math.max(60000, finite(effect.halfLifeMs, HALF_LIFE[metric] || 60 * 60 * 1000)));
+  }
+}
+
 export function observeExperienced(state, { observation = {}, appraisal = {}, prediction = {}, family = '', episodeId = null } = {}, now = Date.now()) {
   if (!state) return state;
   const id = eventIdentity(observation, episodeId, now);
@@ -186,6 +364,9 @@ export function observeExperienced(state, { observation = {}, appraisal = {}, pr
   const affiliation = clamp(appraisal.affiliation, 0, 1);
   const deprivation = clamp(appraisal.deprivation, 0, 1);
   const error = clamp(prediction.error, 0, 1);
+  const structuredMeal = recordMeal(state, observation.body && observation.body.meal, subject, now, id);
+  recordSleep(state, observation.body && observation.body.sleep, subject, now, id);
+  applyExplicitEffects(state, observation.effects, subject, now, id);
 
   if (Math.max(threat, control) >= 0.22) {
     addImpulse(state, 'anxiety', `${id}:threat`, 34 * threat + 18 * control,
@@ -201,25 +382,25 @@ export function observeExperienced(state, { observation = {}, appraisal = {}, pr
     addImpulse(state, 'anger', `${id}:anger`, 22 + 25 * threat + 13 * control,
       `hostility or unfairness in: ${subject}`, now);
   }
-  if (/meal|food|egg|canteen/.test(structural) && !/no_|none|miss|cold|refus/.test(structural)) {
+  if (!structuredMeal && /meal|food|egg|canteen/.test(structural) && !/no_|none|miss|cold|refus/.test(structural)) {
     const current = state.metrics.hunger.value;
-    setLevel(state, 'hunger', 'body:hunger-clock', Math.min(-12, 8 - current),
-      `reduced by the meal: ${subject}`, now, 'body_event');
-  } else if (deprivation >= 0.35 && /hunger|food|egg|meal|canteen/.test(structural)) {
+    state.body.nutrition.lastOfferedAtMs = now;
+    state.body.nutrition.lastMealAtMs = now;
+    state.body.nutrition.lastMealName = clean(observation.name || 'meal', 32);
+    state.body.nutrition.lastOutcome = 'eaten';
+    state.body.nutrition.lastAmount = 1;
+    state.body.nutrition.mealsEaten++;
+    setLevel(state, 'hunger', 'body:hunger-clock', Math.min(-8, 10 - current),
+      `reduced by the meal: ${subject}`, now, 'body_clock');
+  } else if (!structuredMeal && deprivation >= 0.35 && /hunger|food|egg|meal|canteen/.test(structural)) {
     addImpulse(state, 'hunger', `${id}:deprivation`, 22 * deprivation,
-      `food deprivation in: ${subject}`, now, 'body_event', 2 * 60 * 60 * 1000);
+      `food deprivation in: ${subject}`, now, 'meal_deprivation', 2 * 60 * 60 * 1000);
   }
   // A person being present is not automatically reassuring. Existing cast
   // warmth only relieves social need when the same interaction is not appraised
   // as threatening or controlling.
-  if (affiliation >= 0.22 && threat < 0.35 && control < 0.5) {
-    const contact = addImpulse(state, 'loneliness', `${id}:contact`, -32 * affiliation,
-      `social contact from: ${subject}`, now, 'social_event', HALF_LIFE.loneliness);
-    contact.qualifiedReassurance = true;
-    if (threat < 0.25) addImpulse(state, 'anxiety', `${id}:reassurance`, -10 * affiliation,
-      `reassurance from: ${subject}`, now, 'social_event');
-  }
-  if (/no_mail|cancel|refus|ignored|alone/.test(structural)) {
+  recordSocial(state, observation.social, subject, now, id, affiliation, threat, control);
+  if (!observation.social && /no_mail|cancel|refus|ignored|alone/.test(structural)) {
     addImpulse(state, 'loneliness', `${id}:absence`, 18 + 12 * deprivation,
       `social absence or rejection in: ${subject}`, now, 'social_event', HALF_LIFE.loneliness);
   }
@@ -251,37 +432,40 @@ export function tickExperienced(state, {
   legacyPhysical = null, lastMailMs = null,
 } = {}) {
   if (!state) return state;
-  if (!state.legacyImported && legacyPhysical && typeof legacyPhysical === 'object') {
-    for (const key of ['pain', 'hunger', 'fatigue']) {
-      if (!Number.isFinite(legacyPhysical[key])) continue;
-      const amount = clamp(legacyPhysical[key] * 100) - METRICS[key].baseline;
-      if (key === 'pain') {
-        addImpulse(state, key, `migration:${key}`, amount,
-          'starting value migrated from the previous body-clock state', now, 'migration', HALF_LIFE.pain);
-      } else {
-        setLevel(state, key, `migration:${key}`, amount,
-          'starting value migrated from the previous body-clock state', now, 'migration');
-      }
-    }
-    state.legacyImported = true;
-  }
+  // The previous physical fields remain mirrored for old consumers, but they
+  // are never imported back into experienced state.
+  void legacyPhysical;
+  void lastMailMs;
   if (!state.socialClockInitialised) {
-    const hoursWithoutMail = Number.isFinite(lastMailMs) ? Math.max(0, now - lastMailMs) / 3600000 : 0;
-    setLevel(state, 'loneliness', 'body:social-clock', Math.min(50, hoursWithoutMail * 0.65),
-      'social need accumulating with time without reassuring contact', now, 'social_clock');
     state.socialClockInitialised = true;
   }
   const elapsedMs = Math.max(0, Math.min(24 * 60 * 60 * 1000, now - finite(state.lastTickMs, now)));
   const hours = elapsedMs / 3600000;
   state.lastTickMs = now;
-  if (hours > 0) {
-    adjustLevel(state, 'hunger', 'body:hunger-clock', 3.2 * hours,
-      'hunger rising with time since food', now);
-    adjustLevel(state, 'fatigue', 'body:fatigue-clock', (asleep ? -13 : 2.7) * hours,
-      asleep ? 'fatigue recovering during sleep' : 'fatigue accumulating while awake', now);
-    adjustLevel(state, 'loneliness', 'body:social-clock', 0.65 * hours,
-      'social need accumulating with time without reassuring contact', now, 'social_clock');
+  const sleep = state.body.sleep;
+  if (asleep !== sleep.asleep) {
+    const transitionAt = asleep ? now - elapsedMs : now;
+    recordSleep(state, { outcome: asleep ? 'started' : 'ended' },
+      asleep ? 'the sleep period began' : 'the sleep period ended', transitionAt, `sleep-clock:${transitionAt}`);
   }
+  if (hours > 0) {
+    sleep.fatigueLoad = clamp(sleep.fatigueLoad + (asleep ? -7.5 : 2.2) * hours, 8, 88);
+    if (asleep) sleep.totalSleepMs += elapsedMs;
+  }
+  setLevel(state, 'fatigue', 'body:fatigue-clock', sleep.fatigueLoad - METRICS.fatigue.baseline,
+    asleep ? 'fatigue is recovering during recorded sleep' : 'fatigue is accumulating during recorded waking time',
+    now, 'body_clock');
+  updateHungerClock(state, now);
+  const lastSupportiveAtMs = state.body.social.lastSupportiveAtMs;
+  const hoursWithoutSupport = Number.isFinite(lastSupportiveAtMs) ? Math.max(0, now - lastSupportiveAtMs) / 3600000 : 0;
+  const socialTarget = Number.isFinite(lastSupportiveAtMs)
+    ? clamp(20 + 1.3 * hoursWithoutSupport, 20, 74)
+    : METRICS.loneliness.baseline;
+  setLevel(state, 'loneliness', 'body:social-clock', socialTarget - METRICS.loneliness.baseline,
+    Number.isFinite(lastSupportiveAtMs)
+      ? 'social need is rising with time since reassuring contact'
+      : 'social need is at rest until actual contact is recorded',
+    now, 'social_clock');
   const fatigue = finite(state.metrics.fatigue && state.metrics.fatigue.value, METRICS.fatigue.baseline);
   const hunger = finite(state.metrics.hunger && state.metrics.hunger.value, METRICS.hunger.baseline);
   const pain = finite(state.metrics.pain && state.metrics.pain.value, METRICS.pain.baseline);
@@ -350,7 +534,17 @@ export function experiencedSnapshot(state, now = null) {
     prefrontal: brainRegion('prefrontal', 'Prefrontal analogy', 100 - (0.45 * value('fatigue') + 0.3 * value('arousal') + 0.25 * value('pain')), ['inverse fatigue', 'inverse arousal', 'inverse pain']),
     temporalSocial: brainRegion('temporalSocial', 'Temporal / social analogy', value('loneliness'), ['loneliness']),
   };
-  return { version: EXPERIENCED_VERSION, updatedAtMs: state.updatedAtMs, metrics, brain };
+  return {
+    version: EXPERIENCED_VERSION,
+    updatedAtMs: state.updatedAtMs,
+    metrics,
+    brain,
+    body: {
+      nutrition: { ...state.body.nutrition },
+      sleep: { ...state.body.sleep },
+      social: { ...state.body.social },
+    },
+  };
 }
 
 export function experiencedDirective(state, now = null) {
