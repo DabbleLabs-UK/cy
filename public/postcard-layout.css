@@ -1,0 +1,30 @@
+/* Postcard composer layout refinements kept separate from original assets. */
+.pc-ov-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.pc-ov-row input {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.pc-ov-row button {
+  justify-self: end;
+  min-height: 28px;
+  padding: 5px 14px;
+}
+
+.pc-card-footer {
+  grid-column: 1 / -1;
+  margin: 0 10px 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #c3b488;
+}
+
+@media (max-width: 520px) {
+  .pc-card-footer {
+    grid-column: 1;
+  }
+}

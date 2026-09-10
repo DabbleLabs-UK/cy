@@ -120,6 +120,7 @@ function cy_import_map(): string
 <link rel="apple-touch-icon" sizes="180x180" href="<?= htmlspecialchars(cy_asset('assets/apple-touch-icon.png'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/style.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/timetravel.css'), ENT_QUOTES) ?>">
+<link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('postcard-layout.css'), ENT_QUOTES) ?>">
 <script>
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
@@ -242,10 +243,6 @@ window.CY = {
             <div class="pc-stamp-line">
               <input id="pc-from" name="from" type="text" maxlength="40" placeholder="your name" required>
             </div>
-            <div class="pc-card-actions">
-              <span id="pc-count" class="counter">0 / 900</span>
-              <button type="submit" class="pc-send">Post it</button>
-            </div>
           </div>
 
           <!-- divide -->
@@ -273,6 +270,11 @@ window.CY = {
               <div id="pc-ov-status" class="pc-ov-status" aria-live="polite"></div>
               <div id="pc-ov-grid" class="pc-ov-grid"></div>
             </div>
+          </div>
+
+          <div class="pc-card-actions pc-card-footer">
+            <span id="pc-count" class="counter">0 / 900</span>
+            <button type="submit" class="pc-send">Post it</button>
           </div>
         </div>
 
