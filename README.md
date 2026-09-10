@@ -56,8 +56,10 @@ prompt. Every fifth completed reply promotes the oldest archived fan item, and
 an empty tray also promotes one, so heavy traffic cannot grow an unbounded model
 queue and older accepted mail still has a path back in. The sender receives an
 explicit reply-tray or fan-mail receipt; only reply-tray receipts show a waiting
-spinner. A runner claim abandoned for more than 30 minutes no longer occupies a
-tray place, although the postcard remains retained. Abuse rate limits remain separate from overload handling. `news` follows
+spinner. The server never hands Dell a second postcard while a reply is in
+progress. A runner claim abandoned for more than 30 minutes becomes retained
+final fan mail rather than lingering or appearing as a fresh delivery again.
+Abuse rate limits remain separate from overload handling. `news` follows
 the existing deliver_at queue shape and shares the runner inbox poll.
 
 People who write are remembered. On the first postcard a visitor is issued a

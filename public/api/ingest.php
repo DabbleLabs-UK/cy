@@ -35,6 +35,13 @@ try {
          SET blocked = 1, block_reason = :reason
          WHERE id = :id'
     );
+    // The postcard row is authoritative for when mail was actually posted and
+    // whether it came back out of the fan-mail bag. This also keeps events honest
+    // when an older runner does not yet send those fields.
+    $postcardProvenance = $db->prepare(
+        'SELECT posted_at, (promoted_at IS NOT NULL) AS promoted
+         FROM postcards WHERE id = :id'
+    );
     // Persist a completed drawing. Like visitor_seen this is a side-channel: the
     // per-pass `draw` events already carry the animation into the public stream,
     // and this writes the durable record. ON DUPLICATE keeps a re-sent batch
@@ -153,7 +160,17 @@ try {
             continue;
         }
 
-        $payloadJson = json_encode($event['payload']);
+        $payload = $event['payload'];
+        if ($kind === 'postcard_in' && is_array($payload)) {
+            $postcardId = (int)($payload['id'] ?? 0);
+            if ($postcardId > 0) {
+                $postcardProvenance->execute([':id' => $postcardId]);
+                $source = $postcardProvenance->fetch();
+                $payload = captive_postcard_event_provenance($payload, $source ?: null);
+            }
+        }
+
+        $payloadJson = json_encode($payload);
         if ($payloadJson === false) {
             throw new InvalidArgumentException('invalid payload');
         }

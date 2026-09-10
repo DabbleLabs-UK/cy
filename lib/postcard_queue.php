@@ -21,6 +21,56 @@ function captive_postcard_fan_mail_supported(array $query): bool
     return isset($query['fan_mail']) && (string)$query['fan_mail'] === '1';
 }
 
+function captive_postcard_can_claim_next(int $inFlightReplies): bool
+{
+    return $inFlightReplies <= 0;
+}
+
+/**
+ * A runner has one reply generation lane. Do not hand it another postcard while
+ * a previously claimed reply remains in progress.
+ */
+function captive_postcard_inflight_replies(PDO $db): int
+{
+    return (int)$db->query(
+        "SELECT COUNT(*) FROM postcards
+         WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
+           AND delivered_at IS NOT NULL
+           AND delivered_at >= DATE_SUB(NOW(), INTERVAL " . CY_REPLY_CLAIM_TTL_SECONDS . " SECOND)"
+    )->fetchColumn();
+}
+
+/**
+ * A reply claim which never completed is retained, but it is not attempted or
+ * presented as a fresh arrival again. fan_final is the existing terminal class
+ * for mail that reached the reply path without producing a usable reply.
+ */
+function captive_postcard_expire_stale_claims(PDO $db): int
+{
+    $claimTtl = max(60, CY_REPLY_CLAIM_TTL_SECONDS);
+    return (int)$db->exec(
+        "UPDATE postcards
+         SET mail_class = 'fan_final'
+         WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
+           AND delivered_at IS NOT NULL
+           AND delivered_at < DATE_SUB(NOW(), INTERVAL {$claimTtl} SECOND)"
+    );
+}
+
+/** @param array{posted_at?:mixed,promoted?:mixed}|null $source */
+function captive_postcard_event_provenance(array $payload, ?array $source): array
+{
+    if ($source === null) {
+        return $payload;
+    }
+    $payload['promoted'] = !empty($source['promoted']);
+    if (!empty($source['posted_at'])) {
+        $posted = new DateTimeImmutable((string)$source['posted_at'], new DateTimeZone('UTC'));
+        $payload['posted_at'] = $posted->format('Y-m-d\TH:i:s\Z');
+    }
+    return $payload;
+}
+
 /** @return array{reply_capacity:int,promote_every:int,completed_since_promotion:int} */
 function captive_postcard_queue_lock(PDO $db): array
 {

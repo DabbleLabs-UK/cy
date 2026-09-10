@@ -13,6 +13,17 @@ $checks = [
     'disabled capability does not collect fan mail' => captive_postcard_fan_mail_supported(['fan_mail' => '0']) === false,
     'updated runner opts in to fan-mail collection' => captive_postcard_fan_mail_supported(['fan_mail' => '1']) === true,
     'abandoned runner claims expire after thirty minutes' => CY_REPLY_CLAIM_TTL_SECONDS === 30 * 60,
+    'runner can claim when no reply is in flight' => captive_postcard_can_claim_next(0) === true,
+    'runner cannot claim a second simultaneous reply' => captive_postcard_can_claim_next(1) === false,
+    'runner remains blocked if several claims somehow exist' => captive_postcard_can_claim_next(3) === false,
+    'database provenance marks promoted mail authoritatively' => captive_postcard_event_provenance(
+        ['id' => 13, 'promoted' => false],
+        ['posted_at' => '2026-09-09 23:53:52', 'promoted' => 1]
+    ) === ['id' => 13, 'promoted' => true, 'posted_at' => '2026-09-09T23:53:52Z'],
+    'missing provenance leaves an event unchanged' => captive_postcard_event_provenance(
+        ['id' => 99],
+        null
+    ) === ['id' => 99],
 ];
 
 $failed = 0;

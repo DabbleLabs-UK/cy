@@ -23,38 +23,42 @@ try {
     $db->beginTransaction();
 
     captive_postcard_queue_lock($db);
-    // If the tray is completely quiet, use the free place for the oldest fan-mail
-    // item. The every-N-replies promotion in ingest.php handles sustained traffic.
-    if (captive_postcard_active_replies($db) === 0 && captive_postcard_promote_oldest($db)) {
-        $db->exec(
-            'UPDATE postcard_queue_state
-             SET completed_since_promotion = 0, updated_at = NOW()
-             WHERE id = 1'
-        );
-    }
+    captive_postcard_expire_stale_claims($db);
+    $postcards = [];
+    if (captive_postcard_can_claim_next(captive_postcard_inflight_replies($db))) {
+        // If the tray is completely quiet, use the free place for the oldest fan-mail
+        // item. The every-N-replies promotion in ingest.php handles sustained traffic.
+        if (captive_postcard_active_replies($db) === 0 && captive_postcard_promote_oldest($db)) {
+            $db->exec(
+                'UPDATE postcard_queue_state
+                 SET completed_since_promotion = 0, updated_at = NOW()
+                 WHERE id = 1'
+            );
+        }
 
-    $postcards = $db->query(
-        'SELECT p.id, p.visitor_id, p.from_name, p.body, p.image_path, p.image_source,
-                p.image_attrib, p.caption, p.posted_at, p.mail_class,
-                (p.promoted_at IS NOT NULL) AS promoted,
-                (SELECT MAX(pp.posted_at) FROM postcards pp
-                   WHERE pp.visitor_id = p.visitor_id AND pp.id < p.id) AS prev_posted_at,
-                v.handle AS v_handle, v.visit_count AS v_visit_count,
-                v.postcard_count AS v_postcard_count, v.warmth AS v_warmth,
-                v.suspicion AS v_suspicion, v.grudge AS v_grudge, v.notes AS v_notes,
-                v.first_seen AS v_first_seen, v.last_seen AS v_last_seen
-         FROM postcards p
-         LEFT JOIN visitors v ON v.visitor_id = p.visitor_id
-         WHERE p.mail_class = \'reply\' AND p.deliver_at <= NOW()
-               AND p.delivered_at IS NULL AND p.replied_at IS NULL AND p.blocked = 0
-         ORDER BY
-            (p.posted_at <= (NOW() - INTERVAL 15 MINUTE)) DESC,
-            CASE WHEN p.posted_at <= (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END ASC,
-            CASE WHEN p.posted_at > (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END DESC,
-            p.id DESC
-         LIMIT 1
-         FOR UPDATE'
-    )->fetchAll();
+        $postcards = $db->query(
+            'SELECT p.id, p.visitor_id, p.from_name, p.body, p.image_path, p.image_source,
+                    p.image_attrib, p.caption, p.posted_at, p.mail_class,
+                    (p.promoted_at IS NOT NULL) AS promoted,
+                    (SELECT MAX(pp.posted_at) FROM postcards pp
+                       WHERE pp.visitor_id = p.visitor_id AND pp.id < p.id) AS prev_posted_at,
+                    v.handle AS v_handle, v.visit_count AS v_visit_count,
+                    v.postcard_count AS v_postcard_count, v.warmth AS v_warmth,
+                    v.suspicion AS v_suspicion, v.grudge AS v_grudge, v.notes AS v_notes,
+                    v.first_seen AS v_first_seen, v.last_seen AS v_last_seen
+             FROM postcards p
+             LEFT JOIN visitors v ON v.visitor_id = p.visitor_id
+             WHERE p.mail_class = \'reply\' AND p.deliver_at <= NOW()
+                   AND p.delivered_at IS NULL AND p.replied_at IS NULL AND p.blocked = 0
+             ORDER BY
+                (p.posted_at <= (NOW() - INTERVAL 15 MINUTE)) DESC,
+                CASE WHEN p.posted_at <= (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END ASC,
+                CASE WHEN p.posted_at > (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END DESC,
+                p.id DESC
+             LIMIT 1
+             FOR UPDATE'
+        )->fetchAll();
+    }
 
     if ($postcards) {
         $ids = array_column($postcards, 'id');
