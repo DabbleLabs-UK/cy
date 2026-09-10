@@ -21,6 +21,17 @@ has `dryRun: true`), so a bare checkout runs offline out of the box.
 Stop with Ctrl-C (SIGINT): the batch queue is flushed and vitals are persisted
 before exit.
 
+## Run continuously on Dell Windows
+
+The Dell Startup shortcut runs `runner\cy-hidden.vbs`. That launcher resolves its
+own checkout and starts `runner\cy-supervisor.bat` in a hidden Windows process.
+The supervisor restarts `node runner\run.js` after an unexpected exit and appends
+output to `runner\state\run.out.log`.
+
+To restore the production runner, start `runner\cy-hidden.vbs` through Windows.
+Do not launch `node runner\run.js` as a child of an SSH or WSL deployment session:
+the runner will be terminated when that transient session ends.
+
 ## Config (`config.json`)
 
 | key         | meaning                                                        |
