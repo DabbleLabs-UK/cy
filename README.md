@@ -43,8 +43,8 @@ completely decoupled from however many people are watching, and lets the
 viewer be a dumb polling client with no websocket/SSE infrastructure needed
 for the skeleton.
 
-Postcards are accepted immediately. The first eight unresolved items occupy a
-bounded reply tray; overload remains accepted as durable fan mail instead of
+Postcards are accepted immediately. The first eight waiting or recently claimed
+items occupy a bounded reply tray; overload remains accepted as durable fan mail instead of
 being rejected. Dell claims one reply item at a time, newest-first while it is
 fresh, but any item waiting 15 minutes ages into oldest-first priority. Fan mail
 is screened and recorded in the public chronology without entering the model
@@ -52,7 +52,8 @@ prompt. Every fifth completed reply promotes the oldest archived fan item, and
 an empty tray also promotes one, so heavy traffic cannot grow an unbounded model
 queue and older accepted mail still has a path back in. The sender receives an
 explicit reply-tray or fan-mail receipt; only reply-tray receipts show a waiting
-spinner. Abuse rate limits remain separate from overload handling. `news` follows
+spinner. A runner claim abandoned for more than 30 minutes no longer occupies a
+tray place, although the postcard remains retained. Abuse rate limits remain separate from overload handling. `news` follows
 the existing deliver_at queue shape and shares the runner inbox poll.
 
 People who write are remembered. On the first postcard a visitor is issued a

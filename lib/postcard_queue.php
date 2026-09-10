@@ -6,6 +6,10 @@ declare(strict_types=1);
 // promise of an immediate personal reply.
 const CY_REPLY_TRAY_CAPACITY = 8;
 const CY_FAN_PROMOTE_EVERY_REPLIES = 5;
+// A claimed reply normally completes in a few minutes. If a runner disappears
+// after claiming one, do not let that abandoned claim occupy the bounded tray
+// forever. The postcard itself remains retained in the database and timeline.
+const CY_REPLY_CLAIM_TTL_SECONDS = 1800;
 
 function captive_postcard_disposition(int $activeReplies, int $capacity = CY_REPLY_TRAY_CAPACITY): string
 {
@@ -36,9 +40,14 @@ function captive_postcard_queue_lock(PDO $db): array
 
 function captive_postcard_active_replies(PDO $db): int
 {
+    $claimTtl = max(60, CY_REPLY_CLAIM_TTL_SECONDS);
     return (int)$db->query(
         "SELECT COUNT(*) FROM postcards
-         WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0"
+         WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
+           AND (
+             delivered_at IS NULL
+             OR delivered_at >= DATE_SUB(NOW(), INTERVAL {$claimTtl} SECOND)
+           )"
     )->fetchColumn();
 }
 

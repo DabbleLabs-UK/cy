@@ -59,40 +59,43 @@ export class BrainHud {
   _build() {
     this.root.classList.add('brainhud');
     this.root.innerHTML = `
-      <div class="soma-head">
-        <span class="soma-badge">SOMA V1 - AWAITING STATE</span>
-        <span class="soma-live" aria-label="Soma state unavailable"></span>
-      </div>
-      <p class="soma-caveat">Core state is computed before language. Bounded self-output feedback is shown separately. Every reading names its Soma source; brain locations remain functional analogies, not measured physiology.</p>
-      <div class="brain-figure">
-        <svg class="brain-svg" viewBox="0 0 340 230" role="img" aria-labelledby="brain-title brain-desc">
-          <title id="brain-title">Functional analogy of Cy's Soma circuits</title>
-          <desc id="brain-desc">An anatomically inspired lateral brain. Shaded regions map implemented computational circuits to rough functional analogies.</desc>
-          <path class="brain-shell" d="M34 128 C24 91 45 60 80 43 C105 20 147 19 178 31 C214 27 257 40 286 66 C309 86 316 116 303 139 C307 157 294 176 272 181 C252 198 212 204 179 196 C148 204 108 195 82 178 C55 172 38 154 34 128 Z"/>
-          <path class="brain-cerebellum" d="M235 164 C262 151 295 158 304 178 C296 197 264 205 235 189 C226 181 227 171 235 164 Z"/>
-          <path class="brain-stem" d="M213 178 C226 183 237 193 235 219 L218 219 C220 201 207 192 196 184 Z"/>
-          <path class="brain-folds" d="M54 83 C85 72 105 72 132 82 M46 111 C78 102 98 107 119 119 M82 50 C104 60 110 71 111 93 M143 40 C154 60 153 79 142 98 M184 39 C197 56 203 73 198 94 M230 48 C238 66 242 83 237 105 M273 73 C284 91 284 110 274 128 M236 132 C253 141 261 153 260 173 M94 146 C117 137 137 140 153 154"/>
-        </svg>
-        <div class="brain-key">ANATOMICAL ANALOGY</div>
-      </div>
       <div class="inference-measured">
         <span class="measure-dot"></span>
         <span class="measure-label">MODEL INFERENCE</span>
         <span class="measure-value">IDLE</span>
         <span class="measure-kind">MEASURED</span>
       </div>
-      <div class="soma-readout"></div>
-      <div class="soma-selection">
-        <div><span>ACTION</span><strong class="soma-action">waiting for state</strong></div>
-        <div><span>ATTENTION</span><strong class="soma-attention">nothing selected</strong></div>
-        <div><span>EPISODIC MEMORY</span><strong class="soma-memory">0 episodes</strong></div>
-        <div><span>SELF-QUESTION</span><strong class="soma-question">unavailable</strong></div>
-        <div><span>SELF-OUTPUT FEEDBACK</span><strong class="soma-expression">waiting for emitted words</strong></div>
-        <div><span>LEARNED WORD ASSOCIATIONS</span><strong class="soma-associations">0 learned</strong></div>
+      <div class="soma-implemented" hidden>
+        <div class="soma-head">
+          <span class="soma-badge">IMPLEMENTED SOMA V1</span>
+          <span class="soma-live available" aria-label="Soma state available"></span>
+        </div>
+        <p class="soma-caveat">Core state is computed before language. Bounded self-output feedback is shown separately. Every reading names its Soma source; brain locations remain functional analogies, not measured physiology.</p>
+        <div class="brain-figure">
+          <svg class="brain-svg" viewBox="0 0 340 230" role="img" aria-labelledby="brain-title brain-desc">
+            <title id="brain-title">Functional analogy of Cy's Soma circuits</title>
+            <desc id="brain-desc">An anatomically inspired lateral brain. Shaded regions map implemented computational circuits to rough functional analogies.</desc>
+            <path class="brain-shell" d="M34 128 C24 91 45 60 80 43 C105 20 147 19 178 31 C214 27 257 40 286 66 C309 86 316 116 303 139 C307 157 294 176 272 181 C252 198 212 204 179 196 C148 204 108 195 82 178 C55 172 38 154 34 128 Z"/>
+            <path class="brain-cerebellum" d="M235 164 C262 151 295 158 304 178 C296 197 264 205 235 189 C226 181 227 171 235 164 Z"/>
+            <path class="brain-stem" d="M213 178 C226 183 237 193 235 219 L218 219 C220 201 207 192 196 184 Z"/>
+            <path class="brain-folds" d="M54 83 C85 72 105 72 132 82 M46 111 C78 102 98 107 119 119 M82 50 C104 60 110 71 111 93 M143 40 C154 60 153 79 142 98 M184 39 C197 56 203 73 198 94 M230 48 C238 66 242 83 237 105 M273 73 C284 91 284 110 274 128 M236 132 C253 141 261 153 260 173 M94 146 C117 137 137 140 153 154"/>
+          </svg>
+          <div class="brain-key">ANATOMICAL ANALOGY</div>
+        </div>
+        <div class="soma-readout"></div>
+        <div class="soma-selection">
+          <div><span>ACTION</span><strong class="soma-action">nothing selected</strong></div>
+          <div><span>ATTENTION</span><strong class="soma-attention">nothing selected</strong></div>
+          <div><span>EPISODIC MEMORY</span><strong class="soma-memory">0 episodes</strong></div>
+          <div><span>SELF-QUESTION</span><strong class="soma-question">unavailable</strong></div>
+          <div><span>SELF-OUTPUT FEEDBACK</span><strong class="soma-expression">waiting for emitted words</strong></div>
+          <div><span>LEARNED WORD ASSOCIATIONS</span><strong class="soma-associations">0 learned</strong></div>
+        </div>
       </div>
       <details class="legacy-box">
         <summary>PLANNED STATS</summary>
-        <p>Not connected to implemented Soma state yet. These legacy synthetic values are retained only to show what still needs a real causal interpretation; they are not observations or clinical measures.</p>
+        <p class="soma-pending-note"><strong>Soma circuit display:</strong> hidden until an implemented runner state is actually received.</p>
+        <p>These legacy synthetic values are retained only to show what still needs a real causal interpretation; they are not observations or clinical measures.</p>
         <dl>
           <div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
           <div><dt>mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
@@ -142,15 +145,17 @@ export class BrainHud {
       root: this.root.querySelector('.inference-measured'),
       value: this.root.querySelector('.measure-value'),
     };
+    this.implementedEl = this.root.querySelector('.soma-implemented');
+    this.pendingEl = this.root.querySelector('.soma-pending-note');
     this.badgeEl = this.root.querySelector('.soma-badge');
     this.liveEl = this.root.querySelector('.soma-live');
   }
 
   setSoma(soma) {
     if (!soma || soma.status !== 'implemented' || !soma.circuits) return;
+    this.implementedEl.hidden = false;
+    this.pendingEl.hidden = true;
     this.badgeEl.textContent = `IMPLEMENTED SOMA V${soma.version || 1}`;
-    this.liveEl.classList.add('available');
-    this.liveEl.setAttribute('aria-label', 'Soma state available');
     for (const circuit of CIRCUITS) {
       const reading = soma.circuits[circuit.key];
       if (!reading) continue;

@@ -242,6 +242,10 @@ window.CY = {
             <div class="pc-stamp-line">
               <input id="pc-from" name="from" type="text" maxlength="40" placeholder="your name" required>
             </div>
+            <div class="pc-card-actions">
+              <span id="pc-count" class="counter">0 / 900</span>
+              <button type="submit" class="pc-send">Post it</button>
+            </div>
           </div>
 
           <!-- divide -->
@@ -250,10 +254,8 @@ window.CY = {
           <!-- picture side -->
           <div class="pc-side pc-pic" id="pc-drop">
             <div class="pc-pic-empty" id="pc-pic-empty">
-              <div class="pc-pic-hint">drag a picture here</div>
-              <div class="pc-pic-or">or</div>
-              <button type="button" class="pc-browse" id="pc-browse">Browse&hellip;</button>
-              <div class="pc-pic-or">or search below</div>
+              <div class="pc-pic-title">ADD A PICTURE</div>
+              <div class="pc-pic-hint">drop an image here</div>
             </div>
             <div class="pc-pic-preview" id="pc-pic-preview" hidden>
               <img id="pc-pic-img" alt="chosen picture">
@@ -261,25 +263,21 @@ window.CY = {
               <div class="pc-pic-src" id="pc-pic-src"></div>
             </div>
             <input id="pc-file" name="image" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+            <div class="pc-picture-picker" aria-label="Choose a picture source">
+              <button type="button" class="pc-browse" id="pc-browse">Choose a file...</button>
+              <div class="pc-pic-or">OR SEARCH OPENVERSE</div>
+              <div class="pc-ov-row">
+                <input id="pc-ov-q" type="text" maxlength="100" placeholder="what picture?">
+                <button type="button" id="pc-ov-go">Search</button>
+              </div>
+              <div id="pc-ov-status" class="pc-ov-status" aria-live="polite"></div>
+              <div id="pc-ov-grid" class="pc-ov-grid"></div>
+            </div>
           </div>
         </div>
 
-        <!-- openverse search -->
-        <div class="pc-ov">
-          <div class="pc-ov-row">
-            <input id="pc-ov-q" type="text" maxlength="100" placeholder="search Openverse for a picture...">
-            <button type="button" id="pc-ov-go">Search</button>
-          </div>
-          <div id="pc-ov-status" class="pc-ov-status"></div>
-          <div id="pc-ov-grid" class="pc-ov-grid"></div>
-        </div>
-
-        <div class="form-row">
-          <span id="pc-count" class="counter">0 / 900</span>
-          <button type="submit" class="pc-send">Post it</button>
-        </div>
         <p class="form-hint">Text, a picture, or both. A receipt will say whether it reached his reply tray or the fan mail bag.</p>
-        <p id="pc-note" class="form-note"></p>
+        <p id="pc-note" class="form-note" aria-live="polite"></p>
       </form>
     </div>
 

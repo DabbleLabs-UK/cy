@@ -12,6 +12,7 @@ $checks = [
     'legacy runner does not collect fan mail' => captive_postcard_fan_mail_supported([]) === false,
     'disabled capability does not collect fan mail' => captive_postcard_fan_mail_supported(['fan_mail' => '0']) === false,
     'updated runner opts in to fan-mail collection' => captive_postcard_fan_mail_supported(['fan_mail' => '1']) === true,
+    'abandoned runner claims expire after thirty minutes' => CY_REPLY_CLAIM_TTL_SECONDS === 30 * 60,
 ];
 
 $failed = 0;
