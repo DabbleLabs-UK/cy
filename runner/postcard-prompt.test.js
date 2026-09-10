@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { ZONE_A, buildPrompt } from './prompt.js';
+import { ZONE_A, buildDirectives, buildPrompt, completionBudget, completionDirective } from './prompt.js';
 
 assert.match(
   ZONE_A,
@@ -38,5 +38,10 @@ const picturePrompt = buildPrompt('', 'postcard', {
 });
 assert.match(picturePrompt, /begin by reacting to one concrete detail from their\nwords or picture/);
 assert.match(picturePrompt, /a picture: a blue boat under a bridge/);
+
+const length = completionDirective(45);
+assert.match(length, /about 31 words/);
+assert.equal(completionBudget(45), 69, 'the hard ceiling leaves room to end naturally');
+assert.match(buildDirectives({}, 'journal', { length }), /stop on your own before the hard limit/);
 
 console.log('postcard-prompt.test.js: all checks passed');

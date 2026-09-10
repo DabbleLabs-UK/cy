@@ -441,7 +441,7 @@ export function dreamSampling(v) {
 // cache. This builds the block; buildPrompt() places it last. ctx carries the
 // contextual injections assembled by the loop:
 //   { bans, regime, cast, grudge, officer, overheard, wingnoise, visitor,
-//     amplified, warden, cost, incidents, form } - any may be omitted/empty.
+//     amplified, warden, cost, incidents, length, form } - any may be omitted/empty.
 export function buildDirectives(v, mode, ctx = {}) {
   // DREAM is a wholly separate branch. It shares only the persona/voice in the
   // cached Zone A; NONE of the waking Zone C directives (state style, form, one-
@@ -512,6 +512,7 @@ export function buildDirectives(v, mode, ctx = {}) {
   // and the form is re-sampled per burst; the form (the shape) is dead last.
   if (style) parts.push(style);
   if (ctx.bans) parts.push(ctx.bans);
+  if (ctx.length) parts.push(ctx.length);
   if (ctx.form) parts.push(ctx.form);
   return parts.join('\n\n');
 }
@@ -572,6 +573,22 @@ export function sampling(v) {
 export function letterPredict(senderText) {
   const words = (senderText || '').trim().split(/\s+/).filter(Boolean).length;
   return Math.max(40, Math.min(220, Math.round(words * 1.4)));
+}
+
+// Soma chooses the intended amount of expression. The provider needs a larger
+// technical ceiling than that intended length, otherwise it repeatedly reaches
+// num_predict in the middle of a word. Tell the model where to stop, then leave
+// enough headroom for it to finish naturally. The stream still has a hard-cap
+// guard in case a small model ignores this instruction.
+export function completionDirective(targetTokens) {
+  const target = Math.max(16, Number(targetTokens) || 62);
+  const words = Math.max(10, Math.round(target * 0.68));
+  return `LENGTH. Keep this to about ${words} words and stop on your own before the hard limit. Finish the current word before stopping; the thought itself may stay unresolved.`;
+}
+
+export function completionBudget(targetTokens) {
+  const target = Math.max(16, Number(targetTokens) || 62);
+  return Math.min(320, Math.max(target + 24, Math.ceil(target * 1.5)));
 }
 
 // Stop at any chat-template control token so the model cannot generate a fresh

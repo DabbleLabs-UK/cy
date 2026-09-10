@@ -298,6 +298,21 @@ export function repeatsWithinBurst(chunk, priorEmitted, { minRun = 24, tail = 60
   return isRepeat(chunk, priorEmitted, { minRun, tail });
 }
 
+// A hard model token limit can land in the middle of a token (for example
+// "Root is tryin tae mess wi"). Do not publish that clipped token as if Cy chose
+// to stop there. Keep naturally completed endings and intentional fragments
+// unchanged; only a confirmed token-limit ending is shortened to its last whole
+// word and marked as technically interrupted.
+export function finishTokenLimitedTail(text) {
+  const end = String(text || '').trimEnd();
+  if (!end) return '';
+  if (/[.!?](?:["')\]]*)$/.test(end)) return end;
+  const match = end.match(/^(.*)\s+\S+$/s);
+  if (!match) return '';
+  const wholeWords = match[1].trimEnd().replace(/[,;:-]+$/, '').trimEnd();
+  return wholeWords ? wholeWords + '...' : '';
+}
+
 // Buffers streamed tokens and yields complete sentence/newline chunks.
 export class SentenceBuffer {
   constructor() {
@@ -334,11 +349,14 @@ export class SentenceBuffer {
     return chunks;
   }
 
-  // Return and clear any trailing partial (call when a generation ends).
-  flush() {
+  // Return and clear any trailing partial (call when a generation ends). A
+  // confirmed token-limit end gets a defensive whole-word finish; ordinary
+  // generation ends retain Cy's deliberately fragmentary voice unchanged.
+  flush({ tokenLimited = false } = {}) {
     const rest = this.buf;
     this.buf = '';
-    return rest.trim() ? [rest] : [];
+    const finished = tokenLimited ? finishTokenLimitedTail(rest) : rest;
+    return finished.trim() ? [finished] : [];
   }
 }
 

@@ -13,7 +13,7 @@
 //   node runner/abort.test.js
 
 import assert from 'node:assert/strict';
-import { readNdjsonStream } from './run.js';
+import { generationHitTokenLimit, readNdjsonStream } from './run.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -134,5 +134,13 @@ await (async () => {
   assert.equal(res.broke, true, 'an early stop returns { broke:true }');
   ok('onToken can stop the read early (the near-repeat break path)');
 })();
+
+// ---- 5. provider-neutral hard token-limit detection ----
+assert.equal(generationHitTokenLimit({ done_reason: 'length' }, { num_predict: 80 }), true);
+assert.equal(generationHitTokenLimit({ finish_reason: 'length' }, { num_predict: 80 }), true);
+assert.equal(generationHitTokenLimit({ eval_count: 45 }, { num_predict: 45 }), true);
+assert.equal(generationHitTokenLimit({ eval_count: 44, done_reason: 'stop' }, { num_predict: 45 }), false);
+assert.equal(generationHitTokenLimit(null, { num_predict: 45 }), false);
+ok('hard token limits are detected from both provider reasons and Ollama token counts');
 
 console.log(`\nabort.test.js: all ${n} checks passed`);

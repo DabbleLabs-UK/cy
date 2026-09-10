@@ -36,6 +36,8 @@ import {
   buildPrompt,
   options,
   letterPredict,
+  completionDirective,
+  completionBudget,
   amplifiedDirective,
   bansDirective,
   wingnoiseDirective,
@@ -169,6 +171,17 @@ export async function readNdjsonStream(reader, { signal, onToken, onDone } = {})
     throw err;
   }
   return { ended: true };
+}
+
+// Provider-neutral hard-limit detection. Ollama reports eval_count and may omit
+// a reason; OpenAI-shaped providers report finish_reason="length". Either is
+// sufficient evidence that the final buffered token was not a chosen ending.
+export function generationHitTokenLimit(stats, opts = {}) {
+  const reason = String((stats && (stats.done_reason || stats.finish_reason)) || '').toLowerCase();
+  if (reason === 'length') return true;
+  const cap = Number(opts && opts.num_predict);
+  const used = Number(stats && (stats.eval_count ?? (stats.usage && stats.usage.completion_tokens)));
+  return Number.isFinite(cap) && cap > 0 && Number.isFinite(used) && used >= cap;
 }
 
 // ---- config ---------------------------------------------------------------
@@ -877,6 +890,7 @@ async function main() {
         top_p: typeof o.top_p === 'number' ? o.top_p : null,
         repeat_penalty: typeof o.repeat_penalty === 'number' ? o.repeat_penalty : null,
         num_predict: typeof o.num_predict === 'number' ? o.num_predict : null,
+        token_limited: !!(r && r.tokenLimited),
         // ---- STRIP ACCOUNTING (raw-vs-surviving) for the ?111 raw view ----
         // Safe aggregates only - NO pre-strip text ever reaches the feed (the raw
         // head sample is server-log only). raw_chars = true provider length before
@@ -1490,8 +1504,10 @@ async function main() {
     if (!primed) await commitHead();
     if (refused) return refusedResult();
     if (repeat) return { full: cleanedFull(), repeat: true };
-    // natural end: flush trailing partial thought
-    for (const chunk of buffer.flush()) await onChunk(chunk, mode);
+    // Natural end: only a confirmed hard token limit gets a defensive whole-word
+    // finish. A real model stop keeps Cy's intentional fragments untouched.
+    const tokenLimited = generationHitTokenLimit(stats, opts);
+    for (const chunk of buffer.flush({ tokenLimited })) await onChunk(chunk, mode);
     // RAW-VS-SURVIVING accounting: log the true provider char count, what survived
     // the strip banks, and what actually reached the page - plus the RAW head when
     // nothing survived (the evidence for WHICH bank ate a billed completion).
@@ -1503,7 +1519,7 @@ async function main() {
     // - recorded as non-emitting so the wasted spend is visible.
     await recordSpend(stats, mode, !!burstEmitted.trim());
     if (burstEmitted.trim()) soma.observeOutput(burstEmitted, { mode, now: Date.now() });
-    return { full: cleanedFull(), aborted: false, stats, model: gen.model || provider.model, ttftMs, strip: stripSnapshot(full) };
+    return { full: burstEmitted, aborted: false, tokenLimited, stats, model: gen.model || provider.model, ttftMs, strip: stripSnapshot(full) };
 
     // A refusal discards everything - the refusal text is NEVER emitted. Log it so
     // it is visible, and return the distinct { refused } shape for the caller to
@@ -1649,10 +1665,12 @@ async function main() {
     const recog = visitorForPrompt(visitor, { now: Date.now() });
     if (recog) ctx.visitor = recog;
 
+    const targetPredict = letterPredict(pc.body);
+    ctx.length = completionDirective(targetPredict);
     const directives = buildDirectives(vitals, 'letter', ctx);
     const letterTail = contextText();
     const prompt = buildPrompt(letterTail, 'postcard', pc, directives);
-    const opts = options(vitals, config.threads, 'letter', { num_predict: letterPredict(pc.body) });
+    const opts = options(vitals, config.threads, 'letter', { num_predict: completionBudget(targetPredict) });
     await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
     const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter', purpose: 'postcard' });
     emitGen(r, 'letter', {
@@ -1729,9 +1747,12 @@ async function main() {
         now: Date.now(),
       },
     });
-    const directives = buildDirectives(vitals, 'journal', buildCtx(cognition.directive));
+    const targetPredict = letterPredict(notice.text);
+    const ctx = buildCtx(cognition.directive);
+    ctx.length = completionDirective(targetPredict);
+    const directives = buildDirectives(vitals, 'journal', ctx);
     const prompt = buildPrompt(contextText(), 'warden', notice, directives);
-    const opts = options(vitals, config.threads, 'journal', { num_predict: letterPredict(notice.text) });
+    const opts = options(vitals, config.threads, 'journal', { num_predict: completionBudget(targetPredict) });
     await logPrompt('warden', ZONE_A + '\n\n---PROMPT---\n' + prompt);
     await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden' });
     soma.completeAction(cognition.action.name);
@@ -2806,12 +2827,14 @@ async function main() {
       // fire-once side effects, so this must happen exactly once per burst - only
       // the sampling and the context tail vary across the repeat-retries below.
       const bans = bansDirective(vitals.recentOpeners);
+      const targetOpts = options(vitals, config.threads, mode);
       noiseThisBurst = false;
       let directives;
       let burstForm = null; // the selected form directive, surfaced to the RAW view
       {
         const ctx = buildCtx(cognition.directive);
         ctx.bans = bans;
+        ctx.length = completionDirective(targetOpts.num_predict);
         ctx.regime = regimeDirective(mins);
         burstForm = selectedAction.name;
         ctx.incidents = incidentsDirective(vitals.ledger, {
@@ -2821,7 +2844,7 @@ async function main() {
         });
         directives = buildDirectives(vitals, 'journal', ctx);
       }
-      const baseOpts = options(vitals, config.threads, mode);
+      const baseOpts = { ...targetOpts, num_predict: completionBudget(targetOpts.num_predict) };
       // Forms that restate a phrase on purpose (the repeat form, "you repeat
       // yourself" from fatigue) opt out of the within-burst repeat guard, so a
       // deliberate refrain is not cut short.

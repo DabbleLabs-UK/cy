@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { burstSeparator, applyBurstSeparator } from './prompt.js';
-import { repeatsWithinBurst } from './warden.js';
+import { SentenceBuffer, finishTokenLimitedTail, repeatsWithinBurst } from './warden.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -90,5 +90,20 @@ assert.equal(repeatsWithinBurst('grey slabs same every day not. ', first), false
 // nothing to compare against yet -> never a repeat
 assert.equal(repeatsWithinBurst(first, ''), false);
 ok('within-burst repeat guard flags verbatim restatement, not fresh prose');
+
+// ---- 5. hard token caps never publish a chopped final token ----
+assert.equal(
+  finishTokenLimitedTail('sweat drippin down, Root is tryin tae mess wi'),
+  'sweat drippin down, Root is tryin tae mess...',
+);
+assert.equal(finishTokenLimitedTail('an intentional complete ending.'), 'an intentional complete ending.');
+assert.equal(finishTokenLimitedTail('single'), '', 'a lone clipped token is safer to discard');
+const capped = new SentenceBuffer();
+capped.push('canny get past dis feeling dat root is trying tae mess wi');
+assert.deepEqual(capped.flush({ tokenLimited: true }), ['canny get past dis feeling dat root is trying tae mess...']);
+const natural = new SentenceBuffer();
+natural.push('feel like');
+assert.deepEqual(natural.flush(), ['feel like'], 'a natural fragment remains part of Cy voice');
+ok('token-limit flush removes only the chopped word and marks the technical interruption');
 
 console.log(`\nboundary.test.js: all ${n} checks passed`);
