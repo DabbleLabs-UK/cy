@@ -49,10 +49,12 @@ const observe = (subject, name, appraisal, tags = [], at = T0 + 1000) => observe
 // D: hostility raises anger and threat-related state.
 {
   const s = state();
+  const lonelinessBefore = experiencedSnapshot(s).metrics.loneliness.value;
   observe(s, 'hostile_fight', { threat: 0.78, controlLoss: 0.55 }, ['hostile', 'fight']);
   const view = experiencedSnapshot(s);
   assert.ok(view.metrics.anger.value > view.metrics.anger.baseline);
   assert.ok(view.metrics.anxiety.value > view.metrics.anxiety.baseline);
+  assert.equal(view.metrics.loneliness.value, lonelinessBefore, 'hostile presence is not reassuring contact');
 }
 
 // E: a friendly postcard relieves social need and mildly reassures.

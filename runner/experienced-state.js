@@ -204,7 +204,10 @@ export function observeExperienced(state, { observation = {}, appraisal = {}, pr
     addImpulse(state, 'hunger', `${id}:deprivation`, 22 * deprivation,
       `food deprivation in: ${subject}`, now, 'body_event', 2 * 60 * 60 * 1000);
   }
-  if (affiliation >= 0.22) {
+  // A person being present is not automatically reassuring. Existing cast
+  // warmth only relieves social need when the same interaction is not appraised
+  // as threatening or controlling.
+  if (affiliation >= 0.22 && threat < 0.35 && control < 0.5) {
     addImpulse(state, 'loneliness', `${id}:contact`, -32 * affiliation,
       `social contact from: ${subject}`, now, 'social_event', HALF_LIFE.loneliness);
     if (threat < 0.25) addImpulse(state, 'anxiety', `${id}:reassurance`, -10 * affiliation,
