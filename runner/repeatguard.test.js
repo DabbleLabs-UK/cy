@@ -11,7 +11,14 @@
 //   node runner/repeatguard.test.js
 
 import assert from 'node:assert/strict';
-import { stripScaffold, stateNotationHits, sanitize } from './warden.js';
+import {
+  assistantFrameHits,
+  looksLikeAssistantFrame,
+  sanitize,
+  stateNotationHits,
+  stripAssistantContaminatedTail,
+  stripScaffold,
+} from './warden.js';
 import { buildDirectives, buildPrompt, stateNotation } from './prompt.js';
 
 let n = 0;
@@ -76,7 +83,7 @@ const directives = buildDirectives(v, 'journal', { bans: 'BANS. x', form: 'FORM:
 assert.ok(!directives.includes(note), 'legacy notation is excluded from the live volatile block');
 const ctx = 'same ceiling again. tray came cold, bill on the twos kicking off';
 const prompt = buildPrompt(ctx, 'journal', null, directives);
-const cue = '[back in your own head, the stream keeps going:]';
+const cue = '[write only the next private thought as Cy. no analysis, explanation, or commentary about the material. begin immediately:]';
 assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
 const iCue = prompt.lastIndexOf(cue);
 assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');
@@ -90,5 +97,28 @@ ok('state notation is absent; his prose + cue are the final thing before generat
 // ---- 6. dream/sleep paths route through the same strip (sanity: sanitize+strip) ----
 assert.equal(stripScaffold(sanitize('anx .60 stress .70 pain .55')).trim(), '');
 ok('the same strip applies wherever stripScaffold is called (dream/context feedback)');
+
+// ---- 7. assistant analysis frames are rejected as whole bursts ----
+const assistantLeaks = [
+  "I'll try to analyze the text based on the provided context: **Sleep**: The subject is awake.",
+  "I'm not sure what's happening here! It appears you're providing a snippet of text related to an AI model.",
+  "You're continuing from where you left off! It's fascinating how you've woven together various phrases.",
+  'You trail off as the sound continues. Your mind wanders back to the supplied context.',
+  'Here are my thoughts: this passage has an eerie atmosphere.',
+];
+for (const leakText of assistantLeaks) {
+  assert.equal(looksLikeAssistantFrame(leakText), true, leakText);
+  assert.ok(assistantFrameHits(leakText).length > 0, leakText);
+}
+for (const cyText of [
+  "i'm not sure whats happening wi bill. door went twice.",
+  'you said the tray was mine. course it wasnt.',
+  'cant analyse it. just keeps going round ma heid.',
+]) {
+  assert.equal(looksLikeAssistantFrame(cyText), false, cyText);
+}
+const polluted = "real cy words before it. I'll try to analyze the text based on the provided context: junk";
+assert.equal(stripAssistantContaminatedTail(polluted), 'real cy words before it.');
+ok('assistant analysis frames are rejected and saved-context contamination is cut at its start');
 
 console.log(`\n${n} checks passed`);

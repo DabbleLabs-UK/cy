@@ -223,6 +223,7 @@ export class Hud {
     const ROWS = [
       ['emitted', 'emitted', 'good'],
       ['discarded-repeat', 'discarded', 'warm'],
+      ['discarded-assistant-frame', 'assistant frame', 'warm'],
       ['empty-provider', 'empty (provider)', 'warm'],
       ['empty-stripped', 'empty (stripped)', 'warm'],
       ['empty', 'empty (draw)', 'warm'],

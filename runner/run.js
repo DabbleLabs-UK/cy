@@ -116,7 +116,19 @@ import {
 import { PowerMeter, costInjection } from './power.js';
 import { SpendMeter } from './spend.js';
 import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } from './provider.js';
-import { createWarden, sanitize, stripScaffold, stripScaffoldAccounted, narrationHits, stateNotationHits, isRepeat, repeatsWithinBurst } from './warden.js';
+import {
+  assistantFrameHits,
+  createWarden,
+  isRepeat,
+  looksLikeAssistantFrame,
+  narrationHits,
+  repeatsWithinBurst,
+  sanitize,
+  stateNotationHits,
+  stripAssistantContaminatedTail,
+  stripScaffold,
+  stripScaffoldAccounted,
+} from './warden.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
@@ -1022,6 +1034,20 @@ async function main() {
       /* never crash on debug logging */
     }
   }
+  // A strong assistant/analysis opener means the model stopped being Cy. The
+  // held opening is rejected before it reaches the page or saved context.
+  async function logAssistantFrameDiscard(head, mode) {
+    const hits = assistantFrameHits(head);
+    const snippet = (head || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    const line = `[cy] assistant-frame holdback (${mode}) - discarding generation: "${hits.join(' | ') || snippet}"`;
+    console.warn(line);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
+    } catch {
+      /* never crash on debug logging */
+    }
+  }
   // RAW-VS-SURVIVING accounting at the natural end of a burst: the true provider
   // char count (BEFORE any stripping), the chars that survived stripScaffold, and
   // the chars that actually reached the page (burstEmitted). When NOTHING survived
@@ -1215,7 +1241,8 @@ async function main() {
 
   // ---- CYCLE OUTCOME ACCOUNTING ----------------------------------------------
   // Every generation cycle must end in exactly ONE recorded outcome so a stall is
-  // never invisible: emitted / discarded-repeat / empty / blocked-by-warden /
+  // never invisible: emitted / discarded-repeat / discarded-assistant-frame /
+  // empty / blocked-by-warden /
   // aborted / deliberate-silence / throttled. A rolling ring of the last N holds
   // the recent picture (published in the vitals payload - which ticks even during
   // a stall, unlike `gen`), and a cumulative total is kept for the whole run.
@@ -1224,7 +1251,7 @@ async function main() {
   // removed all of it). The bare 'empty' key is retained because the drawing path
   // still uses it for a DSL pass that produced nothing (see doDraw fallback).
   const OUTCOME_KINDS = [
-    'emitted', 'discarded-repeat', 'empty-provider', 'empty-stripped', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
+    'emitted', 'discarded-repeat', 'discarded-assistant-frame', 'empty-provider', 'empty-stripped', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
   ];
   const OUTCOME_WINDOW = 20;
   const recentOutcomes = []; // ring of the last OUTCOME_WINDOW outcome strings
@@ -1629,6 +1656,7 @@ async function main() {
     let primed = contextTail === undefined && !screenRefusal;
     let repeat = false;
     let refused = false;
+    let assistantFrame = false;
     // generation telemetry: wall-clock to the first token (ttft), and the final
     // `done` line which carries prompt_eval_count/eval_count/durations (+ usage/cost
     // for a paid provider).
@@ -1656,6 +1684,13 @@ async function main() {
       const cleaned = stripScaffold(sanitize(head));
       if (screenRefusal && cleaned.trim() && looksLikeRefusal(cleaned)) {
         refused = true;
+        ac.abort();
+        return;
+      }
+      if (cleaned.trim() && looksLikeAssistantFrame(cleaned)) {
+        assistantFrame = true;
+        wardenBlocksInGen++;
+        await logAssistantFrameDiscard(head, mode);
         ac.abort();
         return;
       }
@@ -1710,7 +1745,7 @@ async function main() {
         head += text;
         if (head.length >= PRIME_CHARS) {
           await commitHead();
-          if (repeat || refused) return true; // stop: opening was a replay or a refusal
+          if (repeat || refused || assistantFrame) return true; // stop: opening was unsafe
         }
       } else {
         for (const chunk of buffer.push(text)) await onChunk(chunk, mode);
@@ -1728,6 +1763,7 @@ async function main() {
       });
     } catch (err) {
       if (refused) return refusedResult();
+      if (assistantFrame) return { full: '', assistantFrame: true, aborted: false };
       if (repeat) return { full: cleanedFull(), repeat: true };
       if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
       console.warn('[cy] stream error:', err.message);
@@ -1739,14 +1775,17 @@ async function main() {
     // aborted mid-stream (an inbound postcard/notice cut the generation at once)
     if (streamRes && streamRes.aborted) {
       if (refused) return refusedResult();
+      if (assistantFrame) return { full: '', assistantFrame: true, aborted: false };
       if (repeat) return { full: cleanedFull(), repeat: true };
       return { full: cleanedFull(), aborted: true };
     }
     if (refused) return refusedResult();
+    if (assistantFrame) return { full: '', assistantFrame: true, aborted: false };
     if (repeat) return { full: cleanedFull(), repeat: true };
     // generation ended before priming completed (shorter than PRIME_CHARS)
     if (!primed) await commitHead();
     if (refused) return refusedResult();
+    if (assistantFrame) return { full: '', assistantFrame: true, aborted: false };
     if (repeat) return { full: cleanedFull(), repeat: true };
     // Natural end: only a confirmed hard token limit gets a defensive whole-word
     // finish. A real model stop keeps Cy's intentional fragments untouched.
@@ -3440,6 +3479,7 @@ async function main() {
 
       const burstStart = Date.now();
       let discards = 0;
+      let assistantFrameDiscards = 0;
       let tempBump = 0;
       let penBump = 0;
       let produced = false;
@@ -3474,6 +3514,18 @@ async function main() {
         });
         if (r.error) { errored = true; break; } // provider already backed off; move on
         if (r.refused) { refusedGen = true; break; } // DeepSeek refusal: discard, no retry
+        if (r.assistantFrame) {
+          assistantFrameDiscards++;
+          await recordOutcome('discarded-assistant-frame');
+          // Retry once after removing any previously saved assistant-shaped tail,
+          // with a small engineering sampling variation. The rejected generation
+          // itself was never appended. A second failure becomes a quiet cycle.
+          contextBuf = stripAssistantContaminatedTail(contextBuf);
+          tempBump += 0.35;
+          if (assistantFrameDiscards < 2) continue;
+          lastResult = r;
+          break;
+        }
         if (!r.repeat) {
           produced = !!(r.full && r.full.trim());
           lastFull = r.full || '';
@@ -3731,7 +3783,7 @@ async function loadContext(path) {
         }
       })
       .join('');
-    return stripScaffold(sanitize(text));
+    return stripAssistantContaminatedTail(stripScaffold(sanitize(text)));
   } catch {
     return '';
   }

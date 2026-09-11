@@ -175,6 +175,50 @@ const NARRATION = [
   /\bi\s+apologi[sz]e\b[^\n]*/gi,
 ];
 
+// Whole-burst assistant frames. These are intentionally stronger and narrower
+// than the line stripper above: when one appears at the held opening, the model
+// has stopped being Cy and is analysing the supplied context. The entire burst
+// must be rejected before any text reaches the pen or Zone B; stripping only the
+// first sentence would leave the rest of the assistant answer behind.
+const ASSISTANT_FRAME = [
+  /i(?:'|\u2019)?ll\s+(?:try\s+to\s+)?(?:analy[sz]e|summari[sz]e|explain)\s+(?:the|this)\s+(?:text|context|passage)\b/i,
+  /i(?:'|\u2019)?m\s+not\s+sure\s+what(?:'|\u2019)?s\s+happening\s+here[\s\S]{0,180}\b(?:you(?:'|\u2019)?re|you\s+are)\s+(?:providing|asking|sharing)\b/i,
+  /you(?:'|\u2019)?re\s+continuing\s+from\s+where\s+you\s+left\s+off\b/i,
+  /you\s+trail\s+off\s+as\b/i,
+  /\bthis\s+(?:response|passage|text)\s+(?:aims|has|contains|appears)\b/i,
+  /\bhere\s+are\s+my\s+thoughts\s*:/i,
+];
+
+function assistantFrameMatches(s) {
+  const text = s || '';
+  const matches = [];
+  for (const re of ASSISTANT_FRAME) {
+    re.lastIndex = 0;
+    const match = re.exec(text);
+    if (match) matches.push({ index: match.index, text: match[0] });
+  }
+  return matches.sort((a, b) => a.index - b.index);
+}
+
+export function assistantFrameHits(s) {
+  return assistantFrameMatches(s).map((match) =>
+    match.text.trim().replace(/\s+/g, ' ').slice(0, 120));
+}
+
+export function looksLikeAssistantFrame(s) {
+  return assistantFrameMatches(s).length > 0;
+}
+
+// Saved context has no burst markers, so once a strong assistant frame has
+// entered it there is no safe way to recover later text as Cy's. Preserve the
+// uncontaminated prefix and discard the tainted tail in memory on restart. The
+// public event history is not altered.
+export function stripAssistantContaminatedTail(s) {
+  const text = s || '';
+  const first = assistantFrameMatches(text)[0];
+  return first ? text.slice(0, first.index).trimEnd() : text;
+}
+
 // STATE-NOTATION LEAK. The compressed vitals notation from the volatile prompt
 // block ('agit .70 stress .85 despair .80 hunger 2.00 fatigue 3.0') copied out as
 // if it were prose to continue - the same imitate-what-sits-nearest failure mode

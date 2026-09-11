@@ -52,7 +52,7 @@ assert.equal(JSON.stringify({ appraisal: runtime.state.appraisal, experienced: r
   emotionsBeforeContext, 'K: current defensive context does not calculate emotional state');
 assert.equal(runtime.directive(), directiveBeforeContext,
   'K: current defensive context does not alter the provisional cognitive directive');
-assert.match(runtime.groundedDirective({ now: t0 + 1000 }).directive, /search:integration/,
+assert.match(runtime.groundedDirective({ now: t0 + 1000 }).directive, /Present external cues: officer at cell/,
   'current defensive facts enter the separate grounded directive');
 
 const controllableMeal = createEnvironmentRecord(createEnvironmentEvent('meal', {
@@ -100,7 +100,7 @@ assert.equal(JSON.stringify(runtime.state.experienced.metrics.hunger), hungerBef
   'grounded ingestion does not modify the provisional Hunger value');
 assert.equal(runtime.directive(), directiveBeforeMeal,
   'grounded ingestion does not alter the provisional cognitive directive');
-assert.match(runtime.groundedDirective({ now: t0 + 2000 }).directive, /FULLY_CONSUMED/,
+assert.match(runtime.groundedDirective({ now: t0 + 2000 }).directive, /intake outcome fully consumed/,
   'grounded intake enters the separate factual directive without a Hunger claim');
 
 runtime.observe({
@@ -165,13 +165,13 @@ const zoneC = buildDirectives(vitals, 'journal', {
   provisionalCognition: generation.provisionalDirective,
 });
 const prompt = buildPrompt('', 'journal', null, zoneC);
-assert.match(prompt, /<GROUNDED_CURRENT_STATE>/);
+assert.match(prompt, /<PRIVATE_CURRENT_FACTS>/);
 assert.match(prompt, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
 assert.doesNotMatch(prompt, /output action selected:/);
 assert.match(prompt, /source event: env-search-/);
 assert.match(prompt, /archived event material:/);
 assert.doesNotMatch(prompt, /was expected next/i);
-assert.ok(prompt.indexOf('<GROUNDED_CURRENT_STATE>') > prompt.indexOf('ONE THING'));
+assert.ok(prompt.indexOf('<PRIVATE_CURRENT_FACTS>') > prompt.indexOf('ONE THING'));
 
 const appraisalBeforeOutput = { ...runtime.state.appraisal };
 const threatBeforeOutput = JSON.stringify(runtime.state.threatLearning);
@@ -234,7 +234,7 @@ assert.equal(broken.available, false);
 assert.equal(broken.directive(), '');
 assert.equal(broken.snapshot().status, 'unavailable');
 assert.match(broken.snapshot().reason, /instrumented update failure/);
-assert.match(prepareSomaGeneration(broken).groundedDirective, /No grounded Soma state is available/);
+assert.match(prepareSomaGeneration(broken).groundedDirective, /No current grounded facts are available/);
 assert.equal(prepareSomaGeneration(broken).provisionalMemoryCandidate, null);
 assert.equal(failures.length, 1);
 assert.deepEqual(

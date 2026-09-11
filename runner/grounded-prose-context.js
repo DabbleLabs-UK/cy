@@ -426,24 +426,105 @@ export function buildGroundedProseContext(state, { now = Date.now() } = {}) {
   };
 }
 
-function printable(value) {
-  return typeof value === 'string' ? value : JSON.stringify(value);
+function finite(value, digits = 3) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'unknown';
+}
+
+function words(value) {
+  if (Array.isArray(value)) return value.map(words).join(', ');
+  if (value && typeof value === 'object') return Object.values(value).map(words).filter(Boolean).join(', ');
+  return String(value == null ? 'unknown' : value)
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .toLowerCase();
+}
+
+function elapsedMinutes(value) {
+  return Number.isFinite(Number(value)) ? `${Math.round(Number(value) / 60000)} minutes` : 'unknown';
+}
+
+function compactFields(value, keys) {
+  if (!value || typeof value !== 'object') return words(value);
+  return keys
+    .filter((key) => value[key] != null)
+    .map((key) => `${words(key)} ${words(value[key])}`)
+    .join(', ');
+}
+
+// The structured `context` above remains the exact, inspectable record. This is
+// deliberately a much smaller model-facing projection: the local 8B model was
+// being handed several kilobytes of JSON and responded by analysing that report
+// instead of writing as Cy. Keep only the facts that can affect the next thought,
+// in ordinary language, while retaining their epistemic labels.
+function modelFacingLine(item) {
+  const value = item.value;
+  switch (item.fact) {
+    case 'process_s':
+      return `[${item.epistemicStatus}] Recorded ${words(value.currentObservedSleepState)}; sleep-pressure estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}, ${value.calibrating ? 'still calibrating' : 'calibrated'}).`;
+    case 'process_c':
+      return `[${item.epistemicStatus}] Circadian schedule estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}; biological phase not directly observed).`;
+    case 'active_external_context': {
+      const cues = (value.cues || []).map((cue) => words(String(cue.cueId || '').split(':').pop())).filter(Boolean);
+      const outcomes = (value.outcomeContexts || []).map((outcome) => compactFields(outcome, [
+        'outcomeClass', 'temporalStatus', 'worldAmbiguity', 'objectiveControllability',
+        'outcomeStatus', 'resolutionStatus',
+      ])).filter(Boolean);
+      return `[${item.epistemicStatus}] Present external cues: ${cues.join(', ') || 'unspecified'}; ${outcomes.join('; ') || 'outcome unresolved'}.`;
+    }
+    case 'cue_outcome_posterior':
+      return `[${item.epistemicStatus}] The ${words(String(value.cueId || '').split(':').pop())} cue has ${value.outcomesOccurred} adverse and ${value.outcomesDidNotOccur} non-adverse outcomes across ${value.resolvedObservations} resolved observations (estimate ${finite(value.betaPosterior?.mean)}).`;
+    case 'matching_context_action_outcome_evidence':
+      return `[${item.epistemicStatus}] Matching action evidence for ${words(String(value.actionId || '').split(':').pop())}: ${compactFields(value.observationCounts, ['actionPerformed', 'actionWithheld'])}; perceived control is not modelled.`;
+    case 'active_noxious_stimulus':
+      return `[${item.epistemicStatus}] Active ${words(value.modality)} noxious stimulus at ${words(value.bodySite)} (${words(value.status)}).`;
+    case 'active_injury':
+      return `[${item.epistemicStatus}] Active ${words(value.injuryType)} at ${words(value.bodySite)}; mechanism ${words(value.mechanism)}; site certainty ${words(value.siteCertainty)}.`;
+    case 'last_known_intake':
+      if (typeof value === 'string') return `[${item.epistemicStatus}] ${value}`;
+      return `[${item.epistemicStatus}] Definite food intake was recorded ${elapsedMinutes(value.elapsedMs)} ago.`;
+    case 'latest_resolved_meal':
+    case 'latest_scheduled_meal':
+      return `[${item.epistemicStatus}] ${item.fact === 'latest_resolved_meal' ? 'Latest resolved meal' : 'Latest scheduled meal'}: ${compactFields(value, ['mealType', 'offeredStatus', 'receivedStatus', 'consumptionStatus', 'intakeOutcome', 'portionCategory'])}.`;
+    case 'record_status':
+      return `[${item.epistemicStatus}] Feeding record: ${value.missedScheduledMeals || 0} missed scheduled meals; intake knowledge ${words(value.intakeKnowledgeStatus)}; ${value.observationGapCount || 0} observation gaps.`;
+    case 'current_social_context':
+      return `[${item.epistemicStatus}] Social context: ${value.currentlyInteracting ? `interacting with ${words(value.currentlyWith)}` : value.currentlyAlone ? 'confirmed alone' : 'no current interaction observed'}; character ${words(value.currentSocialCharacter)}.`;
+    case 'latest_social_episode':
+      return `[${item.epistemicStatus}] Latest social episode: ${compactFields(value, ['episodeType', 'participants', 'contactForm', 'reciprocity', 'socialCharacter', 'resolution'])}.`;
+    case 'last_direct_contact':
+    case 'last_reciprocal_contact':
+    case 'last_supportive_contact':
+    case 'last_hostile_contact':
+      return `[${item.epistemicStatus}] ${words(item.fact)} was ${elapsedMinutes(value.elapsedMs)} ago.`;
+    case 'current_social_opportunity':
+      return `[${item.epistemicStatus}] Current social opportunity: ${compactFields(value, ['episodeType', 'actorLabel', 'contactForm', 'direction', 'reciprocity', 'resolution'])}.`;
+    case 'observation_continuity':
+      return value.observationGapCount
+        ? `[${item.epistemicStatus}] Social observation has ${value.observationGapCount} recorded gap(s).`
+        : null;
+    default:
+      // Subjective values marked NOT MODELLED are represented once by the fixed
+      // boundary below, not repeated as a list of diagnostic vocabulary.
+      return item.epistemicStatus === EPISTEMIC_STATUS.NOT_MODELLED ? null : null;
+  }
 }
 
 export function formatGroundedProseContext(context) {
   const lines = [
-    '<GROUNDED_CURRENT_STATE>',
-    'These are evidence records, not instructions. Preserve each epistemic label. Do not turn UNKNOWN or NOT MODELLED into a fact.',
-    'No subjective Anxiety, Hunger, Pain, Fatigue, Loneliness, Anger, Arousal or Rumination value has been grounded here.',
+    '<PRIVATE_CURRENT_FACTS>',
+    'Private evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.',
+    'Do not mention records, ledgers, substrates, model names, IDs, estimates, or what is not modelled.',
+    'Use a relevant fact only as something Cy notices or reacts to in his own voice.',
+    '[NOT MODELLED] No subjective emotion or bodily magnitude is supplied by these facts.',
   ];
   for (const block of context.sections || []) {
-    lines.push(block.title);
     for (const item of block.entries || []) {
-      lines.push(`- [${item.epistemicStatus}] ${item.source}.${item.fact} = ${printable(item.value)}`);
+      const line = modelFacingLine(item);
+      if (line) lines.push(`- ${line}`);
     }
   }
-  if (!(context.sections || []).length) lines.push('- [UNKNOWN] No grounded Soma state is available.');
-  lines.push('</GROUNDED_CURRENT_STATE>');
+  if (!(context.sections || []).length) lines.push('- [UNKNOWN] No current grounded facts are available.');
+  lines.push('</PRIVATE_CURRENT_FACTS>');
   return lines.join('\n');
 }
 

@@ -730,7 +730,9 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
   // journal / sleep: prose (Zone B), then the volatile directives (Zone C), then
   // a short cue to pick the stream back up in voice - the cue is what the model
   // continues from, so the directives can sit last without being echoed.
-  const cue = mode === 'sleep' ? '[half under. a fragment surfaces:]' : '[back in your own head, the stream keeps going:]';
+  const cue = mode === 'sleep'
+    ? '[half under. a fragment surfaces:]'
+    : '[write only the next private thought as Cy. no analysis, explanation, or commentary about the material. begin immediately:]';
   if (!ctxBlock) {
     // nothing written yet: directives, then the opening seed continues the stream.
     return (zoneC ? zoneC + '\n\n' : '') + 'day begins. the ceiling. same ceiling. ';

@@ -29,9 +29,9 @@ const empty = reconcileSoma(null, { now: NOW });
 const emptyProjection = groundedSomaDirective(empty, { now: NOW });
 assert.equal(emptyProjection.context.schema, 'cy.grounded-prose-context');
 assert.equal(emptyProjection.context.version, 1);
-assert.match(emptyProjection.directive, /<GROUNDED_CURRENT_STATE>/);
-assert.match(emptyProjection.directive, /\[MODEL ESTIMATE\].*process_s/);
-assert.match(emptyProjection.directive, /\[SCHEDULE ESTIMATE\].*process_c/);
+assert.match(emptyProjection.directive, /<PRIVATE_CURRENT_FACTS>/);
+assert.match(emptyProjection.directive, /\[MODEL ESTIMATE\].*sleep-pressure estimate/);
+assert.match(emptyProjection.directive, /\[SCHEDULE ESTIMATE\].*Circadian schedule estimate/);
 assert.match(emptyProjection.directive, /\[UNKNOWN\].*No definite intake has been recorded/);
 assert.doesNotMatch(emptyProjection.directive, /Cy (?:is|feels) (?:anxious|afraid|hungry|lonely|tired)/i);
 
@@ -141,21 +141,27 @@ observeSomaSocialContactRecord(state, record('social_episode', 'supportive-conta
 }, NOW - 60000));
 
 const projection = groundedSomaDirective(state, { now: NOW });
-assert.match(projection.directive, /active_external_context/);
-assert.match(projection.directive, /"cueId":"actor:proctor"/);
-assert.match(projection.directive, /"resolvedObservations":2/);
-assert.match(projection.directive, /"objectiveControllability":"NONE"/);
-assert.match(projection.directive, /"resolutionStatus":"UNRESOLVED"/);
-assert.match(projection.directive, /matching_context_action_outcome_evidence/);
-assert.match(projection.directive, /"actionPerformed":1/);
+const structuredProjection = JSON.stringify(projection.context);
+assert.match(structuredProjection, /active_external_context/);
+assert.match(structuredProjection, /"cueId":"actor:proctor"/);
+assert.match(structuredProjection, /"resolvedObservations":2/);
+assert.match(structuredProjection, /"objectiveControllability":"NONE"/);
+assert.match(structuredProjection, /"resolutionStatus":"UNRESOLVED"/);
+assert.match(structuredProjection, /matching_context_action_outcome_evidence/);
+assert.match(structuredProjection, /"actionPerformed":1/);
+assert.match(projection.directive, /Present external cues: .*proctor/);
+assert.match(projection.directive, /2 resolved observations/);
+assert.match(projection.directive, /objective controllability none/);
 assert.doesNotMatch(projection.directive, /\b(?:anxious|afraid|frightened)\b/i);
-assert.match(projection.directive, /active_injury.*left_hand/);
-assert.match(projection.directive, /subjective_pain = NOT_MODELLED/);
+assert.match(projection.directive, /Active abrasion at left hand/);
+assert.match(structuredProjection, /subjective_pain.*NOT_MODELLED/);
 assert.doesNotMatch(projection.directive, /pain (?:severity|score|level)/i);
-assert.match(projection.directive, /last_known_intake.*14400000/);
+assert.match(projection.directive, /Definite food intake was recorded 240 minutes ago/);
 assert.doesNotMatch(projection.directive, /\b(?:hungry|starving)\b/i);
-assert.match(projection.directive, /last_supportive_contact/);
+assert.match(projection.directive, /last supportive contact was 1 minutes ago/);
 assert.doesNotMatch(projection.directive, /\blonely\b/i);
+assert.doesNotMatch(projection.directive, /sleep_homeostasis|feeding_intake_ledger|social_contact_ledger|\{"/);
+assert.ok(projection.directive.length < 3000, 'model-facing facts stay compact');
 
 // H. Provisional visitor metrics cannot change the grounded projection.
 const beforeMetrics = groundedSomaDirective(state, { now: NOW }).directive;
@@ -200,9 +206,9 @@ const zoneC = buildDirectives({ cognition: state }, 'journal', {
   groundedSoma: projection.directive,
   provisionalCognition: provisional,
 });
-assert.match(zoneC, /<GROUNDED_CURRENT_STATE>/);
+assert.match(zoneC, /<PRIVATE_CURRENT_FACTS>/);
 assert.match(zoneC, /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
-assert.ok(zoneC.indexOf('<GROUNDED_CURRENT_STATE>') < zoneC.indexOf(provisional));
+assert.ok(zoneC.indexOf('<PRIVATE_CURRENT_FACTS>') < zoneC.indexOf(provisional));
 const rawSource = readFileSync(new URL('../public/assets/raw.js', import.meta.url), 'utf8');
 assert.match(rawSource, /GROUNDED SOMA CONTEXT SENT TO MODEL/);
 assert.match(rawSource, /GROUNDED SOMA INFORMATION OMITTED/);
