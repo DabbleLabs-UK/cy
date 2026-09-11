@@ -607,6 +607,7 @@ async function main() {
     const record = createEnvironmentRecord(event, {
       consumedBy: [
         'soma-input-staging-v1',
+        'current-defensive-context-v1',
         'probabilistic-threat-learning-v1',
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
           ? ['process-s-normalized-v1']
@@ -614,6 +615,7 @@ async function main() {
         ...(provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
       ],
     });
+    record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
     record.threat_learning = soma.observeThreatLearningRecord(record);
     emit({ kind: 'world_event_record', payload: record });
     return record;

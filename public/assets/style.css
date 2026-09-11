@@ -932,6 +932,24 @@ body.cy-paused::after {
 .threat-learning-limits strong { color: #788693; }
 .threat-learning-inspector { margin-top: 7px; color: #86a99a; font-size: 8px; }
 .threat-learning-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
+.defensive-context-card { margin-top: 9px; padding: 9px; border: 1px solid #425d6d; background: rgba(17, 29, 38, 0.48); }
+.defensive-context-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b9d5e4; font-size: 8px; letter-spacing: 0.08em; }
+.defensive-context-status { color: #65d59a; font-size: 8px; }
+.defensive-context-explanation,
+.defensive-context-empty { margin: 5px 0; color: #9cb1bc; font-size: 8px; line-height: 1.45; }
+.defensive-contexts { display: grid; gap: 7px; margin-top: 7px; }
+.defensive-context-item { padding: 7px; border: 1px solid rgba(94, 126, 144, 0.45); background: rgba(6, 13, 18, 0.38); }
+.defensive-context-item > strong { display: block; color: #c8e0ec; font: 8px/1.35 var(--mono); text-transform: uppercase; }
+.defensive-context-outcome { margin: 4px 0; color: #a9c2cf; font-size: 8px; line-height: 1.4; text-transform: uppercase; }
+.defensive-context-item ul { margin: 5px 0; padding-left: 15px; color: #8fa6b2; font-size: 7.5px; line-height: 1.45; }
+.defensive-context-item dl { display: grid; gap: 2px; margin: 6px 0 0; }
+.defensive-context-item dl > div { display: flex; justify-content: space-between; gap: 8px; }
+.defensive-context-item dt { color: #728a97; font-size: 7px; letter-spacing: 0.06em; }
+.defensive-context-item dd { margin: 0; color: #b8cbd4; font-size: 7px; text-align: right; }
+.defensive-context-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(94, 126, 144, 0.35); color: #849ca8; font-size: 7.5px; line-height: 1.4; }
+.defensive-context-limits strong { color: #788693; }
+.defensive-context-inspector { margin-top: 7px; color: #91b2c2; font-size: 8px; }
+.defensive-context-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b5c7d0; font: inherit; line-height: 1.45; }
 .circadian-process-card { padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
 .circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 8px; letter-spacing: 0.08em; }
 .circadian-process-status { color: #65d59a; font-size: 8px; }

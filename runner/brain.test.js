@@ -20,6 +20,9 @@ assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_sta
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'probabilistic_threat_learning').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'current_defensive_context').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'objective_controllability').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'perceived_controllability').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
@@ -80,6 +83,13 @@ assert.match(source, /class="soma-region-list"/);
 assert.match(source, /probabilistic_threat_learning/);
 assert.match(source, /predicts outcomes; it is not an anxiety or fear-intensity score/);
 assert.match(source, /threat-learning-inspector/);
+assert.match(source, /CURRENT DEFENSIVE CONTEXT/);
+assert.match(source, /It is not an anxiety or threat score/);
+assert.match(source, /Learned uncertainty remains the separate posterior variance/);
+assert.match(source, /defensive-context-inspector/);
+assert.match(source, /ACTUAL CONTROL/);
+assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
+  'unimplemented region placeholders without artwork must remain hidden');
 assert.doesNotMatch(source, /Learned outcome probability/);
 assert.match(source, /className = `soma-region-entry/);
 assert.match(source, /className = `soma-state-entry soma-reading-entry/);

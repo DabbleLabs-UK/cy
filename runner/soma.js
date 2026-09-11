@@ -37,6 +37,12 @@ import {
   threatLearningSnapshot,
 } from './probabilistic-threat-learning.js';
 import {
+  createCurrentDefensiveContext,
+  currentDefensiveContextSnapshot,
+  observeCurrentDefensiveContextRecord as applyCurrentDefensiveContextRecord,
+  reconcileCurrentDefensiveContext,
+} from './current-defensive-context.js';
+import {
   PRISON_SCHEDULE,
   PRISON_SCHEDULE_TIME_ZONE,
   habitualWakeMinutes,
@@ -135,6 +141,7 @@ function blank(now, legacyPhysical = null) {
       timeZone: PRISON_SCHEDULE_TIME_ZONE,
     }),
     threatLearning: createThreatLearning(now),
+    currentDefensiveContext: createCurrentDefensiveContext(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -184,6 +191,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
       timeZone: PRISON_SCHEDULE_TIME_ZONE,
     }),
     threatLearning: reconcileThreatLearning(raw.threatLearning, { now }),
+    currentDefensiveContext: reconcileCurrentDefensiveContext(raw.currentDefensiveContext, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -218,6 +226,13 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
 export function observeSomaThreatLearningRecord(state, record) {
   if (!state || !record) return null;
   return applyThreatLearningRecord(state.threatLearning, record);
+}
+
+// Current defensive context reads only the present structured world record and
+// the grounded learner state as it existed before this event's outcome update.
+export function observeSomaCurrentDefensiveContextRecord(state, record) {
+  if (!state || !record) return null;
+  return applyCurrentDefensiveContextRecord(state.currentDefensiveContext, state.threatLearning, record);
 }
 
 function familyOf(name, tags = []) {
@@ -901,6 +916,7 @@ export function somaSnapshot(state) {
     sleepHomeostasis: sleepHomeostasisSnapshot(state.sleepHomeostasis),
     circadianProcessC: circadianProcessCSnapshot(state.circadianProcessC),
     threatLearning: threatLearningSnapshot(state.threatLearning),
+    currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

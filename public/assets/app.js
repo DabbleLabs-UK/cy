@@ -171,6 +171,7 @@ async function boot() {
   brain = new BrainHud($('#brain'), {
     historyUrl: CFG.somaHistory,
     threatLearningUrl: CFG.threatLearning,
+    defensiveContextUrl: CFG.defensiveContext,
     registry: CFG.implementationRegistry,
     admin: !!CFG.admin,
   });

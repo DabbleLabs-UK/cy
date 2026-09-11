@@ -1,0 +1,74 @@
+{
+  "schema": "cy.architecture-spec",
+  "version": 1,
+  "id": "current-defensive-context-dimensional-ontology",
+  "implementation_version": "current-defensive-context-v1",
+  "locked": true,
+  "public_name": "Current defensive context",
+  "implementation_status": "IMPLEMENTED",
+  "interpretation": "An event-driven vector of present external cues, separate learned cue-outcome posteriors, categorical temporal status, objective controllability, world ambiguity and outcome resolution. It is not a scalar threat, fear or anxiety value.",
+  "scientific_conceptual_basis": [
+    {
+      "authors": "Abend",
+      "year": 2023,
+      "title": "Understanding anxiety symptoms as aberrant defensive responding along the threat imminence continuum",
+      "journal": "Neuroscience and Biobehavioral Reviews",
+      "doi": "10.1016/j.neubiorev.2023.105305",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37414377/",
+      "use": "Supports representing temporal proximity as a separate defensive-context dimension; it does not provide these software categories as a numeric biological scale."
+    },
+    {
+      "authors": "Yamamori and Robinson",
+      "year": 2023,
+      "title": "Computational perspectives on human fear and anxiety",
+      "journal": "Neuroscience and Biobehavioral Reviews",
+      "doi": "10.1016/j.neubiorev.2022.104959",
+      "url": "https://discovery.ucl.ac.uk/id/eprint/10161311/",
+      "use": "Supports keeping learned prediction, uncertainty and approach-avoidance constructs computationally distinguishable."
+    },
+    {
+      "authors": "Maier and Watkins",
+      "year": 2010,
+      "title": "Role of the medial prefrontal cortex in coping and resilience",
+      "journal": "Brain Research",
+      "doi": "10.1016/j.brainres.2010.08.039",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2967290/",
+      "use": "Supports treating controllability as consequential while distinguishing objective control from unimplemented perceived or learned control."
+    },
+    {
+      "authors": "Tzovara, Korn and Bach",
+      "year": 2018,
+      "title": "Human Pavlovian fear conditioning conforms to probabilistic learning",
+      "journal": "PLOS Computational Biology",
+      "doi": "10.1371/journal.pcbi.1006243",
+      "url": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1006243",
+      "use": "Provides the existing cue-outcome posterior state attached without modification to each current context."
+    }
+  ],
+  "dimensions": ["active external cues", "separate learned adverse-outcome posteriors", "world ambiguity", "temporal status", "objective controllability", "outcome status", "resolution status", "source environment events"],
+  "temporal_status_ontology": ["POTENTIAL", "IMMINENT", "ONGOING", "RESOLVED", "UNKNOWN"],
+  "objective_controllability_ontology": ["NONE", "LIMITED", "SUBSTANTIAL", "UNKNOWN"],
+  "world_ambiguity_ontology": ["CLEAR", "PARTIAL", "AMBIGUOUS", "UNKNOWN"],
+  "resolution_ontology": ["UNRESOLVED", "RESOLVED_ADVERSE", "RESOLVED_SAFE", "UNKNOWN"],
+  "ontology_classification": "ENGINEERING ONTOLOGY informed by scientific concepts; not a published numeric biological scale and not claimed to reproduce the Predatory Imminence Continuum.",
+  "posterior_dependency": "Exact alpha, beta, posterior mean, posterior variance and resolved-observation count are inherited from probabilistic-threat-learning-v1. No new probability calculation is introduced.",
+  "state_lifecycle": "Changes only when a structured environment record opens, updates or resolves a context. No time decay or interpolation occurs between events.",
+  "producer_requirement": "An unresolved context remains active until a later structured environment event uses the same context_id and explicitly resolves it. Producers that omit that closure leave the context active by design.",
+  "controllability_distinction": {
+    "objective_controllability": "LIVE only as an exact structured world category",
+    "perceived_controllability": "NOT MODELLED",
+    "learned_action_outcome_control": "NOT MODELLED"
+  },
+  "numeric_psychological_parameters": [],
+  "engineering_constants": [
+    { "name": "state_schema_version", "value": 1, "classification": "storage compatibility; not a psychological parameter" }
+  ],
+  "limitations": [
+    "The structured environment producer, not this subsystem, determines whether a cue is present and assigns temporal, objective-control, ambiguity and resolution categories.",
+    "An unresolved context cannot close without a later structured event carrying the same context_id and explicit resolution facts.",
+    "Learned posterior assumptions remain binary, stationary and independent exactly as defined by probabilistic-threat-learning-v1.",
+    "Public summaries omit exact posterior parameters and source event identifiers; owner inspection retains them.",
+    "No biological activation, subjective response or attentional priority is inferred from this factual vector."
+  ],
+  "not_modelled": ["anxiety", "fear intensity", "weighted threat score", "salience score", "time decay", "imminence score", "control score", "uncertainty score", "remembered cue reactivation", "imagined cue reactivation", "perceived controllability", "instrumental controllability learning", "brain activation"]
+}

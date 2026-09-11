@@ -97,6 +97,14 @@ post-installation update history. It does not consume generated prose or legacy
 appraisal values and has no current effect on language, action selection,
 anxiety, or brain activity.
 
+`current-defensive-context.js` adds a separate grounded, event-driven vector for
+present external cues. It attaches existing cue-outcome posteriors while keeping
+world ambiguity, categorical imminence, objective control and outcome resolution
+independent. It supports multiple simultaneous contexts and persists exact
+transitions, but calculates no threat, fear, anxiety, salience, perceived-control
+or brain-activation value. The context is captured before the same event updates
+the threat learner, preserving the expectation available when the event arrived.
+
 ## dryRun
 
 With `dryRun: true` the runner never touches the network:

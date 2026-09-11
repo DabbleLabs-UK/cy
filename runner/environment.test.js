@@ -16,6 +16,7 @@ assert.equal(eaten.world.physical.food.consumed, 'full');
 assert.match(eaten.text, /ate it/);
 assert.deepEqual(eaten.world.associative_learning.outcomes,
   [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'did_not_occur' }]);
+assert.equal(eaten.world.defensive_context.temporal_status, 'RESOLVED');
 
 const partial = chooseMealEvent('lunch', () => 0.9);
 assert.equal(partial.provisional.body.meal.outcome, 'partial');

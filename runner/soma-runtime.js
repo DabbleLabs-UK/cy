@@ -95,6 +95,14 @@ export function createSomaRuntime(rawState, {
       });
       return result;
     },
+    observeCurrentDefensiveContextRecord(record) {
+      let result = null;
+      mutate('current defensive context', (current) => {
+        result = engine.observeSomaCurrentDefensiveContextRecord(current, record);
+        return current;
+      });
+      return result;
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

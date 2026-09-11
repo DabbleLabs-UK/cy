@@ -90,6 +90,10 @@ export function chooseMealEvent(meal, rnd = Math.random) {
             : outcome === 'missed' || outcome === 'refused' ? 'occurred' : 'unknown',
         }],
       },
+      defensive_context: {
+        temporal_status: 'RESOLVED',
+        adverse_outcome_classes: ['DEPRIVATION_OR_LOSS'],
+      },
     },
     observation: { summary: text, observed_facts: { meal: label, outcome } },
     provisional: {

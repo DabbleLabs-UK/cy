@@ -111,6 +111,13 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Examines only explicit structured cue/outcome links. Resolved occurred or did-not-occur trials update independent Beta-Bernoulli posteriors; unknown outcomes do not update.',
             ];
+        } elseif ($consumer === 'current-defensive-context-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Joins present structured external cues to existing learned posteriors and keeps ambiguity, categorical imminence, objective control and resolution separate. It calculates no emotion score.',
+            ];
         } elseif ($consumer === 'legacy-experienced-state-v2') {
             $consumers[] = [
                 'id' => $consumer,
@@ -136,6 +143,10 @@ function captive_environment_record_inspection(array $record, array $registry): 
         'what_threat_learning_did' => $record['threat_learning'] ?? [
             'status' => 'not_recorded',
             'detail' => 'This record predates the probabilistic threat-learning implementation or did not reach that consumer.',
+        ],
+        'what_current_defensive_context_did' => $record['current_defensive_context'] ?? [
+            'status' => 'not_recorded',
+            'detail' => 'This record predates current defensive context or did not reach that consumer.',
         ],
         'what_systems_consumed_it' => [
             'consumers' => $consumers,

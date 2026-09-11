@@ -265,11 +265,22 @@ function threatLearningMarkup(status, volatilityStatus, generalisationStatus, co
   </section>`;
 }
 
+function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, perceivedStatus, learnedControlStatus, rememberedStatus, admin) {
+  return `<section class="defensive-context-card status-${status.status.toLowerCase().replace('_', '-')}">
+    <div class="defensive-context-head"><span>${status.displayName}</span><strong class="defensive-context-status">${status.publicLabel}</strong></div>
+    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution. Learned uncertainty remains the separate posterior variance shown in owner inspection. It is not an anxiety or threat score.</p>
+    <div class="defensive-contexts"><p class="defensive-context-empty">No current structured defensive context is active.</p></div>
+    <div class="defensive-context-limits"><span>${objectiveStatus.displayName}</span><strong>${objectiveStatus.publicLabel}</strong><span>${imminenceStatus.displayName}</span><strong>${imminenceStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${learnedControlStatus.displayName}</span><strong>${learnedControlStatus.publicLabel}</strong><span>${rememberedStatus.displayName}</span><strong>${rememberedStatus.publicLabel}</strong></div>
+    ${admin ? '<details class="defensive-context-inspector"><summary>CURRENT DEFENSIVE CONTEXT INSPECTION</summary><pre>Waiting for exact context state and transition history.</pre></details>' : ''}
+  </section>`;
+}
+
 export class BrainHud {
-  constructor(root, { historyUrl = '', threatLearningUrl = '', registry = null, admin = false } = {}) {
+  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', registry = null, admin = false } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
     this.threatLearningUrl = threatLearningUrl;
+    this.defensiveContextUrl = defensiveContextUrl;
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
@@ -278,13 +289,19 @@ export class BrainHud {
     this.threatVolatilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_volatility');
     this.threatGeneralisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_generalisation');
     this.threatContextualStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_contextual_inference');
+    this.defensiveContextStatus = implementationStatus(this.registry, 'soma_subsystems', 'current_defensive_context');
+    this.objectiveControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'objective_controllability');
+    this.threatImminenceStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_imminence_representation');
+    this.perceivedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'perceived_controllability');
+    this.learnedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'learned_controllability');
+    this.rememberedThreatCueStatus = implementationStatus(this.registry, 'soma_subsystems', 'remembered_imagined_threat_cues');
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
       status: implementationStatus(this.registry, 'soma_variables', definition.key),
     }));
     const registeredRegions = Array.isArray(this.registry.brain_regions) && this.registry.brain_regions.length
-      ? this.registry.brain_regions
+      ? this.registry.brain_regions.filter((entry) => entry.ui_exposed !== false)
       : BRAIN_REGIONS.map((region) => ({ id: region.key, display_name: region.label }));
     this.regionDefinitions = registeredRegions.map((registered) => ({
       ...(regionGeometry.get(registered.id) || {}),
@@ -351,12 +368,24 @@ export class BrainHud {
       const threatLearning = definition.key === 'anxiety'
         ? threatLearningMarkup(this.threatLearningStatus, this.threatVolatilityStatus, this.threatGeneralisationStatus, this.threatContextualStatus, this.admin)
         : '';
+      const defensiveContext = definition.key === 'anxiety'
+        ? defensiveContextMarkup(
+          this.defensiveContextStatus,
+          this.objectiveControllabilityStatus,
+          this.threatImminenceStatus,
+          this.perceivedControllabilityStatus,
+          this.learnedControllabilityStatus,
+          this.rememberedThreatCueStatus,
+          this.admin,
+        )
+        : '';
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${sleepHomeostasis}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${defensiveContext}${sleepHomeostasis}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       if (definition.key === 'fatigue') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
+      if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
@@ -491,11 +520,30 @@ export class BrainHud {
     });
   }
 
+  _wireDefensiveContext(entry) {
+    const inspector = entry.querySelector('.defensive-context-inspector');
+    if (!inspector) return;
+    inspector.addEventListener('toggle', async () => {
+      if (!inspector.open || !this.defensiveContextUrl) return;
+      const target = inspector.querySelector('pre');
+      target.textContent = 'Loading exact context state and transition history...';
+      try {
+        const response = await fetch(this.defensiveContextUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`defensive context ${response.status}`);
+        const data = await response.json();
+        target.textContent = JSON.stringify(data.inspection || data, null, 2);
+      } catch (error) {
+        target.textContent = error && error.message ? error.message : 'Current defensive-context inspection unavailable.';
+      }
+    });
+  }
+
   setSoma(soma) {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.sleepHomeostasis = soma.sleepHomeostasis || null;
     this.circadianProcessC = soma.circadianProcessC || null;
     this.threatLearning = soma.threatLearning || null;
+    this.currentDefensiveContext = soma.currentDefensiveContext || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
     for (const definition of this.metricDefinitions) {
@@ -520,6 +568,7 @@ export class BrainHud {
     this.renderSleepHomeostasis();
     this.renderCircadianProcessC();
     this.renderThreatLearning();
+    this.renderCurrentDefensiveContext();
     for (const definition of this.regionDefinitions) {
       const reading = definition.key === 'scnCircadian'
         ? this.circadianProcessC && this.circadianProcessC.scnAnalogy
@@ -666,6 +715,70 @@ export class BrainHud {
         item.append(heading, summary);
         root.appendChild(item);
       }
+    }
+  }
+
+  renderCurrentDefensiveContext() {
+    const entry = this.rows.anxiety;
+    const card = entry && entry.querySelector('.defensive-context-card');
+    if (!card) return;
+    const snapshot = this.currentDefensiveContext;
+    const live = this.defensiveContextStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.defensive-context-status').textContent = live
+      ? this.defensiveContextStatus.publicLabel : 'UNAVAILABLE';
+    const root = card.querySelector('.defensive-contexts');
+    root.textContent = '';
+    if (!live || !Array.isArray(snapshot.activeContexts) || !snapshot.activeContexts.length) {
+      const empty = document.createElement('p');
+      empty.className = 'defensive-context-empty';
+      empty.textContent = live
+        ? 'No current structured defensive context is active.'
+        : 'No grounded current defensive-context state has reached this view.';
+      root.appendChild(empty);
+      return;
+    }
+    for (const context of snapshot.activeContexts) {
+      const item = document.createElement('article');
+      item.className = 'defensive-context-item';
+      const cue = Array.isArray(context.activeCues) && context.activeCues.length
+        ? context.activeCues[0].cueId : 'external cue';
+      const heading = document.createElement('strong');
+      heading.textContent = `${String(cue).replace(':', ' ')} PRESENT`;
+      const outcome = document.createElement('p');
+      outcome.className = 'defensive-context-outcome';
+      outcome.textContent = `Possible learned outcome: ${String(context.outcomeClass || 'unknown').replaceAll('_', ' ')}`;
+      const evidence = document.createElement('ul');
+      for (const association of Array.isArray(context.learnedEvidence) ? context.learnedEvidence : []) {
+        const row = document.createElement('li');
+        const description = association.evidence === 'ADVERSE_MORE_OFTEN'
+          ? 'adverse outcome observed more often than safe non-occurrence'
+          : association.evidence === 'SAFE_MORE_OFTEN'
+            ? 'safe non-occurrence observed more often than the adverse outcome'
+            : association.evidence === 'EVENLY_SPLIT'
+              ? 'resolved observations evenly split'
+              : 'no resolved observations yet';
+        row.textContent = `${String(association.cueId).replace(':', ' ')}: ${description}`;
+        evidence.appendChild(row);
+      }
+      const facts = document.createElement('dl');
+      for (const [label, value] of [
+        ['IMMINENCE', context.temporalStatus],
+        ['ACTUAL CONTROL', context.objectiveControllability],
+        ['WORLD AMBIGUITY', context.worldAmbiguity],
+        ['OUTCOME', context.outcomeStatus],
+        ['RESOLUTION', context.resolutionStatus],
+      ]) {
+        const wrapper = document.createElement('div');
+        const term = document.createElement('dt');
+        const detail = document.createElement('dd');
+        term.textContent = label;
+        detail.textContent = String(value || 'UNKNOWN').replaceAll('_', ' ');
+        wrapper.append(term, detail);
+        facts.appendChild(wrapper);
+      }
+      item.append(heading, outcome, evidence, facts);
+      root.appendChild(item);
     }
   }
 

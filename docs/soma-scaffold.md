@@ -234,6 +234,65 @@ cue generalisation are NOT MODELLED. Anxiety and the amygdala and
 anterior-cingulate analogies remain PROVISIONAL and receive no numerical input
 from this learner.
 
+## Grounded current defensive context
+
+The authoritative architecture specification is
+config/model-specs/current-defensive-context.json. The implementation is in
+runner/current-defensive-context.js. It is an event-driven vector, not a threat,
+fear, anxiety or salience score.
+
+A context can exist only when a structured environment record contains a
+present external cue and either an explicit adverse-outcome class or an existing
+grounded cue-outcome posterior. Eligible cues are the same canonical actor,
+event, location and explicit-signal identifiers used by probabilistic threat
+learning. Generated prose, remembered events and imagined cues cannot open or
+update a context.
+
+Each independent context records:
+
+- a stable structured context identity and adverse-outcome class;
+- currently present external cues;
+- exact cue-outcome posterior snapshots from the grounded learner;
+- the posterior snapshot when the context first opened;
+- world ambiguity as CLEAR, PARTIAL, AMBIGUOUS or UNKNOWN, derived categorically
+  from structured observation certainty;
+- temporal status as POTENTIAL, IMMINENT, ONGOING, RESOLVED or UNKNOWN;
+- objective controllability as NONE, LIMITED, SUBSTANTIAL or UNKNOWN;
+- outcome and resolution status without treating unknown as safe;
+- opening, update and resolution timestamps; and
+- every source environment-event ID.
+
+The temporal, ambiguity, control and resolution categories are an ENGINEERING
+ONTOLOGY informed by threat-imminence and controllability literature. They are
+not a published numeric biological scale and are not claimed to reproduce the
+Predatory Imminence Continuum. No category is converted to a number.
+
+State changes only when a structured event changes the represented situation.
+There is no clock decay, interpolation or continuous fake history. Multiple
+context identities and adverse-outcome classes remain independent. Unresolved
+contexts survive a runner restart, and the complete actual transition sequence
+is persisted.
+
+The current event is evaluated against learner state before that event's
+resolved outcome updates the posterior. This preserves the expectation that was
+available when the event arrived. A later context transition can use the newer
+posterior without rewriting the opening snapshot.
+
+Public Soma output lists active contexts using categorical facts and qualitative
+evidence balance only. Exact alpha, beta, mean, variance, observation counts,
+source events and transition history are available in the owner-only inspector.
+
+OBJECTIVE CONTROLLABILITY is LIVE only where the structured world supplies it.
+PERCEIVED CONTROLLABILITY, LEARNED ACTION-OUTCOME CONTROL and remembered or
+imagined threat-cue activation are NOT MODELLED. Anxiety and arousal remain
+PROVISIONAL. The amygdala analogy remains PROVISIONAL; BNST, PAG and vmPFC
+activation mappings are NOT MODELLED and are hidden because the current artwork
+does not support them.
+
+No new psychological numerical parameter was introduced. The only new number is
+state schema version 1, classified as ENGINEERING / STORAGE. The attached
+posterior values are inherited unchanged from probabilistic-threat-learning-v1.
+
 ## Previous event representation
 
 Before this scaffold, public prison events were rows in events with a timestamp,

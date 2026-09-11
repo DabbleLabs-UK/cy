@@ -78,6 +78,27 @@ $threatApiSource = file_get_contents(__DIR__ . '/../public/api/threat-learning.p
 check_environment(str_contains($threatApiSource, 'captive_is_admin'), 'exact threat-learning inspection must be admin-only');
 check_environment(str_contains($threatApiSource, "'history' => \$history"), 'exact threat-learning history must be exposed to admin');
 
+$contextRecord = $record;
+$contextRecord['consumed_by'] = ['soma-input-staging-v1', 'current-defensive-context-v1'];
+$contextRecord['current_defensive_context'] = [
+    'modelVersion' => 'current-defensive-context-v1',
+    'updated' => true,
+    'transitions' => [[
+        'contextKey' => 'search:one|COERCIVE_LOSS_OF_CONTROL',
+        'active' => true,
+        'temporalStatus' => 'IMMINENT',
+        'objectiveControllability' => 'NONE',
+        'perceivedControllability' => 'NOT_MODELLED',
+    ]],
+];
+$contextInspection = captive_environment_record_inspection($contextRecord, captive_implementation_registry());
+check_environment($contextInspection['what_current_defensive_context_did']['updated'] === true, 'current defensive-context trace was not exposed');
+check_environment($contextInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'current defensive-context consumer must be LIVE');
+$contextApiSource = file_get_contents(__DIR__ . '/../public/api/defensive-context.php');
+check_environment(str_contains($contextApiSource, 'captive_is_admin'), 'exact defensive-context inspection must be admin-only');
+check_environment(str_contains($contextApiSource, "'activeContexts' => \$active"), 'active defensive contexts must be exposed to admin');
+check_environment(str_contains($contextApiSource, "'history' => \$history"), 'defensive-context transition history must be exposed to admin');
+
 $source = file_get_contents(__DIR__ . '/../public/api/ingest.php');
 check_environment(str_contains($source, "if (\$kind === 'world_event_record')"), 'ingest must handle private records');
 check_environment(str_contains($source, 'continue;'), 'private records must not fall through to public events');

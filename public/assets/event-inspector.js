@@ -5,6 +5,7 @@ export const INSPECTION_HEADINGS = [
   ['what_cy_observed', 'WHAT CY OBSERVED'],
   ['what_soma_received', 'WHAT SOMA RECEIVED'],
   ['what_threat_learning_did', 'WHAT THREAT LEARNING DID'],
+  ['what_current_defensive_context_did', 'WHAT CURRENT DEFENSIVE CONTEXT DID'],
   ['what_systems_consumed_it', 'WHAT SYSTEMS CONSUMED IT'],
 ];
 

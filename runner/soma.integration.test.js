@@ -25,6 +25,34 @@ const groundedSearch = createEnvironmentRecord(createEnvironmentEvent('cell_sear
 runtime.observeThreatLearningRecord(groundedSearch);
 assert.equal(runtime.state.threatLearning.pairs['actor:proctor'].COERCIVE_LOSS_OF_CONTROL.alpha, 2);
 
+const currentSearch = createEnvironmentRecord(createEnvironmentEvent('cell_search', {
+  id: 'env-current-search', timestamp: '2026-09-10 12:00:01.000', eventType: 'officer_at_cell',
+  world: {
+    participants: { actor: 'proctor', relationship_ref: 'proctor' },
+    situation: { control: 'none', resolution_status: 'unresolved' },
+    associative_learning: {
+      linkage: 'self_contained_event',
+      outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'unknown' }],
+    },
+    defensive_context: {
+      context_id: 'search:integration',
+      temporal_status: 'IMMINENT',
+      adverse_outcome_classes: ['COERCIVE_LOSS_OF_CONTROL'],
+    },
+  },
+}));
+const emotionsBeforeContext = JSON.stringify({
+  appraisal: runtime.state.appraisal,
+  experienced: runtime.state.experienced,
+});
+const directiveBeforeContext = runtime.directive();
+runtime.observeCurrentDefensiveContextRecord(currentSearch);
+assert.equal(runtime.state.currentDefensiveContext.contexts['search:integration|COERCIVE_LOSS_OF_CONTROL'].temporalStatus, 'IMMINENT');
+assert.equal(JSON.stringify({ appraisal: runtime.state.appraisal, experienced: runtime.state.experienced }),
+  emotionsBeforeContext, 'K: current defensive context does not calculate emotional state');
+assert.equal(runtime.directive(), directiveBeforeContext,
+  'K: current defensive context does not alter prompts or selected behaviour');
+
 runtime.observe({
   name: 'cell_search',
   text: 'Mr Locke searched the cell and moved the blue postcard',
@@ -88,9 +116,12 @@ assert.ok(prompt.indexOf('SOMA - computed before language') > prompt.indexOf('ON
 
 const appraisalBeforeOutput = { ...runtime.state.appraisal };
 const threatBeforeOutput = JSON.stringify(runtime.state.threatLearning);
+const defensiveBeforeOutput = JSON.stringify(runtime.state.currentDefensiveContext);
 runtime.observeOutput('locke and the blue postcard again. i will not forget it.', { mode: 'journal', now: t0 + 7000 });
 assert.deepEqual(runtime.state.appraisal, appraisalBeforeOutput, 'own prose did not become an external event');
 assert.equal(JSON.stringify(runtime.state.threatLearning), threatBeforeOutput, 'own prose did not update threat learning');
+assert.equal(JSON.stringify(runtime.state.currentDefensiveContext), defensiveBeforeOutput,
+  'own prose did not create a current defensive context');
 assert.ok(runtime.state.expression.themes.includes('locke') || runtime.state.expression.themes.includes('postcard'));
 
 const persistenceDir = await mkdtemp(join(tmpdir(), 'cy-soma-persist-'));
@@ -110,6 +141,7 @@ assert.equal(restarted.state.memory.episodes.length, runtime.state.memory.episod
 assert.equal(restarted.state.memory.selectedId, runtime.state.memory.selectedId);
 assert.equal(restarted.state.expression.lastText, runtime.state.expression.lastText);
 assert.deepEqual(restarted.state.threatLearning, runtime.state.threatLearning);
+assert.deepEqual(restarted.state.currentDefensiveContext, runtime.state.currentDefensiveContext);
 
 const failures = [];
 const broken = createSomaRuntime(null, {
