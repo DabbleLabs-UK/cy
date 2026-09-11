@@ -10,6 +10,15 @@ export const FEEDING_MODEL_ID = 'feeding-homeostasis-uninstantiated-framework';
 export const FEEDING_MODEL_VERSION = 'feeding-intake-ledger-v1';
 export const FEEDING_PROVENANCE = 'config/model-specs/feeding-homeostasis.json';
 
+export const HMPPS_REFERENCE_RATION = Object.freeze({
+  source: 'HMPPS Food in Prisons Policy Framework Guidance Manual',
+  adultMaleDailyEnergyKcal: 2605,
+  adultMaleFatMaximumG: 97,
+  adultMaleCarbohydrateMinimumG: 333,
+  adultMaleProteinMinimumG: 55.5,
+  mealEnergyKcal: Object.freeze({ breakfast: 500, lunch: 750, dinner: 750, tea: 750 }),
+});
+
 export const OFFERED_STATUSES = Object.freeze(['OFFERED', 'NOT_OFFERED', 'UNKNOWN']);
 export const AVAILABILITY_STATUSES = Object.freeze(['AVAILABLE', 'UNAVAILABLE', 'UNKNOWN']);
 export const RECEIVED_STATUSES = Object.freeze(['RECEIVED', 'NOT_RECEIVED', 'UNKNOWN']);
@@ -139,6 +148,42 @@ function isFeedingRecord(record) {
   return Object.values(food).some((value) => value != null && String(value).toLowerCase() !== 'unknown');
 }
 
+function finiteNonNegative(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function nutritionFacts(food, mealType, outcome, portion) {
+  const supplied = food.nutrition && typeof food.nutrition === 'object' ? food.nutrition : {};
+  const explicitEnergy = finiteNonNegative(supplied.energy_kcal ?? food.energy_kcal);
+  const fullEnergy = explicitEnergy != null
+    ? explicitEnergy
+    : HMPPS_REFERENCE_RATION.mealEnergyKcal[mealType] ?? null;
+  const fullMacros = {
+    fatG: finiteNonNegative(supplied.fat_g),
+    carbohydrateG: finiteNonNegative(supplied.carbohydrate_g),
+    proteinG: finiteNonNegative(supplied.protein_g),
+  };
+  const exactMacros = Object.values(fullMacros).every((value) => value != null);
+  let consumedFraction = null;
+  if (outcome === 'FULLY_CONSUMED') consumedFraction = 1;
+  else if (['REFUSED', 'UNAVAILABLE'].includes(outcome)) consumedFraction = 0;
+  else if (outcome === 'PARTLY_CONSUMED' && portion.basis === 'OBSERVED_EXACT') {
+    consumedFraction = portion.fraction;
+  }
+  const consumedEnergyKcal = fullEnergy != null && consumedFraction != null
+    ? fullEnergy * consumedFraction : null;
+  return {
+    fullMealEnergyKcal: fullEnergy,
+    consumedEnergyKcal,
+    consumedFraction,
+    fullMealMacros: exactMacros ? fullMacros : null,
+    nutritionBasis: explicitEnergy != null
+      ? (exactMacros ? 'EXPLICIT_FACTUAL_NUTRITION' : 'EXPLICIT_ENERGY_MACROS_UNKNOWN')
+      : fullEnergy != null ? 'HMPPS_REFERENCE_PRISON_RATION' : 'UNKNOWN',
+    macronutrientComposition: exactMacros ? 'EXPLICIT' : 'BOUNDED_UNCERTAIN',
+  };
+}
+
 export function ingestionRecordFromEnvironment(record) {
   if (!isFeedingRecord(record)) return null;
   const event = record.world_event;
@@ -154,13 +199,15 @@ export function ingestionRecordFromEnvironment(record) {
     no: 'UNSCHEDULED', unscheduled: 'UNSCHEDULED',
     unknown: 'UNKNOWN',
   });
+  const mealType = canonicalId(food.meal_type);
+  const nutrition = nutritionFacts(food, mealType, outcome, portion);
   return {
     schema: FEEDING_RECORD_SCHEMA,
     version: FEEDING_STATE_VERSION,
     eventId: event.id,
     timestamp: event.timestamp,
     mealId: canonicalId(food.meal_id),
-    mealType: canonicalId(food.meal_type),
+    mealType,
     scheduledStatus: scheduled,
     offeredStatus: offered,
     availabilityStatus: availability,
@@ -171,8 +218,13 @@ export function ingestionRecordFromEnvironment(record) {
     portionFraction: portion.fraction,
     portionBasis: portion.basis,
     durationMs: Number.isFinite(event.duration_ms) && event.duration_ms >= 0 ? event.duration_ms : null,
-    nutritionalComposition: 'UNKNOWN',
-    physiologicalImpact: 'NOT_MODELLED',
+    nutritionalComposition: nutrition.macronutrientComposition,
+    fullMealEnergyKcal: nutrition.fullMealEnergyKcal,
+    consumedEnergyKcal: nutrition.consumedEnergyKcal,
+    consumedFraction: nutrition.consumedFraction,
+    fullMealMacros: nutrition.fullMealMacros,
+    nutritionBasis: nutrition.nutritionBasis,
+    physiologicalImpact: 'MODELLED_SEPARATELY',
     sourceEnvironmentEventIds: [event.id],
     fieldProvenance: {
       mealIdentity: 'STRUCTURED_WORLD_FACT',
@@ -182,8 +234,9 @@ export function ingestionRecordFromEnvironment(record) {
       received: 'STRUCTURED_WORLD_FACT',
       consumption: 'STRUCTURED_WORLD_FACT',
       portion: 'STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN',
-      nutritionalComposition: 'UNKNOWN',
-      physiologicalImpact: 'NOT_MODELLED',
+      energy: nutrition.nutritionBasis,
+      nutritionalComposition: nutrition.macronutrientComposition,
+      physiologicalImpact: 'MODELLED_SEPARATELY',
     },
   };
 }
@@ -335,8 +388,8 @@ function summary(state, now = Date.now(), includeAll = false) {
     recentMealOutcomes: includeAll ? visibleRecords : visibleRecords.slice(-6),
     totalFeedingRecords: records.length,
     homeostaticEnergyState: 'NOT_MODELLED',
-    subjectiveHunger: 'PROVISIONAL',
-    gutSatiety: 'NOT_MODELLED',
+    subjectiveHunger: 'NOT_MODELLED',
+    gutSatiety: 'MODELLED_SEPARATELY',
     hedonicAppetite: 'NOT_MODELLED',
     learnedMealAnticipation: 'NOT_MODELLED',
     feedingActionSelection: 'NOT_MODELLED',

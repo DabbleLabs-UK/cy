@@ -25,7 +25,12 @@ $state = [
         'lastKnownIntakeAt' => '2026-09-10 11:45:00.000',
         'latestResolvedMeal' => ['intakeOutcome' => 'FULLY_CONSUMED'],
         'homeostaticEnergyState' => 'NOT_MODELLED',
-        'subjectiveHunger' => 'PROVISIONAL',
+        'subjectiveHunger' => 'NOT_MODELLED',
+    ],
+    'physiologicalSatiety' => [
+        'status' => 'LIVE',
+        'current' => ['minimum' => 4.3, 'midpoint' => 4.7, 'maximum' => 5.1],
+        'subjectiveHunger' => 'NOT_MODELLED',
     ],
     'learnedControllability' => [
         'status' => 'implemented',
@@ -48,6 +53,7 @@ check_soma($implemented['seq'] === 42, 'event sequence is preserved');
 check_soma($implemented['soma']['status'] === 'provisional', 'registry truth overrides the legacy runner claim');
 check_soma($implemented['soma']['circuits'] === $state['circuits'], 'runner values are returned without recomputation');
 check_soma($implemented['soma']['feeding'] === $state['feeding'], 'grounded feeding state is returned without recomputation');
+check_soma($implemented['soma']['physiologicalSatiety'] === $state['physiologicalSatiety'], 'physiological Satiety range is returned without recomputation');
 check_soma($implemented['soma']['learnedControllability'] === $state['learnedControllability'], 'action-outcome evidence is returned without recomputation');
 check_soma($implemented['implementation_registry']['schema'] === 'cy.implementation-registry', 'registry accompanies the state');
 

@@ -95,6 +95,58 @@ if ($sleepinessConfig['jsonPath'] !== '$.soma.predictedSleepiness.predictedKss'
     fwrite(STDERR, "FAIL: predicted KSS history config is incorrect\n");
     exit(1);
 }
+$satietyConfig = captive_soma_history_config('24h', 'satiety', 'satiety');
+if ($satietyConfig['jsonPath'] !== '$.soma.physiologicalSatiety.current.midpoint'
+    || $satietyConfig['jsonPathMin'] !== '$.soma.physiologicalSatiety.current.minimum'
+    || $satietyConfig['jsonPathMax'] !== '$.soma.physiologicalSatiety.current.maximum'
+    || $satietyConfig['scale'] !== 1.0) {
+    fwrite(STDERR, "FAIL: physiological Satiety history config is incorrect\n");
+    exit(1);
+}
+$satietyPoints = captive_soma_history_points([[
+    'ts_ms' => 9000,
+    'value' => '4.7',
+    'minimum' => '4.3',
+    'maximum' => '5.1',
+]], 'satiety', 0, 10000, 10, 'satiety', 1.0);
+if (count($satietyPoints) !== 1
+    || $satietyPoints[0]['value'] !== 4.7
+    || $satietyPoints[0]['minimum'] !== 4.3
+    || $satietyPoints[0]['maximum'] !== 5.1) {
+    fwrite(STDERR, "FAIL: physiological Satiety history did not preserve its uncertainty band\n");
+    exit(1);
+}
+$satietyPayload = json_encode([
+    'soma' => ['physiologicalSatiety' => ['current' => [
+        'midpoint' => 4.7,
+        'minimum' => 4.3,
+        'maximum' => 5.1,
+    ]]],
+], JSON_THROW_ON_ERROR);
+$satietyPayloadPoints = captive_soma_history_points(
+    [['ts_ms' => 9250, 'payload' => $satietyPayload]],
+    'satiety', 0, 10000, 10, 'satiety', 1.0
+);
+if ($satietyPayloadPoints !== [[
+    'ts' => 9250,
+    'value' => 4.7,
+    'minimum' => 4.3,
+    'maximum' => 5.1,
+]]) {
+    fwrite(STDERR, "FAIL: physiological Satiety payload fallback lost its uncertainty band\n");
+    exit(1);
+}
+$legacyHungerPayload = json_encode([
+    'soma' => ['experienced' => ['metrics' => ['hunger' => ['value' => 100]]]],
+], JSON_THROW_ON_ERROR);
+$satietyFromLegacyHunger = captive_soma_history_points(
+    [['ts_ms' => 9500, 'payload' => $legacyHungerPayload]],
+    'satiety', 0, 10000, 10, 'satiety', 1.0
+);
+if ($satietyFromLegacyHunger !== []) {
+    fwrite(STDERR, "FAIL: legacy Hunger history leaked into physiological Satiety history\n");
+    exit(1);
+}
 
 if (captive_soma_history_bucket_seconds(captive_soma_history_config('1h', 'anxiety')) !== 30
     || captive_soma_history_bucket_seconds(captive_soma_history_config('24h', 'anxiety')) !== 600
@@ -107,6 +159,16 @@ if (!str_contains($historyQuery, 'FORCE INDEX (idx_kind_ts)')
     || !str_contains($historyQuery, 'SELECT MAX(seq) AS seq')
     || !str_contains($historyQuery, 'GROUP BY FLOOR(UNIX_TIMESTAMP(ts) / 600)')) {
     fwrite(STDERR, "FAIL: history query does not sample indexed time buckets before reading payload JSON\n");
+    exit(1);
+}
+$satietyQuery = captive_soma_history_query(
+    '$.soma.physiologicalSatiety.current.midpoint',
+    600,
+    '$.soma.physiologicalSatiety.current.minimum',
+    '$.soma.physiologicalSatiety.current.maximum'
+);
+if (!str_contains($satietyQuery, ' AS minimum') || !str_contains($satietyQuery, ' AS maximum')) {
+    fwrite(STDERR, "FAIL: physiological Satiety query omits its uncertainty bounds\n");
     exit(1);
 }
 

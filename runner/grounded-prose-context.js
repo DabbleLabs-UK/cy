@@ -9,6 +9,7 @@ import { circadianProcessCSnapshot } from './circadian-process-c.js';
 import { threeProcessSleepinessSnapshot } from './three-process-sleepiness.js';
 import { currentDefensiveContextInspection } from './current-defensive-context.js';
 import { feedingSnapshot } from './feeding-homeostasis.js';
+import { physiologicalSatietySnapshot } from './physiological-satiety.js';
 import { somaticSnapshot } from './somatic-nociceptive-substrate.js';
 import { socialContactSnapshot } from './social-contact-substrate.js';
 import { THREAT_LEARNING_PRIOR } from './probabilistic-threat-learning.js';
@@ -257,6 +258,7 @@ function somaticSection(state) {
 
 function feedingSection(state, now) {
   const snapshot = feedingSnapshot(state.feeding, now);
+  const satiety = physiologicalSatietySnapshot(state.physiologicalSatiety);
   if (!snapshot) return null;
   const entries = [];
   if (snapshot.lastKnownIntakeAt) {
@@ -304,6 +306,31 @@ function feedingSection(state, now) {
       observationGapCount: (snapshot.unknownIntervals || []).length,
     },
   ));
+  if (satiety && satiety.status === 'LIVE' && satiety.current) {
+    entries.push(entry(
+      EPISTEMIC_STATUS.MODEL_ESTIMATE,
+      'physiological_satiety',
+      'physiological_satiety',
+      {
+        range: [satiety.current.minimum, satiety.current.maximum],
+        scale: 'published physiological satiety model nominal 1-10 scale',
+        inputUncertainty: satiety.inputUncertainty,
+        latestIntake: satiety.latestKnownIntake && {
+          mealType: satiety.latestKnownIntake.mealType,
+          consumedEnergyKcal: satiety.latestKnownIntake.consumedEnergyKcal,
+          portionBasis: satiety.latestKnownIntake.portionBasis,
+          nutritionBasis: satiety.latestKnownIntake.nutritionBasis,
+        },
+      },
+    ));
+  } else {
+    entries.push(entry(
+      EPISTEMIC_STATUS.UNKNOWN,
+      'physiological_satiety',
+      'physiological_satiety_unavailable',
+      satiety && satiety.statusReason || 'MODEL_NOT_INITIALIZED',
+    ));
+  }
   entries.push(entry(
     EPISTEMIC_STATUS.NOT_MODELLED,
     'feeding_intake_ledger',
@@ -517,6 +544,10 @@ function modelFacingLine(item) {
       return `[${item.epistemicStatus}] ${item.fact === 'latest_resolved_meal' ? 'Latest resolved meal' : 'Latest scheduled meal'}: ${compactFields(value, ['mealType', 'offeredStatus', 'receivedStatus', 'consumptionStatus', 'intakeOutcome', 'portionCategory'])}.`;
     case 'record_status':
       return `[${item.epistemicStatus}] Feeding record: ${value.missedScheduledMeals || 0} missed scheduled meals; intake knowledge ${words(value.intakeKnowledgeStatus)}; ${value.observationGapCount || 0} observation gaps.`;
+    case 'physiological_satiety':
+      return `[${item.epistemicStatus}] Physiological satiety range ${finite(value.range?.[0], 2)}-${finite(value.range?.[1], 2)} on the published model's nominal 1-10 scale; input uncertainty ${words(value.inputUncertainty)}. This is a model estimate, not an observed feeling.`;
+    case 'physiological_satiety_unavailable':
+      return `[${item.epistemicStatus}] Physiological satiety estimate unavailable: ${words(value)}.`;
     case 'current_social_context':
       return `[${item.epistemicStatus}] Social context: ${value.currentlyInteracting ? `interacting with ${words(value.currentlyWith)}` : value.currentlyAlone ? 'confirmed alone' : 'no current interaction observed'}; character ${words(value.currentSocialCharacter)}.`;
     case 'latest_social_episode':

@@ -3,8 +3,8 @@ declare(strict_types=1);
 
 // Owner-only exact inspection of the grounded feeding input ledger. This
 // reconstructs canonical ingestion records from private structured world-event
-// traces and combines them with the latest runner continuity snapshot. It does
-// not calculate Hunger or any physiological state.
+// traces and combines them with the latest feeding and physiological-satiety
+// snapshots. Subjective hunger remains unmodelled.
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
@@ -30,12 +30,17 @@ try {
     }
 
     $latest = null;
+    $satiety = null;
     $vitals = $db->query("SELECT payload FROM events WHERE kind = 'vitals' ORDER BY seq DESC LIMIT 1")->fetchColumn();
     if ($vitals !== false) {
         $payload = json_decode((string)$vitals, true);
         $candidate = is_array($payload) ? ($payload['soma']['feeding'] ?? null) : null;
         if (is_array($candidate)) {
             $latest = $candidate;
+        }
+        $satietyCandidate = is_array($payload) ? ($payload['soma']['physiologicalSatiety'] ?? null) : null;
+        if (is_array($satietyCandidate)) {
+            $satiety = $satietyCandidate;
         }
     }
 
@@ -44,7 +49,7 @@ try {
     captive_json_response([
         'ok' => true,
         'inspection' => [
-            'heading' => 'FEEDING / HOMEOSTATIC INPUTS',
+            'heading' => 'PHYSIOLOGICAL SATIETY',
             'status' => 'IMPLEMENTED',
             'publicLabel' => 'LIVE',
             'model' => [
@@ -74,9 +79,10 @@ try {
                 $records
             )),
             'records' => $records,
+            'physiologicalSatiety' => $satiety,
             'homeostaticPhysiologicalState' => 'NOT_MODELLED',
-            'subjectiveHunger' => 'PROVISIONAL',
-            'note' => 'All ledger facts come from structured food events. Schedule alone is not ingestion, and unknown intervals remain unknown.',
+            'subjectiveHunger' => 'NOT_MODELLED',
+            'note' => 'All intake facts come from structured food events. The satiety range is a Martinez, Dibbs et al. 2025 model estimate; schedule alone is not ingestion, and unknown intervals remain unknown.',
         ],
     ]);
 } catch (Throwable $e) {

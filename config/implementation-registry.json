@@ -46,14 +46,14 @@
       "version": "legacy-experienced-state-v2"
     },
     {
-      "id": "hunger",
-      "display_name": "HUNGER",
-      "implementation_status": "PROVISIONAL",
-      "model_spec_id": null,
-      "status_note": "A grounded feeding and ingestion ledger is LIVE separately. The displayed Hunger value still comes from the older arbitrary baseline, elapsed-time curve, meal effects and deprivation impulses; no approved model converts feeding history into subjective hunger.",
-      "data_dependencies": ["food_offered", "food_consumed", "portion_fraction", "energy_proxy"],
-      "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "feeding_deprivation_history", "energy_homeostatic_state"],
-      "version": "legacy-experienced-state-v2"
+      "id": "satiety",
+      "display_name": "PHYSIOLOGICAL SATIETY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "martinez-dibbs-integrated-physiological-satiety",
+      "status_note": "A deterministic ensemble implements the published stomach, intestinal, CCK, GLP-1, PYY, ghrelin and physiological satiety equations. It reports an input-uncertainty range and does not model subjective hunger.",
+      "data_dependencies": ["feeding", "intake_outcome", "portion_fraction"],
+      "version": "physiological-satiety-v1",
+      "provenance": "config/model-specs/physiological-satiety.json"
     },
     {
       "id": "sleepiness",
@@ -101,7 +101,7 @@
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": null,
       "status_note": "A compact engineering projection sends factual outputs from LIVE grounded substrates to the language model with explicit epistemic labels. It introduces no emotion score, threshold, weight or psychological mapping, and generated expression cannot update grounded state.",
-      "data_dependencies": ["sleep_homeostasis", "circadian_process_c", "current_defensive_context", "probabilistic_threat_learning", "learned_controllability", "ingestion_ledger", "injury_ledger", "social_contact_ledger"],
+      "data_dependencies": ["sleep_homeostasis", "circadian_process_c", "current_defensive_context", "probabilistic_threat_learning", "learned_controllability", "ingestion_ledger", "gut_satiety", "injury_ledger", "social_contact_ledger"],
       "version": "grounded-prose-context-v1",
       "provenance": "runner/grounded-prose-context.js"
     },
@@ -565,12 +565,13 @@
     },
     {
       "id": "gut_satiety",
-      "display_name": "GASTROINTESTINAL SATIATION / SATIETY",
-      "implementation_status": "NOT_IMPLEMENTED",
-      "model_spec_id": null,
-      "status_note": "No gastric, intestinal or gut-hormone model exists.",
-      "data_dependencies": [],
-      "version": null
+      "display_name": "MODELLED GI / SATIETY PHYSIOLOGY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "martinez-dibbs-integrated-physiological-satiety",
+      "status_note": "Implements the published GI compartments, nutrient transit, CCK, GLP-1, PYY, ghrelin and physiological satiety equation as a deterministic uncertainty ensemble for a metabolically healthy adult reference.",
+      "data_dependencies": ["ingestion_ledger", "resolved_consumed_energy", "HMPPS_reference_ration"],
+      "version": "physiological-satiety-v1",
+      "provenance": "config/model-specs/physiological-satiety.json"
     },
     {
       "id": "hedonic_appetite",
@@ -834,8 +835,8 @@
       "display_name": "HYPOTHALAMIC / FEEDING-HOMEOSTASIS ANALOGY",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Structured feeding inputs are LIVE, but internal energy state, AgRP/NPY and POMC systems, peripheral signals and hypothalamic activity are NOT MODELLED. Elapsed time since intake does not illuminate this region.",
-      "data_dependencies": ["hunger", "homeostatic_state"],
+      "status_note": "GI and hormonal physiological satiety modelling is LIVE separately, but AgRP/NPY, POMC and hypothalamic neuronal activity remain NOT MODELLED. The satiety score does not illuminate this region.",
+      "data_dependencies": ["subjective_hunger", "homeostatic_state"],
       "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety", "sleep_homeostasis"],
       "version": null
     },

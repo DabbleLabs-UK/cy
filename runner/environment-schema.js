@@ -92,6 +92,13 @@ const BASE_WORLD = Object.freeze({
       portion_category: UNKNOWN,
       portion_fraction: null,
       energy_proxy: null,
+      energy_kcal: null,
+      nutrition: {
+        energy_kcal: null,
+        fat_g: null,
+        carbohydrate_g: null,
+        protein_g: null,
+      },
     },
     sleep: { state: UNKNOWN, interruption: UNKNOWN },
     environmental_discomfort: UNKNOWN,

@@ -52,7 +52,9 @@ try {
     $jsonPath = $config['jsonPath'];
     $stmt = $db->prepare(captive_soma_history_query(
         $jsonPath,
-        captive_soma_history_bucket_seconds($config)
+        captive_soma_history_bucket_seconds($config),
+        $config['jsonPathMin'] ?? null,
+        $config['jsonPathMax'] ?? null
     ));
     $stmt->execute([$fromSql]);
     $points = captive_soma_history_points(

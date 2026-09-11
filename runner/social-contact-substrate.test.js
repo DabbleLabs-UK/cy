@@ -120,7 +120,7 @@ assert.match(runSource, /actualContact \? 'CONTACT' : 'OPPORTUNITY'/);
 assert.match(runSource, /action:disengage/);
 const brainSource = readFileSync(new URL('../public/assets/brain.js', import.meta.url), 'utf8');
 assert.match(brainSource, /SOCIAL CONTACT LEDGER INSPECTION/);
-assert.match(brainSource, /\['pain', 'loneliness'\]\.includes\(definition\.key\)/);
+assert.match(brainSource, /\['pain', 'loneliness', 'satiety'\]\.includes\(definition\.key\)/);
 assert.match(brainSource, /data-range="1h"[\s\S]*data-range="24h"[\s\S]*data-range="7d"/);
 const endpointSource = readFileSync(new URL('../public/api/social-contact.php', import.meta.url), 'utf8');
 assert.match(endpointSource, /unset\(\$episode\['linkedEnvironmentEventIds'\]\)/);

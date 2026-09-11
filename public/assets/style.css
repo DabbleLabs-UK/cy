@@ -1019,6 +1019,13 @@ body.cy-paused::after {
 .feeding-timeline-item p { margin: 3px 0 0; color: #9cb2a7; font-size: 7.5px; line-height: 1.45; }
 .feeding-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 7.5px; line-height: 1.4; }
 .feeding-model-limits strong { color: #788693; }
+.satiety-model-reading { display: flex; align-items: baseline; gap: 7px; margin: 8px 0 5px; }
+.satiety-model-reading strong { color: #efd58c; font-size: 17px; letter-spacing: 0.04em; }
+.satiety-model-reading span { color: #7f97a7; font-size: 7px; letter-spacing: 0.14em; }
+.satiety-uncertainty { color: #91a6b4; font-size: 8px; line-height: 1.45; }
+.satiety-history-band { fill: rgba(239, 190, 74, 0.18); stroke: none; }
+.satiety-history-line { fill: none; stroke: #efbe4a; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.soma-state-entry[data-metric="satiety"] .soma-state-bar i { position: relative; }
 .feeding-input-inspector { margin-top: 7px; color: #86a99a; font-size: 8px; }
 .feeding-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
 .somatic-input-card { margin-top: 9px; padding: 9px; border: 1px solid #535b73; background: rgba(31, 35, 48, 0.42); }

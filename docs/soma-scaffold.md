@@ -515,13 +515,16 @@ the PROVISIONAL legacy experienced-state compatibility consumer. It also reports
 registry dependencies that overlap the non-unknown input fields. The endpoint is
 not configured or loaded for ordinary visitors.
 
-## Grounded feeding and intake substrate
+## Grounded feeding, intake and physiological satiety
 
 `runner/feeding-homeostasis.js` implements an objective feeding ledger. It does
-not implement subjective Hunger. The visitor-facing HUNGER value remains
-PROVISIONAL and continues to come from the older arbitrary heuristic described
-in the numerical inventory below. Neither that value nor its legacy nutrition
-mirror can initialize or modify the grounded ledger.
+not implement subjective Hunger. `runner/physiological-satiety.js` consumes only
+resolved ingestion records from that ledger and implements the integrated GI and
+gut-hormone satiety model in Martinez, Dibbs et al. (2025), PMCID PMC12272436.
+The visitor-facing headline is PHYSIOLOGICAL SATIETY, on the publication's model
+scale, and never the older heuristic Hunger value. Subjective Hunger remains NOT
+MODELLED. Neither the old Hunger value nor its legacy nutrition mirror can
+initialize or modify the grounded ledger or physiological model.
 
 The canonical `cy.ingestion-record` stores:
 
@@ -537,8 +540,10 @@ The canonical `cy.ingestion-record` stores:
 - portion category, optional observed exact fraction and whether the amount is
   OBSERVED_EXACT, CATEGORICAL_ONLY or UNKNOWN;
 - duration when supplied by the world event;
-- explicit UNKNOWN nutritional composition and NOT_MODELLED physiological
-  impact;
+- consumed energy, nutrition basis, full-meal and consumed macronutrient facts
+  when known, otherwise explicit bounded nutritional uncertainty;
+- a link to the separately versioned physiological model rather than an
+  untraceable physiological effect;
 - per-field structured-world provenance.
 
 A `meal_expected` record is only a schedule expectation. It never advances
@@ -557,21 +562,59 @@ file. At reconciliation, elapsed runner downtime is appended as an explicit
 `RUNNER_NOT_OBSERVING` interval with `ingestionAssumption: NONE_MADE`. No food,
 fasting or normal schedule is inferred across the gap.
 
-The public Hunger detail contains a LIVE factual FEEDING / INTAKE subsection:
-last known intake, elapsed time since that known intake, latest resolved meal,
-missed scheduled meals, intake-record completeness and a bounded six-record
-event timeline. It is deliberately not a continuous Hunger graph. Private
-structured event IDs and the complete ledger are omitted from the public
-snapshot. The owner-only inspector reconstructs the full exact ledger and its
-source IDs from `environment_events`, alongside the latest continuity snapshot.
+Where a resolved event supplies explicit factual energy or nutrition, it
+supersedes defaults. Otherwise breakfast uses the 500 kcal HMPPS reference
+ration and lunch, dinner or tea uses 750 kcal. No snack is created. A full meal
+uses the full energy; NONE, REFUSED and UNAVAILABLE add zero; an exact partial
+portion scales energy exactly; categorical partial and UNKNOWN intake do not
+become an invented amount and make the model input incomplete.
 
-Soma can read the factual `feeding` snapshot. Known intake, recent meal and
-observation-continuity facts can enter the grounded prose projection with their
-epistemic status. The projection does not say that Cy is hungry. Feeding does
-not create an appraisal, select attention or action, activate a brain analogy,
-or alter the legacy Hunger number.
+The public SATIETY detail contains a compact physiological range, modelled
+gastric contents and CCK, GLP-1, PYY and ghrelin ranges, latest intake and its
+nutrition basis. Feeding history and model limitations remain behind secondary
+disclosures. Private structured event IDs and the complete ledger are omitted
+from the public snapshot. The owner-only inspector exposes the full ledger,
+source IDs, model compartments, hormones, parameter provenance and uncertainty.
 
-### Uninstantiated homeostatic framework
+Soma can read the factual `feeding` snapshot and the separate physiological
+satiety range. Once LIVE, the latter enters the grounded prose projection as a
+MODEL ESTIMATE with its scale and input uncertainty. The assembler does not say
+that Cy is hungry. Satiety does not create an appraisal, select attention or
+action, activate a brain analogy, or alter the legacy Hunger number.
+
+### Published GI and gut-hormone model
+
+`config/model-specs/physiological-satiety.json` locks the published equations,
+all literature, calibrated and expert-informed parameters, initial conditions,
+diet-input assumptions, uncertainty ensemble and validation boundary. It models
+stomach, upper and lower small intestine and large intestine fat/carbohydrate
+compartments; gastric distention and emptying; CCK, GLP-1, PYY and ghrelin; and
+the publication's piecewise physiological satiety equation.
+
+The exact prison ration composition is not known. The model therefore evaluates
+a deterministic 225-track grid over the publication's tested 10%, 20% and 30%
+relative-fat cases, five evenly spaced published fat-density values, five evenly
+spaced published carbohydrate-density values and three evenly spaced published
+male meal-eating rates. Protein energy remains at the publication's male 16%
+reference. The public result is the minimum and maximum across every track; the
+midpoint is derived only for plotting and inspection. It is not a measured or
+selected true meal composition and it does not use random sampling.
+
+New authoritative state begins only at the first FULLY_CONSUMED breakfast or a
+PARTLY_CONSUMED breakfast with an exact observed portion and no unresolved
+intake uncertainty at that timestamp. This clean-breakfast criterion is an
+ENGINEERING INITIALISATION RULE. Before it, status is CALIBRATING. A newly
+observed runner gap whose intake is unknown changes status to INPUT_INCOMPLETE.
+Known elapsed time is integrated in one-minute model steps, including restart
+downtime. No legacy history is backfilled.
+
+The model uses the paper's published/reference initial compartment and hormone
+states, including 296 mL initial gastric distention and 110 pM ghrelin. It does
+not simulate subjective Hunger, energy balance, hedonic appetite, learned meal
+anticipation, feeding action selection, or hypothalamic neurons. The
+hypothalamic feeding analogy therefore remains NOT MODELLED.
+
+### Separate uninstantiated homeostatic framework
 
 `config/model-specs/feeding-homeostasis.json` records the locked conceptual
 framework from Keramati and Gutkin (2014): internal state H, preferred state H*,
@@ -580,18 +623,16 @@ reward `r(H_t,K_t) = D(H_t) - D(H_t + K_t)`. The free parameters m and n,
 preferred state H*, internal dimensions, depletion dynamics, food-to-physiology
 mapping K and temporal discounting are all null and NOT INSTANTIATED.
 
-The specification also records that gastrointestinal satiation, endocrine and
-metabolic signals, nutrients, learned meal timing, food cues, hedonic processes,
-social factors and feeding action selection are absent. CY EMBODIMENT MODEL is
-NOT CALIBRATED. No calorie, macronutrient, stomach-volume, leptin, ghrelin,
-glucose, AgRP/NPY or POMC value is fabricated.
+This remains a separate uninstantiated framework. It does not consume or modify
+the physiological satiety model. Metabolic energy balance, learned meal timing,
+food cues, hedonic processes, social factors and feeding action selection remain
+absent. No leptin, glucose, AgRP/NPY or POMC value is fabricated.
 
 The hypothalamic feeding-homeostasis analogy stays NOT MODELLED, and the insular
-interoceptive analogy stays PROVISIONAL. Both registry entries now name the
-feeding ledger as a possible future dependency, but neither receives activation
-from elapsed time since intake.
+interoceptive analogy stays PROVISIONAL. Neither receives activation from the GI
+model or elapsed time since intake.
 
-New numerical inventory:
+New ledger numerical inventory:
 
 - schema/state version 1: ENGINEERING / STORAGE;
 - valid exact portion interval 0 through 1 inclusive: OBSERVED WORLD DATA
@@ -604,7 +645,9 @@ New numerical inventory:
 - m, n, H*, H dynamics and K: FREE / UNSET MODEL PARAMETERS;
 - all dates, portions and elapsed durations in tests: TEST FIXTURES.
 
-No ARBITRARY / HEURISTIC Hunger, homeostatic or brain parameter was introduced.
+The complete physiological model numerical inventory and provenance classes are
+in `config/model-specs/physiological-satiety.json`. No ARBITRARY / HEURISTIC
+Hunger, satiety, homeostatic or brain parameter was introduced.
 
 ## LLM role
 

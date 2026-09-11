@@ -59,6 +59,16 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scale' => 1.0,
         ];
     }
+    if ($scope === 'satiety' && $key === 'satiety') {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.physiologicalSatiety.current.midpoint',
+            'jsonPathMin' => '$.soma.physiologicalSatiety.current.minimum',
+            'jsonPathMax' => '$.soma.physiologicalSatiety.current.maximum',
+            'scale' => 1.0,
+        ];
+    }
     if ($scope === 'circadian' && $key === 'processC') {
         return CAPTIVE_SOMA_RANGES[$range] + [
             'scope' => $scope,
@@ -76,10 +86,19 @@ function captive_soma_history_bucket_seconds(array $config): int
     return max(1, (int)ceil((int)$config['seconds'] / max(1, (int)$config['points'])));
 }
 
-function captive_soma_history_query(string $jsonPath, int $bucketSeconds): string
+function captive_soma_history_query(
+    string $jsonPath,
+    int $bucketSeconds,
+    ?string $jsonPathMin = null,
+    ?string $jsonPathMax = null
+): string
 {
     $bucketSeconds = max(1, $bucketSeconds);
-    return "SELECT e.ts, JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$jsonPath')) AS value
+    $rangeColumns = $jsonPathMin !== null && $jsonPathMax !== null
+        ? ", JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$jsonPathMin')) AS minimum,
+             JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$jsonPathMax')) AS maximum"
+        : '';
+    return "SELECT e.ts, JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$jsonPath')) AS value$rangeColumns
             FROM events e
             JOIN (
                 SELECT MAX(seq) AS seq
@@ -235,6 +254,13 @@ function captive_soma_history_points(
                 $value = $payload['soma']['predictedSleepiness']['predictedKss'] ?? null;
             } elseif ($scope === 'circadian') {
                 $value = $payload['soma']['circadianProcessC']['processCEstimate'] ?? null;
+            } elseif ($scope === 'satiety') {
+                $current = $payload['soma']['physiologicalSatiety']['current'] ?? null;
+                if (is_array($current)) {
+                    $value = $current['midpoint'] ?? null;
+                    $row['minimum'] = $current['minimum'] ?? null;
+                    $row['maximum'] = $current['maximum'] ?? null;
+                }
             } else {
                 $group = $scope === 'brain' ? 'brain' : 'metrics';
                 $value = $payload['soma']['experienced'][$group][$key]['value'] ?? null;
@@ -261,7 +287,15 @@ function captive_soma_history_points(
         $bucket = (int)floor(($tsMs - $fromMs) / $bucketMs);
         // Keep the last real reading in each bucket. No interpolation or fake
         // samples are introduced when the runner was offline.
-        $buckets[$bucket] = ['ts' => $tsMs, 'value' => round((float)$value * $scale, 1)];
+        $digits = $scope === 'satiety' ? 3 : 1;
+        $point = ['ts' => $tsMs, 'value' => round((float)$value * $scale, $digits)];
+        if ($scope === 'satiety' && is_numeric($row['minimum'] ?? null) && is_numeric($row['maximum'] ?? null)) {
+            $point['minimum'] = round((float)$row['minimum'] * $scale, 3);
+            $point['maximum'] = round((float)$row['maximum'] * $scale, 3);
+        } elseif ($scope === 'satiety') {
+            continue;
+        }
+        $buckets[$bucket] = $point;
     }
     ksort($buckets, SORT_NUMERIC);
     return array_values($buckets);

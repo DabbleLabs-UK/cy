@@ -117,7 +117,8 @@ assert.equal(JSON.stringify(state), beforeProse, 'L: generated prose cannot crea
 assert.equal(implementationEntry('soma_subsystems', 'feeding_event_model').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'feeding_deprivation_history').implementation_status, 'IMPLEMENTED');
-assert.equal(implementationEntry('soma_variables', 'hunger').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('soma_variables', 'satiety').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'gut_satiety').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'energy_homeostatic_state').implementation_status, 'NOT_IMPLEMENTED');
 assert.notEqual(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'IMPLEMENTED',
   'M: feeding facts do not make the hypothalamic analogy LIVE');

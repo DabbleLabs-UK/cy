@@ -7,7 +7,7 @@
   "public_name": "Feeding and homeostatic inputs",
   "implementation_status": "PARTIALLY_IMPLEMENTED",
   "implemented_scope": "Structured food availability, offering, receipt, ingestion, portion and record-continuity facts only.",
-  "interpretation": "This is an objective feeding-input ledger and an uninstantiated scientific framework. It does not estimate internal energy state, homeostatic drive, reward, appetite, satiety or subjective hunger.",
+  "interpretation": "This specification governs the objective feeding-input ledger. It does not itself estimate internal energy state, homeostatic drive, reward, appetite, satiety or subjective hunger. Resolved ingestion records are consumed separately by the locked physiological-satiety-v1 model.",
   "scientific_basis": [
     {
       "authors": "Keramati and Gutkin",
@@ -71,8 +71,8 @@
   "limitations": [
     "Food availability and intake are not internal physiological state.",
     "Elapsed time since known intake is factual time, not hunger, fasting certainty or homeostatic drive.",
-    "Unknown or categorical portions are not converted to fractions, calories or nutrients.",
-    "Gastrointestinal satiation, endocrine and metabolic signals, learned meal timing, sensory food cues, hedonic reward, social context and feeding action selection are not modelled.",
+    "Unknown or categorical portions are not converted to a single invented fraction. The separate physiological-satiety-v1 consumer remains input-incomplete until the amount is known.",
+    "This ledger does not itself calculate gastrointestinal satiety or endocrine state. Those are implemented only by the separately versioned physiological-satiety-v1 model; metabolic energy balance, learned meal timing, sensory food cues, hedonic reward, social context and feeding action selection remain unmodelled.",
     "No AgRP, NPY, POMC, leptin, ghrelin, glucose, gut-hormone or hypothalamic activity is inferred."
   ],
   "engineering_constants": [
@@ -89,8 +89,8 @@
     "metabolic depletion",
     "digestion",
     "gastric emptying",
-    "gut satiation or satiety",
-    "calories or macronutrients",
+    "gut satiation or satiety within this ledger",
+    "calorie or macronutrient calculation within this ledger",
     "endocrine signals",
     "hedonic appetite",
     "learned meal anticipation",

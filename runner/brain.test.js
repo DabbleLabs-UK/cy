@@ -35,7 +35,7 @@ assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
 assert.deepEqual(EXPERIENCED_METRICS.map((metric) => metric.key),
-  ['anxiety', 'arousal', 'pain', 'hunger', 'sleepiness', 'loneliness', 'anger', 'rumination']);
+  ['anxiety', 'arousal', 'pain', 'satiety', 'sleepiness', 'loneliness', 'anger', 'rumination']);
 assert.deepEqual(
   [...BRAIN_REGIONS.map((region) => region.key).filter((key) => key !== 'scnCircadian')].sort(),
   [...Object.keys(snapshot.experienced.brain)].sort(),
@@ -109,12 +109,14 @@ assert.equal(
   implementationEntry('soma_subsystems', 'feeding_event_model').display_name,
   'FEEDING / INTAKE EVENTS',
 );
-assert.match(source, /Objective food availability and intake history/);
-assert.match(source, /TIME SINCE KNOWN INTAKE/);
 assert.match(source, /SUBJECTIVE HUNGER/);
 assert.match(source, /feeding-input-inspector/);
-assert.doesNotMatch(source, /feeding-history[^\n]*soma-history/,
-  'feeding inputs must not be rendered as a continuous Hunger graph');
+assert.match(source, /PHYSIOLOGICAL SATIETY/);
+assert.match(source, /MODEL ESTIMATE - NOT A REPORTED FEELING/);
+assert.match(source, /scope === 'satiety'/);
+assert.match(source, /class="satiety-history-band"/);
+assert.doesNotMatch(source, /HUNGER HISTORY/,
+  'the superseded heuristic Hunger graph must not return');
 assert.equal(elapsedFeedingLabel(0), '0m');
 assert.equal(elapsedFeedingLabel((2 * 60 + 17) * 60000), '2h 17m');
 assert.equal(elapsedFeedingLabel((25 * 60 + 3) * 60000), '1d 1h 3m');
@@ -136,7 +138,7 @@ assert.match(source, /className = `soma-state-entry soma-reading-entry/);
 assert.doesNotMatch(source, /class="soma-detail"/, 'the old shared bottom-mounted inspector must not return');
 assert.match(source, /<summary class="soma-state-row"[\s\S]*?<div class="soma-reading-detail">/, 'a Soma detail is nested immediately after its own summary');
 assert.match(source, /<summary><span class="soma-region-name"[\s\S]*?<div class="soma-reading-detail">/, 'a brain-region detail is nested immediately after its own summary');
-assert.match(source, /definition\.key === 'sleepiness' \? 'sleepiness' : 'metric'/);
+assert.match(source, /definition\.key === 'sleepiness' \? 'sleepiness'[\s\S]*definition\.key === 'satiety' \? 'satiety' : 'metric'/);
 assert.match(source, /PREDICTED KSS \(1-9\)/);
 assert.match(source, /buildScaledHistoryPath\(data\.points, 1, 9\)/);
 assert.match(source, /this\._wireReading\(entry, 'brain', definition\.key\)/);

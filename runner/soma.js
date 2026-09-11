@@ -58,6 +58,13 @@ import {
   touchFeedingContinuity,
 } from './feeding-homeostasis.js';
 import {
+  advancePhysiologicalSatiety,
+  createPhysiologicalSatiety,
+  observePhysiologicalSatietyRecord,
+  physiologicalSatietySnapshot,
+  reconcilePhysiologicalSatiety,
+} from './physiological-satiety.js';
+import {
   controllabilitySnapshot,
   createControllabilityState,
   observeControllabilityRecord as applyControllabilityRecord,
@@ -178,6 +185,7 @@ function blank(now, legacyPhysical = null) {
     threatLearning: createThreatLearning(now),
     currentDefensiveContext: createCurrentDefensiveContext(now),
     feeding: createFeedingState(now),
+    physiologicalSatiety: createPhysiologicalSatiety(now),
     learnedControllability: createControllabilityState(now),
     somaticNociceptive: createSomaticState(now),
     socialContact: createSocialContactState(now),
@@ -202,6 +210,7 @@ function boundAssociations(associations) {
 export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } = {}) {
   const base = blank(now, legacyPhysical);
   if (!raw || typeof raw !== 'object' || raw.version !== VERSION) return base;
+  const feeding = reconcileFeedingState(raw.feeding, { now });
   const out = {
     ...base,
     ...raw,
@@ -235,7 +244,11 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     }),
     threatLearning: reconcileThreatLearning(raw.threatLearning, { now }),
     currentDefensiveContext: reconcileCurrentDefensiveContext(raw.currentDefensiveContext, { now }),
-    feeding: reconcileFeedingState(raw.feeding, { now }),
+    feeding,
+    physiologicalSatiety: reconcilePhysiologicalSatiety(raw.physiologicalSatiety, {
+      now,
+      feedingUnknownIntervals: feeding.unknownIntervals,
+    }),
     learnedControllability: reconcileControllabilityState(raw.learnedControllability, { now }),
     somaticNociceptive: reconcileSomaticState(raw.somaticNociceptive, { now }),
     socialContact: reconcileSocialContactState(raw.socialContact, { now }),
@@ -291,7 +304,9 @@ export function observeSomaCurrentDefensiveContextRecord(state, record) {
 // It is separate from the legacy experienced Hunger calculation.
 export function observeSomaFeedingRecord(state, record) {
   if (!state || !record) return null;
-  return applyFeedingRecord(state.feeding, record);
+  const ledger = applyFeedingRecord(state.feeding, record);
+  const physiology = observePhysiologicalSatietyRecord(state.physiologicalSatiety, record);
+  return { ledger, physiology };
 }
 
 // This learner consumes only explicit structured action opportunities. Matching
@@ -701,6 +716,7 @@ export function tickSoma(state, {
   now = Date.now(),
 } = {}) {
   if (!state) return state;
+  advancePhysiologicalSatiety(state.physiologicalSatiety, now);
   touchFeedingContinuity(state.feeding, now);
   touchSocialObservation(state.socialContact, now);
   const elapsed = clamp((now - finite(state.lastTickMs, now)) / 1000, 0, 60);
@@ -942,6 +958,7 @@ export function somaSnapshot(state) {
     threatLearning: threatLearningSnapshot(state.threatLearning),
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),
+    physiologicalSatiety: physiologicalSatietySnapshot(state.physiologicalSatiety),
     learnedControllability: controllabilitySnapshot(state.learnedControllability),
     somaticNociceptive: somaticSnapshot(state.somaticNociceptive),
     social: socialContactSnapshot(state.socialContact, state.lastTickMs),

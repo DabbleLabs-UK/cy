@@ -6,7 +6,7 @@ export const EXPERIENCED_METRICS = [
   { key: 'anxiety', label: 'ANXIETY' },
   { key: 'arousal', label: 'AROUSAL / STRESS' },
   { key: 'pain', label: 'PAIN / DISCOMFORT' },
-  { key: 'hunger', label: 'HUNGER' },
+  { key: 'satiety', label: 'PHYSIOLOGICAL SATIETY' },
   { key: 'sleepiness', label: 'PREDICTED SLEEPINESS' },
   { key: 'loneliness', label: 'LONELINESS / SOCIAL NEED' },
   { key: 'anger', label: 'ANGER / HOSTILITY' },
@@ -237,6 +237,19 @@ function circadianHistoryMarkup() {
   </div>`;
 }
 
+function satietyHistoryMarkup() {
+  return `<div class="soma-reading-history satiety-history-wrap">
+    <div class="soma-ranges" aria-label="Physiological satiety history range">
+      <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+    </div>
+    <div class="soma-history-axis"><span>10</span><strong>MODELLED PHYSIOLOGICAL SATIETY</strong><span>0</span></div>
+    <svg class="soma-history satiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored physiological satiety range">
+      <path class="satiety-history-band"></path><path class="satiety-history-line"></path>
+    </svg>
+    <p class="soma-history-note">History begins only after the physiological model obtains a clean anchor.</p>
+  </div>`;
+}
+
 function sleepHomeostasisMarkup(status, circadianStatus, admin) {
   return `<div class="sleep-regulation-stack"><section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="sleep-homeostasis-head"><span>${status.displayName}</span><strong class="sleep-homeostasis-status">${status.publicLabel}</strong></div>
@@ -312,18 +325,25 @@ function controllabilityMarkup(status, causalStatus, perceivedStatus, comparison
 
 function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, anticipationStatus, actionStatus, admin) {
   return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
-    <div class="feeding-input-head"><span>${feedingStatus.displayName}</span><strong class="feeding-input-status">${feedingStatus.publicLabel}</strong></div>
-    <p class="feeding-input-explanation">Objective food availability and intake history. These records do not calculate Hunger, appetite, satiety or internal energy state.</p>
+    <div class="feeding-input-head"><span>${gutStatus.displayName}</span><strong class="feeding-input-status">CALIBRATING</strong></div>
+    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>PUBLISHED MODEL RANGE / 10</span></div>
+    <p class="feeding-input-explanation">MODEL ESTIMATE - NOT A REPORTED FEELING. A deterministic range from the published GI and gut-hormone model. Higher means greater modelled physiological satiety.</p>
     <dl class="feeding-input-facts">
-      <div><dt>LAST KNOWN INTAKE</dt><dd data-feeding="last-intake">UNKNOWN</dd></div>
-      <div><dt>TIME SINCE KNOWN INTAKE</dt><dd data-feeding="elapsed">UNKNOWN</dd></div>
-      <div><dt>LATEST MEAL OUTCOME</dt><dd data-feeding="latest-outcome">UNKNOWN</dd></div>
-      <div><dt>MISSED SCHEDULED MEALS</dt><dd data-feeding="missed">0</dd></div>
-      <div><dt>INTAKE RECORD</dt><dd data-feeding="knowledge">NO FEEDING RECORD</dd></div>
+      <div><dt>GASTRIC CONTENTS</dt><dd data-satiety="gastric">UNKNOWN</dd></div>
+      <div><dt>CCK</dt><dd data-satiety="cck">UNKNOWN</dd></div>
+      <div><dt>GLP-1</dt><dd data-satiety="glp1">UNKNOWN</dd></div>
+      <div><dt>PYY</dt><dd data-satiety="pyy">UNKNOWN</dd></div>
+      <div><dt>GHRELIN</dt><dd data-satiety="ghrelin">UNKNOWN</dd></div>
+      <div><dt>LATEST KNOWN INTAKE</dt><dd data-satiety="intake">UNKNOWN</dd></div>
+      <div><dt>NUTRITION BASIS</dt><dd data-satiety="nutrition">UNKNOWN</dd></div>
     </dl>
-    <div class="feeding-timeline"><p class="feeding-timeline-empty">No structured feeding records have reached this view.</p></div>
-    <div class="feeding-model-limits"><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>SUBJECTIVE HUNGER</span><strong>PROVISIONAL</strong><span>${gutStatus.displayName}</span><strong>${gutStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong></div>
-    ${admin ? '<details class="feeding-input-inspector"><summary>FEEDING / HOMEOSTATIC INPUTS INSPECTION</summary><pre>Waiting for the complete feeding ledger.</pre></details>' : ''}
+    ${satietyHistoryMarkup()}
+    <details class="soma-substrate-more"><summary>MODEL, LIMITATIONS AND FEEDING HISTORY</summary>
+      <p class="satiety-uncertainty">Waiting for a clean breakfast anchor.</p>
+      <div class="feeding-timeline"><p class="feeding-timeline-empty">No structured feeding records have reached this view.</p></div>
+      <div class="feeding-model-limits"><span>${feedingStatus.displayName}</span><strong>${feedingStatus.publicLabel}</strong><span>SUBJECTIVE HUNGER</span><strong>NOT MODELLED</strong><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>HYPOTHALAMIC NEURAL ACTIVITY</span><strong>NOT MODELLED</strong></div>
+    </details>
+    ${admin ? '<details class="feeding-input-inspector"><summary>PHYSIOLOGICAL SATIETY CALCULATION</summary><pre>Waiting for the current calculation and complete feeding ledger.</pre></details>' : ''}
   </section>`;
 }
 
@@ -552,7 +572,7 @@ export class BrainHud {
       const anxietyGrounding = definition.key === 'anxiety'
         ? `<details class="soma-substrate-more"><summary>THREAT AND CONTROL DETAILS</summary>${threatLearning}${defensiveContext}${learnedControllability}</details>`
         : '';
-      const feeding = definition.key === 'hunger'
+      const feeding = definition.key === 'satiety'
         ? feedingMarkup(
           this.feedingStatus,
           this.energyHomeostasisStatus,
@@ -586,19 +606,20 @@ export class BrainHud {
           this.admin,
         )
         : '';
-      const numericHistory = ['pain', 'loneliness'].includes(definition.key) ? ''
+      const numericHistory = ['pain', 'loneliness', 'satiety'].includes(definition.key) ? ''
         : definition.key === 'sleepiness'
           ? historyMarkup('KSS PREDICTED SLEEPINESS', 'Stored predicted KSS sleepiness history on the 1 to 9 scale')
           : historyMarkup();
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
         <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
-      this._wireReading(entry, definition.key === 'sleepiness' ? 'sleepiness' : 'metric', definition.key);
+      this._wireReading(entry, definition.key === 'sleepiness' ? 'sleepiness'
+        : definition.key === 'satiety' ? 'satiety' : 'metric', definition.key);
       if (definition.key === 'sleepiness') this._wireSleepHomeostasis(entry);
       if (definition.key === 'sleepiness') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
       if (definition.key === 'anxiety') this._wireControllability(entry);
-      if (definition.key === 'hunger') this._wireFeeding(entry);
+      if (definition.key === 'satiety') this._wireFeeding(entry);
       if (definition.key === 'pain') this._wireSomatic(entry);
       if (definition.key === 'loneliness') this._wireSocialContact(entry);
       readout.appendChild(entry);
@@ -683,7 +704,7 @@ export class BrainHud {
         this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
         entry,
       );
-      const registryScope = ['metric', 'sleepiness'].includes(scope) ? 'soma_variables' : 'brain_regions';
+      const registryScope = ['metric', 'sleepiness', 'satiety'].includes(scope) ? 'soma_variables' : 'brain_regions';
       const registered = implementationStatus(this.registry, registryScope, key);
       if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
       if (registered.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED) return;
@@ -841,6 +862,7 @@ export class BrainHud {
     this.currentDefensiveContext = soma.currentDefensiveContext || null;
     this.learnedControllability = soma.learnedControllability || null;
     this.feeding = soma.feeding || null;
+    this.physiologicalSatiety = soma.physiologicalSatiety || null;
     this.somaticNociceptive = soma.somaticNociceptive || null;
     this.socialContact = soma.social || null;
     this.metrics = soma.experienced.metrics;
@@ -849,6 +871,23 @@ export class BrainHud {
       const metric = this.metrics[definition.key];
       const row = this.rows[definition.key];
       if (!row) continue;
+      if (definition.key === 'satiety') {
+        const current = this.physiologicalSatiety && this.physiologicalSatiety.current;
+        const live = this.physiologicalSatiety && this.physiologicalSatiety.status === 'LIVE'
+          && current && Number.isFinite(current.minimum) && Number.isFinite(current.maximum);
+        row.querySelector('.soma-state-value').textContent = live
+          ? `${current.minimum.toFixed(1)}-${current.maximum.toFixed(1)} / 10` : '--';
+        row.querySelector('.soma-state-status').textContent = live
+          ? 'LIVE' : String(this.physiologicalSatiety && this.physiologicalSatiety.status || 'CALIBRATING').replaceAll('_', ' ');
+        row.querySelector('.soma-state-trend').textContent = live ? 'physiological model' : 'awaiting valid input';
+        const left = live ? Math.max(0, Math.min(100, current.minimum * 10)) : 0;
+        const right = live ? Math.max(left, Math.min(100, current.maximum * 10)) : 0;
+        row.querySelector('.soma-state-bar i').style.left = `${left}%`;
+        row.querySelector('.soma-state-bar i').style.width = live ? `${Math.max(3, right - left)}%` : '0';
+        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(live ? ((current.minimum + current.maximum) / 20) : 0);
+        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means greater modelled physiological satiety. Subjective hunger is not modelled.`;
+        continue;
+      }
       if (definition.key === 'sleepiness') {
         const snapshot = this.predictedSleepiness;
         const live = snapshot && snapshot.publicLabel === 'LIVE' && Number.isFinite(snapshot.predictedKss);
@@ -1267,33 +1306,44 @@ export class BrainHud {
   }
 
   renderFeeding() {
-    const entry = this.rows.hunger;
+    const entry = this.rows.satiety;
     const card = entry && entry.querySelector('.feeding-input-card');
     if (!card) return;
     const snapshot = this.feeding;
-    const live = this.feedingStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+    const physiology = this.physiologicalSatiety;
+    const ledgerLive = this.feedingStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
       && snapshot && snapshot.status === 'implemented';
-    card.querySelector('.feeding-input-status').textContent = live ? this.feedingStatus.publicLabel : 'UNAVAILABLE';
+    const modelLive = physiology && physiology.status === 'LIVE' && physiology.current;
+    card.querySelector('.feeding-input-status').textContent = modelLive
+      ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
+    const range = (value, unit = '') => value && Number.isFinite(value.minimum) && Number.isFinite(value.maximum)
+      ? `${value.minimum.toFixed(2)}-${value.maximum.toFixed(2)}${unit}` : 'UNKNOWN';
+    const intake = physiology && physiology.latestKnownIntake;
     const facts = {
-      'last-intake': live ? feedingTimestampLabel(snapshot.lastKnownIntakeAt) : 'UNKNOWN',
-      elapsed: live ? elapsedFeedingLabel(snapshot.elapsedSinceKnownIntakeMs) : 'UNKNOWN',
-      'latest-outcome': live && snapshot.latestResolvedMeal
-        ? String(snapshot.latestResolvedMeal.intakeOutcome || 'UNKNOWN').replaceAll('_', ' ')
-        : 'UNKNOWN',
-      missed: live ? String(Number(snapshot.missedScheduledMeals) || 0) : 'UNKNOWN',
-      knowledge: live ? String(snapshot.intakeKnowledgeStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
+      score: modelLive ? `${physiology.current.minimum.toFixed(1)}-${physiology.current.maximum.toFixed(1)} / 10` : '--',
+      gastric: modelLive ? range(physiology.gastricContentsMl, ' mL') : 'UNKNOWN',
+      cck: modelLive ? range(physiology.cckPM, ' pM') : 'UNKNOWN',
+      glp1: modelLive ? range(physiology.glp1PM, ' pM') : 'UNKNOWN',
+      pyy: modelLive ? range(physiology.pyyPM, ' pM') : 'UNKNOWN',
+      ghrelin: modelLive ? range(physiology.ghrelinPM, ' pM') : 'UNKNOWN',
+      intake: intake ? `${String(intake.mealType || 'meal').toUpperCase()}, ${Number(intake.consumedEnergyKcal).toFixed(0)} kcal, ${String(intake.portionBasis || 'UNKNOWN').replaceAll('_', ' ')}` : 'NONE RECORDED',
+      nutrition: intake ? `${String(intake.nutritionBasis || 'UNKNOWN').replaceAll('_', ' ')}; ${String(intake.nutritionalComposition || 'UNKNOWN').replaceAll('_', ' ')}` : 'UNKNOWN',
     };
     for (const [key, value] of Object.entries(facts)) {
-      const target = card.querySelector(`[data-feeding="${key}"]`);
+      const target = card.querySelector(`[data-satiety="${key}"]`);
       if (target) target.textContent = value;
     }
+    const uncertainty = card.querySelector('.satiety-uncertainty');
+    if (uncertainty) uncertainty.textContent = modelLive
+      ? `Input uncertainty: ${(physiology.inputUncertainty || []).join('; ') || 'none recorded'}. Model: Martinez, Dibbs et al. 2025. Subjective hunger is not modelled.`
+      : `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}. Subjective hunger is not modelled.`;
     const timeline = card.querySelector('.feeding-timeline');
     timeline.textContent = '';
-    const records = live && Array.isArray(snapshot.recentMealOutcomes) ? snapshot.recentMealOutcomes : [];
+    const records = ledgerLive && Array.isArray(snapshot.recentMealOutcomes) ? snapshot.recentMealOutcomes : [];
     if (!records.length) {
       const empty = document.createElement('p');
       empty.className = 'feeding-timeline-empty';
-      empty.textContent = live
+      empty.textContent = ledgerLive
         ? 'No structured feeding records have been observed yet.'
         : 'No grounded feeding ledger has reached this view.';
       timeline.appendChild(empty);
@@ -1505,13 +1555,23 @@ export class BrainHud {
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.historyRequests.get(entry) !== request) return;
-      path.setAttribute('d', scope === 'sleepiness'
-        ? buildScaledHistoryPath(data.points, 1, 9)
-        : buildHistoryPath(data.points));
+      if (scope === 'satiety') {
+        const paths = buildCircadianHistoryPaths(data.points, 280, 80, { minimum: 1, maximum: 10 });
+        entry.querySelector('.satiety-history-line').setAttribute('d', paths.estimate);
+        entry.querySelector('.satiety-history-band').setAttribute('d', paths.band);
+      } else {
+        path.setAttribute('d', scope === 'sleepiness'
+          ? buildScaledHistoryPath(data.points, 1, 9)
+          : buildHistoryPath(data.points));
+      }
       note.textContent = data.points.length ? `${data.points.length} stored ${range} readings. Gaps mean no runner data was recorded.` : `No stored readings in the last ${range}.`;
     } catch (error) {
       if (this.historyRequests.get(entry) !== request) return;
       path.setAttribute('d', '');
+      const band = entry.querySelector('.satiety-history-band');
+      if (band) band.setAttribute('d', '');
+      const estimate = entry.querySelector('.satiety-history-line');
+      if (estimate) estimate.setAttribute('d', '');
       note.textContent = `History unavailable: ${error.message}`;
     }
   }
