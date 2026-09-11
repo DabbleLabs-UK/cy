@@ -18,6 +18,9 @@ check_registry(captive_implementation_overall_status($registry) === 'provisional
 check_registry(captive_implementation_public_label($registry, 'IMPLEMENTED') === 'LIVE', 'implemented public label');
 check_registry(captive_implementation_public_label($registry, 'PROVISIONAL') === 'PROVISIONAL', 'provisional public label');
 check_registry(captive_implementation_public_label($registry, 'NOT_IMPLEMENTED') === 'NOT MODELLED', 'not implemented public label');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'grounded_soma_to_expressive_context')['implementation_status'] === 'IMPLEMENTED', 'grounded Soma to expressive context must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'model_mediated_expressive_choice')['implementation_status'] === 'IMPLEMENTED', 'model-mediated expressive choice must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'heuristic_drive_expressive_selector')['lifecycle_status'] === 'DISABLED_LEGACY', 'heuristic drive expressive selector must be disabled legacy');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'sleep_homeostasis')['implementation_status'] === 'IMPLEMENTED', 'sleep homeostasis must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'circadian_process_c')['implementation_status'] === 'IMPLEMENTED', 'Process C must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'circadian_process_c')['phase_basis'] === 'schedule_estimated', 'Process C phase must be schedule-estimated');

@@ -121,6 +121,19 @@ globalThis.fetch = async (url) => {
             provisional_cognitive_directive: '<PROVISIONAL_COGNITIVE_SELECTION>selection</PROVISIONAL_COGNITIVE_SELECTION>',
           },
         },
+        {
+          seq: 999.5, ts: '2026-09-10 10:02:01', kind: 'expressive_choice', payload: {
+            available_actions: [{ id: 'journal' }, { id: 'silence' }],
+            grounded_directive_supplied: '<GROUNDED_CURRENT_STATE>fact</GROUNDED_CURRENT_STATE>',
+            current_incident_context_supplied: 'cell search',
+            provisional_cognitive_context_supplied: {
+              classification: 'PROVISIONAL MEMORY CANDIDATE', text: 'blue postcard moved',
+            },
+            selected_action: 'silence',
+            selection_mechanism: 'MODEL-MEDIATED SUBJECTIVE CHARACTER CHOICE',
+            fallback_used: false,
+          },
+        },
         { seq: 1000, ts: '2026-09-10 10:02:02', kind: 'event', payload: { name: 'association' } },
       ],
     }),
@@ -136,7 +149,7 @@ assert.equal(requests.length, 0, 'closed diagnostics performs no feed request');
 window.__cyRaw.start();
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(requests[0], '/stream?since=-100&limit=100', 'opening diagnostics requests only a small recent window');
-assert.equal(raw.rowCount(), 3, 'only the bounded recent response is rendered');
+assert.equal(raw.rowCount(), 4, 'only the bounded recent response is rendered');
 assert.ok(raw.log().children[0]._classes.has('filtered'), 'high-volume text tokens are hidden by default');
 assert.equal(raw.olderBtn().disabled, false, 'older diagnostics are available explicitly');
 
@@ -149,6 +162,15 @@ const allText = (node) => [node.textContent, ...(node.children || []).flatMap((c
 assert.match(allText(genRow), /GROUNDED SOMA CONTEXT SENT TO MODEL/);
 assert.match(allText(genRow), /GROUNDED SOMA INFORMATION OMITTED/);
 assert.match(allText(genRow), /PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL/);
+
+const choiceRow = raw.log().children.find((row) => row.dataset.kind === 'expressive_choice');
+choiceRow.children[0].dispatchEvent({ type: 'click', target: null });
+assert.match(allText(choiceRow), /EXPRESSIVE CHOICE/);
+assert.match(allText(choiceRow), /AVAILABLE ACTIONS/);
+assert.match(allText(choiceRow), /GROUNDED CONTEXT SUPPLIED/);
+assert.match(allText(choiceRow), /PROVISIONAL MEMORY CANDIDATE/);
+assert.match(allText(choiceRow), /SELECTED ACTION/);
+assert.match(allText(choiceRow), /FALLBACK USED/);
 
 raw.olderBtn().dispatchEvent({ type: 'click' });
 await new Promise((resolve) => setImmediate(resolve));

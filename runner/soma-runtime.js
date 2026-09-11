@@ -156,6 +156,20 @@ export function createSomaRuntime(rawState, {
         return current;
       });
     },
+    provisionalMemoryCandidate() {
+      if (failure || !state) return null;
+      try {
+        return engine.provisionalMemoryCandidate(state);
+      } catch (error) {
+        disable('provisional memory candidate', error);
+        return null;
+      }
+    },
+    recordExpressiveChoice(inspection, options) {
+      return mutate('expressive choice record', (current) => (
+        engine.recordExpressiveChoice(current, inspection, options)
+      ));
+    },
     directive() {
       if (failure || !state) return '';
       try {

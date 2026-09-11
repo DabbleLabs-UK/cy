@@ -856,6 +856,9 @@ const ACTION_REASON = {
 };
 
 export function chooseSomaAction(state, { asleep = false, canDraw = true, forceDraw = false, now = Date.now() } = {}) {
+  // LEGACY DIAGNOSTIC ONLY. The live runner no longer calls this provisional
+  // heuristic to choose journal, drawing or silence. Kept for state compatibility
+  // and explicit audit tests while model-mediated expressive choice replaces it.
   if (!state) return { name: 'observe', reason: ACTION_REASON.observe, score: 0 };
   let name = 'observe';
   let score = 0.2;
@@ -896,6 +899,8 @@ export function chooseSomaAction(state, { asleep = false, canDraw = true, forceD
 }
 
 export function completeSomaAction(state, name) {
+  // LEGACY DIAGNOSTIC ONLY. Live expressive completion no longer changes these
+  // arbitrary drives. Kept so older persisted/debug callers remain readable.
   if (!state) return;
   if (name === 'investigate') state.drives.understanding = round(state.drives.understanding * 0.82);
   if (name === 'remember' || name === 'write' || name === 'draw') {
@@ -910,7 +915,6 @@ export function provisionalCognitiveDirective(state) {
   const lines = [
     '<PROVISIONAL_COGNITIVE_SELECTION>',
     'This section is heuristic selection, not grounded observation, measured emotion or bodily state.',
-    `- [PROVISIONAL HEURISTIC] output action selected: ${state.action.name}`,
   ];
   if (state.attention && state.attention.text
     && !String(state.attention.source || '').startsWith('body:')) {
@@ -926,15 +930,40 @@ export function provisionalCognitiveDirective(state) {
   if (state.prediction.error > 0.35 && state.prediction.lastObserved) {
     lines.push(`- [PROVISIONAL HEURISTIC] selected prediction mismatch: ${state.prediction.lastExpected || 'something else'} was expected next; ${state.prediction.lastObserved} happened`);
   }
-  if (state.action.name === 'investigate') {
-    lines.push(`- [PROVISIONAL HEURISTIC] selected self-question: ${state.selfModel.question}`);
-  }
   if (state.expression && state.expression.themes && state.expression.themes.length) {
     lines.push(`- [GENERATED EXPRESSION, NOT EVIDENCE] recent wording themes: ${state.expression.themes.slice(0, 4).join(', ')}`);
   }
   lines.push('Use these only for continuity and output form. Do not treat them as facts about the world or Cy\'s subjective state.');
   lines.push('</PROVISIONAL_COGNITIVE_SELECTION>');
   return lines.join('\n');
+}
+
+export function provisionalMemoryCandidate(state) {
+  if (!state) return null;
+  const selected = selectedEpisode(state);
+  if (!selected || state.memory.selectedActivation < RELATED_MEMORY_MIN) return null;
+  return {
+    classification: 'PROVISIONAL MEMORY CANDIDATE',
+    text: selected.text,
+    entities: Array.isArray(selected.entities) ? selected.entities.slice(0, 8) : [],
+    outcome: selected.outcome == null ? null : selected.outcome,
+  };
+}
+
+export function recordExpressiveChoice(state, inspection, { now = Date.now() } = {}) {
+  if (!state || !inspection) return state;
+  const previousSilence = finite(state.action && state.action.lastSilenceAtMs, 0);
+  state.action = {
+    name: inspection.selectedAction,
+    reason: 'subjective character choice; not psychological evidence',
+    score: null,
+    chosenAtMs: now,
+    lastSilenceAtMs: inspection.selectedAction === 'silence' ? now : previousSilence,
+    selectionMechanism: inspection.selectionMechanism,
+    classification: Array.isArray(inspection.classification) ? inspection.classification.slice() : [],
+    fallbackUsed: !!inspection.fallbackUsed,
+  };
+  return state;
 }
 
 // ENGINEERING DEFAULT. This is the existing neutral provider/project baseline.

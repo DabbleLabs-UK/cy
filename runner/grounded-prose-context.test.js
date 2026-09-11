@@ -208,7 +208,8 @@ assert.match(rawSource, /GROUNDED SOMA CONTEXT SENT TO MODEL/);
 assert.match(rawSource, /GROUNDED SOMA INFORMATION OMITTED/);
 assert.match(rawSource, /PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL/);
 
-// K/L. This handoff does not replace either action selector.
+// K/L. The legacy selector remains inspectable but is no longer called by the
+// live runner. Scientific/grounded action selection remains not implemented.
 const actionProbeBefore = JSON.parse(JSON.stringify(state));
 const actionProbeAfter = JSON.parse(JSON.stringify(state));
 groundedSomaDirective(actionProbeAfter, { now: NOW });
@@ -219,6 +220,11 @@ assert.deepEqual(
 );
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_action_selection').implementation_status,
   'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'model_mediated_expressive_choice').implementation_status,
+  'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'heuristic_drive_expressive_selector').lifecycle_status,
+  'DISABLED_LEGACY');
+assert.doesNotMatch(runSource, /soma\.chooseAction\(/);
 assert.equal(INSTRUMENTAL_ACTION_SELECTION, 'ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL');
 
 console.log('grounded-prose-context.test.js: all checks passed');

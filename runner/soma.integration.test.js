@@ -163,7 +163,7 @@ const zoneC = buildDirectives(vitals, 'journal', {
 const prompt = buildPrompt('', 'journal', null, zoneC);
 assert.match(prompt, /<GROUNDED_CURRENT_STATE>/);
 assert.match(prompt, /<PROVISIONAL_COGNITIVE_SELECTION>/);
-assert.match(prompt, /output action selected:/);
+assert.doesNotMatch(prompt, /output action selected:/);
 assert.match(prompt, /selected episodic-memory item/);
 assert.match(prompt, /was expected next/i);
 assert.ok(prompt.indexOf('<GROUNDED_CURRENT_STATE>') > prompt.indexOf('ONE THING'));
@@ -229,7 +229,8 @@ assert.equal(broken.available, false);
 assert.equal(broken.directive(), '');
 assert.equal(broken.snapshot().status, 'unavailable');
 assert.match(broken.snapshot().reason, /instrumented update failure/);
-assert.equal(prepareSomaGeneration(broken).action.name, 'observe');
+assert.match(prepareSomaGeneration(broken).groundedDirective, /No grounded Soma state is available/);
+assert.equal(prepareSomaGeneration(broken).provisionalMemoryCandidate, null);
 assert.equal(failures.length, 1);
 assert.deepEqual(
   Object.fromEntries(Object.entries(options({ cognition: broken.state }, 2, 'journal')).filter(([key]) => !['stop', 'num_ctx', 'num_thread'].includes(key))),
@@ -260,7 +261,6 @@ const scenario = {
     prediction: engine.somaSnapshot(runtime.state).prediction,
   },
   journal: {
-    action: generation.action.name,
     groundedSomaContext: generation.groundedDirective,
     provisionalCognitiveContext: generation.provisionalDirective,
   },

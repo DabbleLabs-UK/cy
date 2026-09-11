@@ -59,6 +59,12 @@ import {
 import { createSomaRuntime } from './soma-runtime.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import {
+  buildExpressiveChoiceRequest,
+  chooseExpressiveAction,
+  EXPRESSIVE_DRAW_COOLDOWN_MS,
+  EXPRESSIVE_SILENCE_COOLDOWN_MS,
+} from './expressive-choice.js';
+import {
   parseStrokes,
   moodSnapshot,
   detectDrawRequest,
@@ -1788,7 +1794,7 @@ async function main() {
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
   // chunk (used for the drawing DSL, which must never reach the pen as prose).
   // Wired to currentAbort so an inbound postcard/notice can cut it short.
-  async function rawGenerate({ system, prompt, opts, purpose = 'drawing' }) {
+  async function rawGenerate({ system, prompt, opts, purpose = 'drawing', accountingMode = purpose }) {
     const ac = new AbortController();
     currentAbort = ac;
     // a non-streamed generation is opaque to the viewer (nothing reaches the page),
@@ -1801,7 +1807,7 @@ async function main() {
       // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
       // DSL pass that returned text is productive (it will attempt to render); an empty
       // return paid for nothing, so it lands in the non-emitting series.
-      await recordSpend(out.stats, 'draw', !!(out.text && out.text.trim()));
+      await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
       return out.text || '';
     } catch {
       return ''; // aborted, unreachable, or bad body - caller treats as no drawing
@@ -1918,7 +1924,6 @@ async function main() {
     vitals.lastMailMs = Date.now();
     vitals.noMailFiredMs = 0;
     const cognition = prepareSomaGeneration(soma, {
-      canDraw: false,
       now: Date.now(),
       inputs: {
         physical: vitals.physical,
@@ -2013,8 +2018,6 @@ async function main() {
       // next inbox poll creates the public archive receipt.
       emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
     }
-    soma.completeAction(cognition.action.name);
-
     // remember them: a cheap compressed note + a standing nudge, written back to
     // the DB via a private visitor_seen event (never enters the public stream).
     if (visitor && visitor.visitor_id) {
@@ -2057,7 +2060,6 @@ async function main() {
     emit({ kind: 'event', payload: { name: 'warden', amp: Number(a.toFixed(3)), text: notice.text } });
 
     const cognition = prepareSomaGeneration(soma, {
-      canDraw: false,
       now: Date.now(),
       inputs: {
         physical: vitals.physical,
@@ -2088,8 +2090,6 @@ async function main() {
       opts,
       output: r.full,
     });
-    soma.completeAction(cognition.action.name);
-
     emit({ kind: 'mode', payload: { from: 'warden', to: 'journal' } });
     currentMode = 'journal';
   }
@@ -2103,7 +2103,7 @@ async function main() {
   // events (one per pass) plus a private `draw_saved` record for the drawings
   // table. Fewer than MIN_STROKES valid strokes and the drawing is discarded -
   // the decision line still stands.
-  async function doDraw() {
+  async function doDraw({ cognition = null, incidentContext = '' } = {}) {
     const now = Date.now();
     currentMode = 'journal';
 
@@ -2121,7 +2121,8 @@ async function main() {
     // A bespoke prompt (drawDecidePrompt) whose LAST line is the naming cue, NOT a
     // reprise of his prose - otherwise the model just carries the journal on and the
     // "subject" comes back as diary text (the observed bug).
-    const ctx = buildCtx();
+    const ctx = buildCtx(cognition);
+    if (incidentContext) ctx.incidents = incidentContext;
     ctx.bans = bansDirective(vitals.recentOpeners);
     ctx.form = drawIntentDirective(intent, { redrawSubject: redraw ? vitals.lastDrawSubject : null });
     const dir1 = buildDirectives(vitals, 'journal', ctx);
@@ -3349,15 +3350,13 @@ async function main() {
       const mode = 'journal';
       currentMode = mode;
 
-      // Soma chooses the next waking action before language. A queued drawing
-      // request is an external demand and therefore wins; otherwise drawing is
-      // eligible only after a real cooldown so it cannot crowd out the journal.
+      // The existing scheduler has already created an autonomous activity
+      // opportunity. Grounded Soma now supplies facts; a separate model-mediated
+      // subjective layer chooses only among real outward expressive capabilities.
+      // A queued drawing request is external rather than autonomous and still wins.
       const nowMs = Date.now();
       const hasDrawRequest = pendingDrawRequests.length > 0;
       const cognition = prepareSomaGeneration(soma, {
-        asleep: false,
-        canDraw: hasDrawRequest || nowMs - (vitals.lastDrawMs || 0) > 45 * 60 * 1000,
-        forceDraw: hasDrawRequest,
         now: nowMs,
         inputs: {
           physical: vitals.physical,
@@ -3367,26 +3366,83 @@ async function main() {
           now: nowMs,
         },
       });
-      const selectedAction = cognition.action;
 
-      // Silence is now a selected, inspectable action rather than a random result
-      // of legacy mood axes. Publish it only after the quiet period has actually
-      // elapsed: the feed treats the event timestamp as the end of the span.
-      if (selectedAction.name === 'silence') {
+      // Reuse the same bounded recent-incident view in the chooser and in any
+      // resulting journal/drawing prompt. No full ledger or day history is sent.
+      const incidentContext = incidentsDirective(vitals.ledger, {
+        relations: vitals.relations,
+        mailWaitMs: nowMs - (vitals.lastMailMs || nowMs),
+        rnd: () => 0,
+      });
+
+      if (hasDrawRequest) {
+        await recordOutcome((await doDraw({ cognition, incidentContext })) || 'empty');
+        continue;
+      }
+
+      const availableActions = ['journal'];
+      if (nowMs - (vitals.lastDrawMs || 0) > EXPRESSIVE_DRAW_COOLDOWN_MS) {
+        availableActions.push('draw');
+      }
+      const lastSilenceAtMs = Number(soma.state && soma.state.action
+        && soma.state.action.lastSilenceAtMs) || 0;
+      if (!lastSilenceAtMs || nowMs - lastSilenceAtMs >= EXPRESSIVE_SILENCE_COOLDOWN_MS) {
+        availableActions.push('silence');
+      }
+      const choiceRequest = buildExpressiveChoiceRequest({
+        groundedContext: cognition.groundedContext,
+        groundedDirective: cognition.groundedDirective,
+        currentIncidentContext: incidentContext,
+        provisionalMemoryCandidate: cognition.provisionalMemoryCandidate,
+        availableActions,
+      });
+      const expressiveChoice = await chooseExpressiveAction(choiceRequest, {
+        generate: (call) => rawGenerate({
+          system: call.system,
+          prompt: call.prompt,
+          opts: options(vitals, config.threads, 'journal', call.options),
+          purpose: call.purpose,
+          accountingMode: 'expressive_choice',
+        }),
+      });
+      soma.recordExpressiveChoice(expressiveChoice, { now: nowMs });
+      emit({
+        kind: 'expressive_choice',
+        payload: {
+          schema: expressiveChoice.schema,
+          version: expressiveChoice.version,
+          classification: expressiveChoice.classification,
+          available_actions: expressiveChoice.availableActions,
+          grounded_context_supplied: expressiveChoice.groundedContextSupplied,
+          grounded_directive_supplied: expressiveChoice.groundedDirectiveSupplied,
+          current_incident_context_supplied: expressiveChoice.currentIncidentContextSupplied,
+          provisional_cognitive_context_supplied: expressiveChoice.provisionalCognitiveContextSupplied,
+          selected_action: expressiveChoice.selectedAction,
+          focus_refs: expressiveChoice.focusRefs,
+          reason_type: expressiveChoice.reasonType,
+          selection_mechanism: expressiveChoice.selectionMechanism,
+          fallback_used: expressiveChoice.fallbackUsed,
+          fallback: expressiveChoice.fallback,
+        },
+      });
+      const selectedAction = expressiveChoice.selectedAction;
+
+      // The silence duration remains the pre-existing scheduling mechanism. This
+      // handoff replaces WHAT is chosen, not the runner's overall timing model.
+      // Publish only after the quiet period has elapsed so the event marks its end.
+      if (selectedAction === 'silence') {
         const seconds = Math.round(45 + 180 * ((soma.state && soma.state.drives.rest) || 0));
         await recordOutcome('deliberate-silence');
-        soma.completeAction('silence');
         await recordCompletedSilence(seconds, {
           idle: idleSilently,
           emit,
-          reason: `soma: ${selectedAction.reason}`,
+          reason: 'model-mediated subjective character choice',
         });
         continue;
       }
 
-      if (selectedAction.name === 'draw') {
-        await recordOutcome((await doDraw()) || 'empty');
-        soma.completeAction('draw');
+      if (selectedAction === 'draw') {
+        await recordOutcome((await doDraw({ cognition, incidentContext })) || 'empty');
         continue;
       }
 
@@ -3411,12 +3467,8 @@ async function main() {
         ctx.bans = bans;
         ctx.length = completionDirective(targetOpts.num_predict);
         ctx.regime = regimeDirective(mins);
-        burstForm = selectedAction.name;
-        ctx.incidents = incidentsDirective(vitals.ledger, {
-          relations: vitals.relations,
-          mailWaitMs: Date.now() - (vitals.lastMailMs || Date.now()),
-          rnd: () => 0, // LEDGER CAP: the 3 most recent only, not a random 3-5
-        });
+        burstForm = selectedAction;
+        ctx.incidents = incidentContext;
         directives = buildDirectives(vitals, 'journal', ctx);
       }
       const baseOpts = { ...targetOpts, num_predict: completionBudget(targetOpts.num_predict) };
@@ -3605,10 +3657,8 @@ async function main() {
           vitals.recentOpeners.push(w);
           while (vitals.recentOpeners.length > 5) vitals.recentOpeners.shift();
         }
-        // Language is an expression of Soma, never an input to it. Completing
-        // the selected action changes only the associated drive; the generated
-        // wording cannot reward itself or rewrite memory, mood, or relations.
-        soma.completeAction(selectedAction.name);
+        // Language remains expression rather than evidence. No grounded state or
+        // provisional drive is updated as a consequence of this selected form.
       }
       // roll the "did this burst carry a wing noise" window for the no-drumbeat rule
       recentNoise = [recentNoise[1], noiseThisBurst];

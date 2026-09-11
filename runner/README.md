@@ -199,8 +199,9 @@ Soma circuits.
 - **Provisional Soma v1** (`soma.js`) with **provisional experienced state v2** (`experienced-state.js`) - observes real runner events, appraises threat,
   affiliation, deprivation, control loss, and novelty, updates per-family
   expectations, retains a bounded episodic memory, selects attention, derives
-  competing drives, and chooses investigate/remember/connect/attend-body/draw/
-  write/silence/rest. Meal outcomes, sleep periods and interruptions, and the
+  competing drives, and retains a legacy diagnostic selector for investigate/
+  remember/connect/attend-body/draw/write/silence/rest. The live runner no
+  longer calls that selector. Meal outcomes, sleep periods and interruptions, and the
   last supportive social contact are persisted. Recovering event impulses use a
   soft ceiling instead of unlimited addition. These mechanisms and their numeric
   parameters are unapproved heuristics; the public registry labels them PROVISIONAL.
@@ -253,9 +254,16 @@ Soma circuits.
   epistemic status. Inactive defensive/somatic/social sections are omitted with
   an inspectable categorical reason. No threshold or psychological mapping is
   used. Sampling uses the static existing provider/project baseline, labelled
-  `ENGINEERING DEFAULT`. Heuristic journal/draw/silence selection remains
-  PROVISIONAL; instrumental choice remains
-  `ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL`.
+  `ENGINEERING DEFAULT`.
+- **Model-mediated expressive choice** (`expressive-choice.js`) - at an existing
+  autonomous activity opportunity, a short structured call chooses only among
+  the currently available JOURNAL, DRAW and SILENCE capabilities. It sees the
+  grounded projection, the existing three-incident bounded context, and at most
+  one item labelled PROVISIONAL MEMORY CANDIDATE. It receives no provisional
+  visitor-facing metrics or heuristic drive scores. This is subjective character
+  behaviour, explicitly NOT scientific psychological action selection. Invalid
+  output or provider failure uses the engineering JOURNAL fallback. Instrumental
+  world choices remain `ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL`.
 - **Language boundary** - the grounded Soma computes and records what can be
   justified from Cy's simulated world and approved models. The language model
   performs Cy's subjective expression of that state. Generated expression is
@@ -287,9 +295,9 @@ Soma circuits.
 - **The meter** (`power.js`) - estimates Dell OptiPlex draw from CPU load,
   integrates to kWh and cost at the tariff, persists cumulatively to
   `state/power.json`, and periodically tells CY what he costs (Warden pays).
-- **Drawing** (`draw.js`) - occasionally (roughly one per 20-40 min waking,
-  weighted by fixation/dissociation/longing, a fresh postcard image, or waiting)
-  he draws instead of writing. Two stages: he decides in ONE line of his own
+- **Drawing** (`draw.js`) - when drawing is selected after its existing capability
+  cooldown, or when a postcard explicitly requests a drawing, he draws instead
+  of writing. Two stages: he decides in ONE line of his own
   voice what he is drawing and why (streamed as normal text), then a second
   generation emits ONLY a coarse 0-100 stroke DSL (`P/L/D/C/A/H/T`). The DSL is
   parsed defensively (bad lines skipped, coords clamped, 120-stroke cap, <3
@@ -312,8 +320,10 @@ Soma circuits.
 ## Pieces
 
 - `vitals.js` - state engine: drift, derived states, amplification, event deltas.
-- `soma.js` - implemented appraisal, prediction, memory, attention, self-model,
-  action selection, prompt projection, and public circuit snapshot.
+- `soma.js` - provisional appraisal, prediction, memory, attention and legacy
+  drive/action diagnostics, plus adapters to the separate grounded substrates.
+- `expressive-choice.js` - structured subjective choice between real outward
+  expressive capabilities; no emotion score, utility or instrumental action.
 - `cast.js` - inmates + officers + visitor memory: relations map, social/officer
   events, overheard remarks, grudge directive, visitor recognition.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.

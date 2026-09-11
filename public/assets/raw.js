@@ -36,7 +36,7 @@ const MAX_ROWS = 300;
 
 // Every event kind the feed can carry. Order defines the filter-chip order.
 const KINDS = [
-  'text', 'gen', 'silence', 'mode', 'abort', 'draw', 'vitals', 'host',
+  'text', 'gen', 'expressive_choice', 'silence', 'mode', 'abort', 'draw', 'vitals', 'host',
   'power', 'tempo', 'postcard_in', 'postcard_out', 'fan_mail_in', 'news_in', 'warden',
   'event', 'day',
 ];
@@ -367,6 +367,7 @@ function render(ev, { prepend = false, follow = true } = {}) {
     if (!builtStructured) {
       detail.textContent = '';
       if (ev.kind === 'gen') detail.appendChild(burstDetail(ev, drops));
+      else if (ev.kind === 'expressive_choice') detail.appendChild(expressiveChoiceDetail(ev));
       else if (ev.payload && ev.payload.environment_event_id && CFG.environmentEvent) {
         detail.textContent = 'loading structured environment event...';
         try {
@@ -381,7 +382,7 @@ function render(ev, { prepend = false, follow = true } = {}) {
         }
       } else detail.appendChild(jsonBlock(ev));
       builtStructured = true;
-      jsonShown = ev.kind !== 'gen';
+      jsonShown = ev.kind !== 'gen' && ev.kind !== 'expressive_choice';
     }
   };
   head.addEventListener('click', (e) => {
@@ -435,6 +436,8 @@ function summaryFor(ev) {
       return JSON.stringify(p.s ?? '') + (p.mode && p.mode !== 'journal' ? '  [' + p.mode + (p.lucid ? '/lucid' : '') + ']' : '');
     case 'gen':
       return `${p.mode || '?'}  in=${p.tokens_in} out=${p.tokens_out}  ${p.gen_tok_s}tok/s  ttft=${p.ttft_ms}ms  total=${p.total_ms}ms${idleBadge(p)}${stripBadge(p)}  (click to expand)`;
+    case 'expressive_choice':
+      return `${p.selected_action || '?'}  ${p.selection_mechanism || '?'}  fallback=${p.fallback_used ? 'YES' : 'NO'}  (click to expand)`;
     case 'silence':
       return `${p.seconds}s${p.reason ? '  (' + p.reason + ')' : ''}`;
     case 'mode':
@@ -541,7 +544,7 @@ function burstDetail(ev, drops) {
   ));
   promptSec.appendChild(zoneBlock(
     'PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL',
-    'heuristic memory, attention and output-action selection; not grounded state',
+    'heuristic memory and attention continuity material; not grounded state or action selection',
     p.provisional_cognitive_directive,
   ));
   promptSec.appendChild(zoneBlock('ZONE A', 'voice / fixed (cached prefix)', p.zone_a));
@@ -650,6 +653,51 @@ function burstDetail(ev, drops) {
   actions.append(copyBtn, jsonBtn);
   box.appendChild(actions);
 
+  return box;
+}
+
+function expressiveChoiceDetail(ev) {
+  const p = ev.payload || {};
+  const box = document.createElement('div');
+  box.className = 'burst expressive-choice-detail';
+  const choice = section('EXPRESSIVE CHOICE');
+  choice.appendChild(zoneBlock(
+    'AVAILABLE ACTIONS',
+    'real outward capabilities supplied to the chooser',
+    JSON.stringify(p.available_actions || [], null, 2),
+  ));
+  choice.appendChild(zoneBlock(
+    'GROUNDED CONTEXT SUPPLIED',
+    'LIVE facts and approved model outputs with epistemic labels',
+    p.grounded_directive_supplied,
+  ));
+  choice.appendChild(zoneBlock(
+    'CURRENT OR RECENT INCIDENT CONTEXT SUPPLIED',
+    'bounded existing incident context; not a grounded emotion',
+    p.current_incident_context_supplied,
+  ));
+  choice.appendChild(zoneBlock(
+    'PROVISIONAL COGNITIVE CONTEXT SUPPLIED',
+    'optional PROVISIONAL MEMORY CANDIDATE only',
+    p.provisional_cognitive_context_supplied
+      ? JSON.stringify(p.provisional_cognitive_context_supplied, null, 2) : null,
+  ));
+  choice.appendChild(zoneBlock(
+    'SELECTED ACTION',
+    'subjective character behaviour; not psychological evidence',
+    p.selected_action || '(unknown)',
+  ));
+  choice.appendChild(zoneBlock(
+    'SELECTION MECHANISM',
+    'subjective character layer; not scientific action selection',
+    p.selection_mechanism || '(unknown)',
+  ));
+  choice.appendChild(zoneBlock(
+    'FALLBACK USED',
+    p.fallback_used ? 'YES - engineering fallback' : 'NO',
+    p.fallback ? JSON.stringify(p.fallback, null, 2) : 'NO',
+  ));
+  box.appendChild(choice);
   return box;
 }
 

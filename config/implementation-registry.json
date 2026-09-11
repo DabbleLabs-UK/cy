@@ -105,11 +105,43 @@
       "provenance": "runner/grounded-prose-context.js"
     },
     {
+      "id": "grounded_soma_to_expressive_context",
+      "display_name": "GROUNDED SOMA TO EXPRESSIVE CONTEXT",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The model-mediated expressive chooser receives the same factual Handoff-11 projection with epistemic labels. No heuristic visitor-facing metric, drive, salience score or emotion mapping is supplied to the chooser.",
+      "data_dependencies": ["grounded_soma_prose_context"],
+      "version": "model-mediated-expressive-choice-v1",
+      "provenance": "runner/expressive-choice.js"
+    },
+    {
+      "id": "model_mediated_expressive_choice",
+      "display_name": "MODEL-MEDIATED EXPRESSIVE CHOICE",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "classification": ["SUBJECTIVE_CHARACTER_LAYER", "NOT_SCIENTIFIC_PSYCHOLOGICAL_MODEL"],
+      "status_note": "A small structured model call chooses only among currently available journal, draw and silence capabilities. The result is character behaviour, not a grounded measurement, reward policy, utility model or psychological action-selection model.",
+      "data_dependencies": ["grounded_soma_to_expressive_context", "current_incident_context", "provisional_memory_candidate"],
+      "version": "model-mediated-expressive-choice-v1",
+      "provenance": "runner/expressive-choice.js"
+    },
+    {
+      "id": "heuristic_drive_expressive_selector",
+      "display_name": "HEURISTIC DRIVE EXPRESSIVE SELECTOR",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "lifecycle_status": "DISABLED_LEGACY",
+      "model_spec_id": null,
+      "status_note": "The old arbitrary drive-weight selector remains as compatibility and diagnostic code only. The live runner does not call it and it no longer selects journal, drawing or silence.",
+      "data_dependencies": [],
+      "version": "legacy-soma-action-selector-v1",
+      "provenance": "runner/soma.js"
+    },
+    {
       "id": "grounded_soma_action_selection",
       "display_name": "GROUNDED SOMA TO ACTION SELECTION",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Grounded Soma outputs do not select journal, drawing, silence or instrumental actions. Existing output-action selection remains provisional and prison instrumental choice remains engineering round-robin.",
+      "status_note": "No scientific or grounded action-selection model exists. Expressive form is now a separately classified subjective character-model choice; prison instrumental choice remains engineering round-robin.",
       "data_dependencies": [],
       "available_future_dependencies": ["grounded_soma_prose_context"],
       "version": null

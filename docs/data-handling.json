@@ -11,7 +11,7 @@
     "Owner-selected runner controls including tempo, day or night regime, pause state, and model provider"
   ],
   "stores": [
-    "The ordered public event stream, including screened Cy prose, prison events, public postcard fields, drawings, operational telemetry, Soma snapshots containing current experienced-state values and their causal contributors, and generation-inspection payloads that separately retain the grounded Soma prompt projection and provisional cognitive prompt projection",
+    "The ordered public event stream, including screened Cy prose, prison events, public postcard fields, drawings, operational telemetry, Soma snapshots containing current experienced-state values and their causal contributors, generation-inspection payloads that separately retain the grounded Soma prompt projection and provisional cognitive prompt projection, and autonomous expressive-choice inspection records containing the supplied bounded context, allowed actions, parsed choice and engineering-fallback status",
     "Private structured prison-world records separating objective event facts, Cy's observation, normalized categorical Soma input, and named consuming systems for the admin-only event inspector",
     "Queued and delivered postcards, their reply-tray or fan-mail class, delivery, promotion and reply timestamps, submitted text, optional handle, moderation state, and rate-limit metadata",
     "Uploaded or remotely selected postcard images re-encoded as WebP with metadata removed, plus source attribution when applicable",
@@ -42,8 +42,8 @@
     },
     {
       "recipient": "DeepSeek, only while the owner has selected the optional remote provider",
-      "purpose": "Generate Cy's prose or drawing instructions",
-      "data": "The current prompt, which can include recent screened Cy prose, a compact epistemically labelled projection of LIVE grounded sleep, defensive-context, learned cue-outcome, matching action-outcome, feeding, somatic and social-contact state, separately labelled provisional attention, memory and output-action selection, recent incidents, incoming postcard text, and compact returning-visitor context. The eight provisional visitor-facing Soma metrics are not sent as state claims."
+      "purpose": "Generate Cy's prose or drawing instructions, and select an autonomous outward expressive form",
+      "data": "The current prose or drawing prompt can include recent screened Cy prose, a compact epistemically labelled projection of LIVE grounded sleep, defensive-context, learned cue-outcome, matching action-outcome, feeding, somatic and social-contact state, separately labelled provisional attention and memory continuity material, recent incidents, incoming postcard text, and compact returning-visitor context. Before an autonomous expressive episode, a separate small structured chooser sends the current grounded projection, bounded current/recent incident context, an optional item explicitly labelled PROVISIONAL MEMORY CANDIDATE, and the currently available journal/draw/silence IDs. The eight provisional visitor-facing Soma metrics and heuristic drive scores are not sent to the chooser."
     },
     {
       "recipient": "Openverse and the host of a selected public image",
@@ -82,7 +82,9 @@
     "Structured somatic records remain separate from the provisional Pain / Discomfort value. Active stimulus and injury facts may enter the grounded prompt projection, but they do not create subjective Pain, general discomfort, healing, sensitisation, allodynia, hyperalgesia, nocifensive action or brain activation.",
     "The grounded Soma prompt projection is an engineering selection of already stored LIVE subsystem facts and model estimates. It adds no emotion mapping, threshold, weight, probability or new grounded state, and records categorical omissions for inspection.",
     "Grounded Soma prompt facts may influence Cy's generated subjective prose. Generated prose remains isolated from grounded sleep, threat-learning, defensive-context, feeding, action-outcome, somatic and social-contact state and cannot become evidence for those systems.",
-    "Heuristic attention, episodic retrieval, prediction mismatch and output-action selection remain separately labelled PROVISIONAL COGNITIVE SELECTION. Waking sampling and target length use the static existing provider/project profile rather than provisional experienced-state values.",
+    "Heuristic attention, episodic retrieval and prediction mismatch remain separately labelled PROVISIONAL COGNITIVE SELECTION for prose continuity. Only an optional selected episode explicitly labelled PROVISIONAL MEMORY CANDIDATE may be supplied to the expressive chooser; heuristic attention and drive scores are not supplied.",
+    "Autonomous journal, draw or silence choice is model-mediated subjective character behaviour, not grounded or scientific psychological action selection. Only the parsed action, allowed focus references and fixed descriptive reason category are stored; hidden chain-of-thought is neither requested nor stored.",
+    "The old heuristic drive selector remains disabled legacy code. A selected expressive action and resulting prose or drawing are not written back as evidence for grounded Soma or as a measured psychological state.",
     "A stimulus ending does not resolve its injury, elapsed time does not imply healing, and only an explicit structured resolution naming an existing injury closes it. Unknown somatic facts remain unknown rather than becoming no harm.",
     "Complete somatic event, injury and source-event traces are owner-only. The public view receives a bounded recent factual summary without private environment-event identifiers.",
     "Screened model text returns to Soma only as a bounded efference copy of Cy's action: repetition, intensity, commitments, and activation of word associations previously learned from lived input. Text sentiment cannot directly manufacture appraisal or emotional state.",

@@ -1083,14 +1083,75 @@ them into an emotion, need, salience, action probability or behavioural score.
 Every entry is labelled OBSERVED FACT, MODEL ESTIMATE, LEARNED STATISTICAL
 EXPECTATION, SCHEDULE ESTIMATE, UNKNOWN or NOT MODELLED. Inactive sections are
 omitted by categorical state, and each omission is recorded for the owner
-inspector. Heuristic attention, episodic retrieval, prediction mismatch and
-output-action selection are placed in a separately labelled PROVISIONAL
-COGNITIVE SELECTION block.
+inspector. Heuristic attention, episodic retrieval and prediction mismatch are
+placed in a separately labelled PROVISIONAL COGNITIVE SELECTION block. The old
+heuristic output-action line is no longer sent to the model.
 
 The grounded Soma computes and records what can be justified from Cy's
 simulated world and approved models. The language model performs Cy's subjective
 expression of that state. Generated expression is not treated as measurement of
 the underlying state.
+
+## Model-mediated expressive choice
+
+Cy's grounded Soma is responsible for defensible world and computational state.
+The language model is allowed to supply Cy's subjective expression and expressive
+choices. Those choices are character behaviour, not measurements of the
+underlying psychological state.
+
+The live runner now offers only capabilities that genuinely exist: JOURNAL,
+DRAW and SILENCE. A small structured call receives the fixed Cy identity, the
+Handoff-11 grounded projection, the existing incident directive capped to its
+three most recent items, and at most one separately labelled PROVISIONAL MEMORY
+CANDIDATE. It receives no provisional Anxiety, Hunger, Fatigue, Loneliness, Pain,
+Anger, Arousal or Rumination value, no heuristic drive score, and no salience
+total. It returns only an allowed action ID, allowed context-reference IDs and
+the fixed descriptive reason type `subjective_character_choice`.
+
+The old `chooseSomaAction` and `completeSomaAction` functions remain only for
+compatibility and audit diagnostics. Their `remember`, `investigate`, `connect`,
+`attend_body` and `observe` labels never represented distinct outward operations;
+the live runner no longer invokes them. Sleep/dream scheduling and externally
+requested drawings remain outside autonomous expressive choice. Instrumental
+world actions remain the Handoff-8 `ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL`
+mechanism, and grounded instrumental action selection remains NOT MODELLED.
+
+The audited action categories are:
+
+- EXPRESSIVE: `write` was the legacy label for the normal JOURNAL path; DRAW and
+  SILENCE already had distinct outward handlers. These are now exposed to the
+  chooser as `journal`, `draw` and `silence`.
+- COGNITIVE / INTERNAL: `observe`, `investigate`, `remember`, `connect` and
+  `attend_body` changed only a provisional prompt label or legacy drive. They did
+  not execute a distinct visitor-visible or world-changing operation and are not
+  chooser actions.
+- SLEEP-PHASE CONTROL: `rest` labelled the sleep phase, but the live runner's
+  existing clock and dream branch already control sleep independently.
+- INSTRUMENTAL WORLD ACTION: comply/refuse, hand over/withhold, engage/withdraw,
+  answer/remain silent within an interaction, and respond/disengage remain
+  Handoff-8 world-changing choices outside this expressive layer.
+
+Numerical inventory for this bridge is engineering-only:
+
+- schema version: 1;
+- structured-call temperature: 0;
+- top-p: 1;
+- repeat penalty: 1;
+- repeat window: 64 tokens;
+- output cap: 80 tokens;
+- context window: the existing 3072-token project setting;
+- recent incident items: the existing maximum of 3;
+- provisional memory candidates: at most 1, with the existing maximum of 8
+  entity labels;
+- retry count: 0;
+- fallback action: JOURNAL;
+- retained draw availability cooldown: 45 minutes;
+- retained silence availability cooldown: 15 minutes.
+
+The temperature, top-p, repeat settings, token limits, retries, fallback and
+capability cooldowns are ENGINEERING MODEL-CALL or scheduling settings, not
+psychological parameters. No action weights, emotion thresholds, utility
+coefficients, reward values, drive weights or action probabilities were added.
 
 Cy's brain display is deliberately a functional analogy, not a fake brain scan.
 Real psychological and bodily processes are distributed across interacting

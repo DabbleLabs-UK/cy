@@ -12,6 +12,11 @@ assert.equal(registry.soma_variables.length, 8);
 assert.ok(registry.soma_variables.every((entry) => entry.implementation_status === 'PROVISIONAL'));
 assert.equal(somaImplementationStatus(), 'provisional');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_prose_context').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_to_expressive_context').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'model_mediated_expressive_choice').implementation_status, 'IMPLEMENTED');
+assert.deepEqual(implementationEntry('soma_subsystems', 'model_mediated_expressive_choice').classification,
+  ['SUBJECTIVE_CHARACTER_LAYER', 'NOT_SCIENTIFIC_PSYCHOLOGICAL_MODEL']);
+assert.equal(implementationEntry('soma_subsystems', 'heuristic_drive_expressive_selector').lifecycle_status, 'DISABLED_LEGACY');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_action_selection').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'sleep_homeostasis').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
