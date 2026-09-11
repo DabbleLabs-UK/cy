@@ -1,0 +1,102 @@
+{
+  "schema": "cy.model-spec",
+  "version": 1,
+  "id": "structured-somatic-harm-ledger",
+  "implementation_version": "somatic-nociceptive-substrate-v1",
+  "implementation_status": "IMPLEMENTED",
+  "title": "Structured somatic harm and noxious-input substrate",
+  "scope": "A factual event and persistence model for explicit noxious bodily stimuli and injuries in Cy's represented prison world.",
+  "scientific_boundary": {
+    "pain": "A personal sensory and emotional experience associated with, or resembling that associated with, actual or potential tissue damage.",
+    "nociception": "Neural encoding of noxious stimuli. Cy has no biological nociceptors, so the implementation is only a computational functional analogue of incoming nociceptive information.",
+    "noxious_stimulus": "A stimulus represented as capable of causing tissue damage. Capability is stored categorically and is not inferred from prose.",
+    "implemented": [
+      "structured somatic event facts",
+      "categorical noxious-stimulus representation",
+      "persistent injury identity and follow-up ledger",
+      "functional computational analogue of incoming nociceptive information"
+    ],
+    "not_implemented": [
+      "subjective Pain",
+      "general discomfort integration",
+      "injury healing dynamics",
+      "predictive Pain inference",
+      "peripheral or central sensitisation",
+      "allodynia or hyperalgesia",
+      "nocifensive action selection",
+      "brain-region activation"
+    ]
+  },
+  "sources": [
+    {
+      "citation": "International Association for the Study of Pain. IASP Terminology.",
+      "url": "https://www.iasp-pain.org/resources/terminology/",
+      "use": "Terminological boundary between Pain, nociception and noxious stimuli. The software does not claim a biological process."
+    },
+    {
+      "citation": "Garland EL. Pain Processing in the Human Nervous System: A Selective Review of Nociceptive and Biobehavioral Pathways. Prim Care. 2012;39(3):561-571. doi:10.1016/j.pop.2012.06.013.",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3438523/",
+      "use": "Supports treating nociceptive pathways and the multidimensional experience of Pain as non-identical. No anatomical activation mapping was derived."
+    },
+    {
+      "citation": "Woller SA, Eddinger KA, Corr M, Yaksh TL. An Overview of Pathways Encoding Nociception. Clin Exp Rheumatol. 2017;35 Suppl 107(5):40-46.",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6636838/",
+      "use": "Supports the mechanical, thermal and chemical modality vocabulary and the distinction between peripheral input and distributed processing. No biological pathway equation was copied."
+    },
+    {
+      "citation": "Chen ZS, Wang J. Pain, from perception to action: A computational perspective. iScience. 2023;26(1):105707. doi:10.1016/j.isci.2022.105707.",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9771728/",
+      "use": "Documents computational perspectives linking perception, inference and action. Predictive inference and action selection remain explicitly unimplemented here."
+    },
+    {
+      "citation": "Lang VA, Lundh T, Ortiz-Catalan M. Mathematical and Computational Models for Pain: A Systematic Review. Pain Med. 2021;22(12):2806-2817. doi:10.1093/pm/pnab177.",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8665994/",
+      "use": "Shows heterogeneous mathematical approaches and no single accepted universal Pain equation. This implementation therefore introduces no Pain magnitude equation."
+    }
+  ],
+  "event_semantics": {
+    "unknown_is_not_none": true,
+    "stimulus_modalities": ["MECHANICAL", "THERMAL", "CHEMICAL", "OTHER", "UNKNOWN"],
+    "noxious_statuses": ["YES", "NO", "UNKNOWN"],
+    "tissue_damage_statuses": ["CONFIRMED", "THREATENED", "NONE", "UNKNOWN"],
+    "injury_statuses": ["ACTIVE", "RESOLVED", "UNKNOWN"],
+    "rules": [
+      "A stimulus and an injury are separate records.",
+      "A stimulus ending never resolves an injury.",
+      "Only confirmed structured tissue damage creates an injury ledger record.",
+      "Only an explicit structured resolution naming an existing injury closes it.",
+      "Elapsed time does not imply healing.",
+      "A PHYSICAL_HARM binary outcome cannot invent body site, modality, injury type, duration or subjective Pain.",
+      "Generated prose is not admissible evidence."
+    ]
+  },
+  "equations": [],
+  "coefficients": [],
+  "thresholds": [],
+  "decay_rates": [],
+  "clamps": [],
+  "numerical_inventory": [
+    {
+      "value": 1,
+      "role": "schema and implementation version",
+      "basis": "ENGINEERING VERSION IDENTIFIER; not a scientific parameter"
+    },
+    {
+      "value": 8,
+      "role": "number of recent somatic events included in the public snapshot; the complete ledger remains persisted and owner-inspectable",
+      "basis": "ARBITRARY / HEURISTIC DISPLAY LIMIT; not a scientific parameter"
+    },
+    {
+      "value": 160,
+      "role": "maximum accepted character length for a persisted stimulus or injury identity",
+      "basis": "ARBITRARY / HEURISTIC INPUT-SAFETY LIMIT; not a scientific parameter"
+    }
+  ],
+  "legacy_isolation": {
+    "legacy_pain_baseline": "not read",
+    "legacy_pain_impulses": "not read",
+    "legacy_pain_decay": "not read",
+    "legacy_migration_values": "not read",
+    "language_affect_or_action_effect": "none"
+  }
+}

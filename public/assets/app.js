@@ -174,6 +174,7 @@ async function boot() {
     defensiveContextUrl: CFG.defensiveContext,
     learnedControllabilityUrl: CFG.learnedControllability,
     feedingUrl: CFG.feeding,
+    somaticUrl: CFG.somatic,
     registry: CFG.implementationRegistry,
     admin: !!CFG.admin,
   });

@@ -24,6 +24,8 @@ assert.equal(implementationEntry('soma_subsystems', 'probabilistic_threat_learni
 assert.equal(implementationEntry('soma_subsystems', 'current_defensive_context').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'feeding_event_model').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'computational_nociceptive_input_analogue').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'subjective_pain').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'energy_homeostatic_state').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'objective_controllability').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'perceived_controllability').implementation_status, 'NOT_IMPLEMENTED');
@@ -117,6 +119,11 @@ assert.equal(elapsedFeedingLabel(0), '0m');
 assert.equal(elapsedFeedingLabel((2 * 60 + 17) * 60000), '2h 17m');
 assert.equal(elapsedFeedingLabel((25 * 60 + 3) * 60000), '1d 1h 3m');
 assert.equal(elapsedFeedingLabel(null), 'UNKNOWN');
+assert.match(source, /Structured bodily harm and noxious-input facts/);
+assert.match(source, /SOMATIC \/ NOXIOUS INPUT TRACE/);
+assert.match(source, /subjectivePainStatus/);
+assert.doesNotMatch(source, /definition\.key === 'pain' \? historyMarkup\(\)/,
+  'the Pain detail must not present the factual somatic substrate as a numeric Pain graph');
 assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
   'unimplemented region placeholders without artwork must remain hidden');
 assert.doesNotMatch(source, /Learned outcome probability/);

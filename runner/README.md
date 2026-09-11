@@ -171,9 +171,11 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
 | `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
-`soma` contains the PROVISIONAL experienced-state snapshot plus two narrower LIVE
-subsystems: normalized homeostatic sleep pressure (Process S) and the published
-five-harmonic circadian Process C waveform. Process C carries an explicit
+`soma` contains the PROVISIONAL experienced-state snapshot plus narrower LIVE
+subsystems: normalized homeostatic sleep pressure (Process S), the published
+five-harmonic circadian Process C waveform, structured feeding records,
+probabilistic threat learning, defensive-context records, action-outcome
+contingencies, and a structured somatic-harm and noxious-input ledger. Process C carries an explicit
 schedule-estimated phase interval because biological phase is not observed.
 Process S and Process C remain separate and are not a subjective-fatigue claim.
 Current attention and action, prediction error, episodic-memory
@@ -218,6 +220,16 @@ Soma circuits.
   calculate Hunger, calories, satiety, internal energy, reward, appetite,
   feeding action or brain activation; the older displayed Hunger value remains
   separately PROVISIONAL.
+- **LIVE somatic harm and noxious-input ledger**
+  (`somatic-nociceptive-substrate.js`) - consumes only canonical structured
+  stimulus, body-site, tissue-damage, injury-status and observation facts. It
+  preserves stable injury identities and follow-ups across restart; a stimulus
+  ending does not resolve an injury, elapsed time never implies healing, and
+  unknown is never converted to none. It is a computational functional analogue
+  of incoming nociceptive information, not biological nociception or subjective
+  Pain. It does not calculate Pain magnitude, general discomfort, healing,
+  sensitisation, action selection, prompt wording or brain activation. The
+  existing numeric Pain / Discomfort value remains separately PROVISIONAL.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
   Each outcome now carries objective/categorical world facts and a separate

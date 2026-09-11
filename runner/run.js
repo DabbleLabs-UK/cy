@@ -631,6 +631,14 @@ async function main() {
       world: worldWithDescription,
       observation: { summary, ...observation },
     });
+    const somaticFacts = event.world.somatic;
+    const hasSomaticFacts = somaticFacts.stimulus.id != null
+      || somaticFacts.stimulus.noxious_stimulus !== 'UNKNOWN'
+      || somaticFacts.stimulus.status !== 'UNKNOWN'
+      || somaticFacts.body.site !== 'UNKNOWN'
+      || somaticFacts.tissue.damage_status !== 'UNKNOWN'
+      || somaticFacts.tissue.injury_id != null
+      || somaticFacts.tissue.injury_status !== 'UNKNOWN';
     const record = createEnvironmentRecord(event, {
       consumedBy: [
         'soma-input-staging-v1',
@@ -648,10 +656,17 @@ async function main() {
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
           ? ['process-s-normalized-v1']
           : []),
+        ...(hasSomaticFacts ? [
+          'somatic-event-model-v1',
+          'noxious-stimulus-representation-v1',
+          'injury-ledger-v1',
+          'computational-nociceptive-input-analogue-v1',
+        ] : []),
         ...(provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
       ],
     });
     record.feeding = soma.observeFeedingRecord(record);
+    record.somatic_nociceptive = soma.observeSomaticRecord(record);
     record.action_outcome_contingency = soma.observeControllabilityRecord(record);
     record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
     record.threat_learning = soma.observeThreatLearningRecord(record);

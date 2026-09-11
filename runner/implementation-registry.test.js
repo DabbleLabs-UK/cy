@@ -40,6 +40,16 @@ assert.equal(implementationEntry('soma_subsystems', 'hedonic_appetite').implemen
 assert.equal(implementationEntry('soma_subsystems', 'learned_meal_anticipation').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'feeding_action_selection').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'cy_embodiment_model').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'somatic_event_model').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'noxious_stimulus_representation').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'injury_ledger').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'computational_nociceptive_input_analogue').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'injury_healing_dynamics').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'subjective_pain').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'predictive_pain_inference').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'peripheral_sensitisation').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'central_sensitisation').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'nocifensive_action_model').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_variables', 'anxiety').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'amygdala').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'acc').implementation_status, 'PROVISIONAL');

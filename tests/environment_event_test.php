@@ -177,6 +177,30 @@ check_environment(str_contains($feedingApiSource, 'captive_is_admin'), 'exact fe
 check_environment(str_contains($feedingApiSource, "'records' => \$records"), 'complete feeding records must be exposed to admin');
 check_environment(str_contains($feedingApiSource, "'homeostaticPhysiologicalState' => 'NOT_MODELLED'"), 'admin inspection must preserve the physiological boundary');
 
+$somaticRecord = $record;
+$somaticRecord['world_event']['id'] = 'env-somatic-test';
+$somaticRecord['world_event']['event_type'] = 'injury';
+$somaticRecord['world_event']['event_family'] = 'physical';
+$somaticRecord['soma_input']['event_id'] = 'env-somatic-test';
+$somaticRecord['consumed_by'] = ['soma-input-staging-v1', 'somatic-event-model-v1', 'injury-ledger-v1'];
+$somaticRecord['somatic_nociceptive'] = [
+    'updated' => true,
+    'event' => [
+        'schema' => 'cy.somatic-event',
+        'eventId' => 'env-somatic-test',
+        'tissue' => ['damageStatus' => 'CONFIRMED', 'injuryId' => 'injury:test'],
+    ],
+    'subjectivePain' => 'NOT_MODELLED',
+];
+$somaticInspection = captive_environment_record_inspection($somaticRecord, captive_implementation_registry());
+check_environment($somaticInspection['what_somatic_noxious_substrate_did']['event']['tissue']['injuryId'] === 'injury:test', 'somatic trace was not exposed');
+check_environment($somaticInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'somatic event consumer must be LIVE');
+check_environment($somaticInspection['what_systems_consumed_it']['consumers'][2]['public_label'] === 'LIVE', 'injury ledger consumer must be LIVE');
+$somaticApiSource = file_get_contents(__DIR__ . '/../public/api/somatic.php');
+check_environment(str_contains($somaticApiSource, 'captive_is_admin'), 'exact somatic inspection must be admin-only');
+check_environment(str_contains($somaticApiSource, "'eventTraces' => \$traces"), 'complete somatic event traces must be exposed to admin');
+check_environment(str_contains($somaticApiSource, "'subjectivePain' => 'NOT_MODELLED'"), 'admin somatic inspection must preserve the subjective Pain boundary');
+
 $source = file_get_contents(__DIR__ . '/../public/api/ingest.php');
 check_environment(str_contains($source, "if (\$kind === 'world_event_record')"), 'ingest must handle private records');
 check_environment(str_contains($source, 'continue;'), 'private records must not fall through to public events');

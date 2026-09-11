@@ -7,8 +7,8 @@ import {
   serializeEnvironmentRecord,
 } from './environment-schema.js';
 
-assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 20);
-assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 20);
+assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 21);
+assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 21);
 
 const event = createEnvironmentEvent('meal', {
   id: 'env-test-meal',
@@ -28,6 +28,7 @@ assert.equal(record.soma_input.food_received, 'unknown');
 assert.equal(record.soma_input.portion_category, 'unknown');
 assert.deepEqual(record.soma_input.feeding, record.world_event.world.physical.food);
 assert.equal(record.soma_input.nociceptive_impact, 'unknown');
+assert.equal(record.soma_input.somatic.tissue.damage_status, 'UNKNOWN');
 assert.notEqual(record.soma_input.nociceptive_impact, 'none');
 assert.equal(record.soma_input.persistence, 'unknown');
 assert.equal(record.soma_input.associative_learning.linkage, 'unknown');
@@ -91,6 +92,15 @@ assert.equal(search.world.defensive_context.temporal_status, 'RESOLVED');
 assert.deepEqual(search.world.defensive_context.adverse_outcome_classes,
   ['COERCIVE_LOSS_OF_CONTROL', 'PHYSICAL_HARM']);
 assert.equal(search.world.action_opportunity.chosen_action, 'unknown');
+assert.equal(search.world.somatic.tissue.damage_status, 'NONE');
+
+const injury = createEnvironmentEvent('minor_injury', {
+  id: 'env-test-injury',
+  timestamp: '2026-09-10 12:16:00.000',
+});
+assert.equal(injury.world.somatic.tissue.damage_status, 'CONFIRMED');
+assert.equal(injury.world.somatic.tissue.injury_id, 'injury:env-test-injury');
+assert.equal(injury.world.somatic.body.site, 'UNKNOWN');
 
 const encoded = JSON.stringify(record);
 for (const forbidden of ['threat_score', 'emotion_score', 'brain_activation', 'appraisal_magnitude']) {

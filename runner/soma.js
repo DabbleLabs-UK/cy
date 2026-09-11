@@ -56,6 +56,12 @@ import {
   reconcileControllabilityState,
 } from './action-outcome-contingency.js';
 import {
+  createSomaticState,
+  observeSomaticRecord as applySomaticRecord,
+  reconcileSomaticState,
+  somaticSnapshot,
+} from './somatic-nociceptive-substrate.js';
+import {
   PRISON_SCHEDULE,
   PRISON_SCHEDULE_TIME_ZONE,
   habitualWakeMinutes,
@@ -157,6 +163,7 @@ function blank(now, legacyPhysical = null) {
     currentDefensiveContext: createCurrentDefensiveContext(now),
     feeding: createFeedingState(now),
     learnedControllability: createControllabilityState(now),
+    somaticNociceptive: createSomaticState(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -209,6 +216,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     currentDefensiveContext: reconcileCurrentDefensiveContext(raw.currentDefensiveContext, { now }),
     feeding: reconcileFeedingState(raw.feeding, { now }),
     learnedControllability: reconcileControllabilityState(raw.learnedControllability, { now }),
+    somaticNociceptive: reconcileSomaticState(raw.somaticNociceptive, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -269,6 +277,13 @@ export function observeSomaFeedingRecord(state, record) {
 export function observeSomaControllabilityRecord(state, record) {
   if (!state || !record) return null;
   return applyControllabilityRecord(state.learnedControllability, record);
+}
+
+// Structured somatic facts enter a separate factual ledger. This consumer does
+// not read legacy Pain, free text, appraisal, affect or brain-region values.
+export function observeSomaSomaticRecord(state, record) {
+  if (!state || !record) return null;
+  return applySomaticRecord(state.somaticNociceptive, record);
 }
 
 function familyOf(name, tags = []) {
@@ -956,6 +971,7 @@ export function somaSnapshot(state) {
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),
     learnedControllability: controllabilitySnapshot(state.learnedControllability),
+    somaticNociceptive: somaticSnapshot(state.somaticNociceptive),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

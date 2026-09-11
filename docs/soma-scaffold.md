@@ -1067,3 +1067,43 @@ activity.
 
 This scaffold is complete when those absences remain visible rather than being
 filled with invented defaults.
+
+## Grounded somatic harm and noxious-input substrate
+
+`runner/somatic-nociceptive-substrate.js` is the sole persisted grounded store
+for post-installation somatic event facts. It accepts only the canonical
+`world.somatic` block of a structured environment record. It never reads the
+legacy Pain baseline, Pain impulses, the four-hour heuristic recovery, migrated
+experienced-state values, generated prose, appraisal values or brain mappings.
+
+The canonical record preserves stimulus identity, mechanical/thermal/chemical/
+other/unknown modality, onset, offset and active/ended/point/unknown status;
+categorical YES/NO/UNKNOWN noxious status; body site, laterality and certainty;
+CONFIRMED/THREATENED/NONE/UNKNOWN tissue damage; stable injury identity, type
+and ACTIVE/RESOLVED/UNKNOWN status; observation facts; knowledge status; source
+event identity; and field provenance. Missing information remains `UNKNOWN`,
+never `NONE`.
+
+Stimulus and injury lifetimes are independent. A stimulus ending does not close
+an injury. Confirmed tissue damage creates or updates only its named injury;
+only a structured resolution naming an existing injury can close it. There is
+no time-based healing rule. A structured tissue-damage status can classify the
+existing `PHYSICAL_HARM` outcome as occurred, did-not-occur or unknown, but that
+binary classification cannot invent a site, mechanism, type, severity,
+duration or subjective experience.
+
+The public Pain / Discomfort row remains `PROVISIONAL` because it still displays
+the old heuristic value. Its detail now contains the separate LIVE factual
+somatic/noxious-input status and event timeline instead of presenting a new
+numeric Pain history as grounded. The owner inspector exposes complete event
+traces and source identifiers. Subjective Pain, general discomfort integration,
+predictive Pain inference, injury healing, peripheral and central sensitisation,
+allodynia, hyperalgesia, nocifensive action, and brain activation all remain
+`NOT MODELLED`.
+
+The scientific scope and complete numerical inventory are in
+`config/model-specs/somatic-nociceptive-substrate.json`. The only added numeric
+choices are schema version 1, an arbitrary public display tail of 8 events, and
+an arbitrary 160-character identity validation limit. They are engineering
+choices, not biological or psychological parameters; there is no equation,
+coefficient, decay rate, threshold or clamp in the grounded substrate.

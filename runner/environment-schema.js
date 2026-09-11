@@ -7,6 +7,7 @@
 export const ENVIRONMENT_SCHEMA = 'cy.environment-event';
 export const ENVIRONMENT_SCHEMA_VERSION = 1;
 export const SOMA_INPUT_SCHEMA = 'cy.soma-input';
+export const SOMATIC_EVENT_SCHEMA = 'cy.somatic-event';
 
 const UNKNOWN = 'unknown';
 const FORBIDDEN_MODEL_OUTPUT_KEYS = new Set([
@@ -67,6 +68,28 @@ const BASE_WORLD = Object.freeze({
     },
     sleep: { state: UNKNOWN, interruption: UNKNOWN },
     environmental_discomfort: UNKNOWN,
+  },
+  somatic: {
+    schema: SOMATIC_EVENT_SCHEMA,
+    version: 1,
+    stimulus: {
+      id: null,
+      modality: 'UNKNOWN',
+      onset_at: null,
+      offset_at: null,
+      status: 'UNKNOWN',
+      noxious_stimulus: 'UNKNOWN',
+    },
+    body: { site: 'UNKNOWN', laterality: 'UNKNOWN', certainty: 'UNKNOWN' },
+    tissue: {
+      damage_status: 'UNKNOWN',
+      injury_id: null,
+      injury_type: 'UNKNOWN',
+      injury_status: 'UNKNOWN',
+      resolved_at: null,
+    },
+    knowledge_status: 'UNKNOWN',
+    field_provenance: {},
   },
   situation: {
     possible_harm: UNKNOWN,
@@ -131,14 +154,15 @@ const BASE_OBSERVATION = Object.freeze({
 export const REFERENCE_EVENT_ARCHETYPES = Object.freeze([
   { id: 'meal_expected', family: 'homeostasis', world: { physical: { food: { scheduled: 'yes', intake_outcome: 'expected' } }, situation: { predictability: 'routine', resolution_status: 'unresolved' } }, observation: { modality: 'direct' } },
   { id: 'meal', family: 'homeostasis', world: { situation: { predictability: 'routine' } }, observation: { modality: 'direct' } },
+  { id: 'somatic_event', family: 'physical', world: {}, observation: { modality: 'direct' } },
   { id: 'sleep_normal', family: 'homeostasis', world: { physical: { sleep: { state: 'sleep_period', interruption: 'none' } }, situation: { predictability: 'routine', resolution_status: 'resolved' } }, observation: { modality: 'direct' } },
   { id: 'sleep_interrupted', family: 'homeostasis', world: { physical: { sleep: { state: 'interrupted', interruption: 'present' } }, situation: { resolution_status: 'unresolved' } }, observation: { modality: 'direct' } },
   { id: 'forced_wakefulness', family: 'homeostasis', world: { physical: { sleep: { state: 'forced_wakefulness', interruption: 'present' } }, situation: { control: 'none', agency: 'institution', resolution_status: 'unresolved' } }, observation: { modality: 'direct', certainty: 'certain' } },
   { id: 'persistent_night_noise', family: 'environment', world: { physical: { environmental_discomfort: 'present', sleep: { state: UNKNOWN, interruption: 'possible' } }, situation: { predictability: 'persistent', resolution_status: 'unresolved' }, temporal: { onset: 'event', persistence: 'ongoing', recurrence: 'repeated' }, context: { location: 'cell' } }, observation: { modality: 'heard', certainty: 'certain' } },
-  { id: 'cell_search', family: 'custody', world: { physical: { injury: 'none', nociceptive_impact: 'none' }, situation: { possible_harm: 'possible', uncertainty: 'present', control: 'none', predictability: 'low', goal_obstruction: 'present', agency: 'officer', intent: 'unknown', resolution_status: 'resolved' }, context: { location: 'cell' }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }, { outcome_class: 'PHYSICAL_HARM', status: 'did_not_occur' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['COERCIVE_LOSS_OF_CONTROL', 'PHYSICAL_HARM'] } }, observation: { modality: 'direct', certainty: 'certain' } },
+  { id: 'cell_search', family: 'custody', world: { physical: { injury: 'none', nociceptive_impact: 'none' }, somatic: { tissue: { damage_status: 'NONE' }, knowledge_status: 'PARTIAL', field_provenance: { tissue_damage: 'STRUCTURED_WORLD_FACT' } }, situation: { possible_harm: 'possible', uncertainty: 'present', control: 'none', predictability: 'low', goal_obstruction: 'present', agency: 'officer', intent: 'unknown', resolution_status: 'resolved' }, context: { location: 'cell' }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }, { outcome_class: 'PHYSICAL_HARM', status: 'did_not_occur' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['COERCIVE_LOSS_OF_CONTROL', 'PHYSICAL_HARM'] } }, observation: { modality: 'direct', certainty: 'certain' } },
   { id: 'lockdown', family: 'custody', world: { situation: { possible_harm: UNKNOWN, uncertainty: 'present', control: 'none', predictability: 'low', goal_obstruction: 'present', agency: 'institution', intent: 'unknown', resolution_status: 'unresolved' }, context: { location: 'wing' }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }] }, defensive_context: { context_id: 'custody:lockdown', temporal_status: 'ONGOING', adverse_outcome_classes: ['COERCIVE_LOSS_OF_CONTROL'] } }, observation: { modality: 'direct', certainty: 'certain' } },
   { id: 'cancelled_activity', family: 'routine', world: { situation: { control: 'none', predictability: 'low', goal_obstruction: 'present', agency: 'institution', responsibility_evidence: UNKNOWN, intent: UNKNOWN, resolution_status: 'resolved', deprivation_outcome: 'missed' }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'occurred' }, { outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['DEPRIVATION_OR_LOSS', 'COERCIVE_LOSS_OF_CONTROL'] } }, observation: { modality: 'direct', certainty: 'certain' } },
-  { id: 'minor_injury', family: 'physical', world: { physical: { injury: 'minor', nociceptive_impact: 'minor', physical_discomfort: 'present' }, situation: { possible_harm: 'minor', resolution_status: UNKNOWN }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'PHYSICAL_HARM', status: 'occurred' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['PHYSICAL_HARM'] } }, observation: { modality: 'direct', certainty: 'certain' } },
+  { id: 'minor_injury', family: 'physical', world: { physical: { injury: 'minor', nociceptive_impact: 'minor', physical_discomfort: 'present' }, somatic: { tissue: { damage_status: 'CONFIRMED', injury_type: 'UNKNOWN', injury_status: 'ACTIVE' }, knowledge_status: 'PARTIAL', field_provenance: { tissue_damage: 'STRUCTURED_WORLD_FACT', injury_type: 'UNKNOWN', body_site: 'UNKNOWN', stimulus_modality: 'UNKNOWN' } }, situation: { possible_harm: 'minor', resolution_status: UNKNOWN }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'PHYSICAL_HARM', status: 'occurred' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['PHYSICAL_HARM'] } }, observation: { modality: 'direct', certainty: 'certain' } },
   { id: 'calm_routine', family: 'routine', world: { physical: { injury: 'none', nociceptive_impact: 'none', environmental_discomfort: 'none' }, situation: { possible_harm: 'none', uncertainty: 'none', control: 'limited', predictability: 'routine', novelty: 'none', goal_obstruction: 'none', resolution_status: 'resolved' } }, observation: { modality: 'direct', certainty: 'certain' } },
   { id: 'friendly_interaction', family: 'social', world: { situation: { possible_harm: 'none', social_contact: 'present', social_contact_quality: 'supportive', rejection_support: 'support', intent: 'supportive', resolution_status: 'resolved' }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'SOCIAL_HOSTILITY', status: 'did_not_occur' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['SOCIAL_HOSTILITY'] } }, observation: { modality: 'direct', certainty: 'probable' } },
   { id: 'hostile_interaction', family: 'social', world: { situation: { possible_harm: 'possible', social_contact: 'present', social_contact_quality: 'hostile', rejection_support: 'rejection', intent: 'hostile', resolution_status: UNKNOWN }, associative_learning: { linkage: 'self_contained_event', outcomes: [{ outcome_class: 'SOCIAL_HOSTILITY', status: 'occurred' }] }, defensive_context: { temporal_status: 'RESOLVED', adverse_outcome_classes: ['SOCIAL_HOSTILITY'] } }, observation: { modality: 'direct', certainty: 'probable' } },
@@ -180,6 +204,26 @@ export function createEnvironmentEvent(archetypeId, {
     world: merge(BASE_WORLD, merge(archetype.world || {}, world)),
     observation: merge(BASE_OBSERVATION, merge(archetype.observation || {}, observation)),
   };
+  if (event.world.somatic.tissue.damage_status === 'CONFIRMED'
+    && !event.world.somatic.tissue.injury_id) {
+    event.world.somatic.tissue.injury_id = `injury:${id}`;
+  }
+  if (event.world.somatic.stimulus.id && !event.world.somatic.stimulus.onset_at) {
+    event.world.somatic.stimulus.onset_at = timestamp;
+  }
+  const hasExplicitSomaticFacts = Object.prototype.hasOwnProperty.call(world || {}, 'somatic');
+  const damageOutcome = hasExplicitSomaticFacts ? ({
+    CONFIRMED: 'occurred',
+    NONE: 'did_not_occur',
+    THREATENED: 'unknown',
+  }[event.world.somatic.tissue.damage_status] || null) : null;
+  if (damageOutcome) {
+    const outcomes = event.world.associative_learning.outcomes;
+    const existingIndex = outcomes.findIndex((item) => item && item.outcome_class === 'PHYSICAL_HARM');
+    const derived = { outcome_class: 'PHYSICAL_HARM', status: damageOutcome };
+    if (existingIndex >= 0) outcomes[existingIndex] = derived;
+    else outcomes.push(derived);
+  }
   assertNoModelOutputs(event.world, 'world');
   assertNoModelOutputs(event.observation, 'observation');
   return event;
@@ -238,6 +282,7 @@ export function environmentEventToSomaInput(event) {
     defensive_context: deepClone(event.world.defensive_context),
     instrumental: deepClone(event.world.instrumental),
     action_opportunity: deepClone(event.world.action_opportunity),
+    somatic: deepClone(event.world.somatic),
   };
 }
 

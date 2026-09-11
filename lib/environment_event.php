@@ -153,6 +153,18 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Persists the canonical ingestion record and updates factual feeding-history indexes. It does not infer calories, physiology or appetite.',
             ];
+        } elseif (in_array($consumer, [
+            'somatic-event-model-v1',
+            'noxious-stimulus-representation-v1',
+            'injury-ledger-v1',
+            'computational-nociceptive-input-analogue-v1',
+        ], true)) {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Reads only structured somatic facts and preserves explicit unknowns. It calculates no subjective Pain, healing, sensitisation, action or brain activation.',
+            ];
         } elseif ($consumer === 'legacy-experienced-state-v2') {
             $consumers[] = [
                 'id' => $consumer,
@@ -217,6 +229,10 @@ function captive_environment_record_inspection(array $record, array $registry): 
         'what_feeding_ledger_did' => $record['feeding'] ?? [
             'status' => 'not_recorded',
             'detail' => 'This record is not a feeding event, predates the feeding ledger, or did not reach that consumer.',
+        ],
+        'what_somatic_noxious_substrate_did' => $record['somatic_nociceptive'] ?? [
+            'status' => 'not_recorded',
+            'detail' => 'This record has no structured somatic facts, predates the somatic substrate, or did not reach that consumer.',
         ],
         'what_systems_consumed_it' => [
             'consumers' => $consumers,

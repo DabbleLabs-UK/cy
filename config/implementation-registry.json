@@ -42,6 +42,7 @@
       "model_spec_id": null,
       "status_note": "Injury and discomfort plumbing exists, but the current magnitude and recovery rules are unapproved heuristics.",
       "data_dependencies": ["actual_harm", "nociceptive_impact", "physical_discomfort", "environmental_discomfort"],
+      "available_future_dependencies": ["somatic_event_model", "noxious_stimulus_representation", "injury_ledger", "computational_nociceptive_input_analogue"],
       "version": "legacy-experienced-state-v2"
     },
     {
@@ -246,6 +247,141 @@
       "version": null
     },
     {
+      "id": "somatic_event_model",
+      "display_name": "SOMATIC HARM EVENTS",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "structured-somatic-harm-ledger",
+      "status_note": "Canonical structured events preserve stimulus, body-site, tissue-harm, injury-status, observation and explicit unknown fields without assigning subjective Pain.",
+      "data_dependencies": ["structured_environment_event.somatic"],
+      "version": "somatic-nociceptive-substrate-v1",
+      "provenance": "config/model-specs/somatic-nociceptive-substrate.json"
+    },
+    {
+      "id": "noxious_stimulus_representation",
+      "display_name": "NOXIOUS STIMULUS REPRESENTATION",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "structured-somatic-harm-ledger",
+      "status_note": "Represents observed mechanical, thermal, chemical, other or unknown stimulus modality and categorical noxious status. It is a world-fact representation, not biological nociception.",
+      "data_dependencies": ["somatic_event_model"],
+      "version": "somatic-nociceptive-substrate-v1"
+    },
+    {
+      "id": "injury_ledger",
+      "display_name": "INJURY LEDGER",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "structured-somatic-harm-ledger",
+      "status_note": "Persists stable post-installation injury identities, origin, site, mechanism, status, follow-ups, resolution and provenance. No healing is inferred from elapsed time.",
+      "data_dependencies": ["somatic_event_model"],
+      "version": "somatic-nociceptive-substrate-v1"
+    },
+    {
+      "id": "computational_nociceptive_input_analogue",
+      "display_name": "COMPUTATIONAL NOCICEPTIVE INPUT ANALOGUE",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "structured-somatic-harm-ledger",
+      "status_note": "A functional computational analogue that carries structured noxious-input facts. Cy has no biological nociceptors, and this is neither nociception nor subjective Pain.",
+      "data_dependencies": ["noxious_stimulus_representation", "injury_ledger"],
+      "version": "somatic-nociceptive-substrate-v1"
+    },
+    {
+      "id": "injury_healing_dynamics",
+      "display_name": "INJURY HEALING DYNAMICS",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Elapsed time never heals an injury. Resolution requires an explicit structured follow-up naming the stable injury identity.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["injury_ledger"],
+      "version": null
+    },
+    {
+      "id": "subjective_pain",
+      "display_name": "SUBJECTIVE PAIN",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No model converts noxious input or injury facts into a subjective Pain experience. The separate public Pain / Discomfort value remains a provisional legacy heuristic.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["computational_nociceptive_input_analogue", "injury_ledger"],
+      "version": null
+    },
+    {
+      "id": "general_discomfort_integration",
+      "display_name": "GENERAL DISCOMFORT INTEGRATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No grounded model combines injury, environmental discomfort, hunger, fatigue or other bodily facts into a general discomfort state.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "predictive_pain_inference",
+      "display_name": "PREDICTIVE PAIN INFERENCE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No Bayesian, predictive-processing or reinforcement-learning model of Pain perception is implemented.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "peripheral_sensitisation",
+      "display_name": "PERIPHERAL SENSITISATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Repeated events do not change peripheral gain, thresholds or later responses.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "central_sensitisation",
+      "display_name": "CENTRAL SENSITISATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Repeated events do not change central gain, thresholds or later responses; allodynia and hyperalgesia are not modelled.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "nocifensive_action_model",
+      "display_name": "NOCIFENSIVE ACTION MODEL",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Noxious-input and injury facts do not select withdrawal, guarding, avoidance or any other action.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "insula_nociceptive_analogy",
+      "display_name": "INSULA NOCICEPTIVE ANALOGY",
+      "implementation_status": "PROVISIONAL",
+      "model_spec_id": null,
+      "status_note": "Somatic input is an available future dependency only. No insula activation is derived from it.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["computational_nociceptive_input_analogue", "subjective_pain"],
+      "ui_exposed": false,
+      "version": null
+    },
+    {
+      "id": "acc_pain_affect_analogy",
+      "display_name": "ACC PAIN-AFFECT ANALOGY",
+      "implementation_status": "PROVISIONAL",
+      "model_spec_id": null,
+      "status_note": "No subjective Pain, Pain affect or anterior-cingulate activation mapping is implemented.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["subjective_pain"],
+      "ui_exposed": false,
+      "version": null
+    },
+    {
+      "id": "pag_pain_modulation_analogy",
+      "display_name": "PAG PAIN-MODULATION ANALOGY",
+      "implementation_status": "PROVISIONAL",
+      "model_spec_id": null,
+      "status_note": "No descending Pain modulation or PAG activation mapping is implemented.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["subjective_pain", "nocifensive_action_model"],
+      "ui_exposed": false,
+      "version": null
+    },
+    {
       "id": "feeding_event_model",
       "display_name": "FEEDING / INTAKE EVENTS",
       "implementation_status": "IMPLEMENTED",
@@ -416,7 +552,7 @@
       "model_spec_id": null,
       "status_note": "Intended to represent interoceptive processing. Feeding input history is now available as a future dependency, but no internal physiological or gut state is modelled. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
       "data_dependencies": ["pain", "hunger", "arousal", "interoception"],
-      "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety"],
+      "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety", "computational_nociceptive_input_analogue", "subjective_pain"],
       "version": "legacy-brain-map-v1"
     },
     {
@@ -436,6 +572,7 @@
       "model_spec_id": null,
       "status_note": "The live threat learner provides expected outcome, uncertainty, and outcome surprisal as possible future dependencies, but no approved anterior-cingulate mapping exists. The older displayed mapping remains an unapproved linear heuristic and is not shown as live activation.",
       "data_dependencies": ["expected_outcome", "uncertainty", "outcome_surprisal", "rumination", "pain", "goal_obstruction", "control"],
+      "available_future_dependencies": ["computational_nociceptive_input_analogue", "subjective_pain"],
       "version": "legacy-brain-map-v1"
     },
     {

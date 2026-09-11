@@ -119,6 +119,14 @@ export function createSomaRuntime(rawState, {
       });
       return result;
     },
+    observeSomaticRecord(record) {
+      let result = null;
+      mutate('somatic and noxious-input ledger', (current) => {
+        result = engine.observeSomaSomaticRecord(current, record);
+        return current;
+      });
+      return result;
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

@@ -368,6 +368,24 @@ export function openInstrumentalOpportunity(state, {
       text: situationText,
       world: {
         participants: { actor: cleanActorKey, target: 'cy', relationship_ref: cleanActorKey },
+        ...(definition.openingArchetypeId === 'cell_search' ? {
+          physical: {
+            injury: 'unknown',
+            nociceptive_impact: 'unknown',
+            physical_discomfort: 'unknown',
+          },
+          somatic: {
+            tissue: {
+              damage_status: 'UNKNOWN',
+              injury_id: null,
+              injury_type: 'UNKNOWN',
+              injury_status: 'UNKNOWN',
+              resolved_at: null,
+            },
+            knowledge_status: 'UNKNOWN',
+            field_provenance: { tissue_damage: 'UNKNOWN_AT_OPPORTUNITY_OPEN' },
+          },
+        } : {}),
         situation: {
           control: 'limited',
           agency: definition.sourceKind === 'officer' ? 'officer' : cleanActorKey,
