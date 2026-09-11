@@ -142,6 +142,8 @@ assert.match(source, /this\._wireCircadian\(entry\)/);
 assert.match(source, /closeOtherReadings\([\s\S]*?details\.soma-state-entry, details\.soma-region-entry/,
   'Soma metrics and brain regions participate in one single-open accordion');
 assert.match(source, /buildHistoryUrl\(this\.historyUrl, scope, key, range\)/);
+assert.match(source, /THREAT AND CONTROL DETAILS[\s\S]*?\$\{threatLearning\}\$\{defensiveContext\}\$\{learnedControllability\}/,
+  'the three detailed Anxiety subsystems remain available behind one secondary disclosure');
 assert.doesNotMatch(
   source,
   /fetch\(buildHistoryUrl\([^\n]+\), \{ cache: 'no-store' \}\)/,

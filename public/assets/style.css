@@ -787,6 +787,9 @@ body.cy-paused::after {
   gap: 6px; align-items: center; text-align: left; cursor: pointer; list-style: none;
 }
 .soma-state-row::-webkit-details-marker { display: none; }
+.soma-state-entry > .soma-state-row,
+.soma-state-entry > .soma-state-row * { cursor: pointer; }
+.soma-state-row:hover { background: rgba(56, 82, 103, 0.18); }
 .soma-state-row::before { content: '+'; position: absolute; left: 2px; top: 5px; color: #718796; font-size: 9px; }
 .soma-state-entry[open] > .soma-state-row::before { content: '-'; }
 .soma-state-row:hover .soma-state-label,

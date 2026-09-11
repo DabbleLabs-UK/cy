@@ -527,6 +527,9 @@ export class BrainHud {
           this.admin,
         )
         : '';
+      const anxietyGrounding = definition.key === 'anxiety'
+        ? `<details class="soma-substrate-more"><summary>THREAT AND CONTROL DETAILS</summary>${threatLearning}${defensiveContext}${learnedControllability}</details>`
+        : '';
       const feeding = definition.key === 'hunger'
         ? feedingMarkup(
           this.feedingStatus,
@@ -563,7 +566,7 @@ export class BrainHud {
         : '';
       const numericHistory = ['pain', 'loneliness'].includes(definition.key) ? '' : historyMarkup();
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${threatLearning}${defensiveContext}${learnedControllability}${feeding}${sleepHomeostasis}${socialContact}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       if (definition.key === 'fatigue') this._wireCircadian(entry);
