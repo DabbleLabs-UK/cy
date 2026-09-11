@@ -94,17 +94,25 @@ observeSoma(hungry, {
 tickSoma(hungry, { asleep: false, now: t0 + 16 * 3600000 });
 assert.equal(hungry.attention.source, 'body:hunger');
 assert.equal(chooseSomaAction(hungry, { canDraw: false, now: t0 + 16 * 3600000 + 1 }).name, 'attend_body');
+assert.match(somaDirective(hungry), /body-derived attention was not sent/);
+assert.doesNotMatch(somaDirective(hungry), /food has become impossible to ignore/i);
 const before = soma.drives.understanding;
 completeSomaAction(soma, 'investigate');
 assert.ok(soma.drives.understanding < before);
 
 const directive = somaDirective(soma);
-assert.match(directive, /computed before language/);
-assert.match(directive, /related lived memory/);
-assert.match(directive, /EXPERIENCED STATE/);
+assert.match(directive, /<PROVISIONAL_COGNITIVE_SELECTION>/);
+assert.match(directive, /selected episodic-memory item/);
+assert.doesNotMatch(directive, /EXPERIENCED STATE/);
 assert.doesNotMatch(directive, /(?:anxiety|arousal|pain|hunger|fatigue|loneliness|anger|rumination)\s+\d+/i);
 const sampling = somaSampling(soma);
-assert.ok(sampling.temperature >= 0.58 && sampling.temperature <= 1.05);
+assert.deepEqual(sampling, {
+  temperature: 0.72,
+  top_p: 0.86,
+  repeat_penalty: 1.18,
+  repeat_last_n: 160,
+  num_predict: 62,
+});
 const legacyHot = {
   cognition: soma,
   mental: { anxiety: 1, stress: 1, despair: 1, hope: 0, lucidity: 0, agitation: 1, dissociation: 1, anger: 1, longing: 1 },
@@ -112,7 +120,7 @@ const legacyHot = {
   derived: { confusion: 1, overwhelm: 1, numbness: 1, paranoia: 1, fixation: 1, resignation: 1, brittleness: 1 },
 };
 const liveDirectives = buildDirectives(legacyHot, 'journal', { soma: directive });
-assert.match(liveDirectives, /SOMA - computed before language/);
+assert.match(liveDirectives, /<PROVISIONAL_COGNITIVE_SELECTION>/);
 assert.doesNotMatch(liveDirectives, /STATE:|RIGHT NOW:/);
 assert.deepEqual(
   Object.fromEntries(Object.entries(options(legacyHot, 2, 'journal')).filter(([key]) => key !== 'stop' && key !== 'num_ctx' && key !== 'num_thread')),

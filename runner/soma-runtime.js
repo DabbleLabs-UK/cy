@@ -165,6 +165,27 @@ export function createSomaRuntime(rawState, {
         return '';
       }
     },
+    provisionalDirective() {
+      if (failure || !state) return '';
+      try {
+        return engine.provisionalCognitiveDirective(state);
+      } catch (error) {
+        disable('provisional cognitive prompt context', error);
+        return '';
+      }
+    },
+    groundedDirective(options) {
+      try {
+        return engine.groundedSomaDirective(failure ? null : state, options);
+      } catch (error) {
+        disable('grounded Soma prompt context', error);
+        try {
+          return engine.groundedSomaDirective(null, options);
+        } catch {
+          return { context: null, directive: '' };
+        }
+      }
+    },
     snapshot() {
       if (failure || !state) {
         return {

@@ -74,7 +74,7 @@
   "causal_limit": "The estimates are observational. Cy's choices are not randomly assigned, so differences can be confounded by context, actor, opportunity and prior situation. Causal control is not established.",
   "state_lifecycle": "Complete post-installation opportunities and exact posterior updates persist in Soma state. No prose backfill, forgetting, decay, recency weighting or arbitrary time window is used.",
   "public_boundary": "Public output contains exact aggregate posteriors, counts, means, variances and contingency differences, but not opportunity IDs or source event IDs. Owner inspection contains the complete trace.",
-  "soma_boundary": "The ledger is accessible in Soma state but does not alter Anxiety, Arousal, Anger, Rumination, action selection, prompts, generated prose or brain-region activation.",
+  "soma_boundary": "The ledger is accessible in Soma state. Matching current-context observational evidence may enter the grounded prose prompt with its causal limitation preserved, but it does not alter Anxiety, Arousal, Anger, Rumination, action selection or brain-region activation.",
   "numeric_inventory": [
     { "name": "alpha_0", "value": 1, "classification": "CONVENTIONAL STATISTICAL PRIOR; not an empirical psychological constant" },
     { "name": "beta_0", "value": 1, "classification": "CONVENTIONAL STATISTICAL PRIOR; not an empirical psychological constant" },
@@ -97,7 +97,7 @@
     "Pavlovian-instrumental arbitration",
     "action selection from control",
     "anxiety or other affect effects",
-    "prompt or prose effects",
+    "subjective or emotional interpretation of evidence supplied to the language model",
     "vmPFC or other neural activation"
   ]
 }

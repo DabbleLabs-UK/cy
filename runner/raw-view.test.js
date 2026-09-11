@@ -113,7 +113,14 @@ globalThis.fetch = async (url) => {
       now: 1000,
       events: [
         { seq: 998, ts: '2026-09-10 10:02:00', kind: 'text', payload: { s: 'token' } },
-        { seq: 999, ts: '2026-09-10 10:02:01', kind: 'gen', payload: { mode: 'journal' } },
+        {
+          seq: 999, ts: '2026-09-10 10:02:01', kind: 'gen', payload: {
+            mode: 'journal',
+            grounded_soma_directive: '<GROUNDED_CURRENT_STATE>fact</GROUNDED_CURRENT_STATE>',
+            grounded_soma_context: { omitted: [{ subsystem: 'somatic', reason: 'NO_ACTIVE' }] },
+            provisional_cognitive_directive: '<PROVISIONAL_COGNITIVE_SELECTION>selection</PROVISIONAL_COGNITIVE_SELECTION>',
+          },
+        },
         { seq: 1000, ts: '2026-09-10 10:02:02', kind: 'event', payload: { name: 'association' } },
       ],
     }),
@@ -132,6 +139,16 @@ assert.equal(requests[0], '/stream?since=-100&limit=100', 'opening diagnostics r
 assert.equal(raw.rowCount(), 3, 'only the bounded recent response is rendered');
 assert.ok(raw.log().children[0]._classes.has('filtered'), 'high-volume text tokens are hidden by default');
 assert.equal(raw.olderBtn().disabled, false, 'older diagnostics are available explicitly');
+
+const genRow = raw.log().children.find((row) => row.dataset.kind === 'gen');
+genRow.children[0].dispatchEvent({ type: 'click', target: null });
+const allText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => {
+  const walk = (item) => [item.textContent, ...(item.children || []).flatMap(walk)];
+  return walk(child);
+})].join('\n');
+assert.match(allText(genRow), /GROUNDED SOMA CONTEXT SENT TO MODEL/);
+assert.match(allText(genRow), /GROUNDED SOMA INFORMATION OMITTED/);
+assert.match(allText(genRow), /PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL/);
 
 raw.olderBtn().dispatchEvent({ type: 'click' });
 await new Promise((resolve) => setImmediate(resolve));

@@ -9,7 +9,7 @@
 // and LEGACY unless the comment at that section says it is operational plumbing.
 
 import { BY_KEY, CAST, OFFICERS } from './cast.js';
-import { somaSampling } from './soma.js';
+import { ENGINEERING_DEFAULT_SAMPLING, somaSampling } from './soma.js';
 
 export const NUM_CTX = 3072;
 
@@ -443,7 +443,8 @@ export function dreamSampling(v) {
 // cache. This builds the block; buildPrompt() places it last. ctx carries the
 // contextual injections assembled by the loop:
 //   { bans, regime, cast, grudge, officer, overheard, wingnoise, visitor,
-//     amplified, warden, cost, incidents, length, form } - any may be omitted/empty.
+//     amplified, warden, cost, incidents, groundedSoma,
+//     provisionalCognition, length, form } - any may be omitted/empty.
 export function buildDirectives(v, mode, ctx = {}) {
   // DREAM is a wholly separate branch. It shares only the persona/voice in the
   // cached Zone A; NONE of the waking Zone C directives (state style, form, one-
@@ -497,7 +498,10 @@ export function buildDirectives(v, mode, ctx = {}) {
   // still reads reasonably fresh, but ahead of the every-burst tail so a burst with
   // no new incident reuses it from cache instead of re-evaluating it.
   if (ctx.incidents) parts.push(ctx.incidents);
-  if (ctx.soma) parts.push(ctx.soma);
+  if (ctx.groundedSoma) parts.push(ctx.groundedSoma);
+  if (ctx.provisionalCognition) parts.push(ctx.provisionalCognition);
+  // Compatibility only. New runner paths use the explicitly named sections.
+  if (ctx.soma && !ctx.provisionalCognition) parts.push(ctx.soma);
   // TIER 2 - ONE-SHOT CUES: present in only the single burst they fire, absent the
   // rest. Placed AFTER the stable tier so their appearance/disappearance only ever
   // invalidates from here on, never the stable prefix above.
@@ -562,13 +566,7 @@ export function sampling(v) {
   // If Soma is unavailable, keep language generation alive with a neutral fixed
   // profile. Legacy mood scalars are diagnostics/placeholders and must not become
   // a second hidden behavioural brain merely because the real state failed.
-  return {
-    temperature: 0.72,
-    top_p: 0.86,
-    repeat_penalty: 1.18,
-    repeat_last_n: 160,
-    num_predict: 62,
-  };
+  return { ...ENGINEERING_DEFAULT_SAMPLING };
 }
 
 // num_predict for a letter reply, from the sender's word count.
@@ -577,11 +575,12 @@ export function letterPredict(senderText) {
   return Math.max(40, Math.min(220, Math.round(words * 1.4)));
 }
 
-// Soma chooses the intended amount of expression. The provider needs a larger
-// technical ceiling than that intended length, otherwise it repeatedly reaches
-// num_predict in the middle of a word. Tell the model where to stop, then leave
-// enough headroom for it to finish naturally. The stream still has a hard-cap
-// guard in case a small model ignores this instruction.
+// The static waking baseline or the postcard word-count rule supplies the
+// intended amount of expression. The provider needs a larger technical ceiling
+// than that intended length, otherwise it repeatedly reaches num_predict in the
+// middle of a word. Tell the model where to stop, then leave enough headroom for
+// it to finish naturally. The stream still has a hard-cap guard in case a small
+// model ignores this instruction.
 export function completionDirective(targetTokens) {
   const target = Math.max(16, Number(targetTokens) || 62);
   const words = Math.max(10, Math.round(target * 0.68));

@@ -343,8 +343,9 @@ These are observational associations from Cy's naturally occurring choices,
 not causal proof. Context generalisation, perceived control, causal control,
 helplessness, coping efficacy, resilience, the full Huys-Dayan model, the
 Dorfman-Gershman Bayesian controllability comparison and action arbitration are
-NOT MODELLED. The ledger does not alter Anxiety, any other affect, action
-selection, prompts, prose or neural analogies.
+NOT MODELLED. Matching current-context evidence can enter the grounded prose
+projection as an explicitly observational record. The ledger does not alter
+Anxiety, any other affect, action selection or neural analogies.
 
 The complete post-installation opportunity and exact before/after posterior
 history persists in Soma state. Public output shows exact aggregate evidence
@@ -564,9 +565,11 @@ structured event IDs and the complete ledger are omitted from the public
 snapshot. The owner-only inspector reconstructs the full exact ledger and its
 source IDs from `environment_events`, alongside the latest continuity snapshot.
 
-Soma can read the factual `feeding` snapshot. It is not included in the prompt,
-does not say that Cy is hungry, and does not affect language, appraisal,
-attention, action selection, brain activation or the legacy Hunger number.
+Soma can read the factual `feeding` snapshot. Known intake, recent meal and
+observation-continuity facts can enter the grounded prose projection with their
+epistemic status. The projection does not say that Cy is hungry. Feeding does
+not create an appraisal, select attention or action, activate a brain analogy,
+or alter the legacy Hunger number.
 
 ### Uninstantiated homeostatic framework
 
@@ -973,7 +976,11 @@ not approved region computations.
 
 A repeated generated burst increases retry temperature by 0.35, repeat penalty
 by 0.12, and legacy stress by 0.06; both sampling controls cap at 1.60. These are
-PROVISIONAL loop/rendering rules, not LLM-assigned emotional scores.
+PROVISIONAL loop/rendering rules, not LLM-assigned emotional scores. Baseline
+waking sampling no longer varies with provisional experienced-state, drive,
+attention or prediction-error values. It uses the existing provider/project
+profile (temperature 0.72, top-p 0.86, repeat penalty 1.18, repeat-last-n 160,
+target 62 tokens), classified as an ENGINEERING DEFAULT.
 
 Environment occurrence probabilities per 5-second tick are injury 0.0006, cell
 search 0.0008, lockdown 0.0005, trivial irritation 0.004, social interaction
@@ -1067,6 +1074,28 @@ activity.
 
 This scaffold is complete when those absences remain visible rather than being
 filled with invented defaults.
+
+## Grounded Soma to prose boundary
+
+`runner/grounded-prose-context.js` projects selected current facts from the LIVE
+grounded substrates into a compact, versioned prompt block. It does not combine
+them into an emotion, need, salience, action probability or behavioural score.
+Every entry is labelled OBSERVED FACT, MODEL ESTIMATE, LEARNED STATISTICAL
+EXPECTATION, SCHEDULE ESTIMATE, UNKNOWN or NOT MODELLED. Inactive sections are
+omitted by categorical state, and each omission is recorded for the owner
+inspector. Heuristic attention, episodic retrieval, prediction mismatch and
+output-action selection are placed in a separately labelled PROVISIONAL
+COGNITIVE SELECTION block.
+
+The grounded Soma computes and records what can be justified from Cy's
+simulated world and approved models. The language model performs Cy's subjective
+expression of that state. Generated expression is not treated as measurement of
+the underlying state.
+
+Cy's brain display is deliberately a functional analogy, not a fake brain scan.
+Real psychological and bodily processes are distributed across interacting
+systems, so the project avoids inventing single centres or precise-looking
+activation where the model does not justify one.
 
 ## Grounded somatic harm and noxious-input substrate
 

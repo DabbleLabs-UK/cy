@@ -12,8 +12,9 @@ import {
   observeExperiencedOutput,
   tickExperienced,
   experiencedSnapshot,
-  experiencedDirective,
 } from './experienced-state.js';
+
+import { groundedProseDirective } from './grounded-prose-context.js';
 
 import { somaImplementationStatus } from './implementation-registry.js';
 import {
@@ -281,8 +282,9 @@ export function observeSomaFeedingRecord(state, record) {
   return applyFeedingRecord(state.feeding, record);
 }
 
-// This learner consumes only explicit structured action opportunities. Its
-// observational evidence does not alter affect, prose or action selection.
+// This learner consumes only explicit structured action opportunities. Matching
+// current-context evidence can be projected factually into the language prompt,
+// but it does not calculate affect or select an action.
 export function observeSomaControllabilityRecord(state, record) {
   if (!state || !record) return null;
   return applyControllabilityRecord(state.learnedControllability, record);
@@ -711,8 +713,9 @@ export function tickSoma(state, {
   tickSleepHomeostasis(state.sleepHomeostasis, { now, asleep: sleepHomeostasisAsleep });
 
   // Grounded Process C is evaluated from clock time and the configured habitual
-  // prison schedule. It remains separate from provisional fatigue and has no
-  // language, action-selection, mood, or brain-activation effect.
+  // prison schedule. It remains separate from provisional fatigue. Its estimate
+  // can enter the factual prompt projection, but it does not calculate mood,
+  // select an action or activate a brain analogy.
   tickCircadianProcessC(state.circadianProcessC, {
     now,
     habitualWakeMinutes: habitualWakeMinutes(PRISON_SCHEDULE),
@@ -902,57 +905,59 @@ export function completeSomaAction(state, name) {
   if (name === 'silence' || name === 'rest') state.drives.rest = round(state.drives.rest * 0.82);
 }
 
-export function somaDirective(state) {
+export function provisionalCognitiveDirective(state) {
   if (!state) return '';
   const lines = [
-    'SOMA - computed before language; this is material and a selected action, not wording to imitate:',
-    `- action selected: ${state.action.name} (${state.action.reason})`,
+    '<PROVISIONAL_COGNITIVE_SELECTION>',
+    'This section is heuristic selection, not grounded observation, measured emotion or bodily state.',
+    `- [PROVISIONAL HEURISTIC] output action selected: ${state.action.name}`,
   ];
-  lines.push(experiencedDirective(state.experienced));
-  if (state.attention && state.attention.text) {
-    lines.push(`- what presently has attention: ${state.attention.text}`);
+  if (state.attention && state.attention.text
+    && !String(state.attention.source || '').startsWith('body:')) {
+    lines.push(`- [PROVISIONAL HEURISTIC] selected attention text: ${state.attention.text}`);
+  } else if (state.attention && String(state.attention.source || '').startsWith('body:')) {
+    lines.push('- [PROVISIONAL HEURISTIC OMITTED] body-derived attention was not sent because its source is an ungrounded experienced-state metric.');
   }
-  const pressures = [];
-  if (state.drives.safety > 0.55) pressures.push('danger or lost control should colour what is noticed');
-  if (state.drives.food > 0.62) pressures.push('bodily deprivation is competing for attention');
-  if (state.drives.rest > 0.68) pressures.push('fatigue favours less output');
-  if (state.drives.contact > 0.58) pressures.push('contact with another person remains salient');
-  if (pressures.length) lines.push(`- active pressure: ${pressures.slice(0, 2).join('; ')}`);
   const selected = selectedEpisode(state);
   if (selected && state.memory.selectedActivation >= RELATED_MEMORY_MIN) {
     const who = selected.entities && selected.entities.length ? ` involving ${selected.entities.join(', ')}` : '';
-    lines.push(`- related lived memory${who}: ${selected.text}`);
+    lines.push(`- [PROVISIONAL HEURISTIC] selected episodic-memory item${who}: ${selected.text}`);
   }
   if (state.prediction.error > 0.35 && state.prediction.lastObserved) {
-    lines.push(`- an expectation was violated: ${state.prediction.lastExpected || 'something else'} was expected next; ${state.prediction.lastObserved} happened`);
+    lines.push(`- [PROVISIONAL HEURISTIC] selected prediction mismatch: ${state.prediction.lastExpected || 'something else'} was expected next; ${state.prediction.lastObserved} happened`);
   }
   if (state.action.name === 'investigate') {
-    lines.push(`- unresolved self-question: ${state.selfModel.question}`);
-  }
-  if (state.action.name === 'attend_body') {
-    lines.push('- bodily need has won attention; begin from what the body interrupts or makes hard to ignore');
+    lines.push(`- [PROVISIONAL HEURISTIC] selected self-question: ${state.selfModel.question}`);
   }
   if (state.expression && state.expression.themes && state.expression.themes.length) {
-    lines.push(`- recent own wording kept returning to: ${state.expression.themes.slice(0, 4).join(', ')}; this is expression, not proof those things happened`);
+    lines.push(`- [GENERATED EXPRESSION, NOT EVIDENCE] recent wording themes: ${state.expression.themes.slice(0, 4).join(', ')}`);
   }
-  lines.push('Choose your own words. Do not name a score or pretend you were told to feel something.');
+  lines.push('Use these only for continuity and output form. Do not treat them as facts about the world or Cy\'s subjective state.');
+  lines.push('</PROVISIONAL_COGNITIVE_SELECTION>');
   return lines.join('\n');
 }
 
-export function somaSampling(state) {
-  const c = (state && state.circuits) || {};
-  const action = (state && state.action && state.action.name) || 'observe';
-  const temperature = clamp(0.64 + 0.22 * clamp(c.predictionError) + 0.12 * (1 - clamp(c.attention)), 0.58, 1.05);
-  const lengths = { investigate: 105, remember: 90, connect: 80, attend_body: 58, draw: 45, write: 78, observe: 62 };
-  const pressure = Math.max(clamp(state && state.drives && state.drives.rest), clamp(state && state.drives && state.drives.food));
-  const predicted = Math.round((lengths[action] || 70) * (1 - 0.42 * pressure));
-  return {
-    temperature: Number(temperature.toFixed(3)),
-    top_p: Number(clamp(0.84 + 0.1 * clamp(c.predictionError), 0.8, 0.95).toFixed(3)),
-    repeat_penalty: Number((1.14 + 0.1 * clamp(c.attention)).toFixed(3)),
-    repeat_last_n: 160,
-    num_predict: Math.max(28, predicted),
-  };
+// ENGINEERING DEFAULT. This is the existing neutral provider/project baseline.
+// It is intentionally static: provisional psychological metrics and heuristic
+// action selection do not alter sampling or response length.
+export const ENGINEERING_DEFAULT_SAMPLING = Object.freeze({
+  temperature: 0.72,
+  top_p: 0.86,
+  repeat_penalty: 1.18,
+  repeat_last_n: 160,
+  num_predict: 62,
+});
+
+export function somaSampling() {
+  return { ...ENGINEERING_DEFAULT_SAMPLING };
+}
+
+export function somaDirective(state) {
+  return provisionalCognitiveDirective(state);
+}
+
+export function groundedSomaDirective(state, options) {
+  return groundedProseDirective(state, options);
 }
 
 export function somaSnapshot(state) {

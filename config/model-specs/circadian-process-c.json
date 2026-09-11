@@ -111,6 +111,7 @@
     "meals_activity_postcards_and_noise_as_phase_shifters": "NOT MODELLED",
     "direct_biological_phase": "NOT OBSERVED",
     "scn_neuronal_firing": "NOT MODELLED",
-    "behavioural_and_language_effects": "NOT MODELLED"
+    "subjective_or_behavioural_mapping": "NOT MODELLED",
+    "grounded_prompt_projection": "The schedule-estimated Process C value and uncertainty may be supplied factually to the language model; no subjective Fatigue or other state is inferred."
   }
 }

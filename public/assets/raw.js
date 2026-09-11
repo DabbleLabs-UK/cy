@@ -528,6 +528,22 @@ function burstDetail(ev, drops) {
 
   // --- PROMPT ---
   const promptSec = section('PROMPT');
+  promptSec.appendChild(zoneBlock(
+    'GROUNDED SOMA CONTEXT SENT TO MODEL',
+    'LIVE factual/model evidence with explicit epistemic status',
+    p.grounded_soma_directive,
+  ));
+  promptSec.appendChild(zoneBlock(
+    'GROUNDED SOMA INFORMATION OMITTED',
+    'categorical compaction decisions for this generation',
+    p.grounded_soma_context && p.grounded_soma_context.omitted
+      ? JSON.stringify(p.grounded_soma_context.omitted, null, 2) : null,
+  ));
+  promptSec.appendChild(zoneBlock(
+    'PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL',
+    'heuristic memory, attention and output-action selection; not grounded state',
+    p.provisional_cognitive_directive,
+  ));
   promptSec.appendChild(zoneBlock('ZONE A', 'voice / fixed (cached prefix)', p.zone_a));
   promptSec.appendChild(zoneBlock('ZONE B', 'context - Cy\'s fed-back prose', p.zone_b));
   promptSec.appendChild(zoneBlock('ZONE C', 'directives - volatile, rebuilt per burst', p.zone_c));
@@ -713,6 +729,17 @@ function burstPlain(ev, drops) {
   const p = ev.payload || {};
   const L = [];
   L.push(`=== BURST  seq #${ev.seq}  ${ev.ts || ''}  mode=${p.mode || '?'} ===`);
+  L.push('');
+  L.push('GROUNDED SOMA CONTEXT SENT TO MODEL');
+  L.push(p.grounded_soma_directive != null ? String(p.grounded_soma_directive) : '(not emitted)');
+  L.push('');
+  L.push('GROUNDED SOMA INFORMATION OMITTED');
+  L.push(p.grounded_soma_context && p.grounded_soma_context.omitted
+    ? JSON.stringify(p.grounded_soma_context.omitted, null, 2) : '(not emitted)');
+  L.push('');
+  L.push('PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL');
+  L.push(p.provisional_cognitive_directive != null
+    ? String(p.provisional_cognitive_directive) : '(not emitted)');
   L.push('');
   L.push(`ZONE A [${len(p.zone_a)} chars] - voice / fixed`);
   L.push(p.zone_a != null ? String(p.zone_a) : '(not emitted)');

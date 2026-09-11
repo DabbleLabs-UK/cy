@@ -97,6 +97,7 @@
     "legacy_pain_impulses": "not read",
     "legacy_pain_decay": "not read",
     "legacy_migration_values": "not read",
-    "language_affect_or_action_effect": "none"
+    "grounded_prompt_projection": "Active stimulus and injury facts may be supplied factually to the language model.",
+    "subjective_affect_or_action_mapping": "none"
   }
 }

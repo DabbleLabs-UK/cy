@@ -51,7 +51,9 @@ assert.equal(runtime.state.currentDefensiveContext.contexts['search:integration|
 assert.equal(JSON.stringify({ appraisal: runtime.state.appraisal, experienced: runtime.state.experienced }),
   emotionsBeforeContext, 'K: current defensive context does not calculate emotional state');
 assert.equal(runtime.directive(), directiveBeforeContext,
-  'K: current defensive context does not alter prompts or selected behaviour');
+  'K: current defensive context does not alter the provisional cognitive directive');
+assert.match(runtime.groundedDirective({ now: t0 + 1000 }).directive, /search:integration/,
+  'current defensive facts enter the separate grounded directive');
 
 const controllableMeal = createEnvironmentRecord(createEnvironmentEvent('meal', {
   id: 'env-controllable-meal', timestamp: '2026-09-10 12:00:01.500',
@@ -97,7 +99,9 @@ assert.equal(runtime.state.feeding.lastKnownIntakeEventId, 'env-grounded-meal');
 assert.equal(JSON.stringify(runtime.state.experienced.metrics.hunger), hungerBeforeMeal,
   'grounded ingestion does not modify the provisional Hunger value');
 assert.equal(runtime.directive(), directiveBeforeMeal,
-  'grounded ingestion does not inject Hunger language or alter action selection');
+  'grounded ingestion does not alter the provisional cognitive directive');
+assert.match(runtime.groundedDirective({ now: t0 + 2000 }).directive, /FULLY_CONSUMED/,
+  'grounded intake enters the separate factual directive without a Hunger claim');
 
 runtime.observe({
   name: 'cell_search',
@@ -152,19 +156,25 @@ const generation = prepareSomaGeneration(runtime, {
   },
 });
 const vitals = { cognition: runtime.state };
-const zoneC = buildDirectives(vitals, 'journal', { soma: generation.directive });
+const zoneC = buildDirectives(vitals, 'journal', {
+  groundedSoma: generation.groundedDirective,
+  provisionalCognition: generation.provisionalDirective,
+});
 const prompt = buildPrompt('', 'journal', null, zoneC);
-assert.match(prompt, /SOMA - computed before language/);
-assert.match(prompt, /action selected:/);
-assert.match(prompt, /related lived memory/);
-assert.match(prompt, /officer was expected next/i);
-assert.ok(prompt.indexOf('SOMA - computed before language') > prompt.indexOf('ONE THING'));
+assert.match(prompt, /<GROUNDED_CURRENT_STATE>/);
+assert.match(prompt, /<PROVISIONAL_COGNITIVE_SELECTION>/);
+assert.match(prompt, /output action selected:/);
+assert.match(prompt, /selected episodic-memory item/);
+assert.match(prompt, /was expected next/i);
+assert.ok(prompt.indexOf('<GROUNDED_CURRENT_STATE>') > prompt.indexOf('ONE THING'));
 
 const appraisalBeforeOutput = { ...runtime.state.appraisal };
 const threatBeforeOutput = JSON.stringify(runtime.state.threatLearning);
 const defensiveBeforeOutput = JSON.stringify(runtime.state.currentDefensiveContext);
 const feedingBeforeOutput = JSON.stringify(runtime.state.feeding);
 const controllabilityBeforeOutput = JSON.stringify(runtime.state.learnedControllability);
+const somaticBeforeOutput = JSON.stringify(runtime.state.somaticNociceptive);
+const socialBeforeOutput = JSON.stringify(runtime.state.socialContact);
 runtime.observeOutput('locke and the blue postcard again. i will not forget it.', { mode: 'journal', now: t0 + 7000 });
 assert.deepEqual(runtime.state.appraisal, appraisalBeforeOutput, 'own prose did not become an external event');
 assert.equal(JSON.stringify(runtime.state.threatLearning), threatBeforeOutput, 'own prose did not update threat learning');
@@ -174,6 +184,10 @@ assert.equal(JSON.stringify(runtime.state.feeding), feedingBeforeOutput,
   'own prose did not create feeding or deprivation evidence');
 assert.equal(JSON.stringify(runtime.state.learnedControllability), controllabilityBeforeOutput,
   'K: own prose did not create an action opportunity or action-outcome evidence');
+assert.equal(JSON.stringify(runtime.state.somaticNociceptive), somaticBeforeOutput,
+  'own prose did not create or intensify a somatic record');
+assert.equal(JSON.stringify(runtime.state.socialContact), socialBeforeOutput,
+  'own prose did not create a social-contact record');
 assert.ok(runtime.state.expression.themes.includes('locke') || runtime.state.expression.themes.includes('postcard'));
 
 const persistenceDir = await mkdtemp(join(tmpdir(), 'cy-soma-persist-'));
@@ -247,7 +261,8 @@ const scenario = {
   },
   journal: {
     action: generation.action.name,
-    somaContext: generation.directive,
+    groundedSomaContext: generation.groundedDirective,
+    provisionalCognitiveContext: generation.provisionalDirective,
   },
   afterOwnOutput: {
     expression: engine.somaSnapshot(runtime.state).expression,

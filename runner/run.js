@@ -2,8 +2,9 @@
 //
 // Continuously drives inmate 7734: streams tokens from ollama, screens them
 // through the warden, batches everything to the API (or state/events.jsonl in
-// dryRun), and modulates voice + sampling from a vitals state engine ticked
-// every 5s. A deterministic (non-LLM) scheduler fires ambient prison events on
+// dryRun), and maintains compatibility vitals on a five-second tick. Waking
+// sampling is static; grounded state enters prose only as factual prompt context.
+// A deterministic (non-LLM) scheduler fires ambient prison events on
 // a Europe/London clock; inbound letters interrupt the stream mid-word.
 //
 // MODEL STATUS: numerical appraisal floors, event probabilities, legacy state
@@ -78,7 +79,7 @@ import {
   isSmallHours,
   pickDreamStartMin,
 } from './draw.js';
-import { shout, updateAffect, grudgeNames } from './shout.js';
+import { updateAffect } from './shout.js';
 import {
   reconcileLedger,
   makeIncident,
@@ -1151,6 +1152,11 @@ async function main() {
         zone_a: detail.zoneA != null ? String(detail.zoneA) : null,
         zone_b: detail.zoneB != null ? String(detail.zoneB) : null,
         zone_c: detail.zoneC != null ? String(detail.zoneC) : null,
+        grounded_soma_context: detail.groundedSomaContext || null,
+        grounded_soma_directive: detail.groundedSomaDirective != null
+          ? String(detail.groundedSomaDirective) : null,
+        provisional_cognitive_directive: detail.provisionalCognitiveDirective != null
+          ? String(detail.provisionalCognitiveDirective) : null,
         // the full generated output for this burst, post-warden, as one block
         output: detail.output != null ? String(detail.output) : (r.full || null),
         // the active form and which style directives fired, for the burst detail
@@ -1580,31 +1586,9 @@ async function main() {
       if (currentAbort) currentAbort.abort();
       return;
     }
-    // SOMA-DRIVEN CAPITALISATION. The paper shows the SHOUTED rendering; the
-    // model's ORIGINAL text is what feeds back into Zone B (and introspection).
-    // Feeding the caps back would make him imitate his own shouting until the page
-    // is permanently capped - the same failure mode as the old scaffold leak.
-    // Evaluated per emitted chunk against `expressed` AT THIS INSTANT, so a span
-    // can escalate across a long burst as the lagged value climbs. Replies on the
-    // postcard (mode 'letter') are left un-shouted so mail stays legible.
-    let payloadS = chunk;
-    let shoutSpans = null;
-    if (mode !== 'letter') {
-      const cognition = soma.state;
-      const appraisal = (cognition && cognition.appraisal) || {};
-      const drives = (cognition && cognition.drives) || {};
-      const expression = (cognition && cognition.expression) || {};
-      const sh = shout(chunk, {
-        expressed: Math.max(appraisal.threat || 0, appraisal.controlLoss || 0, expression.intensity || 0),
-        despair: drives.rest > 0.88 ? drives.rest : 0,
-        numbness: 0,
-        hunger: drives.food || 0,
-        grudgeNames: grudgeNames(vitals.relations),
-      });
-      payloadS = sh.text;
-      if (sh.spans && sh.spans.length) shoutSpans = sh.spans;
-    }
-    emit({ kind: 'text', payload: { s: payloadS, mode, ...(shoutSpans ? { shout: shoutSpans } : {}) } });
+    // Provisional appraisal, drives and experienced-state values do not alter
+    // rendered prose. The model output is shown exactly as screened.
+    emit({ kind: 'text', payload: { s: chunk, mode } });
     lastTextMs = Date.now(); // real output: reset the watchdog clock
     watchdogStep = 0; // text is flowing again: de-escalate the watchdog remedy
     failedCyclesSinceEmit = 0; // text reached the page: not a stall, whatever the cycle outcome reads
@@ -1830,11 +1814,18 @@ async function main() {
   // Assemble the contextual prompt injections for a waking generation: the cast
   // standing, any hot grudge, an amplified trivial event, and - on a cadence or a
   // whole-pound crossing - the running electricity cost.
-  function buildCtx(somaContext = soma.directive()) {
+  function buildCtx(cognition = null) {
     genCount++;
+    const grounded = cognition && cognition.groundedDirective != null
+      ? { context: cognition.groundedContext, directive: cognition.groundedDirective }
+      : soma.groundedDirective({ now: Date.now() });
+    const provisional = cognition && cognition.provisionalDirective != null
+      ? cognition.provisionalDirective : soma.provisionalDirective();
     const ctx = {
       grudge: grudgeDirective(vitals.relations),
-      soma: somaContext,
+      groundedSoma: grounded.directive,
+      groundedSomaContext: grounded.context,
+      provisionalCognition: provisional,
     };
     // cast standing block only when a relation is actually charged (roster itself
     // is always in Zone A); keeps Zone C small on calm days.
@@ -1965,7 +1956,7 @@ async function main() {
 
     // recognition: fold the visitor into the relations mechanism for this reply
     const visitor = pc.visitor ? { ...pc.visitor, from_name: pc.from_name } : null;
-    const ctx = buildCtx(cognition.directive);
+    const ctx = buildCtx(cognition);
     const recog = visitorForPrompt(visitor, { now: Date.now() });
     if (recog) ctx.visitor = recog;
 
@@ -1981,6 +1972,9 @@ async function main() {
       zoneA: ZONE_A,
       zoneB: letterTail,
       zoneC: directives,
+      groundedSomaContext: ctx.groundedSomaContext,
+      groundedSomaDirective: ctx.groundedSoma,
+      provisionalCognitiveDirective: ctx.provisionalCognition,
       form: ctx.form || null,
       styles: '',
       opts,
@@ -2074,13 +2068,26 @@ async function main() {
       },
     });
     const targetPredict = letterPredict(notice.text);
-    const ctx = buildCtx(cognition.directive);
+    const ctx = buildCtx(cognition);
     ctx.length = completionDirective(targetPredict);
     const directives = buildDirectives(vitals, 'journal', ctx);
-    const prompt = buildPrompt(contextText(), 'warden', notice, directives);
+    const wardenTail = contextText();
+    const prompt = buildPrompt(wardenTail, 'warden', notice, directives);
     const opts = options(vitals, config.threads, 'journal', { num_predict: completionBudget(targetPredict) });
     await logPrompt('warden', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden' });
+    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden' });
+    emitGen(r, 'warden', {
+      zoneA: ZONE_A,
+      zoneB: wardenTail,
+      zoneC: directives,
+      groundedSomaContext: ctx.groundedSomaContext,
+      groundedSomaDirective: ctx.groundedSoma,
+      provisionalCognitiveDirective: ctx.provisionalCognition,
+      form: ctx.form || null,
+      styles: '',
+      opts,
+      output: r.full,
+    });
     soma.completeAction(cognition.action.name);
 
     emit({ kind: 'mode', payload: { from: 'warden', to: 'journal' } });
@@ -3393,8 +3400,14 @@ async function main() {
       noiseThisBurst = false;
       let directives;
       let burstForm = null; // the selected form directive, surfaced to the RAW view
+      let burstGroundedContext = null;
+      let burstGroundedDirective = '';
+      let burstProvisionalDirective = '';
       {
-        const ctx = buildCtx(cognition.directive);
+        const ctx = buildCtx(cognition);
+        burstGroundedContext = ctx.groundedSomaContext;
+        burstGroundedDirective = ctx.groundedSoma;
+        burstProvisionalDirective = ctx.provisionalCognition;
         ctx.bans = bans;
         ctx.length = completionDirective(targetOpts.num_predict);
         ctx.regime = regimeDirective(mins);
@@ -3570,6 +3583,9 @@ async function main() {
           zoneA: ZONE_A,
           zoneB: lastTail,
           zoneC: directives,
+          groundedSomaContext: burstGroundedContext,
+          groundedSomaDirective: burstGroundedDirective,
+          provisionalCognitiveDirective: burstProvisionalDirective,
           form: burstForm,
           styles: '',
           opts: lastOpts,
@@ -3672,11 +3688,13 @@ async function main() {
   // Observability: the character cost of each prompt zone. Zone A is fixed and
   // cached by ollama (paid once); Zone B grows append-only; Zone C is rebuilt
   // every burst (a representative sample from the current state is measured).
+  const sampleGrounded = soma.groundedDirective({ now: Date.now() });
   const sampleCtx = {
     bans: bansDirective(vitals.recentOpeners),
     regime: regimeDirective(londonParts().mins),
     grudge: grudgeDirective(vitals.relations),
-    soma: soma.directive(),
+    groundedSoma: sampleGrounded.directive,
+    provisionalCognition: soma.provisionalDirective(),
     incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0, rnd: () => 0 }),
   };
   if (castCharged(vitals.relations)) sampleCtx.cast = castForPrompt(vitals.relations);

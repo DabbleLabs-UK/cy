@@ -72,7 +72,8 @@ strictly ordered zones, most-stable first (`prompt.js`):
   grows at the end and is never re-sliced from the front per burst, so the shared
   prefix keeps growing. Only when it crosses a hard cap is it trimmed in one large
   chunk (breaking the cache once, rarely) rather than a little every burst.
-- **Zone C** - all volatile directives (Soma selection, incident ledger,
+- **Zone C** - all volatile directives (grounded Soma evidence, separately
+  labelled provisional cognitive selection, incident ledger,
   opener bans, cost injection). Assembled fresh each burst and placed LAST, after
   Zone B, so only this small tail is re-evaluated.
 
@@ -83,27 +84,33 @@ observable.
 
 `hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q4_K_M`, served by
 ollama, measured at ~3.4 tok/s on DELL. The runner owns the provisional
-cognition path; the model is an expression engine. It reads the selected Soma
-action, attended episode, and any prediction error. Screened generated text is
-then observed by deterministic heuristic code for repetition, punctuation,
-commitments and learned-token reactivation. There is no second model call and
-the language model does not assign emotional magnitudes.
+cognition path; the model is an expression engine. It receives a compact
+`<GROUNDED_CURRENT_STATE>` block made only from LIVE grounded substrates, then a
+separate `<PROVISIONAL_COGNITIVE_SELECTION>` block containing heuristic action,
+attention and memory selection. The eight provisional visitor metrics do not
+enter the prompt, sampling, response-length choice or capitalization. Screened
+generated text is observed only by the separate provisional expression/memory
+compatibility path; it cannot update a grounded ledger or learner. There is no
+second model call and the language model does not assign emotional magnitudes.
 
 The separate grounded threat-learning path is implemented in
 `probabilistic-threat-learning.js`. It consumes only explicit self-contained
 cue and resolved categorical outcome links from private structured environment
 records. It persists independent Beta-Bernoulli posteriors and a complete
 post-installation update history. It does not consume generated prose or legacy
-appraisal values and has no current effect on language, action selection,
-anxiety, or brain activity.
+appraisal values. Exact learned evidence may enter the grounded prose block only
+when an active defensive context contains the matching cue; it does not create
+anxiety, choose an action or activate a brain analogy.
 
 `current-defensive-context.js` adds a separate grounded, event-driven vector for
 present external cues. It attaches existing cue-outcome posteriors while keeping
 world ambiguity, categorical imminence, objective control and outcome resolution
 independent. It supports multiple simultaneous contexts and persists exact
 transitions, but calculates no threat, fear, anxiety, salience, perceived-control
-or brain-activation value. The context is captured before the same event updates
-the threat learner, preserving the expectation available when the event arrived.
+or brain-activation value. Active contexts now contribute their facts and exact
+learned evidence to the grounded prose block. The context is captured before the
+same event updates the threat learner, preserving the expectation available when
+the event arrived.
 
 `action-outcome-contingency.js` learns context-specific observational
 action-outcome evidence only from explicit structured opportunities. Scheduled
@@ -115,7 +122,9 @@ current selector is an explicitly non-psychological persisted round-robin; no
 new outcome probabilities are used. Separate Beta(1,1) posteriors are retained
 for action and deliberate no-action conditions. Their mean difference and
 summed variance are exposed without a control score. Neither subsystem infers
-causality, perceived control or helplessness or affects prompts,
+causality, perceived control or helplessness. Matching-context observational
+evidence may be shown factually in the grounded prose block, but it does not
+select an action or become a control score. Neither subsystem alters
 experienced-state values or brain activation.
 
 ## dryRun
@@ -227,20 +236,30 @@ Soma circuits.
   ending does not resolve an injury, elapsed time never implies healing, and
   unknown is never converted to none. It is a computational functional analogue
   of incoming nociceptive information, not biological nociception or subjective
-  Pain. It does not calculate Pain magnitude, general discomfort, healing,
-  sensitisation, action selection, prompt wording or brain activation. The
-  existing numeric Pain / Discomfort value remains separately PROVISIONAL.
+  Pain. Active factual records may enter the grounded prose block, but the
+  subsystem does not calculate Pain magnitude, general discomfort, healing,
+  sensitisation, action selection or brain activation. The existing numeric
+  Pain / Discomfort value remains separately PROVISIONAL.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
   Each outcome now carries objective/categorical world facts and a separate
   observation. Older numeric body, social and appraisal fields remain isolated
   under a provisional compatibility property. The language model does not
   decide what happened or assign the appraisal values.
-- **Language seam** - `run.js` computes provisional Soma before a generation
-  and `prompt.js` exposes the selected action and material. After screening,
-  deterministic heuristic code observes text features; no LLM call scores the
-  output or writes emotion values. Provider changes and runner restarts enter as
-  machine evidence, allowing the software hypothesis to develop from experience.
+- **Grounded Soma to prose seam** (`grounded-prose-context.js`) - constructs a
+  versioned evidence projection from LIVE Process S, Process C, current defensive
+  context, matching learned cue/outcome and action/outcome evidence, feeding,
+  active somatic records and social-contact records. Every item names its
+  epistemic status. Inactive defensive/somatic/social sections are omitted with
+  an inspectable categorical reason. No threshold or psychological mapping is
+  used. Sampling uses the static existing provider/project baseline, labelled
+  `ENGINEERING DEFAULT`. Heuristic journal/draw/silence selection remains
+  PROVISIONAL; instrumental choice remains
+  `ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL`.
+- **Language boundary** - the grounded Soma computes and records what can be
+  justified from Cy's simulated world and approved models. The language model
+  performs Cy's subjective expression of that state. Generated expression is
+  not treated as measurement of the underlying state.
 
 - **Amplification** - `monotony` (0..1) creeps up every empty tick and drops on
   any input. Event deltas are multiplied by `amp = 1 + 2.5*monotony`, so after a
@@ -299,7 +318,8 @@ Soma circuits.
   events, overheard remarks, grudge directive, visitor recognition.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
 - `prompt.js` - the three prompt zones (fixed `ZONE_A`, `buildDirectives` for the
-  volatile Zone C), Soma-derived sampling, and `buildPrompt` which orders them.
+  volatile Zone C), static ENGINEERING DEFAULT waking sampling, and `buildPrompt`
+  which orders them.
   Legacy style/form helpers remain for diagnostics but are not used live.
 - `warden.js` - sentence buffering + outbound/inbound content screen.
 - `client.js` - batched POST to `api/ingest.php`, inbox poll, tempo poll, disk-queue retry.

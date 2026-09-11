@@ -7,8 +7,15 @@ export function prepareSomaGeneration(soma, options = {}) {
   const { inputs = null, ...actionOptions } = options;
   if (inputs) soma.tick(inputs);
   const action = soma.chooseAction(actionOptions);
+  const grounded = soma.groundedDirective({ now: actionOptions.now });
+  const provisionalDirective = soma.provisionalDirective();
   return {
     action,
-    directive: soma.directive(),
+    groundedContext: grounded.context,
+    groundedDirective: grounded.directive,
+    provisionalDirective,
+    // Compatibility alias for inspectors/tests that have not moved to the
+    // explicitly named provisional field yet.
+    directive: provisionalDirective,
   };
 }

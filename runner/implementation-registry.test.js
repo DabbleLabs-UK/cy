@@ -11,6 +11,8 @@ assert.equal(registry.schema, 'cy.implementation-registry');
 assert.equal(registry.soma_variables.length, 8);
 assert.ok(registry.soma_variables.every((entry) => entry.implementation_status === 'PROVISIONAL'));
 assert.equal(somaImplementationStatus(), 'provisional');
+assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_prose_context').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_action_selection').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'sleep_homeostasis').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').phase_basis, 'schedule_estimated');

@@ -95,6 +95,26 @@
   ],
   "soma_subsystems": [
     {
+      "id": "grounded_soma_prose_context",
+      "display_name": "GROUNDED SOMA TO PROSE CONTEXT",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "A compact engineering projection sends factual outputs from LIVE grounded substrates to the language model with explicit epistemic labels. It introduces no emotion score, threshold, weight or psychological mapping, and generated expression cannot update grounded state.",
+      "data_dependencies": ["sleep_homeostasis", "circadian_process_c", "current_defensive_context", "probabilistic_threat_learning", "learned_controllability", "ingestion_ledger", "injury_ledger", "social_contact_ledger"],
+      "version": "grounded-prose-context-v1",
+      "provenance": "runner/grounded-prose-context.js"
+    },
+    {
+      "id": "grounded_soma_action_selection",
+      "display_name": "GROUNDED SOMA TO ACTION SELECTION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Grounded Soma outputs do not select journal, drawing, silence or instrumental actions. Existing output-action selection remains provisional and prison instrumental choice remains engineering round-robin.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["grounded_soma_prose_context"],
+      "version": null
+    },
+    {
       "id": "probabilistic_threat_learning",
       "display_name": "PROBABILISTIC THREAT LEARNING",
       "implementation_status": "IMPLEMENTED",
@@ -224,7 +244,7 @@
       "display_name": "ACTION SELECTION FROM CONTROL",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Learned action-outcome evidence does not alter Cy's action selection, prompt or prose.",
+      "status_note": "Learned action-outcome evidence does not select Cy's actions. Matching current-context evidence may be included factually in the grounded prose prompt, without becoming causal control, perceived control or an action policy.",
       "data_dependencies": [],
       "available_future_dependencies": ["learned_controllability", "perceived_controllability"],
       "version": null
