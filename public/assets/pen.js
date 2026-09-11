@@ -333,10 +333,11 @@ export class Pen {
     this._buildSvg();
     this._buildLiveRegion();
     if (this.root && this.root.addEventListener) {
-      this.root.addEventListener('scroll', () => {
+      this._onRootScroll = () => {
         const gap = this.root.scrollHeight - this.root.scrollTop - this.root.clientHeight;
         this.following = gap < 48;
-      });
+      };
+      this.root.addEventListener('scroll', this._onRootScroll);
     }
   }
 
@@ -652,6 +653,7 @@ export class Pen {
   destroy() {
     try { if (this._ro) this._ro.disconnect(); } catch { /* ignore */ }
     try { if (this._onWindowResize) window.removeEventListener('resize', this._onWindowResize); } catch { /* ignore */ }
+    try { if (this._onRootScroll && this.root) this.root.removeEventListener('scroll', this._onRootScroll); } catch { /* ignore */ }
   }
 
   // ---- vitals modulation ------------------------------------------------

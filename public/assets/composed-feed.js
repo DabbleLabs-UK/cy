@@ -47,6 +47,7 @@ export class ComposedFeed {
     this.instant = false;
     this.current = null;
     this.pens = [];
+    this.penEntries = new Map();
     this.lane = new HandwritingLane();
     this.vitals = null;
     this.following = true;
@@ -198,7 +199,11 @@ export class ComposedFeed {
     const finishLane = this.lane.begin(pen);
     pen.beginEntry('', entryMode);
     this.pens.push(pen);
-    this.current = { block, pen, mode: entryMode, label, startMs: timestampMs(ts), finishLane };
+    this.current = {
+      block, surface, pen, text: '', mode: entryMode, label,
+      startMs: timestampMs(ts), finishLane, static: false,
+    };
+    this.penEntries.set(pen, this.current);
     this._follow();
   }
 
@@ -210,8 +215,8 @@ export class ComposedFeed {
     // able to recreate the physical card from the token's own timestamp. Never
     // manufacture an undated "--:--:--" endpoint when the event supplied one.
     if (!this.current) this.beginEntry(ts, mode);
+    this.current.text += String(text);
     if (this.current.static) {
-      this.current.text += String(text);
       this.current.surface.textContent = this.current.text;
     } else {
       this.current.pen.write(text, mode, lucid, shout);
@@ -225,7 +230,10 @@ export class ComposedFeed {
     if (entry && endMs != null && (entry.startMs == null || endMs >= entry.startMs)) {
       this._appendEndpoint(entry.block, endTs, entry.label + ' ends', 'end');
     }
-    if (entry && entry.finishLane) entry.finishLane();
+    if (entry && entry.finishLane) {
+      entry.finishLane();
+      entry.finishLane = null;
+    }
     this.current = null;
   }
 
@@ -340,9 +348,37 @@ export class ComposedFeed {
   // A later visible object has taken the bottom of the chronology. Preserve all
   // earlier ink, but stop those older surfaces owning a moving pen.
   finishAnimations() {
-    for (const pen of this.pens) {
-      if (pen && typeof pen.finishImmediately === 'function') pen.finishImmediately();
+    for (const pen of [...this.pens]) {
+      const entry = this.penEntries.get(pen);
+      if (entry) {
+        this._flattenWriting(entry);
+      } else {
+        // Drawings cannot be represented faithfully as plain text. Complete them
+        // flat, detach their observers/listeners and release the renderer object;
+        // their finished SVG remains as the visible historical drawing.
+        if (pen && typeof pen.finishImmediately === 'function') pen.finishImmediately();
+        if (pen && typeof pen.destroy === 'function') pen.destroy();
+        this.pens = this.pens.filter((item) => item !== pen);
+      }
     }
+  }
+
+  _flattenWriting(entry) {
+    if (!entry || entry.static || !entry.pen) return;
+    const retired = entry.pen;
+    if (entry.finishLane) {
+      entry.finishLane();
+      entry.finishLane = null;
+    }
+    // The complete logical text is already held by the feed. Stop all detached
+    // stroke work before replacing the expensive SVG with a lightweight card.
+    try { retired.abort(); retired.destroy(); } catch { /* best effort */ }
+    entry.surface.textContent = entry.text;
+    entry.surface.classList.add('cy-writing-static');
+    entry.pen = null;
+    entry.static = true;
+    this.penEntries.delete(retired);
+    this.pens = this.pens.filter((pen) => pen !== retired);
   }
 
   reset() {
@@ -350,6 +386,7 @@ export class ComposedFeed {
       try { pen.abort(); pen.destroy(); } catch { /* best effort */ }
     }
     this.pens = [];
+    this.penEntries.clear();
     this.current = null;
     this.lane.reset();
     this.flow.textContent = '';

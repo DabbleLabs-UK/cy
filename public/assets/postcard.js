@@ -49,6 +49,10 @@ export class Postcards {
   // visible item in the chronology.
   finishAnimations() {
     for (const card of this.cards) {
+      if (card !== this.active && card.pen) {
+        this._flatten(card);
+        continue;
+      }
       if (card.pen && typeof card.pen.finishImmediately === 'function') {
         card.pen.finishImmediately();
       }
@@ -254,6 +258,20 @@ export class Postcards {
       a.finishLane = null;
     }
     this.active = null;
+    this._flatten(a);
+  }
+
+  _flatten(card) {
+    if (!card || !card.pen) return;
+    const text = card.fullBody || card.body || '';
+    if (card.finishLane) {
+      card.finishLane();
+      card.finishLane = null;
+    }
+    try { card.pen.abort(); card.pen.destroy(); } catch { /* best effort */ }
+    card.msg.textContent = text;
+    card.msg.classList.add('pcard-msg-static');
+    card.pen = null;
   }
 
   // deterministic small per-card tilt in [-1.4, +1.4] deg, no Math.random so a
@@ -273,7 +291,7 @@ export class Postcards {
         this.cards.unshift(dead);
         break;
       }
-      try { dead.pen.destroy(); } catch { /* ignore */ }
+      try { if (dead.pen) dead.pen.destroy(); } catch { /* ignore */ }
       if (dead.el && dead.el.remove) dead.el.remove();
     }
   }

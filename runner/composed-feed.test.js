@@ -130,7 +130,33 @@ moving.pens.push({ finishImmediately() { olderFinished++; }, setInstant() {} });
 moving.event('a later event', '', '2026-09-09 10:30:00', 'prison');
 assert.equal(olderFinished, 1, 'a later visible event finishes animation on older writing');
 moving.beginEntry('2026-09-09 10:31:00', 'journal');
-assert.equal(olderFinished, 2, 'a newer journal entry finishes animation on older writing');
+assert.equal(olderFinished, 1, 'a retired renderer is not revisited by every later feed item');
+
+const boundedRoot = makeEl('div');
+const bounded = new ComposedFeed(boundedRoot, { chars: [] });
+const surface = makeEl('div');
+let aborted = 0;
+let destroyed = 0;
+let laneReleased = 0;
+const livePen = {
+  abort() { aborted++; },
+  destroy() { destroyed++; },
+};
+const liveEntry = {
+  block: makeEl('article'), surface, pen: livePen, text: 'complete retained words',
+  finishLane() { laneReleased++; }, static: false,
+};
+bounded.pens.push(livePen);
+bounded.penEntries.set(livePen, liveEntry);
+bounded.current = liveEntry;
+bounded.finishAnimations();
+assert.equal(surface.textContent, 'complete retained words', 'superseded live writing becomes lightweight text');
+assert.ok(surface._classes.has('cy-writing-static'), 'the retired surface uses static handwriting styling');
+assert.equal(bounded.pens.length, 0, 'the retired live Pen is released from the day-long renderer list');
+assert.equal(bounded.penEntries.size, 0, 'the retired live Pen metadata is released');
+assert.equal(aborted, 1, 'detached stroke work is stopped');
+assert.equal(destroyed, 1, 'detached observers and listeners are removed');
+assert.equal(laneReleased, 1, 'the shared handwriting lane is released once');
 
 const jumpRoot = makeEl('div');
 const jumpFeed = new ComposedFeed(jumpRoot, { chars: [] });

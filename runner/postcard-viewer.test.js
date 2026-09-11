@@ -9,8 +9,8 @@
 //      the journal sheet;
 //   3. a long reply SHRINKS and CRAMS toward the bottom edge rather than clipping
 //      or truncating;
-//   4. a replayed backlog postcard (instant fill) appears COMPLETE - laid down
-//      flat with no per-stroke animation.
+//   4. a completed postcard becomes lightweight static handwriting so an open
+//      tab does not retain a day of SVG renderers and observers.
 //
 // Self-checking: throws (non-zero exit) on any failure.
 //
@@ -57,7 +57,7 @@ function makeEl(tag) {
     removeChild(c) { const i = el.children.indexOf(c); if (i >= 0) el.children.splice(i, 1); return c; },
     get firstChild() { return el.children[0] || null; },
     remove() { if (el.parentNode) el.parentNode.removeChild(el); },
-    set textContent(v) { el._text = v; },
+    set textContent(v) { el._text = v; el.children = []; },
     get textContent() { return el._text; },
     get childElementCount() { return el.children.length; },
     querySelector() { return null; },
@@ -315,7 +315,7 @@ await (async () => {
   ok('a long reply shrinks and crams toward the bottom edge rather than clipping');
 })();
 
-// ---- 4. a replayed backlog postcard appears complete, not re-animated ----
+// ---- 4. a completed postcard is flattened after its live/replay work ----
 await (async () => {
   const pc = new Postcards(newRoot(), FONT);
   pc.setInstant(true); // backlog fill, exactly as firstLoad sets it
@@ -326,21 +326,17 @@ await (async () => {
   pc.write(body);
   pc.reply(body);
   pc.settle();
-  await drain(cardPen);
-
-  const strokes = inkStrokes(cardPen);
-  assert.ok(strokes.length >= 1, 'the backlog card has ink');
-  const anyAnimated = strokes.some((p) => p.style.strokeDasharray != null && p.style.strokeDasharray !== '');
-  assert.equal(anyAnimated, false, 'no stroke carries a dashed reveal - it was laid down complete, not re-animated');
 
   // the card settled into place
   assert.ok(pc.active === null, 'the reply is finished (no active card)');
-  const card = pc.cards[pc.cards.length - 1].el;
+  const settled = pc.cards[pc.cards.length - 1];
+  const card = settled.el;
   assert.ok(card._classes.has('settled') && !card._classes.has('writing'), 'the card settled into place');
-
-  const nonSpace = [...body].filter((c) => c !== ' ').length;
-  assert.equal(glyphGroups(cardPen).length, nonSpace, 'the whole reply is present on the settled card');
-  ok('a replayed backlog postcard appears complete, laid flat without re-animating');
+  assert.equal(settled.pen, null, 'the completed card no longer retains a Pen renderer');
+  assert.equal(settled.msg.textContent, body, 'the complete reply remains visible after flattening');
+  assert.ok(settled.msg._classes.has('pcard-msg-static'), 'the complete reply uses static handwriting styling');
+  assert.equal(cardPen.jobs.length, 0, 'pending SVG work is cancelled after the complete text is retained');
+  ok('a completed postcard keeps its words without retaining an SVG renderer');
 })();
 
 // ---- 5. settle backfills a card that only carried the postcard_out ----
@@ -353,6 +349,7 @@ await (async () => {
   pc.settle();
   const last = pc.cards[pc.cards.length - 1];
   assert.ok(last.body && last.body.length > 0, 'settle backfilled the full reply so the card is never blank');
+  assert.equal(last.msg.textContent, last.body, 'the backfilled reply remains visible after renderer teardown');
   ok('a partial-window card is backfilled from the full reply at settle');
 })();
 

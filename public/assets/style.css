@@ -657,6 +657,15 @@ body.cy-paused::after {
 .pcard-msg-side { position: relative; overflow: hidden; }
 .pcard-msg { position: absolute; inset: 7px 8px 6px 10px; }
 .pcard-msg .ink-svg { width: 100%; height: 100%; }
+.pcard-msg-static {
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Segoe Script", cursive;
+  font-size: 11px;
+  line-height: 1.28;
+}
 .pcard-divide { background: rgba(120,90,40,0.35); }
 
 /* address side */
