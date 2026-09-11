@@ -105,6 +105,17 @@ transitions, but calculates no threat, fear, anxiety, salience, perceived-contro
 or brain-activation value. The context is captured before the same event updates
 the threat learner, preserving the expectation available when the event arrived.
 
+`action-outcome-contingency.js` learns context-specific observational
+action-outcome evidence only from explicit structured opportunities. Current
+production opportunities are scheduled meals where accepting and refusing are
+genuinely available; missed meals mark both actions NOT_AVAILABLE and cannot
+become no-action evidence. Separate Beta(1,1) posteriors are retained for action
+and deliberate no-action conditions. Their mean difference and summed variance
+are exposed without a control score. The subsystem persists complete
+post-installation opportunities and updates, but does not infer causality,
+perceived control or helplessness and does not affect prompts, action selection,
+experienced-state values or brain activation.
+
 ## dryRun
 
 With `dryRun: true` the runner never touches the network:

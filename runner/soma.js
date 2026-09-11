@@ -50,6 +50,12 @@ import {
   touchFeedingContinuity,
 } from './feeding-homeostasis.js';
 import {
+  controllabilitySnapshot,
+  createControllabilityState,
+  observeControllabilityRecord as applyControllabilityRecord,
+  reconcileControllabilityState,
+} from './action-outcome-contingency.js';
+import {
   PRISON_SCHEDULE,
   PRISON_SCHEDULE_TIME_ZONE,
   habitualWakeMinutes,
@@ -150,6 +156,7 @@ function blank(now, legacyPhysical = null) {
     threatLearning: createThreatLearning(now),
     currentDefensiveContext: createCurrentDefensiveContext(now),
     feeding: createFeedingState(now),
+    learnedControllability: createControllabilityState(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -201,6 +208,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     threatLearning: reconcileThreatLearning(raw.threatLearning, { now }),
     currentDefensiveContext: reconcileCurrentDefensiveContext(raw.currentDefensiveContext, { now }),
     feeding: reconcileFeedingState(raw.feeding, { now }),
+    learnedControllability: reconcileControllabilityState(raw.learnedControllability, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -238,10 +246,15 @@ export function observeSomaThreatLearningRecord(state, record) {
 }
 
 // Current defensive context reads only the present structured world record and
-// the grounded learner state as it existed before this event's outcome update.
+// the grounded learned-state substrates.
 export function observeSomaCurrentDefensiveContextRecord(state, record) {
   if (!state || !record) return null;
-  return applyCurrentDefensiveContextRecord(state.currentDefensiveContext, state.threatLearning, record);
+  return applyCurrentDefensiveContextRecord(
+    state.currentDefensiveContext,
+    state.threatLearning,
+    state.learnedControllability,
+    record,
+  );
 }
 
 // The grounded feeding ledger consumes only canonical structured food facts.
@@ -249,6 +262,13 @@ export function observeSomaCurrentDefensiveContextRecord(state, record) {
 export function observeSomaFeedingRecord(state, record) {
   if (!state || !record) return null;
   return applyFeedingRecord(state.feeding, record);
+}
+
+// This learner consumes only explicit structured action opportunities. Its
+// observational evidence does not alter affect, prose or action selection.
+export function observeSomaControllabilityRecord(state, record) {
+  if (!state || !record) return null;
+  return applyControllabilityRecord(state.learnedControllability, record);
 }
 
 function familyOf(name, tags = []) {
@@ -935,6 +955,7 @@ export function somaSnapshot(state) {
     threatLearning: threatLearningSnapshot(state.threatLearning),
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),
+    learnedControllability: controllabilitySnapshot(state.learnedControllability),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

@@ -30,6 +30,12 @@ check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'feeding_deprivation_history')['implementation_status'] === 'IMPLEMENTED', 'feeding history must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'energy_homeostatic_state')['implementation_status'] === 'NOT_IMPLEMENTED', 'energy homeostasis must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'hunger')['implementation_status'] === 'PROVISIONAL', 'subjective Hunger must remain provisional');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'action_opportunity_model')['implementation_status'] === 'IMPLEMENTED', 'action opportunity model must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'learned_controllability')['implementation_status'] === 'IMPLEMENTED', 'action-outcome contingency must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'causal_controllability')['implementation_status'] === 'NOT_IMPLEMENTED', 'causal control must remain not modelled');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'perceived_controllability')['implementation_status'] === 'NOT_IMPLEMENTED', 'perceived control must remain not modelled');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'anxiety')['implementation_status'] === 'PROVISIONAL', 'Anxiety must remain provisional');
+check_registry(captive_implementation_registry_entry($registry, 'brain_regions', 'vmpfcControl')['implementation_status'] === 'NOT_IMPLEMENTED', 'vmPFC activation must remain not modelled');
 
 if ($failures !== []) {
     fwrite(STDERR, implode("\n", $failures) . "\n");

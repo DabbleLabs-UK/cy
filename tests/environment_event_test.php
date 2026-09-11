@@ -99,6 +99,28 @@ check_environment(str_contains($contextApiSource, 'captive_is_admin'), 'exact de
 check_environment(str_contains($contextApiSource, "'activeContexts' => \$active"), 'active defensive contexts must be exposed to admin');
 check_environment(str_contains($contextApiSource, "'history' => \$history"), 'defensive-context transition history must be exposed to admin');
 
+$controlRecord = $record;
+$controlRecord['consumed_by'] = ['soma-input-staging-v1', 'action-opportunity-model-v1', 'action-outcome-contingency-v1'];
+$controlRecord['action_outcome_contingency'] = [
+    'modelVersion' => 'action-outcome-contingency-v1',
+    'updated' => true,
+    'opportunity' => ['opportunityId' => 'meal:test:lunch'],
+    'updates' => [[
+        'condition' => 'action',
+        'actionId' => 'action:accept_meal',
+        'before' => ['alpha' => 1, 'beta' => 1],
+        'after' => ['alpha' => 1, 'beta' => 2],
+    ]],
+];
+$controlInspection = captive_environment_record_inspection($controlRecord, captive_implementation_registry());
+check_environment($controlInspection['what_action_outcome_contingency_did']['updated'] === true, 'action-outcome trace was not exposed');
+check_environment($controlInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'action opportunity consumer must be LIVE');
+check_environment($controlInspection['what_systems_consumed_it']['consumers'][2]['public_label'] === 'LIVE', 'action-outcome learner consumer must be LIVE');
+$controlApiSource = file_get_contents(__DIR__ . '/../public/api/action-outcome-contingency.php');
+check_environment(str_contains($controlApiSource, 'captive_is_admin'), 'exact action-outcome inspection must be admin-only');
+check_environment(str_contains($controlApiSource, "'opportunities' => array_values(\$opportunities)"), 'complete action opportunities must be exposed to admin');
+check_environment(str_contains($controlApiSource, "'history' => \$history"), 'complete action-outcome update history must be exposed to admin');
+
 $feedingRecord = $record;
 $feedingRecord['world_event']['id'] = 'env-feeding-test';
 $feedingRecord['world_event']['event_type'] = 'lunch_consumed';

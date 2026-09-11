@@ -149,6 +149,16 @@
       "version": "current-defensive-context-v1"
     },
     {
+      "id": "action_opportunity_model",
+      "display_name": "ACTION OPPORTUNITY MODEL",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "experienced-action-outcome-contingency",
+      "status_note": "Structured world records explicitly identify a comparable context, actions that were actually available, the chosen and executed action state, timestamps and resolved outcomes. Missing action data is never treated as deliberate inaction.",
+      "data_dependencies": ["structured_environment_event.action_opportunity"],
+      "version": "action-opportunity-model-v1",
+      "provenance": "config/model-specs/action-outcome-contingency.json"
+    },
+    {
       "id": "perceived_controllability",
       "display_name": "PERCEIVED CONTROLLABILITY",
       "implementation_status": "NOT_IMPLEMENTED",
@@ -159,11 +169,42 @@
     },
     {
       "id": "learned_controllability",
-      "display_name": "LEARNED ACTION-OUTCOME CONTROL",
+      "display_name": "LEARNED ACTION-OUTCOME CONTINGENCY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "experienced-action-outcome-contingency",
+      "status_note": "Separate Beta-Bernoulli posteriors compare adverse outcomes after an explicitly available action was executed versus deliberately not executed in the same structured context. This is observational association, not causal or perceived control.",
+      "data_dependencies": ["action_opportunity_model", "resolved_categorical_adverse_outcome"],
+      "version": "action-outcome-contingency-v1",
+      "provenance": "config/model-specs/action-outcome-contingency.json"
+    },
+    {
+      "id": "causal_controllability",
+      "display_name": "CAUSAL CONTROL INFERENCE",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "No instrumental action-outcome controllability learner is implemented.",
+      "status_note": "Observed conditional differences do not prove that Cy's action caused an outcome because actions are not randomly assigned and situations may be confounded.",
       "data_dependencies": [],
+      "available_future_dependencies": ["learned_controllability"],
+      "version": null
+    },
+    {
+      "id": "bayesian_controllability_model_comparison",
+      "display_name": "BAYESIAN CONTROLLABILITY MODEL COMPARISON",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No comparison of context-only and context-plus-action predictive models, fitted participant parameters, prior odds or Pavlovian-instrumental arbitration is implemented.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["learned_controllability"],
+      "version": null
+    },
+    {
+      "id": "action_selection_from_control",
+      "display_name": "ACTION SELECTION FROM CONTROL",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Learned action-outcome evidence does not alter Cy's action selection, prompt or prose.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["learned_controllability", "perceived_controllability"],
       "version": null
     },
     {
@@ -342,8 +383,9 @@
       "display_name": "vmPFC / CONTROL-REGULATION ANALOGY",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Objective control is represented, but perceived and learned controllability are not modelled; no vmPFC activation mapping is valid.",
+      "status_note": "An action-outcome contingency substrate is LIVE, but perceived control and neural activation remain NOT MODELLED. The statistical ledger is not a model of vmPFC firing or regulation.",
       "data_dependencies": ["objective_controllability", "perceived_controllability", "learned_controllability"],
+      "available_future_dependencies": ["learned_controllability", "causal_controllability", "perceived_controllability"],
       "ui_exposed": false,
       "version": null
     },
@@ -390,7 +432,7 @@
       "display_name": "PREFRONTAL REGULATION / ACTION-CONTROL ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent regulation and action-control processes. Objective control is now represented separately, but perceived and learned controllability remain unmodelled. The displayed runner mapping is an unapproved inverse linear heuristic and is not shown as live activation.",
+      "status_note": "Intended to represent regulation and action-control processes. Objective control and observational action-outcome contingency are represented separately, but perceived control and neural regulation remain unmodelled. The displayed runner mapping is an unapproved inverse linear heuristic and is not shown as live activation.",
       "data_dependencies": ["fatigue", "arousal", "pain", "action_control"],
       "available_future_dependencies": ["sleep_homeostasis", "objective_controllability", "perceived_controllability", "learned_controllability"],
       "version": "legacy-brain-map-v1"

@@ -13,6 +13,7 @@ import {
   posteriorMean,
   posteriorVariance,
 } from './probabilistic-threat-learning.js';
+import { contingenciesForContext } from './action-outcome-contingency.js';
 
 export const DEFENSIVE_CONTEXT_SCHEMA = 'cy.current-defensive-context';
 export const DEFENSIVE_CONTEXT_VERSION = 1;
@@ -203,7 +204,11 @@ export function reconcileCurrentDefensiveContext(raw, { now = Date.now() } = {})
   return out;
 }
 
-export function contextsFromEnvironmentRecord(state, threatLearning, record) {
+export function contextsFromEnvironmentRecord(state, threatLearning, learnedControllability, record) {
+  if (record == null) {
+    record = learnedControllability;
+    learnedControllability = null;
+  }
   const event = record && record.world_event;
   if (!event || !event.world) return [];
   const cues = cuesFromEnvironmentRecord(record);
@@ -221,6 +226,14 @@ export function contextsFromEnvironmentRecord(state, threatLearning, record) {
     );
     if (!learnedAssociations.length) continue;
     const { contextId, contextKey } = contextIdentity(event, outcomeClass);
+    const actionFacts = event.world && event.world.action_opportunity;
+    const availableActions = actionFacts && Array.isArray(actionFacts.available_actions)
+      ? actionFacts.available_actions : [];
+    const learnedActionOutcomeContingency = contingenciesForContext(
+      learnedControllability,
+      contextId,
+      availableActions,
+    );
     const previous = state && state.contexts ? state.contexts[contextKey] : null;
     const temporal = temporalStatus(event, outcomeStatus);
     const resolution = resolutionStatus(event, outcomeStatus);
@@ -244,7 +257,8 @@ export function contextsFromEnvironmentRecord(state, threatLearning, record) {
       worldAmbiguity: worldAmbiguity(record),
       objectiveControllability: objectiveControllability(event),
       perceivedControllability: 'NOT_MODELLED',
-      learnedActionOutcomeControl: 'NOT_MODELLED',
+      learnedActionOutcomeContingency,
+      causalActionOutcomeControl: 'NOT_MODELLED',
       temporalStatus: temporal,
       outcomeStatus,
       resolutionStatus: resolution,
@@ -254,6 +268,7 @@ export function contextsFromEnvironmentRecord(state, threatLearning, record) {
         learnedAssociations: 'GROUNDED_LEARNED_POSTERIOR',
         worldAmbiguity: 'ENGINEERING_ONTOLOGY_FROM_STRUCTURED_OBSERVATION_CERTAINTY',
         objectiveControllability: 'STRUCTURED_WORLD_FACT',
+        learnedActionOutcomeContingency: 'GROUNDED_OBSERVATIONAL_CONTINGENCY_POSTERIORS',
         temporalStatus: 'ENGINEERING_ONTOLOGY_FROM_STRUCTURED_WORLD_FACT',
         outcomeStatus: 'STRUCTURED_WORLD_FACT',
         resolutionStatus: 'STRUCTURED_WORLD_FACT',
@@ -264,9 +279,13 @@ export function contextsFromEnvironmentRecord(state, threatLearning, record) {
   return transitions;
 }
 
-export function observeCurrentDefensiveContextRecord(state, threatLearning, record) {
+export function observeCurrentDefensiveContextRecord(state, threatLearning, learnedControllability, record) {
+  if (record == null) {
+    record = learnedControllability;
+    learnedControllability = null;
+  }
   if (!state || !record) return { updated: false, reason: 'invalid_record', transitions: [] };
-  const transitions = contextsFromEnvironmentRecord(state, threatLearning, record);
+  const transitions = contextsFromEnvironmentRecord(state, threatLearning, learnedControllability, record);
   for (const transition of transitions) {
     state.contexts[transition.contextKey] = clone(transition);
     state.history.push(clone(transition));
@@ -306,7 +325,7 @@ export function currentDefensiveContextInspection(state) {
     activeContexts: contexts.filter((context) => context.active),
     contexts,
     history: clone((state && state.history) || []),
-    notModelled: ['anxiety', 'fear intensity', 'salience ranking', 'remembered or imagined cue activation', 'perceived controllability', 'learned action-outcome control', 'brain activation'],
+    notModelled: ['anxiety', 'fear intensity', 'salience ranking', 'remembered or imagined cue activation', 'perceived controllability', 'causal action-outcome control', 'brain activation'],
   };
 }
 
@@ -326,7 +345,8 @@ export function currentDefensiveContextSnapshot(state) {
       worldAmbiguity: context.worldAmbiguity,
       objectiveControllability: context.objectiveControllability,
       perceivedControllability: context.perceivedControllability,
-      learnedActionOutcomeControl: context.learnedActionOutcomeControl,
+      learnedActionOutcomeContingency: clone(context.learnedActionOutcomeContingency || []),
+      causalActionOutcomeControl: context.causalActionOutcomeControl,
       temporalStatus: context.temporalStatus,
       outcomeStatus: context.outcomeStatus,
       resolutionStatus: context.resolutionStatus,

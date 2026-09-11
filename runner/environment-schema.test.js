@@ -34,6 +34,9 @@ assert.equal(record.soma_input.associative_learning.linkage, 'unknown');
 assert.deepEqual(record.soma_input.associative_learning.outcomes, []);
 assert.equal(record.soma_input.defensive_context.temporal_status, 'UNKNOWN');
 assert.deepEqual(record.soma_input.defensive_context.adverse_outcome_classes, []);
+assert.equal(record.soma_input.action_opportunity.id, null);
+assert.deepEqual(record.soma_input.action_opportunity.available_actions, []);
+assert.equal(record.soma_input.action_opportunity.action_actually_executed, 'unknown');
 assert.equal(record.observation.summary, 'lunch arrived and some was eaten');
 assert.equal(record.consumed_by[0], 'soma-input-staging-v1');
 assert.equal('observation' in record.world_event, false);
@@ -84,6 +87,7 @@ assert.deepEqual(search.world.associative_learning.outcomes, [
 assert.equal(search.world.defensive_context.temporal_status, 'RESOLVED');
 assert.deepEqual(search.world.defensive_context.adverse_outcome_classes,
   ['COERCIVE_LOSS_OF_CONTROL', 'PHYSICAL_HARM']);
+assert.equal(search.world.action_opportunity.chosen_action, 'unknown');
 
 const encoded = JSON.stringify(record);
 for (const forbidden of ['threat_score', 'emotion_score', 'brain_activation', 'appraisal_magnitude']) {

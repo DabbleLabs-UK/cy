@@ -172,6 +172,7 @@ async function boot() {
     historyUrl: CFG.somaHistory,
     threatLearningUrl: CFG.threatLearning,
     defensiveContextUrl: CFG.defensiveContext,
+    learnedControllabilityUrl: CFG.learnedControllability,
     feedingUrl: CFG.feeding,
     registry: CFG.implementationRegistry,
     admin: !!CFG.admin,

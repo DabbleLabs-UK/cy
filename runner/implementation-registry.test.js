@@ -23,7 +23,11 @@ assert.equal(implementationEntry('soma_subsystems', 'current_defensive_context')
 assert.equal(implementationEntry('soma_subsystems', 'objective_controllability').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'threat_imminence_representation').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'perceived_controllability').implementation_status, 'NOT_IMPLEMENTED');
-assert.equal(implementationEntry('soma_subsystems', 'learned_controllability').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'action_opportunity_model').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'learned_controllability').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'causal_controllability').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'bayesian_controllability_model_comparison').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'action_selection_from_control').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'remembered_imagined_threat_cues').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'feeding_event_model').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implementation_status, 'IMPLEMENTED');
@@ -40,6 +44,7 @@ assert.equal(implementationEntry('brain_regions', 'acc').implementation_status, 
 assert.equal(implementationEntry('brain_regions', 'bnstUncertainThreat').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'pagImminentDefense').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'vmpfcControl').implementation_status, 'NOT_IMPLEMENTED');
+assert.ok(implementationEntry('brain_regions', 'vmpfcControl').available_future_dependencies.includes('learned_controllability'));
 assert.equal(implementationEntry('brain_regions', 'bnstUncertainThreat').ui_exposed, false);
 assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');

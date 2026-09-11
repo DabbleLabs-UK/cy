@@ -30,6 +30,13 @@ assert.equal(expected.world.physical.food.meal_id, '2026-09-11:lunch');
 assert.equal(expected.world.physical.food.meal_type, 'lunch');
 const linked = chooseMealEvent('lunch', () => 0.1, { mealId: '2026-09-11:lunch' });
 assert.equal(linked.world.physical.food.meal_id, expected.world.physical.food.meal_id);
+assert.equal(linked.world.action_opportunity.id, 'meal:2026-09-11:lunch');
+assert.equal(linked.world.action_opportunity.context_id, 'meal:lunch');
+assert.deepEqual(linked.world.action_opportunity.available_actions,
+  ['action:accept_meal', 'action:refuse_meal']);
+assert.equal(linked.world.action_opportunity.chosen_action, 'action:accept_meal');
+assert.equal(linked.world.action_opportunity.action_actually_executed, 'action:accept_meal');
+assert.equal(linked.world.action_opportunity.execution_status, 'EXECUTED');
 
 const partial = chooseMealEvent('lunch', () => 0.9);
 assert.equal(partial.provisional.body.meal.outcome, 'partial');
@@ -49,6 +56,9 @@ assert.equal(missed.world.physical.food.received, 'no');
 assert.equal(missed.world.physical.food.intake_outcome, 'unavailable');
 assert.deepEqual(missed.world.associative_learning.outcomes,
   [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'occurred' }]);
+assert.deepEqual(missed.world.action_opportunity.available_actions, []);
+assert.equal(missed.world.action_opportunity.execution_status, 'NOT_AVAILABLE');
+assert.equal(missed.world.action_opportunity.action_actually_executed, 'NOT_AVAILABLE');
 
 const refused = chooseMealEvent('tea', () => 0.99);
 assert.equal(refused.provisional.body.meal.outcome, 'refused');
@@ -56,6 +66,8 @@ assert.equal(refused.world.physical.food.offered, 'yes');
 assert.equal(refused.world.physical.food.available, 'yes');
 assert.equal(refused.world.physical.food.received, 'yes');
 assert.equal(refused.world.physical.food.intake_outcome, 'refused');
+assert.equal(refused.world.action_opportunity.chosen_action, 'action:refuse_meal');
+assert.equal(refused.world.action_opportunity.execution_status, 'EXECUTED');
 
 const supportive = chooseRoutineEvent('association', () => 0.5);
 assert.equal(supportive.provisional.social.quality, 'supportive');

@@ -57,7 +57,8 @@
   "controllability_distinction": {
     "objective_controllability": "LIVE only as an exact structured world category",
     "perceived_controllability": "NOT MODELLED",
-    "learned_action_outcome_control": "NOT MODELLED"
+    "learned_action_outcome_contingency": "LIVE as separately attached observational evidence; not a context score",
+    "causal_action_outcome_control": "NOT MODELLED"
   },
   "numeric_psychological_parameters": [],
   "engineering_constants": [
@@ -67,8 +68,8 @@
     "The structured environment producer, not this subsystem, determines whether a cue is present and assigns temporal, objective-control, ambiguity and resolution categories.",
     "An unresolved context cannot close without a later structured event carrying the same context_id and explicit resolution facts.",
     "Learned posterior assumptions remain binary, stationary and independent exactly as defined by probabilistic-threat-learning-v1.",
-    "Public summaries omit exact posterior parameters and source event identifiers; owner inspection retains them.",
+    "Public summaries omit exact cue-outcome posterior parameters and all source event identifiers; separately attached action-outcome aggregates retain their exact public posterior evidence under that model's boundary.",
     "No biological activation, subjective response or attentional priority is inferred from this factual vector."
   ],
-  "not_modelled": ["anxiety", "fear intensity", "weighted threat score", "salience score", "time decay", "imminence score", "control score", "uncertainty score", "remembered cue reactivation", "imagined cue reactivation", "perceived controllability", "instrumental controllability learning", "brain activation"]
+  "not_modelled": ["anxiety", "fear intensity", "weighted threat score", "salience score", "time decay", "imminence score", "control score", "uncertainty score", "remembered cue reactivation", "imagined cue reactivation", "perceived controllability", "causal controllability", "brain activation"]
 }

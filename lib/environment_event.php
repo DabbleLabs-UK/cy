@@ -118,6 +118,20 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Joins present structured external cues to existing learned posteriors and keeps ambiguity, categorical imminence, objective control and resolution separate. It calculates no emotion score.',
             ];
+        } elseif ($consumer === 'action-opportunity-model-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Reads only explicit structured action availability, selection, execution, timing and resolution. Missing action data is not treated as deliberate inaction.',
+            ];
+        } elseif ($consumer === 'action-outcome-contingency-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Updates separate Beta-Bernoulli posteriors for executed action and explicit no-action conditions in the same context. It infers neither causal nor perceived control.',
+            ];
         } elseif ($consumer === 'feeding-event-model-v1') {
             $consumers[] = [
                 'id' => $consumer,
@@ -161,6 +175,10 @@ function captive_environment_record_inspection(array $record, array $registry): 
         'what_current_defensive_context_did' => $record['current_defensive_context'] ?? [
             'status' => 'not_recorded',
             'detail' => 'This record predates current defensive context or did not reach that consumer.',
+        ],
+        'what_action_outcome_contingency_did' => $record['action_outcome_contingency'] ?? [
+            'status' => 'not_recorded',
+            'detail' => 'This record has no explicit action opportunity, predates action-outcome learning, or did not reach that consumer.',
         ],
         'what_feeding_ledger_did' => $record['feeding'] ?? [
             'status' => 'not_recorded',

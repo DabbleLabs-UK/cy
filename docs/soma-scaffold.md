@@ -273,18 +273,21 @@ context identities and adverse-outcome classes remain independent. Unresolved
 contexts survive a runner restart, and the complete actual transition sequence
 is persisted.
 
-The current event is evaluated against learner state before that event's
-resolved outcome updates the posterior. This preserves the expectation that was
-available when the event arrived. A later context transition can use the newer
-posterior without rewriting the opening snapshot.
+The current event is evaluated after any explicit action-opportunity resolution
+has updated the separate action-outcome learner and before that event updates
+the cue-outcome threat learner. This lets the context attach current matching
+action evidence while preserving the cue-outcome expectation that was available
+when the event arrived.
 
-Public Soma output lists active contexts using categorical facts and qualitative
-evidence balance only. Exact alpha, beta, mean, variance, observation counts,
+Public Soma output lists cue-outcome evidence in active contexts using categorical
+facts and qualitative balance only. Exact cue-outcome alpha, beta, mean, variance,
 source events and transition history are available in the owner-only inspector.
+Matching action-outcome evidence follows its own public aggregate boundary below.
 
 OBJECTIVE CONTROLLABILITY is LIVE only where the structured world supplies it.
-PERCEIVED CONTROLLABILITY, LEARNED ACTION-OUTCOME CONTROL and remembered or
-imagined threat-cue activation are NOT MODELLED. Anxiety and arousal remain
+LEARNED ACTION-OUTCOME CONTINGENCY is LIVE as separate observational evidence.
+PERCEIVED CONTROLLABILITY, CAUSAL CONTROL and remembered or imagined threat-cue
+activation are NOT MODELLED. Anxiety and arousal remain
 PROVISIONAL. The amygdala analogy remains PROVISIONAL; BNST, PAG and vmPFC
 activation mappings are NOT MODELLED and are hidden because the current artwork
 does not support them.
@@ -292,6 +295,68 @@ does not support them.
 No new psychological numerical parameter was introduced. The only new number is
 state schema version 1, classified as ENGINEERING / STORAGE. The attached
 posterior values are inherited unchanged from probabilistic-threat-learning-v1.
+
+## Grounded learned action-outcome contingency
+
+The authoritative model specification is
+config/model-specs/action-outcome-contingency.json. The implementation is in
+runner/action-outcome-contingency.js.
+
+An update requires an explicit `cy.action-opportunity` world record. It stores a
+stable opportunity and context ID, available and unavailable actions with
+reasons, chosen action, actual execution status, onset and resolution times,
+linked environment events and categorical outcome resolution. Missing action
+data is not a no-action trial. INTENDED, ATTEMPTED, PREVENTED, UNKNOWN,
+NOT_AVAILABLE, unresolved opportunities and UNKNOWN outcomes do not update.
+
+The current world supplies only two real canonical actions:
+`action:accept_meal` and `action:refuse_meal`. They are available only when food
+actually arrives. Their independent structured contexts are `meal:breakfast`,
+`meal:lunch` and `meal:tea`. If food is unavailable, neither action is evidence.
+Journal, drawing, sleep, silence and generated prose are not instrumental
+actions in this model.
+
+For each context x action x adverse-outcome class, separate action and explicit
+no-action Bernoulli conditions begin with Beta(1,1). For binary outcome `u`:
+
+```
+alpha_t = alpha_(t-1) + u
+beta_t = beta_(t-1) + (1 - u)
+mean = alpha / (alpha + beta)
+variance = alpha * beta / ((alpha + beta)^2 * (alpha + beta + 1))
+```
+
+The avoidance contingency is:
+
+```
+delta_control = P(O | NOT_ACTION:A, C) - P(O | A, C)
+Var(delta_control) = Var(P_no_action) + Var(P_action)
+```
+
+Positive evidence means the observed adverse-outcome probability has been lower
+with that action; negative evidence means it has been higher. This value remains
+in [-1,1] and is never mapped to 0-100. Both exact Beta posteriors, means,
+variances and counts remain visible. A credible interval is NOT MODELLED.
+
+These are observational associations from Cy's naturally occurring choices,
+not causal proof. Context generalisation, perceived control, causal control,
+helplessness, coping efficacy, resilience, the full Huys-Dayan model, the
+Dorfman-Gershman Bayesian controllability comparison and action arbitration are
+NOT MODELLED. The ledger does not alter Anxiety, any other affect, action
+selection, prompts, prose or neural analogies.
+
+The complete post-installation opportunity and exact before/after posterior
+history persists in Soma state. Public output shows exact aggregate evidence
+without opportunity or source-event IDs. Owner inspection reconstructs the
+complete stored trace. There is no historical prose backfill, forgetting,
+decay, recency weighting or arbitrary time window.
+
+Numerical inventory: alpha0=1 and beta0=1 are CONVENTIONAL STATISTICAL PRIOR
+values, not empirical psychological constants. Action-opportunity schema version
+1 and state schema version 1 are ENGINEERING / STORAGE values. Public values use
+three decimal places, an ENGINEERING / DISPLAY choice; exact values persist.
+There are no fitted, learning-rate, generalisation, efficacy, anxiety or vmPFC
+coefficients.
 
 ## Previous event representation
 

@@ -111,6 +111,14 @@ export function createSomaRuntime(rawState, {
       });
       return result;
     },
+    observeControllabilityRecord(record) {
+      let result = null;
+      mutate('action-outcome contingency learning', (current) => {
+        result = engine.observeSomaControllabilityRecord(current, record);
+        return current;
+      });
+      return result;
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

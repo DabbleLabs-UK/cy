@@ -27,6 +27,16 @@ $state = [
         'homeostaticEnergyState' => 'NOT_MODELLED',
         'subjectiveHunger' => 'PROVISIONAL',
     ],
+    'learnedControllability' => [
+        'status' => 'implemented',
+        'contingencies' => [[
+            'contextId' => 'meal:lunch',
+            'actionId' => 'action:accept_meal',
+            'contingencyDifference' => 0.25,
+            'causalStatus' => 'NOT_ESTABLISHED',
+        ]],
+        'perceivedControl' => 'NOT_MODELLED',
+    ],
 ];
 $implemented = captive_soma_api_payload([
     'seq' => '42',
@@ -38,6 +48,7 @@ check_soma($implemented['seq'] === 42, 'event sequence is preserved');
 check_soma($implemented['soma']['status'] === 'provisional', 'registry truth overrides the legacy runner claim');
 check_soma($implemented['soma']['circuits'] === $state['circuits'], 'runner values are returned without recomputation');
 check_soma($implemented['soma']['feeding'] === $state['feeding'], 'grounded feeding state is returned without recomputation');
+check_soma($implemented['soma']['learnedControllability'] === $state['learnedControllability'], 'action-outcome evidence is returned without recomputation');
 check_soma($implemented['implementation_registry']['schema'] === 'cy.implementation-registry', 'registry accompanies the state');
 
 $failedRuntime = captive_soma_api_payload([

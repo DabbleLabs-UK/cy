@@ -587,6 +587,10 @@ async function main() {
     durationMs = null,
     provisionalConsumer = true,
   } = {}) {
+    const eventId = `env-${randomUUID()}`;
+    const eventTimestamp = tsNow();
+    const suppliedOpportunity = world.action_opportunity && typeof world.action_opportunity === 'object'
+      ? world.action_opportunity : null;
     const worldWithDescription = {
       ...world,
       context: {
@@ -595,10 +599,22 @@ async function main() {
           ? world.context.description
           : summary,
       },
+      ...(suppliedOpportunity && suppliedOpportunity.id ? {
+        action_opportunity: {
+          ...suppliedOpportunity,
+          onset_at: suppliedOpportunity.onset_at || eventTimestamp,
+          resolved_at: String(suppliedOpportunity.resolution_status || '').toUpperCase() === 'RESOLVED'
+            ? suppliedOpportunity.resolved_at || eventTimestamp : suppliedOpportunity.resolved_at,
+          linked_event_ids: [...new Set([
+            ...(Array.isArray(suppliedOpportunity.linked_event_ids) ? suppliedOpportunity.linked_event_ids : []),
+            eventId,
+          ])],
+        },
+      } : {}),
     };
     const event = createEnvironmentEvent(archetypeId, {
-      id: `env-${randomUUID()}`,
-      timestamp: tsNow(),
+      id: eventId,
+      timestamp: eventTimestamp,
       eventType,
       durationMs,
       world: worldWithDescription,
@@ -610,6 +626,9 @@ async function main() {
         ...(['meal', 'meal_expected'].includes(archetypeId)
           ? ['feeding-event-model-v1', 'ingestion-ledger-v1']
           : []),
+        ...(worldWithDescription.action_opportunity && worldWithDescription.action_opportunity.id
+          ? ['action-opportunity-model-v1', 'action-outcome-contingency-v1']
+          : []),
         'current-defensive-context-v1',
         'probabilistic-threat-learning-v1',
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
@@ -619,6 +638,7 @@ async function main() {
       ],
     });
     record.feeding = soma.observeFeedingRecord(record);
+    record.action_outcome_contingency = soma.observeControllabilityRecord(record);
     record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
     record.threat_learning = soma.observeThreatLearningRecord(record);
     emit({ kind: 'world_event_record', payload: record });
@@ -2496,9 +2516,10 @@ async function main() {
     const mealId = slot.kind === 'meal'
       ? `${londonParts(new Date(now)).date}:${slot.meal}`
       : null;
+    let expectedRecord = null;
     if (mealId) {
       const expected = mealExpectation(slot.meal, mealId);
-      captureEnvironmentEvent(expected.archetypeId, {
+      expectedRecord = captureEnvironmentEvent(expected.archetypeId, {
         eventType: expected.name,
         summary: expected.text,
         world: expected.world,
@@ -2506,6 +2527,11 @@ async function main() {
       });
     }
     const event = materialiseScheduledEvent(slot, Math.random, { mealId });
+    if (expectedRecord && event.world.action_opportunity && event.world.action_opportunity.id) {
+      event.world.action_opportunity.onset_at = expectedRecord.world_event.timestamp;
+      event.world.action_opportunity.linked_event_ids = [expectedRecord.world_event.id];
+      event.world.context.previous_event_ids = [expectedRecord.world_event.id];
+    }
     const structured = captureEnvironmentEvent(event.archetypeId, {
       eventType: event.name,
       summary: event.text,

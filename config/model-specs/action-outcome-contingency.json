@@ -1,0 +1,103 @@
+{
+  "schema": "cy.model-spec",
+  "version": 1,
+  "id": "experienced-action-outcome-contingency",
+  "implementation_version": "action-outcome-contingency-v1",
+  "locked": true,
+  "public_name": "Experienced action-outcome contingency",
+  "implementation_status": "IMPLEMENTED",
+  "interpretation": "Context-specific observational evidence about whether a named adverse outcome has occurred at different rates when an explicitly available action was executed versus deliberately not executed.",
+  "scientific_and_computational_basis": [
+    {
+      "authors": "Maier and Seligman",
+      "year": 2016,
+      "title": "Learned helplessness at fifty: Insights from neuroscience",
+      "journal": "Psychological Review",
+      "doi": "10.1037/rev0000033",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4920136/",
+      "use": "Supports the importance of action-outcome controllability while not supplying a software coefficient or a subjective perceived-control model."
+    },
+    {
+      "authors": "Maier and Watkins",
+      "year": 2010,
+      "title": "Role of the medial prefrontal cortex in coping and resilience",
+      "journal": "Brain Research",
+      "doi": "10.1016/j.brainres.2010.08.039",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2967290/",
+      "use": "Supports the neuroscience relevance of experienced control, but this ledger is not a model of medial-prefrontal firing or regulation."
+    },
+    {
+      "authors": "Huys and Dayan",
+      "year": 2009,
+      "title": "A Bayesian formulation of behavioral control",
+      "journal": "Cognition",
+      "doi": "10.1016/j.cognition.2009.01.008",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19285311/",
+      "use": "Provides a computational treatment of beliefs about control. Cy implements only the simpler action-conditioned evidence substrate, not that full formulation."
+    },
+    {
+      "authors": "Dorfman and Gershman",
+      "year": 2019,
+      "title": "Controllability governs the balance between Pavlovian and instrumental action selection",
+      "journal": "Nature Communications",
+      "doi": "10.1038/s41467-019-13737-7",
+      "url": "https://www.nature.com/articles/s41467-019-13737-7",
+      "use": "Motivates comparison of context-only and context-plus-action predictions. Cy does not implement their Bayesian model comparison, fitted parameters, or action arbitration."
+    }
+  ],
+  "trial_requirement": "A trial exists only when a structured world record explicitly identifies an opportunity, the actions genuinely available, the chosen action, the action actually executed, execution status, timestamps and a resolved relevant outcome. Missing action data is not no-action evidence.",
+  "context_key": "context_id x action_id x outcome_class",
+  "context_generalisation": "NOT_MODELLED",
+  "action_conditions": {
+    "action": "The named action was available and execution_status was EXECUTED with that action chosen.",
+    "no_action": "The named action was available and was deliberately not executed, either because another available action was executed or chosen_action was NONE with execution_status NONE.",
+    "excluded": ["INTENDED", "ATTEMPTED", "PREVENTED", "UNKNOWN", "NOT_AVAILABLE", "unresolved opportunities", "UNKNOWN outcomes"]
+  },
+  "outcome_classes": ["PHYSICAL_HARM", "COERCIVE_LOSS_OF_CONTROL", "SOCIAL_HOSTILITY", "DEPRIVATION_OR_LOSS"],
+  "outcome_statuses": ["OCCURRED", "DID_NOT_OCCUR", "UNKNOWN"],
+  "model": {
+    "likelihood": "Bernoulli",
+    "prior": "Beta",
+    "alpha_0": 1,
+    "beta_0": 1,
+    "prior_classification": "CONVENTIONAL STATISTICAL PRIOR; not an empirical psychological constant",
+    "update_alpha": "alpha_t = alpha_(t-1) + u_t",
+    "update_beta": "beta_t = beta_(t-1) + (1 - u_t)",
+    "posterior_mean": "mu = alpha / (alpha + beta)",
+    "posterior_variance": "var = alpha * beta / ((alpha + beta)^2 * (alpha + beta + 1))",
+    "avoidance_contingency": "delta_control = P(O | NOT_ACTION:A, C) - P(O | A, C)",
+    "contingency_variance": "Var(delta_control) = Var(P_no_action) + Var(P_action)",
+    "range": "[-1, 1]",
+    "credible_interval": "NOT_MODELLED",
+    "free_or_fitted_parameters": []
+  },
+  "causal_limit": "The estimates are observational. Cy's choices are not randomly assigned, so differences can be confounded by context, actor, opportunity and prior situation. Causal control is not established.",
+  "state_lifecycle": "Complete post-installation opportunities and exact posterior updates persist in Soma state. No prose backfill, forgetting, decay, recency weighting or arbitrary time window is used.",
+  "public_boundary": "Public output contains exact aggregate posteriors, counts, means, variances and contingency differences, but not opportunity IDs or source event IDs. Owner inspection contains the complete trace.",
+  "soma_boundary": "The ledger is accessible in Soma state but does not alter Anxiety, Arousal, Anger, Rumination, action selection, prompts, generated prose or brain-region activation.",
+  "numeric_inventory": [
+    { "name": "alpha_0", "value": 1, "classification": "CONVENTIONAL STATISTICAL PRIOR; not an empirical psychological constant" },
+    { "name": "beta_0", "value": 1, "classification": "CONVENTIONAL STATISTICAL PRIOR; not an empirical psychological constant" },
+    { "name": "state_schema_version", "value": 1, "classification": "ENGINEERING / STORAGE; not a model parameter" },
+    { "name": "action_opportunity_schema_version", "value": 1, "classification": "ENGINEERING / STORAGE; not a model parameter" },
+    { "name": "public_decimal_places", "value": 3, "classification": "ENGINEERING / DISPLAY; exact stored values are retained" }
+  ],
+  "arbitrary_or_heuristic_psychological_constants": [],
+  "not_modelled": [
+    "subjective perceived control",
+    "causal control inference",
+    "learned helplessness",
+    "coping efficacy",
+    "resilience",
+    "context generalisation",
+    "credible interval",
+    "full Huys-Dayan behavioural-control model",
+    "Bayesian controllability model comparison",
+    "Dorfman-Gershman fitted parameters",
+    "Pavlovian-instrumental arbitration",
+    "action selection from control",
+    "anxiety or other affect effects",
+    "prompt or prose effects",
+    "vmPFC or other neural activation"
+  ]
+}

@@ -92,6 +92,21 @@ const BASE_WORLD = Object.freeze({
   context: { location: null, description: null, associated_entities: [], previous_event_ids: [] },
   associative_learning: { linkage: UNKNOWN, explicit_signals: [], outcomes: [] },
   defensive_context: { context_id: null, temporal_status: 'UNKNOWN', adverse_outcome_classes: [] },
+  action_opportunity: {
+    id: null,
+    context_id: null,
+    context_type: null,
+    available_actions: [],
+    unavailable_actions: [],
+    chosen_action: UNKNOWN,
+    action_actually_executed: UNKNOWN,
+    execution_status: UNKNOWN,
+    onset_at: null,
+    resolved_at: null,
+    resolution_status: UNKNOWN,
+    linked_event_ids: [],
+    outcome_resolution: [],
+  },
 });
 
 const BASE_OBSERVATION = Object.freeze({
@@ -212,6 +227,7 @@ export function environmentEventToSomaInput(event) {
     },
     associative_learning: deepClone(event.world.associative_learning),
     defensive_context: deepClone(event.world.defensive_context),
+    action_opportunity: deepClone(event.world.action_opportunity),
   };
 }
 

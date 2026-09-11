@@ -38,6 +38,8 @@ const MEAL_LABELS = {
   tea: 'tea',
 };
 
+export const MEAL_ACTIONS = Object.freeze(['action:accept_meal', 'action:refuse_meal']);
+
 export function mealExpectation(meal, mealId) {
   const label = MEAL_LABELS[meal] || 'meal';
   const text = `${label} was scheduled`;
@@ -84,6 +86,10 @@ export function chooseMealEvent(meal, rnd = Math.random, { mealId = null } = {})
   const intakeOutcome = outcome === 'eaten' ? 'full_consumed'
     : outcome === 'partial' ? 'partial_consumed'
       : outcome === 'missed' ? 'unavailable' : 'refused';
+  const deprivationOutcome = outcome === 'eaten' ? 'did_not_occur'
+    : outcome === 'partial' ? 'unknown' : 'occurred';
+  const opportunityId = mealId ? `meal:${mealId}` : null;
+  const contextId = `meal:${label}`;
   return {
     name: `${label}_${outcome}`,
     text,
@@ -115,13 +121,32 @@ export function chooseMealEvent(meal, rnd = Math.random, { mealId = null } = {})
         linkage: 'self_contained_event',
         outcomes: [{
           outcome_class: 'DEPRIVATION_OR_LOSS',
-          status: outcome === 'eaten' ? 'did_not_occur'
-            : outcome === 'missed' || outcome === 'refused' ? 'occurred' : 'unknown',
+          status: deprivationOutcome,
         }],
       },
       defensive_context: {
+        context_id: contextId,
         temporal_status: 'RESOLVED',
         adverse_outcome_classes: ['DEPRIVATION_OR_LOSS'],
+      },
+      action_opportunity: {
+        id: opportunityId,
+        context_id: contextId,
+        context_type: 'scheduled_meal',
+        available_actions: outcome === 'missed' ? [] : [...MEAL_ACTIONS],
+        unavailable_actions: outcome === 'missed'
+          ? MEAL_ACTIONS.map((actionId) => ({ action_id: actionId, reason: 'food_unavailable' }))
+          : [],
+        chosen_action: outcome === 'refused' ? 'action:refuse_meal'
+          : outcome === 'missed' ? 'NONE' : 'action:accept_meal',
+        action_actually_executed: outcome === 'refused' ? 'action:refuse_meal'
+          : outcome === 'missed' ? 'NOT_AVAILABLE' : 'action:accept_meal',
+        execution_status: outcome === 'missed' ? 'NOT_AVAILABLE' : 'EXECUTED',
+        onset_at: null,
+        resolved_at: null,
+        resolution_status: 'RESOLVED',
+        linked_event_ids: [],
+        outcome_resolution: [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: deprivationOutcome }],
       },
     },
     observation: { summary: text, observed_facts: { meal: label, outcome } },

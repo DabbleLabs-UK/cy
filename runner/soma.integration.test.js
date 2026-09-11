@@ -53,6 +53,36 @@ assert.equal(JSON.stringify({ appraisal: runtime.state.appraisal, experienced: r
 assert.equal(runtime.directive(), directiveBeforeContext,
   'K: current defensive context does not alter prompts or selected behaviour');
 
+const controllableMeal = createEnvironmentRecord(createEnvironmentEvent('meal', {
+  id: 'env-controllable-meal', timestamp: '2026-09-10 12:00:01.500',
+  world: {
+    action_opportunity: {
+      id: 'meal:integration:lunch',
+      context_id: 'meal:lunch',
+      context_type: 'scheduled_meal',
+      available_actions: ['action:accept_meal', 'action:refuse_meal'],
+      unavailable_actions: [],
+      chosen_action: 'action:accept_meal',
+      action_actually_executed: 'action:accept_meal',
+      execution_status: 'EXECUTED',
+      onset_at: '2026-09-10 11:59:00.000',
+      resolved_at: '2026-09-10 12:00:01.500',
+      resolution_status: 'RESOLVED',
+      linked_event_ids: [],
+      outcome_resolution: [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'did_not_occur' }],
+    },
+  },
+}));
+const anxietyBeforeControl = JSON.stringify(runtime.state.experienced.metrics.anxiety);
+const directiveBeforeControl = runtime.directive();
+runtime.observeControllabilityRecord(controllableMeal);
+assert.equal(runtime.state.learnedControllability.history.length, 2,
+  'both available meal actions receive explicit action/no-action evidence');
+assert.equal(JSON.stringify(runtime.state.experienced.metrics.anxiety), anxietyBeforeControl,
+  'O: action-outcome evidence does not change provisional Anxiety');
+assert.equal(runtime.directive(), directiveBeforeControl,
+  'action-outcome evidence does not alter the prompt or action selection');
+
 const groundedMeal = createEnvironmentRecord(createEnvironmentEvent('meal', {
   id: 'env-grounded-meal', timestamp: '2026-09-10 12:00:02.000',
   world: { physical: { food: {
@@ -134,6 +164,7 @@ const appraisalBeforeOutput = { ...runtime.state.appraisal };
 const threatBeforeOutput = JSON.stringify(runtime.state.threatLearning);
 const defensiveBeforeOutput = JSON.stringify(runtime.state.currentDefensiveContext);
 const feedingBeforeOutput = JSON.stringify(runtime.state.feeding);
+const controllabilityBeforeOutput = JSON.stringify(runtime.state.learnedControllability);
 runtime.observeOutput('locke and the blue postcard again. i will not forget it.', { mode: 'journal', now: t0 + 7000 });
 assert.deepEqual(runtime.state.appraisal, appraisalBeforeOutput, 'own prose did not become an external event');
 assert.equal(JSON.stringify(runtime.state.threatLearning), threatBeforeOutput, 'own prose did not update threat learning');
@@ -141,6 +172,8 @@ assert.equal(JSON.stringify(runtime.state.currentDefensiveContext), defensiveBef
   'own prose did not create a current defensive context');
 assert.equal(JSON.stringify(runtime.state.feeding), feedingBeforeOutput,
   'own prose did not create feeding or deprivation evidence');
+assert.equal(JSON.stringify(runtime.state.learnedControllability), controllabilityBeforeOutput,
+  'K: own prose did not create an action opportunity or action-outcome evidence');
 assert.ok(runtime.state.expression.themes.includes('locke') || runtime.state.expression.themes.includes('postcard'));
 
 const persistenceDir = await mkdtemp(join(tmpdir(), 'cy-soma-persist-'));
@@ -162,6 +195,8 @@ assert.equal(restarted.state.expression.lastText, runtime.state.expression.lastT
 assert.deepEqual(restarted.state.threatLearning, runtime.state.threatLearning);
 assert.deepEqual(restarted.state.currentDefensiveContext, runtime.state.currentDefensiveContext);
 assert.deepEqual(restarted.state.feeding.records, runtime.state.feeding.records);
+assert.deepEqual(restarted.state.learnedControllability, runtime.state.learnedControllability,
+  'L: action opportunities and exact posteriors survive restart');
 assert.equal(restarted.state.feeding.lastKnownIntakeEventId, runtime.state.feeding.lastKnownIntakeEventId);
 assert.equal(restarted.state.feeding.unknownIntervals.at(-1).ingestionAssumption, 'NONE_MADE');
 

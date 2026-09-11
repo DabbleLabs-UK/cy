@@ -12,6 +12,10 @@ import {
   observeThreatLearningRecord,
   updateThreatLearning,
 } from './probabilistic-threat-learning.js';
+import {
+  createControllabilityState,
+  observeControllabilityRecord,
+} from './action-outcome-contingency.js';
 
 const T0 = '2026-09-11 09:00:00.000';
 
@@ -82,7 +86,9 @@ assert.equal(potential.transitions[0].resolutionStatus, 'UNRESOLVED',
 assert.equal(potential.transitions[0].temporalStatus, 'POTENTIAL');
 assert.equal(potential.transitions[0].objectiveControllability, 'NONE', 'E: objective control is copied categorically');
 assert.equal(potential.transitions[0].perceivedControllability, 'NOT_MODELLED', 'F: perceived control is absent');
-assert.equal(potential.transitions[0].learnedActionOutcomeControl, 'NOT_MODELLED', 'F: instrumental control is absent');
+assert.deepEqual(potential.transitions[0].learnedActionOutcomeContingency, [],
+  'F: no action contingency is fabricated without explicit opportunities');
+assert.equal(potential.transitions[0].causalActionOutcomeControl, 'NOT_MODELLED');
 
 const ongoing = observeCurrentDefensiveContextRecord(state, learning, searchRecord({
   id: 'search-ongoing', timestamp: '2026-09-11 09:01:00.000', phase: 'ONGOING', control: 'limited',
@@ -159,5 +165,48 @@ assert.ok(publicSnapshot.activeContexts.length > 0);
 assert.equal('posterior' in publicSnapshot.activeContexts[0].learnedEvidence[0], false,
   'public context does not expose the owner-only exact posterior');
 assert.equal(publicSnapshot.activeContexts[0].perceivedControllability, 'NOT_MODELLED');
+
+const controllability = createControllabilityState();
+const actionContextRecord = searchRecord({
+  id: 'action-context', contextId: 'search:instrumental', phase: 'ONGOING', outcome: 'occurred',
+});
+actionContextRecord.world_event.world.action_opportunity = {
+  id: 'opportunity:action-context',
+  context_id: 'search:instrumental',
+  context_type: 'officer_request',
+  available_actions: ['action:comply'],
+  unavailable_actions: [],
+  chosen_action: 'action:comply',
+  action_actually_executed: 'action:comply',
+  execution_status: 'EXECUTED',
+  onset_at: T0,
+  resolved_at: T0,
+  resolution_status: 'RESOLVED',
+  linked_event_ids: [],
+  outcome_resolution: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }],
+};
+observeControllabilityRecord(controllability, actionContextRecord);
+const attachedControl = observeCurrentDefensiveContextRecord(
+  createCurrentDefensiveContext(),
+  learning,
+  controllability,
+  actionContextRecord,
+).transitions[0];
+assert.equal(attachedControl.learnedActionOutcomeContingency.length, 1,
+  'M: matching structured context and available action attach learned evidence');
+assert.equal(attachedControl.learnedActionOutcomeContingency[0].actionId, 'action:comply');
+assert.equal(attachedControl.perceivedControllability, 'NOT_MODELLED',
+  'attached evidence does not become perceived control');
+const noCurrentOpportunity = searchRecord({
+  id: 'same-context-no-opportunity', contextId: 'search:instrumental', phase: 'ONGOING', outcome: 'unknown',
+});
+const unattachedControl = observeCurrentDefensiveContextRecord(
+  createCurrentDefensiveContext(),
+  learning,
+  controllability,
+  noCurrentOpportunity,
+).transitions[0];
+assert.deepEqual(unattachedControl.learnedActionOutcomeContingency, [],
+  'learned action evidence is not attached without a genuinely available current action');
 
 console.log('current-defensive-context.test.js: all checks passed');

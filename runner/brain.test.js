@@ -27,6 +27,8 @@ assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implemen
 assert.equal(implementationEntry('soma_subsystems', 'energy_homeostatic_state').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'objective_controllability').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'perceived_controllability').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'learned_controllability').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'causal_controllability').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
@@ -92,6 +94,15 @@ assert.match(source, /It is not an anxiety or threat score/);
 assert.match(source, /Learned uncertainty remains the separate posterior variance/);
 assert.match(source, /defensive-context-inspector/);
 assert.match(source, /ACTUAL CONTROL/);
+assert.equal(
+  implementationEntry('soma_subsystems', 'learned_controllability').display_name,
+  'LEARNED ACTION-OUTCOME CONTINGENCY',
+);
+assert.match(source, /learnedControllabilityStatus/);
+assert.match(source, /observational evidence, not a control percentage or causal proof/);
+assert.match(source, /controllability-inspector/);
+assert.match(source, /Causal control: not established\. Perceived control: not modelled\./);
+assert.doesNotMatch(source, /Cy has 73% control/);
 assert.equal(
   implementationEntry('soma_subsystems', 'feeding_event_model').display_name,
   'FEEDING / INTAKE EVENTS',

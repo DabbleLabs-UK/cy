@@ -275,6 +275,16 @@ function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, percei
   </section>`;
 }
 
+function controllabilityMarkup(status, causalStatus, perceivedStatus, comparisonStatus, actionStatus, admin) {
+  return `<section class="controllability-card status-${status.status.toLowerCase().replace('_', '-')}">
+    <div class="controllability-head"><span>${status.displayName}</span><strong class="controllability-status">${status.publicLabel}</strong></div>
+    <p class="controllability-explanation">Compares adverse-outcome evidence after a genuinely available action was executed versus deliberately not executed in the same structured context. It is observational evidence, not a control percentage or causal proof.</p>
+    <div class="controllability-evidence"><p class="controllability-empty">No resolved comparable action opportunities have been observed yet.</p></div>
+    <div class="controllability-limits"><span>${causalStatus.displayName}</span><strong>${causalStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${comparisonStatus.displayName}</span><strong>${comparisonStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong></div>
+    ${admin ? '<details class="controllability-inspector"><summary>ACTION-OUTCOME CONTINGENCY INSPECTION</summary><pre>Waiting for the complete opportunity and posterior history.</pre></details>' : ''}
+  </section>`;
+}
+
 function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, anticipationStatus, actionStatus, admin) {
   return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
     <div class="feeding-input-head"><span>${feedingStatus.displayName}</span><strong class="feeding-input-status">${feedingStatus.publicLabel}</strong></div>
@@ -307,12 +317,34 @@ function feedingTimestampLabel(value) {
   return new Date(parsed).toLocaleString();
 }
 
+function decimal3(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(3) : 'UNKNOWN';
+}
+
+function displayIdentifier(value) {
+  return String(value || 'unknown').replace(/^action:/, '').replaceAll(/[:_]/g, ' ').toUpperCase();
+}
+
+function contingencyEvidenceText(value) {
+  if (value === 'ADVERSE_OUTCOME_LOWER_WITH_ACTION') {
+    return 'Observed adverse-outcome probability has been lower after this action.';
+  }
+  if (value === 'ADVERSE_OUTCOME_HIGHER_WITH_ACTION') {
+    return 'Observed adverse-outcome probability has been higher after this action.';
+  }
+  if (value === 'POSTERIOR_MEANS_EQUAL') {
+    return 'The current action and no-action posterior means are equal.';
+  }
+  return 'Both action and no-action observations are needed before comparing them.';
+}
+
 export class BrainHud {
-  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', feedingUrl = '', registry = null, admin = false } = {}) {
+  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', learnedControllabilityUrl = '', feedingUrl = '', registry = null, admin = false } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
     this.threatLearningUrl = threatLearningUrl;
     this.defensiveContextUrl = defensiveContextUrl;
+    this.learnedControllabilityUrl = learnedControllabilityUrl;
     this.feedingUrl = feedingUrl;
     this.registry = registry || {};
     this.admin = admin;
@@ -327,6 +359,9 @@ export class BrainHud {
     this.threatImminenceStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_imminence_representation');
     this.perceivedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'perceived_controllability');
     this.learnedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'learned_controllability');
+    this.causalControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'causal_controllability');
+    this.controllabilityComparisonStatus = implementationStatus(this.registry, 'soma_subsystems', 'bayesian_controllability_model_comparison');
+    this.controlActionSelectionStatus = implementationStatus(this.registry, 'soma_subsystems', 'action_selection_from_control');
     this.rememberedThreatCueStatus = implementationStatus(this.registry, 'soma_subsystems', 'remembered_imagined_threat_cues');
     this.feedingStatus = implementationStatus(this.registry, 'soma_subsystems', 'ingestion_ledger');
     this.energyHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'energy_homeostatic_state');
@@ -418,6 +453,16 @@ export class BrainHud {
           this.admin,
         )
         : '';
+      const learnedControllability = definition.key === 'anxiety'
+        ? controllabilityMarkup(
+          this.learnedControllabilityStatus,
+          this.causalControllabilityStatus,
+          this.perceivedControllabilityStatus,
+          this.controllabilityComparisonStatus,
+          this.controlActionSelectionStatus,
+          this.admin,
+        )
+        : '';
       const feeding = definition.key === 'hunger'
         ? feedingMarkup(
           this.feedingStatus,
@@ -430,12 +475,13 @@ export class BrainHud {
         )
         : '';
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${defensiveContext}${feeding}${sleepHomeostasis}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${defensiveContext}${learnedControllability}${feeding}${sleepHomeostasis}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       if (definition.key === 'fatigue') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
+      if (definition.key === 'anxiety') this._wireControllability(entry);
       if (definition.key === 'hunger') this._wireFeeding(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
@@ -589,6 +635,24 @@ export class BrainHud {
     });
   }
 
+  _wireControllability(entry) {
+    const inspector = entry.querySelector('.controllability-inspector');
+    if (!inspector) return;
+    inspector.addEventListener('toggle', async () => {
+      if (!inspector.open || !this.learnedControllabilityUrl) return;
+      const target = inspector.querySelector('pre');
+      target.textContent = 'Loading exact action opportunities, posteriors and update history...';
+      try {
+        const response = await fetch(this.learnedControllabilityUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`action-outcome contingency ${response.status}`);
+        const data = await response.json();
+        target.textContent = JSON.stringify(data.inspection || data, null, 2);
+      } catch (error) {
+        target.textContent = error && error.message ? error.message : 'Action-outcome contingency inspection unavailable.';
+      }
+    });
+  }
+
   _wireFeeding(entry) {
     const inspector = entry.querySelector('.feeding-input-inspector');
     if (!inspector) return;
@@ -613,6 +677,7 @@ export class BrainHud {
     this.circadianProcessC = soma.circadianProcessC || null;
     this.threatLearning = soma.threatLearning || null;
     this.currentDefensiveContext = soma.currentDefensiveContext || null;
+    this.learnedControllability = soma.learnedControllability || null;
     this.feeding = soma.feeding || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
@@ -639,6 +704,7 @@ export class BrainHud {
     this.renderCircadianProcessC();
     this.renderThreatLearning();
     this.renderCurrentDefensiveContext();
+    this.renderControllability();
     this.renderFeeding();
     for (const definition of this.regionDefinitions) {
       const reading = definition.key === 'scnCircadian'
@@ -849,6 +915,69 @@ export class BrainHud {
         facts.appendChild(wrapper);
       }
       item.append(heading, outcome, evidence, facts);
+      const actionEvidence = Array.isArray(context.learnedActionOutcomeContingency)
+        ? context.learnedActionOutcomeContingency : [];
+      for (const learned of actionEvidence) {
+        const association = document.createElement('p');
+        association.className = 'defensive-context-action-evidence';
+        association.textContent = `${String(learned.actionId || 'action').replaceAll('_', ' ')}: ${contingencyEvidenceText(learned.evidenceDescription)} (${learned.observationCounts.actionPerformed} performed, ${learned.observationCounts.actionWithheld} withheld).`;
+        item.appendChild(association);
+      }
+      root.appendChild(item);
+    }
+  }
+
+  renderControllability() {
+    const entry = this.rows.anxiety;
+    const card = entry && entry.querySelector('.controllability-card');
+    if (!card) return;
+    const snapshot = this.learnedControllability;
+    const live = this.learnedControllabilityStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.controllability-status').textContent = live
+      ? this.learnedControllabilityStatus.publicLabel : 'UNAVAILABLE';
+    const root = card.querySelector('.controllability-evidence');
+    root.textContent = '';
+    const contingencies = live && Array.isArray(snapshot.contingencies) ? snapshot.contingencies : [];
+    if (!contingencies.length) {
+      const empty = document.createElement('p');
+      empty.className = 'controllability-empty';
+      empty.textContent = live
+        ? 'No resolved comparable action opportunities have been observed yet.'
+        : 'No grounded action-outcome contingency state has reached this view.';
+      root.appendChild(empty);
+      return;
+    }
+    for (const learned of contingencies) {
+      const item = document.createElement('article');
+      item.className = 'controllability-item';
+      const heading = document.createElement('strong');
+      heading.textContent = `${displayIdentifier(learned.actionId)} - ${displayIdentifier(learned.contextId)}`;
+      const outcome = document.createElement('p');
+      outcome.textContent = `Adverse outcome: ${displayIdentifier(learned.outcomeClass)}`;
+      const facts = document.createElement('dl');
+      const action = learned.actionPosterior || {};
+      const noAction = learned.noActionPosterior || {};
+      for (const [label, value] of [
+        ['ACTION PERFORMED', `${learned.observationCounts.actionPerformed} resolved; Beta(${action.alpha}, ${action.beta}); mean ${decimal3(action.mean)}; variance ${decimal3(action.variance)}`],
+        ['ACTION WITHHELD', `${learned.observationCounts.actionWithheld} resolved; Beta(${noAction.alpha}, ${noAction.beta}); mean ${decimal3(noAction.mean)}; variance ${decimal3(noAction.variance)}`],
+        ['OBSERVED DIFFERENCE', `${decimal3(learned.contingencyDifference)}; variance ${decimal3(learned.contingencyVariance)}`],
+      ]) {
+        const wrapper = document.createElement('div');
+        const term = document.createElement('dt');
+        const detail = document.createElement('dd');
+        term.textContent = label;
+        detail.textContent = value;
+        wrapper.append(term, detail);
+        facts.appendChild(wrapper);
+      }
+      const interpretation = document.createElement('p');
+      interpretation.className = 'controllability-interpretation';
+      interpretation.textContent = contingencyEvidenceText(learned.evidenceDescription);
+      const limits = document.createElement('p');
+      limits.className = 'controllability-causal-limit';
+      limits.textContent = 'Causal control: not established. Perceived control: not modelled.';
+      item.append(heading, outcome, facts, interpretation, limits);
       root.appendChild(item);
     }
   }

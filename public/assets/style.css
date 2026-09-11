@@ -950,6 +950,26 @@ body.cy-paused::after {
 .defensive-context-limits strong { color: #788693; }
 .defensive-context-inspector { margin-top: 7px; color: #91b2c2; font-size: 8px; }
 .defensive-context-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b5c7d0; font: inherit; line-height: 1.45; }
+.defensive-context-action-evidence { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid rgba(94, 126, 144, 0.28); color: #a8c7d6; font-size: 7.5px; line-height: 1.45; text-transform: uppercase; }
+.controllability-card { margin-top: 9px; padding: 9px; border: 1px solid #48596b; background: rgba(18, 24, 34, 0.5); }
+.controllability-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #c1d0df; font-size: 8px; letter-spacing: 0.08em; }
+.controllability-status { color: #65d59a; font-size: 8px; }
+.controllability-explanation,
+.controllability-empty { margin: 5px 0; color: #9eafbf; font-size: 8px; line-height: 1.45; }
+.controllability-evidence { display: grid; gap: 7px; margin-top: 7px; }
+.controllability-item { padding: 7px; border: 1px solid rgba(104, 122, 145, 0.45); background: rgba(6, 10, 17, 0.38); }
+.controllability-item > strong { display: block; color: #d0dce8; font: 8px/1.35 var(--mono); }
+.controllability-item > p { margin: 4px 0; color: #a6b6c6; font-size: 7.5px; line-height: 1.45; }
+.controllability-item dl { display: grid; gap: 4px; margin: 7px 0; }
+.controllability-item dl > div { display: grid; gap: 2px; }
+.controllability-item dt { color: #778da3; font-size: 7px; letter-spacing: 0.06em; }
+.controllability-item dd { margin: 0; color: #c0ccd7; font-size: 7.5px; overflow-wrap: anywhere; }
+.controllability-interpretation { color: #bdd4e4 !important; }
+.controllability-causal-limit { color: #8c9baa !important; text-transform: uppercase; }
+.controllability-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(104, 122, 145, 0.35); color: #8494a5; font-size: 7.5px; line-height: 1.4; }
+.controllability-limits strong { color: #788693; }
+.controllability-inspector { margin-top: 7px; color: #9aafc3; font-size: 8px; }
+.controllability-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bec8d2; font: inherit; line-height: 1.45; }
 .feeding-input-card { margin-top: 9px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
 .feeding-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
 .feeding-input-status { color: #65d59a; font-size: 8px; }
