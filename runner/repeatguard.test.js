@@ -19,7 +19,7 @@ import {
   stripAssistantContaminatedTail,
   stripScaffold,
 } from './warden.js';
-import { buildDirectives, buildPrompt, stateNotation } from './prompt.js';
+import { ZONE_A, buildDirectives, buildPrompt, stateNotation } from './prompt.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -83,7 +83,7 @@ const directives = buildDirectives(v, 'journal', { bans: 'BANS. x', form: 'FORM:
 assert.ok(!directives.includes(note), 'legacy notation is excluded from the live volatile block');
 const ctx = 'same ceiling again. tray came cold, bill on the twos kicking off';
 const prompt = buildPrompt(ctx, 'journal', null, directives);
-const cue = '[write only the next private thought as Cy. no analysis, explanation, or commentary about the material. begin immediately:]';
+const cue = '[write only the next private thought as Cy. keep his rough lower-case prison slang, shorthand, fragments and unfinished grammar even if the recent prose became formal. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
 assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
 const iCue = prompt.lastIndexOf(cue);
 assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');
@@ -93,6 +93,23 @@ const beforeCue = prompt.slice(0, iCue).trimEnd();
 assert.ok(/twos kicking off|ceiling/.test(beforeCue.slice(-80)), 'his own prose immediately precedes the cue');
 assert.ok(!/agit \.70|STATE:/.test(beforeCue.slice(-60)), 'the notation is NOT adjacent to the cue');
 ok('state notation is absent; his prose + cue are the final thing before generation');
+
+// ---- 5b. JOURNAL VOICE LOCK: the cached persona restores Cy's rough register,
+// and a final journal-only reminder follows even a polished recent tail. This is
+// deliberately prompt-level rather than a text rewrite: the emitted prose stays
+// the model's own writing, while the last instruction prevents the fed-back tail
+// from teaching the model a new formal voice.
+assert.match(ZONE_A, /Rough lower-case prison shorthand is the default/);
+assert.match(ZONE_A, /Do not use semicolons or/);
+const polishedTail = 'I have to be ready for anything; prepared for a fight. Whatever it is must be moving closer.';
+const driftPrompt = buildPrompt(polishedTail, 'journal', null, directives);
+assert.ok(driftPrompt.endsWith(cue), 'the journal voice lock follows a polished fed-back tail');
+assert.ok(driftPrompt.lastIndexOf('rough lower-case prison slang') > driftPrompt.lastIndexOf(polishedTail),
+  'the rough-register instruction is later than the formal context it must override');
+const postcardPrompt = buildPrompt(polishedTail, 'postcard', { from_name: 'j', body: 'you alright?' }, directives);
+assert.ok(!postcardPrompt.includes('even if the recent prose became formal'),
+  'the journal-only voice lock does not replace the postcard reply contract');
+ok('journal prompts re-anchor the rough slang register after formal context without changing postcard instructions');
 
 // ---- 6. dream/sleep paths route through the same strip (sanity: sanitize+strip) ----
 assert.equal(stripScaffold(sanitize('anx .60 stress .70 pain .55')).trim(), '');
