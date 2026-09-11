@@ -7,6 +7,7 @@ import {
   BRAIN_REGIONS,
   IMPLEMENTATION_STATUS,
   canRenderDynamicActivity,
+  elapsedFeedingLabel,
 } from '../public/assets/brain.js';
 import { reconcileSoma, somaSnapshot, tickSoma } from './soma.js';
 import { implementationRegistry, implementationEntry } from './implementation-registry.js';
@@ -21,6 +22,9 @@ assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').imple
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'probabilistic_threat_learning').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'current_defensive_context').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'feeding_event_model').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'energy_homeostatic_state').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'objective_controllability').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'perceived_controllability').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
@@ -88,6 +92,20 @@ assert.match(source, /It is not an anxiety or threat score/);
 assert.match(source, /Learned uncertainty remains the separate posterior variance/);
 assert.match(source, /defensive-context-inspector/);
 assert.match(source, /ACTUAL CONTROL/);
+assert.equal(
+  implementationEntry('soma_subsystems', 'feeding_event_model').display_name,
+  'FEEDING / INTAKE EVENTS',
+);
+assert.match(source, /Objective food availability and intake history/);
+assert.match(source, /TIME SINCE KNOWN INTAKE/);
+assert.match(source, /SUBJECTIVE HUNGER/);
+assert.match(source, /feeding-input-inspector/);
+assert.doesNotMatch(source, /feeding-history[^\n]*soma-history/,
+  'feeding inputs must not be rendered as a continuous Hunger graph');
+assert.equal(elapsedFeedingLabel(0), '0m');
+assert.equal(elapsedFeedingLabel((2 * 60 + 17) * 60000), '2h 17m');
+assert.equal(elapsedFeedingLabel((25 * 60 + 3) * 60000), '1d 1h 3m');
+assert.equal(elapsedFeedingLabel(null), 'UNKNOWN');
 assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
   'unimplemented region placeholders without artwork must remain hidden');
 assert.doesNotMatch(source, /Learned outcome probability/);

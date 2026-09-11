@@ -19,6 +19,7 @@
     "On the Dell runner, a bounded Soma episodic memory of up to 512 selected environmental events. An episode may contain postcard text or caption, a prison incident, a warden notice, or machine-continuity evidence, together with time, category, tags, and computed salience",
     "On the Dell runner, learned event-family expectations, up to 128 bounded word associations learned from lived input, current attention and action, self-output action feedback, self-model evidence, eight experienced-state values with their causal contributor ledgers, and up to seven days of downsampled experienced-state history in the gitignored runtime state file",
     "On the Dell runner, normalized homeostatic sleep pressure (Process S), its explicit uncertainty interval, current observed sleep state, model and provenance identifiers, last integration details, and up to seven days of post-installation Process S history",
+    "On the Dell runner, the complete post-installation structured feeding ledger: meal expectation, offering, availability, receipt, consumption outcome, exact observed or categorical portion information, source event identifiers, last known intake, missed scheduled meals, and explicit runner-observation gaps",
     "On the Dell runner, published circadian Process C metadata and evaluations, including the configured habitual wake basis, schedule-estimated CBTmin interval, mathematically derived circular phase interval, explicit phase uncertainty, model and provenance identifiers, and up to seven days of post-installation evaluation history",
     "On the Dell runner, independent Beta-Bernoulli posteriors for structured cue and categorical adverse-outcome pairs, plus the complete post-installation sequence of resolved updates with exact before and after parameters, outcome status, information-theoretic surprisal, timestamp, and source environment event identifiers",
     "On the Dell runner, current defensive-context records and their complete post-installation transition history, including present structured cue IDs, attached learned posterior snapshots, categorical world ambiguity and temporal status, objective controllability, outcome and resolution status, timestamps, and source environment event identifiers",
@@ -34,7 +35,7 @@
     {
       "recipient": "cy.dabblelabs.uk server",
       "purpose": "Publish the screened experience and maintain queued visitor interactions",
-      "data": "Batched public events and private visitor, drawing, structured prison-world, exact probabilistic threat-learning traces, and exact current defensive-context transition write-backs from the Dell runner"
+      "data": "Batched public events and private visitor, drawing, structured prison-world, exact feeding-ledger traces, exact probabilistic threat-learning traces, and exact current defensive-context transition write-backs from the Dell runner"
     },
     {
       "recipient": "DeepSeek, only while the owner has selected the optional remote provider",
@@ -49,7 +50,7 @@
     {
       "recipient": "Public viewers",
       "purpose": "Render and replay the live or historical Cy experience",
-      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED, qualitative cue-outcome associations from the probabilistic threat learner, and categorical public summaries of active current defensive contexts without exact posteriors or source event identifiers"
+      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED, qualitative cue-outcome associations from the probabilistic threat learner, categorical public summaries of active current defensive contexts without exact posteriors or source event identifiers, and recent structured feeding outcomes with last known intake and explicit continuity status"
     }
   ],
   "does_not_store": [
@@ -62,6 +63,8 @@
     "Process S consumes categorical sleep onset, waking, interruption, return-to-sleep and forced-wakefulness records. It is a sleep-homeostasis construct, not a biological measurement or validated subjective-fatigue score, and no old fatigue values are used to backfill it.",
     "Process C is a deterministic published circadian waveform evaluated from clock time. Its biological phase is not observed; a phase interval is estimated from the configured habitual wake schedule, and public history curves are mathematically reconstructed from that stored basis rather than presented as biological measurements.",
     "Process S and Process C remain separate. No equation combines them into the provisional fatigue value, and Process C does not alter Cy's language, mood, action selection, or other visitor-facing Soma variables.",
+    "Structured feeding records remain separate from the provisional Hunger value. They do not create calories, metabolic state, satiety, appetite, hormones, brain activation, prompt wording, or action selection.",
+    "The complete feeding ledger and its source event identifiers are available only through the owner-gated inspector. The public view receives the bounded recent summary carried by the Soma snapshot.",
     "Probabilistic threat learning uses an uninformative Beta(1,1) prior and exact Bernoulli updates only for explicit, self-contained, resolved structured trials. Unknown outcomes do not update. Exact posteriors and update history are owner-only; public viewers receive qualitative association summaries.",
     "The threat learner does not read generated prose, sentiment, legacy appraisal magnitudes, relationship scores, or existing anxiety values, and it does not currently alter anxiety, arousal, language, action selection, or brain-region activation.",
     "Legacy warm or hostile postcard word matching is not admissible threat-learning evidence and does not update the grounded learner.",

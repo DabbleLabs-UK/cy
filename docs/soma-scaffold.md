@@ -340,27 +340,28 @@ environmentInput. This is input staging only. It does not calculate a state.
 
 ## Reference event archetypes
 
-The 19 reference archetypes are:
+The 20 reference archetypes are:
 
-1. meal
-2. sleep_normal
-3. sleep_interrupted
-4. persistent_night_noise
-5. cell_search
-6. lockdown
-7. cancelled_activity
-8. minor_injury
-9. calm_routine
-10. friendly_interaction
-11. hostile_interaction
-12. social_rejection
-13. ambiguous_overheard_remark
-14. officer_instruction
-15. supportive_postcard
-16. ordinary_postcard
-17. hostile_postcard
-18. prolonged_social_absence
-19. forced_wakefulness
+1. meal_expected
+2. meal
+3. sleep_normal
+4. sleep_interrupted
+5. persistent_night_noise
+6. cell_search
+7. lockdown
+8. cancelled_activity
+9. minor_injury
+10. calm_routine
+11. friendly_interaction
+12. hostile_interaction
+13. social_rejection
+14. ambiguous_overheard_remark
+15. officer_instruction
+16. supportive_postcard
+17. ordinary_postcard
+18. hostile_postcard
+19. prolonged_social_absence
+20. forced_wakefulness
 
 Scheduled meals, sleep transitions and routines now materialize one of these
 archetypes. Cell searches, lockdowns, injuries, selected meal problems, night
@@ -370,17 +371,109 @@ prolonged absence of mail also create structured records.
 ## Admin event inspector
 
 The existing admin-only RAW view can fetch a structured record by its event ID.
-It renders four sections:
+It renders these sections:
 
 - WHAT HAPPENED
 - WHAT CY OBSERVED
 - WHAT SOMA RECEIVED
+- WHAT THREAT LEARNING DID
+- WHAT CURRENT DEFENSIVE CONTEXT DID
+- WHAT FEEDING LEDGER DID
 - WHAT SYSTEMS CONSUMED IT
 
 The last section distinguishes the LIVE categorical input-staging consumer from
 the PROVISIONAL legacy experienced-state compatibility consumer. It also reports
 registry dependencies that overlap the non-unknown input fields. The endpoint is
 not configured or loaded for ordinary visitors.
+
+## Grounded feeding and intake substrate
+
+`runner/feeding-homeostasis.js` implements an objective feeding ledger. It does
+not implement subjective Hunger. The visitor-facing HUNGER value remains
+PROVISIONAL and continues to come from the older arbitrary heuristic described
+in the numerical inventory below. Neither that value nor its legacy nutrition
+mirror can initialize or modify the grounded ledger.
+
+The canonical `cy.ingestion-record` stores:
+
+- source environment event ID and timestamp;
+- optional meal ID and meal type;
+- scheduled status: SCHEDULED, UNSCHEDULED or UNKNOWN;
+- offered status: OFFERED, NOT_OFFERED or UNKNOWN;
+- availability status: AVAILABLE, UNAVAILABLE or UNKNOWN;
+- receipt status: RECEIVED, NOT_RECEIVED or UNKNOWN;
+- consumption status: NONE, PARTIAL, FULL or UNKNOWN;
+- resolved outcome: MEAL_EXPECTED, FULLY_CONSUMED, PARTLY_CONSUMED,
+  REFUSED, UNAVAILABLE or UNKNOWN;
+- portion category, optional observed exact fraction and whether the amount is
+  OBSERVED_EXACT, CATEGORICAL_ONLY or UNKNOWN;
+- duration when supplied by the world event;
+- explicit UNKNOWN nutritional composition and NOT_MODELLED physiological
+  impact;
+- per-field structured-world provenance.
+
+A `meal_expected` record is only a schedule expectation. It never advances
+last-known intake. A later structured `meal` event can resolve it as consumed,
+partial, refused, unavailable or unknown. Only FULLY_CONSUMED and
+PARTLY_CONSUMED advance `lastKnownIntakeAt`. Refusal remains distinct from food
+unavailability, and categorical partial consumption retains a null fraction.
+The environment's existing generated partial-meal variant carries the exact
+world-authored fraction 0.45; this is observed fictional-world data, not a
+physiology coefficient.
+
+The `cy.feeding-homeostasis-inputs` state persists its complete
+post-installation record array, last known intake, last offered meal, latest
+scheduled and resolved meals, and continuity metadata in the runner vitals
+file. At reconciliation, elapsed runner downtime is appended as an explicit
+`RUNNER_NOT_OBSERVING` interval with `ingestionAssumption: NONE_MADE`. No food,
+fasting or normal schedule is inferred across the gap.
+
+The public Hunger detail contains a LIVE factual FEEDING / INTAKE subsection:
+last known intake, elapsed time since that known intake, latest resolved meal,
+missed scheduled meals, intake-record completeness and a bounded six-record
+event timeline. It is deliberately not a continuous Hunger graph. Private
+structured event IDs and the complete ledger are omitted from the public
+snapshot. The owner-only inspector reconstructs the full exact ledger and its
+source IDs from `environment_events`, alongside the latest continuity snapshot.
+
+Soma can read the factual `feeding` snapshot. It is not included in the prompt,
+does not say that Cy is hungry, and does not affect language, appraisal,
+attention, action selection, brain activation or the legacy Hunger number.
+
+### Uninstantiated homeostatic framework
+
+`config/model-specs/feeding-homeostasis.json` records the locked conceptual
+framework from Keramati and Gutkin (2014): internal state H, preferred state H*,
+outcome K, drive `D(H_t) = [sum_i |h_i* - h_i,t|^n]^(1/m)`, and drive-reduction
+reward `r(H_t,K_t) = D(H_t) - D(H_t + K_t)`. The free parameters m and n,
+preferred state H*, internal dimensions, depletion dynamics, food-to-physiology
+mapping K and temporal discounting are all null and NOT INSTANTIATED.
+
+The specification also records that gastrointestinal satiation, endocrine and
+metabolic signals, nutrients, learned meal timing, food cues, hedonic processes,
+social factors and feeding action selection are absent. CY EMBODIMENT MODEL is
+NOT CALIBRATED. No calorie, macronutrient, stomach-volume, leptin, ghrelin,
+glucose, AgRP/NPY or POMC value is fabricated.
+
+The hypothalamic feeding-homeostasis analogy stays NOT MODELLED, and the insular
+interoceptive analogy stays PROVISIONAL. Both registry entries now name the
+feeding ledger as a possible future dependency, but neither receives activation
+from elapsed time since intake.
+
+New numerical inventory:
+
+- schema/state version 1: ENGINEERING / STORAGE;
+- valid exact portion interval 0 through 1 inclusive: OBSERVED WORLD DATA
+  validation;
+- six recent public records: DISPLAY; the persisted/admin ledger is complete;
+- generated partial-meal fraction 0.45: pre-existing OBSERVED WORLD DATA in the
+  fictional environment;
+- configured meal clock times: pre-existing CONFIGURED SCHEDULE and never
+  ingestion evidence;
+- m, n, H*, H dynamics and K: FREE / UNSET MODEL PARAMETERS;
+- all dates, portions and elapsed durations in tests: TEST FIXTURES.
+
+No ARBITRARY / HEURISTIC Hunger, homeostatic or brain parameter was introduced.
 
 ## LLM role
 

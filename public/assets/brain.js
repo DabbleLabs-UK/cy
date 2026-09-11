@@ -275,12 +275,45 @@ function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, percei
   </section>`;
 }
 
+function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, anticipationStatus, actionStatus, admin) {
+  return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
+    <div class="feeding-input-head"><span>${feedingStatus.displayName}</span><strong class="feeding-input-status">${feedingStatus.publicLabel}</strong></div>
+    <p class="feeding-input-explanation">Objective food availability and intake history. These records do not calculate Hunger, appetite, satiety or internal energy state.</p>
+    <dl class="feeding-input-facts">
+      <div><dt>LAST KNOWN INTAKE</dt><dd data-feeding="last-intake">UNKNOWN</dd></div>
+      <div><dt>TIME SINCE KNOWN INTAKE</dt><dd data-feeding="elapsed">UNKNOWN</dd></div>
+      <div><dt>LATEST MEAL OUTCOME</dt><dd data-feeding="latest-outcome">UNKNOWN</dd></div>
+      <div><dt>MISSED SCHEDULED MEALS</dt><dd data-feeding="missed">0</dd></div>
+      <div><dt>INTAKE RECORD</dt><dd data-feeding="knowledge">NO FEEDING RECORD</dd></div>
+    </dl>
+    <div class="feeding-timeline"><p class="feeding-timeline-empty">No structured feeding records have reached this view.</p></div>
+    <div class="feeding-model-limits"><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>SUBJECTIVE HUNGER</span><strong>PROVISIONAL</strong><span>${gutStatus.displayName}</span><strong>${gutStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong></div>
+    ${admin ? '<details class="feeding-input-inspector"><summary>FEEDING / HOMEOSTATIC INPUTS INSPECTION</summary><pre>Waiting for the complete feeding ledger.</pre></details>' : ''}
+  </section>`;
+}
+
+export function elapsedFeedingLabel(milliseconds) {
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return 'UNKNOWN';
+  const totalMinutes = Math.floor(milliseconds / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  return [days ? `${days}d` : '', hours || days ? `${hours}h` : '', `${minutes}m`].filter(Boolean).join(' ');
+}
+
+function feedingTimestampLabel(value) {
+  const parsed = Date.parse(String(value || ''));
+  if (!Number.isFinite(parsed)) return 'UNKNOWN';
+  return new Date(parsed).toLocaleString();
+}
+
 export class BrainHud {
-  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', registry = null, admin = false } = {}) {
+  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', feedingUrl = '', registry = null, admin = false } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
     this.threatLearningUrl = threatLearningUrl;
     this.defensiveContextUrl = defensiveContextUrl;
+    this.feedingUrl = feedingUrl;
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
@@ -295,6 +328,12 @@ export class BrainHud {
     this.perceivedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'perceived_controllability');
     this.learnedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'learned_controllability');
     this.rememberedThreatCueStatus = implementationStatus(this.registry, 'soma_subsystems', 'remembered_imagined_threat_cues');
+    this.feedingStatus = implementationStatus(this.registry, 'soma_subsystems', 'ingestion_ledger');
+    this.energyHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'energy_homeostatic_state');
+    this.gutSatietyStatus = implementationStatus(this.registry, 'soma_subsystems', 'gut_satiety');
+    this.hedonicAppetiteStatus = implementationStatus(this.registry, 'soma_subsystems', 'hedonic_appetite');
+    this.mealAnticipationStatus = implementationStatus(this.registry, 'soma_subsystems', 'learned_meal_anticipation');
+    this.feedingActionStatus = implementationStatus(this.registry, 'soma_subsystems', 'feeding_action_selection');
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
@@ -379,13 +418,25 @@ export class BrainHud {
           this.admin,
         )
         : '';
+      const feeding = definition.key === 'hunger'
+        ? feedingMarkup(
+          this.feedingStatus,
+          this.energyHomeostasisStatus,
+          this.gutSatietyStatus,
+          this.hedonicAppetiteStatus,
+          this.mealAnticipationStatus,
+          this.feedingActionStatus,
+          this.admin,
+        )
+        : '';
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${defensiveContext}${sleepHomeostasis}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${historyMarkup()}${threatLearning}${defensiveContext}${feeding}${sleepHomeostasis}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       if (definition.key === 'fatigue') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
+      if (definition.key === 'hunger') this._wireFeeding(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
@@ -538,12 +589,31 @@ export class BrainHud {
     });
   }
 
+  _wireFeeding(entry) {
+    const inspector = entry.querySelector('.feeding-input-inspector');
+    if (!inspector) return;
+    inspector.addEventListener('toggle', async () => {
+      if (!inspector.open || !this.feedingUrl) return;
+      const target = inspector.querySelector('pre');
+      target.textContent = 'Loading the complete feeding ledger and continuity record...';
+      try {
+        const response = await fetch(this.feedingUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`feeding inputs ${response.status}`);
+        const data = await response.json();
+        target.textContent = JSON.stringify(data.inspection || data, null, 2);
+      } catch (error) {
+        target.textContent = error && error.message ? error.message : 'Feeding-input inspection unavailable.';
+      }
+    });
+  }
+
   setSoma(soma) {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.sleepHomeostasis = soma.sleepHomeostasis || null;
     this.circadianProcessC = soma.circadianProcessC || null;
     this.threatLearning = soma.threatLearning || null;
     this.currentDefensiveContext = soma.currentDefensiveContext || null;
+    this.feeding = soma.feeding || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
     for (const definition of this.metricDefinitions) {
@@ -569,6 +639,7 @@ export class BrainHud {
     this.renderCircadianProcessC();
     this.renderThreatLearning();
     this.renderCurrentDefensiveContext();
+    this.renderFeeding();
     for (const definition of this.regionDefinitions) {
       const reading = definition.key === 'scnCircadian'
         ? this.circadianProcessC && this.circadianProcessC.scnAnalogy
@@ -779,6 +850,54 @@ export class BrainHud {
       }
       item.append(heading, outcome, evidence, facts);
       root.appendChild(item);
+    }
+  }
+
+  renderFeeding() {
+    const entry = this.rows.hunger;
+    const card = entry && entry.querySelector('.feeding-input-card');
+    if (!card) return;
+    const snapshot = this.feeding;
+    const live = this.feedingStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.feeding-input-status').textContent = live ? this.feedingStatus.publicLabel : 'UNAVAILABLE';
+    const facts = {
+      'last-intake': live ? feedingTimestampLabel(snapshot.lastKnownIntakeAt) : 'UNKNOWN',
+      elapsed: live ? elapsedFeedingLabel(snapshot.elapsedSinceKnownIntakeMs) : 'UNKNOWN',
+      'latest-outcome': live && snapshot.latestResolvedMeal
+        ? String(snapshot.latestResolvedMeal.intakeOutcome || 'UNKNOWN').replaceAll('_', ' ')
+        : 'UNKNOWN',
+      missed: live ? String(Number(snapshot.missedScheduledMeals) || 0) : 'UNKNOWN',
+      knowledge: live ? String(snapshot.intakeKnowledgeStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
+    };
+    for (const [key, value] of Object.entries(facts)) {
+      const target = card.querySelector(`[data-feeding="${key}"]`);
+      if (target) target.textContent = value;
+    }
+    const timeline = card.querySelector('.feeding-timeline');
+    timeline.textContent = '';
+    const records = live && Array.isArray(snapshot.recentMealOutcomes) ? snapshot.recentMealOutcomes : [];
+    if (!records.length) {
+      const empty = document.createElement('p');
+      empty.className = 'feeding-timeline-empty';
+      empty.textContent = live
+        ? 'No structured feeding records have been observed yet.'
+        : 'No grounded feeding ledger has reached this view.';
+      timeline.appendChild(empty);
+      return;
+    }
+    for (const record of records) {
+      const item = document.createElement('article');
+      item.className = 'feeding-timeline-item';
+      const heading = document.createElement('strong');
+      heading.textContent = `${String(record.mealType || 'meal').replaceAll('_', ' ')} - ${String(record.intakeOutcome || 'UNKNOWN').replaceAll('_', ' ')}`;
+      const detail = document.createElement('p');
+      const portion = record.portionFraction == null
+        ? `${String(record.portionCategory || 'UNKNOWN').replaceAll('_', ' ')} (${String(record.portionBasis || 'UNKNOWN').replaceAll('_', ' ')})`
+        : `${record.portionFraction} observed fraction`;
+      detail.textContent = `${feedingTimestampLabel(record.timestamp)}; offered ${String(record.offeredStatus || 'UNKNOWN').replaceAll('_', ' ')}; consumed ${String(record.consumptionStatus || 'UNKNOWN').replaceAll('_', ' ')}; portion ${portion}.`;
+      item.append(heading, detail);
+      timeline.appendChild(item);
     }
   }
 

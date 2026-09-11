@@ -138,6 +138,7 @@ window.CY = {
   somaHistory: 'api/soma-history.php',
   threatLearning: <?= $isAdmin ? "'api/threat-learning.php'" : 'null' ?>,
   defensiveContext: <?= $isAdmin ? "'api/defensive-context.php'" : 'null' ?>,
+  feeding: <?= $isAdmin ? "'api/feeding.php'" : 'null' ?>,
   environmentEvent: <?= $rawEnabled ? "'api/environment-event.php'" : 'null' ?>,
   implementationRegistry: <?= json_encode($implementationRegistry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>,
   // Hershey glyph data app.js fetches (not a JS import, so the import map below

@@ -99,6 +99,29 @@ check_environment(str_contains($contextApiSource, 'captive_is_admin'), 'exact de
 check_environment(str_contains($contextApiSource, "'activeContexts' => \$active"), 'active defensive contexts must be exposed to admin');
 check_environment(str_contains($contextApiSource, "'history' => \$history"), 'defensive-context transition history must be exposed to admin');
 
+$feedingRecord = $record;
+$feedingRecord['world_event']['id'] = 'env-feeding-test';
+$feedingRecord['world_event']['event_type'] = 'lunch_consumed';
+$feedingRecord['world_event']['event_family'] = 'homeostasis';
+$feedingRecord['soma_input']['event_id'] = 'env-feeding-test';
+$feedingRecord['consumed_by'] = ['soma-input-staging-v1', 'feeding-event-model-v1', 'ingestion-ledger-v1'];
+$feedingRecord['feeding'] = [
+    'updated' => true,
+    'record' => [
+        'schema' => 'cy.ingestion-record',
+        'eventId' => 'env-feeding-test',
+        'intakeOutcome' => 'FULLY_CONSUMED',
+    ],
+];
+$feedingInspection = captive_environment_record_inspection($feedingRecord, captive_implementation_registry());
+check_environment($feedingInspection['what_feeding_ledger_did']['record']['intakeOutcome'] === 'FULLY_CONSUMED', 'feeding trace was not exposed');
+check_environment($feedingInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'feeding event consumer must be LIVE');
+check_environment($feedingInspection['what_systems_consumed_it']['consumers'][2]['public_label'] === 'LIVE', 'ingestion ledger consumer must be LIVE');
+$feedingApiSource = file_get_contents(__DIR__ . '/../public/api/feeding.php');
+check_environment(str_contains($feedingApiSource, 'captive_is_admin'), 'exact feeding inspection must be admin-only');
+check_environment(str_contains($feedingApiSource, "'records' => \$records"), 'complete feeding records must be exposed to admin');
+check_environment(str_contains($feedingApiSource, "'homeostaticPhysiologicalState' => 'NOT_MODELLED'"), 'admin inspection must preserve the physiological boundary');
+
 $source = file_get_contents(__DIR__ . '/../public/api/ingest.php');
 check_environment(str_contains($source, "if (\$kind === 'world_event_record')"), 'ingest must handle private records');
 check_environment(str_contains($source, 'continue;'), 'private records must not fall through to public events');

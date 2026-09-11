@@ -197,6 +197,14 @@ Soma circuits.
   basis. Light entrainment, drift, direct biological phase, and language/action
   effects are not modelled. A specific SCN phase analogy is live without
   presenting the value as neural activation.
+- **LIVE feeding and intake ledger** (`feeding-homeostasis.js`) - consumes only
+  structured food expectation, offering, availability, receipt, consumption and
+  portion facts. It persists the complete post-installation ledger and explicit
+  runner-observation gaps, while exposing a bounded public event summary and an
+  owner-only exact inspector. Schedule is never ingestion. The ledger does not
+  calculate Hunger, calories, satiety, internal energy, reward, appetite,
+  feeding action or brain activation; the older displayed Hunger value remains
+  separately PROVISIONAL.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
   Each outcome now carries objective/categorical world facts and a separate

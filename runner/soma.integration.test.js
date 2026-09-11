@@ -53,6 +53,22 @@ assert.equal(JSON.stringify({ appraisal: runtime.state.appraisal, experienced: r
 assert.equal(runtime.directive(), directiveBeforeContext,
   'K: current defensive context does not alter prompts or selected behaviour');
 
+const groundedMeal = createEnvironmentRecord(createEnvironmentEvent('meal', {
+  id: 'env-grounded-meal', timestamp: '2026-09-10 12:00:02.000',
+  world: { physical: { food: {
+    meal_type: 'lunch', scheduled: 'yes', offered: 'yes', available: 'yes', received: 'yes',
+    consumed: 'full', intake_outcome: 'full_consumed', portion_category: 'full', portion_fraction: 1,
+  } } },
+}));
+const hungerBeforeMeal = JSON.stringify(runtime.state.experienced.metrics.hunger);
+const directiveBeforeMeal = runtime.directive();
+runtime.observeFeedingRecord(groundedMeal);
+assert.equal(runtime.state.feeding.lastKnownIntakeEventId, 'env-grounded-meal');
+assert.equal(JSON.stringify(runtime.state.experienced.metrics.hunger), hungerBeforeMeal,
+  'grounded ingestion does not modify the provisional Hunger value');
+assert.equal(runtime.directive(), directiveBeforeMeal,
+  'grounded ingestion does not inject Hunger language or alter action selection');
+
 runtime.observe({
   name: 'cell_search',
   text: 'Mr Locke searched the cell and moved the blue postcard',
@@ -117,11 +133,14 @@ assert.ok(prompt.indexOf('SOMA - computed before language') > prompt.indexOf('ON
 const appraisalBeforeOutput = { ...runtime.state.appraisal };
 const threatBeforeOutput = JSON.stringify(runtime.state.threatLearning);
 const defensiveBeforeOutput = JSON.stringify(runtime.state.currentDefensiveContext);
+const feedingBeforeOutput = JSON.stringify(runtime.state.feeding);
 runtime.observeOutput('locke and the blue postcard again. i will not forget it.', { mode: 'journal', now: t0 + 7000 });
 assert.deepEqual(runtime.state.appraisal, appraisalBeforeOutput, 'own prose did not become an external event');
 assert.equal(JSON.stringify(runtime.state.threatLearning), threatBeforeOutput, 'own prose did not update threat learning');
 assert.equal(JSON.stringify(runtime.state.currentDefensiveContext), defensiveBeforeOutput,
   'own prose did not create a current defensive context');
+assert.equal(JSON.stringify(runtime.state.feeding), feedingBeforeOutput,
+  'own prose did not create feeding or deprivation evidence');
 assert.ok(runtime.state.expression.themes.includes('locke') || runtime.state.expression.themes.includes('postcard'));
 
 const persistenceDir = await mkdtemp(join(tmpdir(), 'cy-soma-persist-'));
@@ -142,6 +161,9 @@ assert.equal(restarted.state.memory.selectedId, runtime.state.memory.selectedId)
 assert.equal(restarted.state.expression.lastText, runtime.state.expression.lastText);
 assert.deepEqual(restarted.state.threatLearning, runtime.state.threatLearning);
 assert.deepEqual(restarted.state.currentDefensiveContext, runtime.state.currentDefensiveContext);
+assert.deepEqual(restarted.state.feeding.records, runtime.state.feeding.records);
+assert.equal(restarted.state.feeding.lastKnownIntakeEventId, runtime.state.feeding.lastKnownIntakeEventId);
+assert.equal(restarted.state.feeding.unknownIntervals.at(-1).ingestionAssumption, 'NONE_MADE');
 
 const failures = [];
 const broken = createSomaRuntime(null, {

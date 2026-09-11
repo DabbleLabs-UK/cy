@@ -7,8 +7,8 @@ import {
   serializeEnvironmentRecord,
 } from './environment-schema.js';
 
-assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 19);
-assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 19);
+assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 20);
+assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 20);
 
 const event = createEnvironmentEvent('meal', {
   id: 'env-test-meal',
@@ -22,6 +22,11 @@ const event = createEnvironmentEvent('meal', {
 const record = createEnvironmentRecord(event, { consumedBy: ['soma-input-staging-v1'] });
 assert.equal(record.world_event.world.physical.food.consumed, 'partial');
 assert.equal(record.soma_input.food_consumed, 'partial');
+assert.equal(record.soma_input.food_offered, 'yes');
+assert.equal(record.soma_input.food_available, 'unknown');
+assert.equal(record.soma_input.food_received, 'unknown');
+assert.equal(record.soma_input.portion_category, 'unknown');
+assert.deepEqual(record.soma_input.feeding, record.world_event.world.physical.food);
 assert.equal(record.soma_input.nociceptive_impact, 'unknown');
 assert.notEqual(record.soma_input.nociceptive_impact, 'none');
 assert.equal(record.soma_input.persistence, 'unknown');
@@ -35,6 +40,15 @@ assert.equal('observation' in record.world_event, false);
 assert.equal('appraisal' in record.world_event, false);
 assert.equal('appraisal' in record.soma_input, false);
 assert.deepEqual(deserializeEnvironmentRecord(serializeEnvironmentRecord(record)), record);
+
+const expectedMeal = createEnvironmentEvent('meal_expected', {
+  id: 'env-test-expected-meal',
+  timestamp: '2026-09-10 11:45:00.000',
+  world: { physical: { food: { meal_type: 'lunch' } } },
+});
+assert.equal(expectedMeal.world.physical.food.scheduled, 'yes');
+assert.equal(expectedMeal.world.physical.food.intake_outcome, 'expected');
+assert.equal(expectedMeal.world.physical.food.consumed, 'unknown');
 
 assert.throws(
   () => createEnvironmentEvent('cell_search', {

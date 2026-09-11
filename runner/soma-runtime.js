@@ -103,6 +103,14 @@ export function createSomaRuntime(rawState, {
       });
       return result;
     },
+    observeFeedingRecord(record) {
+      let result = null;
+      mutate('feeding and ingestion ledger', (current) => {
+        result = engine.observeSomaFeedingRecord(current, record);
+        return current;
+      });
+      return result;
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

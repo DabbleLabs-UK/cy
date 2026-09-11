@@ -49,8 +49,9 @@
       "display_name": "HUNGER",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Meal outcome and portion history are recorded, but the current hunger curve and effects are unapproved heuristics.",
+      "status_note": "A grounded feeding and ingestion ledger is LIVE separately. The displayed Hunger value still comes from the older arbitrary baseline, elapsed-time curve, meal effects and deprivation impulses; no approved model converts feeding history into subjective hunger.",
       "data_dependencies": ["food_offered", "food_consumed", "portion_fraction", "energy_proxy"],
+      "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "feeding_deprivation_history", "energy_homeostatic_state"],
       "version": "legacy-experienced-state-v2"
     },
     {
@@ -184,6 +185,89 @@
       "version": null
     },
     {
+      "id": "feeding_event_model",
+      "display_name": "FEEDING / INTAKE EVENTS",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "feeding-homeostasis-uninstantiated-framework",
+      "status_note": "Canonical structured records distinguish scheduled expectation, food offering, availability, receipt, full or partial consumption, refusal, unavailability and unknown intake without converting them to Hunger.",
+      "data_dependencies": ["structured_environment_event.physical.food"],
+      "version": "feeding-intake-ledger-v1",
+      "provenance": "config/model-specs/feeding-homeostasis.json"
+    },
+    {
+      "id": "ingestion_ledger",
+      "display_name": "INGESTION LEDGER",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "feeding-homeostasis-uninstantiated-framework",
+      "status_note": "Persists complete post-installation objective meal and intake records, last known intake, exact observed portions and explicit unknowns.",
+      "data_dependencies": ["feeding_event_model"],
+      "version": "feeding-intake-ledger-v1"
+    },
+    {
+      "id": "feeding_deprivation_history",
+      "display_name": "FEEDING / DEPRIVATION HISTORY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "feeding-homeostasis-uninstantiated-framework",
+      "status_note": "Tracks scheduled food unavailability, refusals and unknown intake separately, including explicit runner-observation gaps. It contains no deprivation magnitude.",
+      "data_dependencies": ["ingestion_ledger", "configured_meal_schedule", "runner_observation_continuity"],
+      "version": "feeding-intake-ledger-v1"
+    },
+    {
+      "id": "energy_homeostatic_state",
+      "display_name": "HOMEOSTATIC ENERGY STATE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No calibrated internal physiological state H, preferred state H*, depletion dynamics or food-to-physiology outcome K exists for Cy.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["ingestion_ledger", "cy_embodiment_model"],
+      "version": null
+    },
+    {
+      "id": "gut_satiety",
+      "display_name": "GASTROINTESTINAL SATIATION / SATIETY",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No gastric, intestinal or gut-hormone model exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "hedonic_appetite",
+      "display_name": "HEDONIC APPETITE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No sensory, reward-value or hedonic feeding model exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "learned_meal_anticipation",
+      "display_name": "LEARNED MEAL ANTICIPATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The prison meal schedule is an environmental expectation only; no anticipatory appetite model exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "feeding_action_selection",
+      "display_name": "FEEDING ACTION SELECTION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The grounded ledger does not select food-seeking, eating or refusal actions.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "cy_embodiment_model",
+      "display_name": "CY EMBODIMENT MODEL",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Cy's metabolic expenditure, body mass, digestion, meal-equivalent energy and gastric dynamics are not calibrated or assumed.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
       "id": "sleep_homeostasis",
       "display_name": "HOMEOSTATIC SLEEP PRESSURE",
       "implementation_status": "IMPLEMENTED",
@@ -268,18 +352,19 @@
       "display_name": "INSULAR / INTEROCEPTIVE ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent interoceptive processing. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
+      "status_note": "Intended to represent interoceptive processing. Feeding input history is now available as a future dependency, but no internal physiological or gut state is modelled. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
       "data_dependencies": ["pain", "hunger", "arousal", "interoception"],
+      "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety"],
       "version": "legacy-brain-map-v1"
     },
     {
       "id": "hypothalamic",
-      "display_name": "HYPOTHALAMIC / HOMEOSTATIC ANALOGY",
+      "display_name": "HYPOTHALAMIC / FEEDING-HOMEOSTASIS ANALOGY",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Intended to represent active homeostatic regulation. No valid activation model is currently running. The separate specific SCN circadian analogy is implemented, but that does not validate this broader hypothalamic representation.",
+      "status_note": "Structured feeding inputs are LIVE, but internal energy state, AgRP/NPY and POMC systems, peripheral signals and hypothalamic activity are NOT MODELLED. Elapsed time since intake does not illuminate this region.",
       "data_dependencies": ["hunger", "fatigue", "homeostatic_state"],
-      "available_future_dependencies": ["sleep_homeostasis"],
+      "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety", "sleep_homeostasis"],
       "version": null
     },
     {

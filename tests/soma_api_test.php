@@ -20,6 +20,13 @@ $state = [
     'experienced' => ['metrics' => ['anxiety' => ['value' => 42]]],
     'attention' => ['text' => 'Mr Locke moved the postcard'],
     'memory' => ['episodes' => 2],
+    'feeding' => [
+        'status' => 'implemented',
+        'lastKnownIntakeAt' => '2026-09-10 11:45:00.000',
+        'latestResolvedMeal' => ['intakeOutcome' => 'FULLY_CONSUMED'],
+        'homeostaticEnergyState' => 'NOT_MODELLED',
+        'subjectiveHunger' => 'PROVISIONAL',
+    ],
 ];
 $implemented = captive_soma_api_payload([
     'seq' => '42',
@@ -30,6 +37,7 @@ check_soma($implemented['ok'] === true, 'implemented state is available');
 check_soma($implemented['seq'] === 42, 'event sequence is preserved');
 check_soma($implemented['soma']['status'] === 'provisional', 'registry truth overrides the legacy runner claim');
 check_soma($implemented['soma']['circuits'] === $state['circuits'], 'runner values are returned without recomputation');
+check_soma($implemented['soma']['feeding'] === $state['feeding'], 'grounded feeding state is returned without recomputation');
 check_soma($implemented['implementation_registry']['schema'] === 'cy.implementation-registry', 'registry accompanies the state');
 
 $failedRuntime = captive_soma_api_payload([

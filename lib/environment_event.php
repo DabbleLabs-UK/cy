@@ -118,6 +118,20 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Joins present structured external cues to existing learned posteriors and keeps ambiguity, categorical imminence, objective control and resolution separate. It calculates no emotion score.',
             ];
+        } elseif ($consumer === 'feeding-event-model-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Normalizes only explicit structured food offering, availability, receipt, consumption and portion facts. It does not calculate Hunger.',
+            ];
+        } elseif ($consumer === 'ingestion-ledger-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Persists the canonical ingestion record and updates factual feeding-history indexes. It does not infer calories, physiology or appetite.',
+            ];
         } elseif ($consumer === 'legacy-experienced-state-v2') {
             $consumers[] = [
                 'id' => $consumer,
@@ -147,6 +161,10 @@ function captive_environment_record_inspection(array $record, array $registry): 
         'what_current_defensive_context_did' => $record['current_defensive_context'] ?? [
             'status' => 'not_recorded',
             'detail' => 'This record predates current defensive context or did not reach that consumer.',
+        ],
+        'what_feeding_ledger_did' => $record['feeding'] ?? [
+            'status' => 'not_recorded',
+            'detail' => 'This record is not a feeding event, predates the feeding ledger, or did not reach that consumer.',
         ],
         'what_systems_consumed_it' => [
             'consumers' => $consumers,

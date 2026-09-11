@@ -1,0 +1,100 @@
+{
+  "schema": "cy.framework-spec",
+  "version": 1,
+  "id": "feeding-homeostasis-uninstantiated-framework",
+  "implementation_version": "feeding-intake-ledger-v1",
+  "locked": true,
+  "public_name": "Feeding and homeostatic inputs",
+  "implementation_status": "PARTIALLY_IMPLEMENTED",
+  "implemented_scope": "Structured food availability, offering, receipt, ingestion, portion and record-continuity facts only.",
+  "interpretation": "This is an objective feeding-input ledger and an uninstantiated scientific framework. It does not estimate internal energy state, homeostatic drive, reward, appetite, satiety or subjective hunger.",
+  "scientific_basis": [
+    {
+      "authors": "Keramati and Gutkin",
+      "year": 2014,
+      "title": "Homeostatic reinforcement learning for integrating reward collection and physiological stability",
+      "journal": "eLife",
+      "volume": "3:e04811",
+      "doi": "10.7554/eLife.04811",
+      "url": "https://elifesciences.org/articles/04811",
+      "use": "Defines the general internal-state, homeostatic-drive and drive-reduction-reward framework. Its free parameters and organism-specific dynamics are deliberately not instantiated for Cy."
+    },
+    {
+      "authors": "Belgardt, Okamura and Bruning",
+      "year": 2009,
+      "title": "Hormone and glucose signalling in POMC and AgRP neurons",
+      "journal": "Journal of Physiology",
+      "doi": "10.1113/jphysiol.2009.179192",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19770186/",
+      "use": "Documents integration of peripheral hormones, nutrients and opposing melanocortin-system populations; it does not supply a Cy activation equation."
+    },
+    {
+      "authors": "Cansell et al.",
+      "year": 2012,
+      "title": "Arcuate AgRP neurons and the regulation of energy balance",
+      "journal": "Frontiers in Endocrinology",
+      "doi": "10.3389/fendo.2012.00169",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/23293630/",
+      "use": "Supports treating arcuate AgRP and POMC circuitry as a complex future dependency rather than an elapsed-time proxy."
+    }
+  ],
+  "keramati_gutkin_framework": {
+    "internal_state": "H_t",
+    "preferred_homeostatic_state": "H*",
+    "outcome_effect_on_internal_state": "K_t",
+    "drive_equation": "D(H_t) = [sum_i |h_i* - h_i,t|^n]^(1/m)",
+    "drive_reduction_reward": "r(H_t,K_t) = D(H_t) - D(H_t + K_t)",
+    "free_parameters": {
+      "m": null,
+      "n": null
+    },
+    "unset_organism_specific_components": {
+      "H_star": null,
+      "internal_state_dimensions": null,
+      "metabolic_depletion_dynamics": null,
+      "food_to_physiology_mapping_K": null,
+      "temporal_discounting": null
+    },
+    "implementation_status": "NOT_INSTANTIATED"
+  },
+  "implemented_ontologies": {
+    "food_offering": ["OFFERED", "NOT_OFFERED", "UNKNOWN"],
+    "food_availability": ["AVAILABLE", "UNAVAILABLE", "UNKNOWN"],
+    "food_receipt": ["RECEIVED", "NOT_RECEIVED", "UNKNOWN"],
+    "consumption": ["NONE", "PARTIAL", "FULL", "UNKNOWN"],
+    "portion": ["NONE", "PARTIAL", "FULL", "UNKNOWN"],
+    "portion_basis": ["OBSERVED_EXACT", "CATEGORICAL_ONLY", "UNKNOWN"],
+    "meal_outcome": ["MEAL_EXPECTED", "FULLY_CONSUMED", "PARTLY_CONSUMED", "REFUSED", "UNAVAILABLE", "UNKNOWN"]
+  },
+  "continuity": "Runner downtime is retained as an explicit unknown interval. No assumption of feeding, normal meals or fasting is made across it.",
+  "cy_embodiment_model": "NOT_CALIBRATED",
+  "limitations": [
+    "Food availability and intake are not internal physiological state.",
+    "Elapsed time since known intake is factual time, not hunger, fasting certainty or homeostatic drive.",
+    "Unknown or categorical portions are not converted to fractions, calories or nutrients.",
+    "Gastrointestinal satiation, endocrine and metabolic signals, learned meal timing, sensory food cues, hedonic reward, social context and feeding action selection are not modelled.",
+    "No AgRP, NPY, POMC, leptin, ghrelin, glucose, gut-hormone or hypothalamic activity is inferred."
+  ],
+  "engineering_constants": [
+    { "name": "state_schema_version", "value": 1, "classification": "ENGINEERING/STORAGE" },
+    { "name": "valid_observed_portion_fraction", "value": "0 through 1 inclusive", "classification": "OBSERVED WORLD DATA validation" },
+    { "name": "public_recent_meal_records", "value": 6, "classification": "DISPLAY only; the complete ledger remains persisted" }
+  ],
+  "arbitrary_or_heuristic_hunger_parameters": [],
+  "not_modelled": [
+    "subjective hunger",
+    "internal energy state",
+    "homeostatic drive",
+    "drive-reduction reward",
+    "metabolic depletion",
+    "digestion",
+    "gastric emptying",
+    "gut satiation or satiety",
+    "calories or macronutrients",
+    "endocrine signals",
+    "hedonic appetite",
+    "learned meal anticipation",
+    "feeding action selection",
+    "brain or hypothalamic activation"
+  ]
+}

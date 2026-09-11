@@ -25,6 +25,15 @@ assert.equal(implementationEntry('soma_subsystems', 'threat_imminence_representa
 assert.equal(implementationEntry('soma_subsystems', 'perceived_controllability').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'learned_controllability').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'remembered_imagined_threat_cues').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'feeding_event_model').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'feeding_deprivation_history').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'energy_homeostatic_state').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'gut_satiety').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'hedonic_appetite').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'learned_meal_anticipation').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'feeding_action_selection').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'cy_embodiment_model').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_variables', 'anxiety').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'amygdala').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'acc').implementation_status, 'PROVISIONAL');
@@ -35,6 +44,8 @@ assert.equal(implementationEntry('brain_regions', 'bnstUncertainThreat').ui_expo
 assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
+assert.ok(implementationEntry('brain_regions', 'hypothalamic').available_future_dependencies.includes('ingestion_ledger'));
+assert.ok(implementationEntry('brain_regions', 'insula').available_future_dependencies.includes('ingestion_ledger'));
 assert.ok(registry.brain_regions.filter((entry) => entry.implementation_status === 'PROVISIONAL').length >= 1);
 
 const schemaKeys = new Set(Object.keys(environmentEventToSomaInput(createEnvironmentEvent('calm_routine', {

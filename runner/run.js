@@ -114,7 +114,7 @@ import { createWarden, sanitize, stripScaffold, stripScaffoldAccounted, narratio
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
-import { PRISON_SCHEDULE, materialiseScheduledEvent } from './environment.js';
+import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -607,6 +607,9 @@ async function main() {
     const record = createEnvironmentRecord(event, {
       consumedBy: [
         'soma-input-staging-v1',
+        ...(['meal', 'meal_expected'].includes(archetypeId)
+          ? ['feeding-event-model-v1', 'ingestion-ledger-v1']
+          : []),
         'current-defensive-context-v1',
         'probabilistic-threat-learning-v1',
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
@@ -615,6 +618,7 @@ async function main() {
         ...(provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
       ],
     });
+    record.feeding = soma.observeFeedingRecord(record);
     record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
     record.threat_learning = soma.observeThreatLearningRecord(record);
     emit({ kind: 'world_event_record', payload: record });
@@ -2488,8 +2492,20 @@ async function main() {
     emit({ kind: 'event', payload: { name: 'wing_noise', line, asleep, mid } });
   }
 
-  function fireScheduled(slot) {
-    const event = materialiseScheduledEvent(slot);
+  function fireScheduled(slot, now) {
+    const mealId = slot.kind === 'meal'
+      ? `${londonParts(new Date(now)).date}:${slot.meal}`
+      : null;
+    if (mealId) {
+      const expected = mealExpectation(slot.meal, mealId);
+      captureEnvironmentEvent(expected.archetypeId, {
+        eventType: expected.name,
+        summary: expected.text,
+        world: expected.world,
+        observation: expected.observation,
+      });
+    }
+    const event = materialiseScheduledEvent(slot, Math.random, { mealId });
     const structured = captureEnvironmentEvent(event.archetypeId, {
       eventType: event.name,
       summary: event.text,
@@ -2522,7 +2538,7 @@ async function main() {
     }
 
     for (const slot of PRISON_SCHEDULE) {
-      if (crossed(slot.mins, mins, prevMins)) fireScheduled(slot);
+      if (crossed(slot.mins, mins, prevMins)) fireScheduled(slot, now);
     }
     // regime boundary crossings that can DEVIATE (late unlock, cancelled
     // association). A deviation is an amplifiable event AND a concrete incident.

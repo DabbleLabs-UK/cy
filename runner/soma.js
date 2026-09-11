@@ -43,6 +43,13 @@ import {
   reconcileCurrentDefensiveContext,
 } from './current-defensive-context.js';
 import {
+  createFeedingState,
+  feedingSnapshot,
+  observeFeedingRecord as applyFeedingRecord,
+  reconcileFeedingState,
+  touchFeedingContinuity,
+} from './feeding-homeostasis.js';
+import {
   PRISON_SCHEDULE,
   PRISON_SCHEDULE_TIME_ZONE,
   habitualWakeMinutes,
@@ -142,6 +149,7 @@ function blank(now, legacyPhysical = null) {
     }),
     threatLearning: createThreatLearning(now),
     currentDefensiveContext: createCurrentDefensiveContext(now),
+    feeding: createFeedingState(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -192,6 +200,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     }),
     threatLearning: reconcileThreatLearning(raw.threatLearning, { now }),
     currentDefensiveContext: reconcileCurrentDefensiveContext(raw.currentDefensiveContext, { now }),
+    feeding: reconcileFeedingState(raw.feeding, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -233,6 +242,13 @@ export function observeSomaThreatLearningRecord(state, record) {
 export function observeSomaCurrentDefensiveContextRecord(state, record) {
   if (!state || !record) return null;
   return applyCurrentDefensiveContextRecord(state.currentDefensiveContext, state.threatLearning, record);
+}
+
+// The grounded feeding ledger consumes only canonical structured food facts.
+// It is separate from the legacy experienced Hunger calculation.
+export function observeSomaFeedingRecord(state, record) {
+  if (!state || !record) return null;
+  return applyFeedingRecord(state.feeding, record);
 }
 
 function familyOf(name, tags = []) {
@@ -629,6 +645,7 @@ export function tickSoma(state, {
   now = Date.now(),
 } = {}) {
   if (!state) return state;
+  touchFeedingContinuity(state.feeding, now);
   const elapsed = clamp((now - finite(state.lastTickMs, now)) / 1000, 0, 60);
   state.lastTickMs = now;
   const decay = Math.exp(-elapsed / 600);
@@ -917,6 +934,7 @@ export function somaSnapshot(state) {
     circadianProcessC: circadianProcessCSnapshot(state.circadianProcessC),
     threatLearning: threatLearningSnapshot(state.threatLearning),
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
+    feeding: feedingSnapshot(state.feeding, state.lastTickMs),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

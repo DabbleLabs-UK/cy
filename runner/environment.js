@@ -38,7 +38,26 @@ const MEAL_LABELS = {
   tea: 'tea',
 };
 
-export function chooseMealEvent(meal, rnd = Math.random) {
+export function mealExpectation(meal, mealId) {
+  const label = MEAL_LABELS[meal] || 'meal';
+  const text = `${label} was scheduled`;
+  return {
+    name: `${label}_expected`,
+    text,
+    tags: ['meal', 'food', label, 'expected'],
+    public: {},
+    archetypeId: 'meal_expected',
+    world: {
+      physical: { food: { meal_id: mealId || null, meal_type: label } },
+      context: { location: 'cell' },
+    },
+    observation: { summary: text, observed_facts: { meal: label, outcome: 'expected' } },
+    provisional: null,
+    outcome: `${label} expected`,
+  };
+}
+
+export function chooseMealEvent(meal, rnd = Math.random, { mealId = null } = {}) {
   const label = MEAL_LABELS[meal] || 'meal';
   const roll = rnd();
   let outcome = 'eaten';
@@ -61,7 +80,10 @@ export function chooseMealEvent(meal, rnd = Math.random) {
     text = `${label} came but he could not make himself eat it`;
     appraisal = { deprivation: 0.5, controlLoss: 0.2 };
   }
-  const consumed = outcome === 'eaten' ? 'full' : outcome === 'partial' ? 'partial' : outcome;
+  const consumed = outcome === 'eaten' ? 'full' : outcome === 'partial' ? 'partial' : 'none';
+  const intakeOutcome = outcome === 'eaten' ? 'full_consumed'
+    : outcome === 'partial' ? 'partial_consumed'
+      : outcome === 'missed' ? 'unavailable' : 'refused';
   return {
     name: `${label}_${outcome}`,
     text,
@@ -71,15 +93,22 @@ export function chooseMealEvent(meal, rnd = Math.random) {
     world: {
       physical: {
         food: {
+          meal_id: mealId,
+          meal_type: label,
+          scheduled: 'yes',
           offered: outcome === 'missed' ? 'no' : 'yes',
+          available: outcome === 'missed' ? 'no' : 'yes',
+          received: outcome === 'missed' ? 'no' : 'yes',
           consumed,
+          intake_outcome: intakeOutcome,
+          portion_category: outcome === 'eaten' ? 'full' : outcome === 'partial' ? 'partial' : 'none',
           portion_fraction: amount,
         },
       },
       situation: {
         deprivation_outcome: outcome,
         agency: outcome === 'refused' ? 'self' : outcome === 'missed' ? 'institution' : 'routine',
-        resolution_status: outcome === 'eaten' ? 'resolved' : 'unresolved',
+        resolution_status: 'resolved',
       },
       context: { location: 'cell' },
       associative_learning: {
@@ -266,8 +295,8 @@ function routineFacts(routine, outcome, text) {
   };
 }
 
-export function materialiseScheduledEvent(slot, rnd = Math.random) {
-  if (slot.kind === 'meal') return chooseMealEvent(slot.meal, rnd);
+export function materialiseScheduledEvent(slot, rnd = Math.random, options = {}) {
+  if (slot.kind === 'meal') return chooseMealEvent(slot.meal, rnd, options);
   if (slot.kind === 'routine') return chooseRoutineEvent(slot.routine, rnd);
   if (slot.kind === 'wake') {
     return {
