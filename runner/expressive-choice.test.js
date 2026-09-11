@@ -11,8 +11,13 @@ import {
   EXPRESSIVE_CHOICE_MECHANISM,
   EXPRESSIVE_CHOICE_MODEL_OPTIONS,
   EXPRESSIVE_CHOICE_RETRY_COUNT,
-  EXPRESSIVE_DRAW_COOLDOWN_MS,
+  EXPRESSIVE_DRAW_MIN_JOURNALS,
+  EXPRESSIVE_DRAW_MAX_JOURNALS,
   EXPRESSIVE_SILENCE_COOLDOWN_MS,
+  expressiveCadenceAvailability,
+  reconcileExpressiveCadence,
+  recordExpressiveDrawing,
+  recordExpressiveJournal,
 } from './expressive-choice.js';
 import { INSTRUMENTAL_ACTION_SELECTION } from './instrumental-agency.js';
 import { implementationEntry } from './implementation-registry.js';
@@ -187,7 +192,40 @@ assert.match(runSource, /recordCompletedSilence/);
 assert.match(runSource, /doDraw\(\{ cognition, incidentContext \}\)/);
 
 assert.equal(EXPRESSIVE_CHOICE_RETRY_COUNT, 0);
-assert.equal(EXPRESSIVE_DRAW_COOLDOWN_MS, 45 * 60 * 1000);
 assert.equal(EXPRESSIVE_SILENCE_COOLDOWN_MS, 15 * 60 * 1000);
+
+// M. Autonomous pictures are paced by completed journal entries rather than wall
+// time, so tempo changes cannot turn the intended output mix into dozens of
+// journal cards per drawing. Drawing stays optional from 10 through 14 and is due
+// before entry 16. Failed attempts do not call recordExpressiveDrawing and cannot
+// falsely reset this state.
+let cadence = reconcileExpressiveCadence(null);
+assert.deepEqual(cadence, { journalsSinceDraw: 0 });
+for (let count = 0; count < EXPRESSIVE_DRAW_MIN_JOURNALS; count++) {
+  assert.deepEqual(expressiveCadenceAvailability(cadence), {
+    journal: true,
+    draw: false,
+    phase: 'JOURNAL_INTERVAL',
+  });
+  cadence = recordExpressiveJournal(cadence);
+}
+for (let count = EXPRESSIVE_DRAW_MIN_JOURNALS; count < EXPRESSIVE_DRAW_MAX_JOURNALS; count++) {
+  assert.deepEqual(expressiveCadenceAvailability(cadence), {
+    journal: true,
+    draw: true,
+    phase: 'DRAW_ELIGIBLE',
+  });
+  cadence = recordExpressiveJournal(cadence);
+}
+assert.deepEqual(expressiveCadenceAvailability(cadence), {
+  journal: false,
+  draw: true,
+  phase: 'DRAW_DUE',
+});
+cadence = recordExpressiveDrawing(cadence);
+assert.deepEqual(cadence, { journalsSinceDraw: 0 });
+assert.deepEqual(reconcileExpressiveCadence({ journalsSinceDraw: -4 }), { journalsSinceDraw: 0 });
+assert.match(runSource, /recordExpressiveJournal\(vitals\.expressiveCadence\)/);
+assert.match(runSource, /recordExpressiveDrawing\(\)/);
 
 console.log('expressive-choice.test.js: all checks passed');

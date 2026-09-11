@@ -25,9 +25,45 @@ export const EXPRESSIVE_CHOICE_MODEL_OPTIONS = Object.freeze({
   num_predict: 80,
 });
 export const EXPRESSIVE_CHOICE_RETRY_COUNT = 0;
-// Existing capability gates, retained as engineering scheduling constraints.
-export const EXPRESSIVE_DRAW_COOLDOWN_MS = 45 * 60 * 1000;
+// Existing silence capability gate, retained as an engineering scheduling constraint.
 export const EXPRESSIVE_SILENCE_COOLDOWN_MS = 15 * 60 * 1000;
+
+// ENGINEERING / PRESENTATION CADENCE. These are user-selected output-mix bounds,
+// not psychological or Soma parameters. A spontaneous drawing is unavailable
+// until ten completed journal entries have accumulated, remains a model-selectable
+// option through fourteen, and becomes due before a sixteenth journal entry can
+// start. Only a successfully rendered drawing resets the counter.
+export const EXPRESSIVE_DRAW_MIN_JOURNALS = 10;
+export const EXPRESSIVE_DRAW_MAX_JOURNALS = 15;
+
+export function reconcileExpressiveCadence(value) {
+  const journalsSinceDraw = Number.isInteger(value && value.journalsSinceDraw)
+    && value.journalsSinceDraw >= 0 ? value.journalsSinceDraw : 0;
+  return { journalsSinceDraw };
+}
+
+export function expressiveCadenceAvailability(value) {
+  const state = reconcileExpressiveCadence(value);
+  return {
+    journal: state.journalsSinceDraw < EXPRESSIVE_DRAW_MAX_JOURNALS,
+    draw: state.journalsSinceDraw >= EXPRESSIVE_DRAW_MIN_JOURNALS,
+    phase: state.journalsSinceDraw >= EXPRESSIVE_DRAW_MAX_JOURNALS
+      ? 'DRAW_DUE'
+      : state.journalsSinceDraw >= EXPRESSIVE_DRAW_MIN_JOURNALS
+        ? 'DRAW_ELIGIBLE'
+        : 'JOURNAL_INTERVAL',
+  };
+}
+
+export function recordExpressiveJournal(value) {
+  const state = reconcileExpressiveCadence(value);
+  state.journalsSinceDraw++;
+  return state;
+}
+
+export function recordExpressiveDrawing() {
+  return { journalsSinceDraw: 0 };
+}
 
 export const EXPRESSIVE_ACTIONS = Object.freeze({
   journal: Object.freeze({

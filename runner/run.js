@@ -59,7 +59,10 @@ import { prepareSomaGeneration } from './soma-cycle.js';
 import {
   buildExpressiveChoiceRequest,
   chooseExpressiveAction,
-  EXPRESSIVE_DRAW_COOLDOWN_MS,
+  expressiveCadenceAvailability,
+  reconcileExpressiveCadence,
+  recordExpressiveDrawing,
+  recordExpressiveJournal,
   EXPRESSIVE_SILENCE_COOLDOWN_MS,
 } from './expressive-choice.js';
 import {
@@ -355,6 +358,7 @@ async function main() {
   if (typeof vitals.lastDrawMs !== 'number') vitals.lastDrawMs = 0;
   if (typeof vitals.lastImageMs !== 'number') vitals.lastImageMs = 0;
   if (typeof vitals.lastDrawSubject !== 'string') vitals.lastDrawSubject = '';
+  vitals.expressiveCadence = reconcileExpressiveCadence(vitals.expressiveCadence);
   // DREAM state (persists with everything else). dreamPool holds the memory
   // material dreams recombine (postcard images/captions + news headlines, decayed
   // by recency and scaled by significance); the date fields cap the night's one
@@ -2200,6 +2204,7 @@ async function main() {
 
     vitals.lastDrawMs = now;
     vitals.lastDrawSubject = subject;
+    vitals.expressiveCadence = recordExpressiveDrawing();
     vitals.monotony = clamp((vitals.monotony || 0) - 0.15); // drawing is something happening
     return 'emitted';
   }
@@ -3326,10 +3331,10 @@ async function main() {
         continue;
       }
 
-      const availableActions = ['journal'];
-      if (nowMs - (vitals.lastDrawMs || 0) > EXPRESSIVE_DRAW_COOLDOWN_MS) {
-        availableActions.push('draw');
-      }
+      const cadence = expressiveCadenceAvailability(vitals.expressiveCadence);
+      const availableActions = [];
+      if (cadence.journal) availableActions.push('journal');
+      if (cadence.draw) availableActions.push('draw');
       const lastSilenceAtMs = Number(soma.state && soma.state.action
         && soma.state.action.lastSilenceAtMs) || 0;
       if (!lastSilenceAtMs || nowMs - lastSilenceAtMs >= EXPRESSIVE_SILENCE_COOLDOWN_MS) {
@@ -3483,7 +3488,10 @@ async function main() {
       // every chunk, which must read as blocked, not emitted.
       if (errored) await recordOutcome('aborted'); // provider unreachable / bad HTTP
       else if (refusedGen) await recordOutcome('refused'); // provider refused (visible outcome)
-      else if (burstEmitted.trim()) await recordOutcome('emitted');
+      else if (burstEmitted.trim()) {
+        vitals.expressiveCadence = recordExpressiveJournal(vitals.expressiveCadence);
+        await recordOutcome('emitted');
+      }
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
       else if (wardenBlocksInGen > 0) await recordOutcome('blocked-by-warden');
       else {
