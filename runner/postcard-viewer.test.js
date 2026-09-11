@@ -353,4 +353,25 @@ await (async () => {
   ok('a partial-window card is backfilled from the full reply at settle');
 })();
 
+// ---- 6. an empty attempt disappears and its retry keeps the addressee ----
+await (async () => {
+  const root = newRoot();
+  const pc = new Postcards(root, FONT);
+  pc.begin(); // mode->letter arrives before the first postcard_in
+  pc.incoming({ id: 20, from: 'j', image: '' });
+  pc.settle(); // the model returned no reply text
+  assert.equal(pc.cards.length, 0, 'an empty failed attempt leaves no blank reply card behind');
+  assert.equal(root.children.length, 0, 'the empty card object is removed from the chronology');
+
+  pc.begin({ id: 20, from: 'j' }); // retry mode event is self-contained
+  let handle = findAll(pc.active.el, 'pcard-handle')[0];
+  assert.equal(handle._text, 'j', 'the retry is addressed to the original sender immediately');
+  pc.reply('aye, i heard you.', { id: 20, to: 'j' });
+  pc.settle();
+  assert.equal(pc.cards.length, 1, 'only the completed retry remains in the chronology');
+  handle = findAll(pc.cards[0].el, 'pcard-handle')[0];
+  assert.equal(handle._text, 'j', 'the completed reply remains addressed to the sender');
+  ok('an empty postcard attempt is removed and a later retry retains its addressee');
+})();
+
 console.log(`\npostcard-viewer.test.js: all ${n} checks passed`);

@@ -622,9 +622,16 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
         // paper keeps its place and the journal resumes on it once the card settles.
         pen.finishAnimations();
         postcards.finishAnimations();
-        postcards.begin();
+        postcards.begin(p.postcard_id ? {
+          id: p.postcard_id,
+          from: p.postcard_to || p.cause || 'a stranger',
+        } : null);
+        if (postcardWait && p.postcard_id) postcardWait.incoming(p.postcard_id);
       } else {
-        if (p.from === 'letter') postcards.settle(); // reply done: card settles into place
+        if (p.from === 'letter') {
+          postcards.settle(); // reply done: card settles into place
+          if (postcardWait && p.completed === false) postcardWait.deferred(p.postcard_id);
+        }
       }
       break;
     }
@@ -747,7 +754,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       hud.addPostcardOut(p);
       // the authoritative full reply text, for the mailbag and as the backlog
       // backfill if this card's per-token stream scrolled out of the window.
-      postcards.reply(p.body);
+      postcards.reply(p.body, { id: p.reply_to || p.id, to: p.to || '' });
       postcards.finishAnimations();
       if (pen.event) pen.event('reply sent', '', ev.ts, 'postcard-reply');
       if (postcardWait) postcardWait.replied(p.reply_to || p.id);
@@ -1807,6 +1814,13 @@ function wireForms() {
       savePending();
       if (pending.length) renderWaiting('The inmate replied. Waiting for another response...');
       else showNote(note, 'The inmate replied. His postcard is in the timeline.', false);
+    },
+    deferred(id) {
+      const item = pending.find((x) => Number(x.id) === Number(id));
+      if (!item) return;
+      item.state = 'waiting';
+      savePending();
+      renderWaiting('That reply attempt produced no message. Waiting for the inmate to try again...');
     },
     fan(id, mayReply) {
       const before = pending.length;

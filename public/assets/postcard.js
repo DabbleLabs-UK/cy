@@ -37,6 +37,7 @@ export class Postcards {
     this.active = null; // { el, pen, body, fullBody }
     this.cards = []; // settled/active cards, newest last; capped at MAX_CARDS
     this._pending = null; // the incoming postcard awaiting its reply
+    this._replyTarget = null; // retained across an empty generation and its retry
     this._rotSeed = 1; // deterministic-ish per-card jitter (no Math.random dependency)
   }
 
@@ -68,6 +69,7 @@ export class Postcards {
     this.active = null;
     this.cards = [];
     this._pending = null;
+    this._replyTarget = null;
     this._rotSeed = 1;
   }
 
@@ -82,6 +84,7 @@ export class Postcards {
       image: p && p.image ? String(p.image) : '',
       attrib: (p && p.attrib) || '',
     };
+    this._replyTarget = info;
     if (this.active) {
       if (this.active.handleEl) this.active.handleEl.textContent = info.from;
       if (info.image && !this.active.hasPic) {
@@ -113,9 +116,17 @@ export class Postcards {
 
   // Build a fresh card for the reply now being written. Idempotent within a reply:
   // if a card is already active, keep it.
-  begin() {
+  begin(target = null) {
     if (this.active) return this.active;
-    const pend = this._pending || { from: 'a stranger', image: '', id: null };
+    if (target && target.id) {
+      this._replyTarget = {
+        id: target.id,
+        from: target.from || 'a stranger',
+        image: target.image ? String(target.image) : '',
+        attrib: target.attrib || '',
+      };
+    }
+    const pend = this._pending || this._replyTarget || { from: 'a stranger', image: '', id: null };
     const rot = HANDS + this._tilt();
     const el = document.createElement('div');
     el.className = 'pcard-obj writing';
@@ -234,8 +245,15 @@ export class Postcards {
 
   // The authoritative full reply text (postcard_out). Kept so a backlog card whose
   // per-token text scrolled out of the window can still be laid down complete.
-  reply(body) {
-    if (this.active) this.active.fullBody = body || this.active.fullBody;
+  reply(body, { id = null, to = '' } = {}) {
+    if (this.active) {
+      this.active.fullBody = body || this.active.fullBody;
+      if (id) this.active.id = id;
+      if (to && this.active.handleEl) this.active.handleEl.textContent = to;
+    }
+    if (!id || !this._replyTarget || Number(this._replyTarget.id) === Number(id)) {
+      this._replyTarget = null;
+    }
   }
 
   // The reply is done: settle the card into place. If nothing was written to it
@@ -244,6 +262,17 @@ export class Postcards {
   settle() {
     const a = this.active;
     if (!a) return;
+    if (!String(a.fullBody || a.body || '').trim()) {
+      if (a.finishLane) {
+        a.finishLane();
+        a.finishLane = null;
+      }
+      try { if (a.pen) { a.pen.abort(); a.pen.destroy(); } } catch { /* best effort */ }
+      if (a.el && a.el.remove) a.el.remove();
+      this.cards = this.cards.filter((card) => card !== a);
+      this.active = null;
+      return;
+    }
     if (!a.body && a.fullBody) {
       const wasInstant = a.pen.instant;
       a.pen.setInstant(true); // a settle-time backfill is never re-animated

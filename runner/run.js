@@ -1840,7 +1840,13 @@ async function main() {
     emit({ kind: 'abort', payload: { cause: 'postcard' } });
     const from = currentMode;
     currentMode = 'letter'; // 'letter' remains the viewer mode label for a reply
-    emit({ kind: 'mode', payload: { from, to: 'letter', cause: pc.from_name || 'mail' } });
+    emit({ kind: 'mode', payload: {
+      from,
+      to: 'letter',
+      cause: pc.from_name || 'mail',
+      postcard_id: pc.id,
+      postcard_to: pc.from_name || null,
+    } });
 
     const hostile = isHostile(pc.body);
     const warm = isWarm(pc.body);
@@ -1981,7 +1987,7 @@ async function main() {
         provisionalConsumer: false,
       });
       emit({ kind: 'postcard_out', payload: {
-        id: pc.id, reply_to: pc.id, body: reply,
+        id: pc.id, reply_to: pc.id, to: pc.from_name || null, body: reply,
         environment_event_id: replyRecord.world_event.id,
       } });
     } else {
@@ -2003,7 +2009,12 @@ async function main() {
       });
     }
 
-    emit({ kind: 'mode', payload: { from: 'letter', to: 'journal' } });
+    emit({ kind: 'mode', payload: {
+      from: 'letter',
+      to: 'journal',
+      postcard_id: pc.id,
+      completed: !!reply,
+    } });
     currentMode = 'journal';
   }
 
