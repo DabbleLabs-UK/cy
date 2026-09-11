@@ -242,7 +242,7 @@ function satietyHistoryMarkup() {
     <div class="soma-ranges" aria-label="Physiological satiety history range">
       <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
     </div>
-    <div class="soma-history-axis"><span>10</span><strong>MODELLED PHYSIOLOGICAL SATIETY</strong><span>0</span></div>
+    <div class="soma-history-axis"><span>10</span><strong>MODELLED PHYSIOLOGICAL SATIETY</strong><span>1</span></div>
     <svg class="soma-history satiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored physiological satiety range">
       <path class="satiety-history-band"></path><path class="satiety-history-line"></path>
     </svg>

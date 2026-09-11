@@ -112,6 +112,7 @@ assert.equal(
 assert.match(source, /SUBJECTIVE HUNGER/);
 assert.match(source, /feeding-input-inspector/);
 assert.match(source, /PHYSIOLOGICAL SATIETY/);
+assert.match(source, /<span>10<\/span><strong>MODELLED PHYSIOLOGICAL SATIETY<\/strong><span>1<\/span>/);
 assert.match(source, /MODEL ESTIMATE - NOT A REPORTED FEELING/);
 assert.match(source, /scope === 'satiety'/);
 assert.match(source, /class="satiety-history-band"/);
