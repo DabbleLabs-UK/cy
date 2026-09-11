@@ -6,6 +6,14 @@
 
 export const POSTCARD_ARCHIVE_FILTERS = ['all', 'replied', 'waiting', 'fan_mail'];
 
+// Keep the browser's native fetch attached to its global receiver. Storing the
+// native function directly on a PostcardArchive instance makes the later method
+// call use that instance as `this`, which Chromium rejects as an illegal
+// invocation. Tests can still inject a plain fetch-compatible function.
+export function postcardArchiveFetch(...args) {
+  return globalThis.fetch(...args);
+}
+
 export function postcardArchiveUrl(endpoint, filter, cursor = null, limit = 20) {
   const query = new URLSearchParams();
   query.set('status', POSTCARD_ARCHIVE_FILTERS.includes(filter) ? filter : 'all');
@@ -69,7 +77,7 @@ function make(tag, className = '', text = '') {
 }
 
 export class PostcardArchive {
-  constructor({ dialog, openButton, closeButton, filterRoot, list, status, moreButton, endpoint, fetchImpl = fetch }) {
+  constructor({ dialog, openButton, closeButton, filterRoot, list, status, moreButton, endpoint, fetchImpl = postcardArchiveFetch }) {
     this.dialog = dialog;
     this.openButton = openButton;
     this.closeButton = closeButton;

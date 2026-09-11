@@ -1,9 +1,31 @@
 import assert from 'node:assert/strict';
 import {
+  postcardArchiveFetch,
   postcardArchiveUrl,
   postcardRelativeAge,
   postcardStatusNote,
 } from '../public/assets/postcard-archive.js';
+
+// Chromium requires the native Window.fetch receiver. The archive stores its
+// fetch implementation as an instance property, so the default must be a wrapper
+// that calls globalThis.fetch rather than a detached reference to the native
+// function.
+const originalFetch = globalThis.fetch;
+let fetchReceiver = null;
+let fetchArgs = null;
+try {
+  globalThis.fetch = function (...args) {
+    fetchReceiver = this;
+    fetchArgs = args;
+    return Promise.resolve({ ok: true });
+  };
+  const holder = { fetchImpl: postcardArchiveFetch };
+  await holder.fetchImpl('/archive', { cache: 'no-store' });
+  assert.equal(fetchReceiver, globalThis);
+  assert.deepEqual(fetchArgs, ['/archive', { cache: 'no-store' }]);
+} finally {
+  globalThis.fetch = originalFetch;
+}
 
 const url = postcardArchiveUrl('/api/postcard-archive.php', 'waiting', 72, 20);
 assert.equal(url, '/api/postcard-archive.php?status=waiting&limit=20&cursor=72');
