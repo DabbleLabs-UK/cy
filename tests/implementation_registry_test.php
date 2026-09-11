@@ -34,6 +34,8 @@ check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'learned_controllability')['implementation_status'] === 'IMPLEMENTED', 'action-outcome contingency must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'causal_controllability')['implementation_status'] === 'NOT_IMPLEMENTED', 'causal control must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'perceived_controllability')['implementation_status'] === 'NOT_IMPLEMENTED', 'perceived control must remain not modelled');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'prison_instrumental_opportunities')['implementation_status'] === 'IMPLEMENTED', 'prison instrumental opportunities must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'grounded_instrumental_action_selection')['implementation_status'] === 'NOT_IMPLEMENTED', 'grounded instrumental action selection must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'anxiety')['implementation_status'] === 'PROVISIONAL', 'Anxiety must remain provisional');
 check_registry(captive_implementation_registry_entry($registry, 'brain_regions', 'vmpfcControl')['implementation_status'] === 'NOT_IMPLEMENTED', 'vmPFC activation must remain not modelled');
 

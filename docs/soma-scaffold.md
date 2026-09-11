@@ -309,12 +309,13 @@ linked environment events and categorical outcome resolution. Missing action
 data is not a no-action trial. INTENDED, ATTEMPTED, PREVENTED, UNKNOWN,
 NOT_AVAILABLE, unresolved opportunities and UNKNOWN outcomes do not update.
 
-The current world supplies only two real canonical actions:
+The first implementation supplied two real canonical meal actions:
 `action:accept_meal` and `action:refuse_meal`. They are available only when food
 actually arrives. Their independent structured contexts are `meal:breakfast`,
 `meal:lunch` and `meal:tea`. If food is unavailable, neither action is evidence.
-Journal, drawing, sleep, silence and generated prose are not instrumental
-actions in this model.
+The prison-world opportunities below now supply further explicit actions.
+Journal, drawing, sleep, silence and generated prose remain excluded unless a
+specific structured world situation makes an action relevant.
 
 For each context x action x adverse-outcome class, separate action and explicit
 no-action Bernoulli conditions begin with Beta(1,1). For binary outcome `u`:
@@ -357,6 +358,68 @@ values, not empirical psychological constants. Action-opportunity schema version
 three decimal places, an ENGINEERING / DISPLAY choice; exact values persist.
 There are no fitted, learning-rate, generalisation, efficacy, anxiety or vmPFC
 coefficients.
+
+## Grounded prison instrumental opportunities
+
+The authoritative world-rule specification is
+config/model-specs/prison-instrumental-opportunities.json. The implementation is
+in runner/instrumental-agency.js and extends existing cast incidents rather than
+creating a separate game.
+
+The audit found usable action points in officer orders, officer searches, inmate
+check-in questions, inmates sitting alongside Cy and hostile looks. Officer
+refusals, write-ups, lockup, kindness and other completed social or schedule
+events remain ordinary incidents because they did not already imply a concrete
+two-branch continuation.
+
+The five LIVE archetypes and canonical actions are:
+
+- officer order: `action:comply_instruction` / `action:refuse_instruction`;
+- requested handover before a cell search: `action:hand_over_item` /
+  `action:withhold_item`;
+- inmate check-in question: `action:answer` / `action:remain_silent`;
+- social approach: `action:engage` / `action:withdraw`;
+- provocation: `action:respond` / `action:disengage`.
+
+Each opening is a structured UNRESOLVED action opportunity with UNKNOWN
+outcomes. Its continuation is persisted outside generated prose. On the next
+existing runner world tick, a linked resolution record marks the chosen action
+EXECUTED, records a distinct concrete consequence and supplies explicit
+resolved outcome classes to the existing action-outcome learner. A restart
+preserves an open continuation.
+
+No new stochastic outcome branch is used. The branches are explicit factual
+world rules: an order is completed or recorded as refused; an item is handed
+over and lost or withheld through a search; an answered question continues or
+silence ends the contact; an approach becomes quiet company or ends; and a
+provocation becomes an argument or ends without an exchange. The concrete facts
+and categorical adverse-outcome classification remain separate.
+
+The current selection mechanism is a persisted deterministic round-robin over
+the actions actually available for that archetype. It exists to exercise both
+real branches and is labelled ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL.
+GROUNDED INSTRUMENTAL ACTION SELECTION remains NOT MODELLED. Relationship
+scalars, generated prose and Soma values do not select the action or determine
+the outcome.
+
+Situation, selected action and consequence appear as separate chronological
+prison events. Visitors do not receive action buttons. Owner inspection exposes
+the situation, available and unavailable actions, selected and executed action,
+selection provenance, consequence, remaining possibilities, resolution,
+outcome classification and Handoff-7 learner update.
+
+Opening and resolution records share an actor-specific defensive context ID.
+This makes matching historical contingency evidence available to the current
+defensive-context subsystem without creating perceived control, causal control,
+an Anxiety effect or neural activation.
+
+New numerical inventory: state and model-spec schema version 1 are ENGINEERING /
+STORAGE values. Five archetypes each expose two actions, producing ten distinct
+canonical action IDs; these are WORLD DEFINITION / ENUMERATION counts. The
+round-robin cursor begins at 0 and advances by 1; these are ENGINEERING /
+ENUMERATION values, not psychological quantities. No action
+success, escalation or other environmental probability, psychological weight,
+controllability threshold, emotional effect or brain coefficient was added.
 
 ## Previous event representation
 
@@ -996,7 +1059,7 @@ activity.
 
 - No approved equation for any of the eight affect variables.
 - No approved event-to-emotion magnitude model.
-- No approved learning model for threat, safety, controllability or attribution.
+- No approved subjective or causal controllability, helplessness or attribution model.
 - No approved multi-timescale homeostatic model.
 - No approved neuroscience mapping or regional activation.
 - No LLM emotional-scoring call.

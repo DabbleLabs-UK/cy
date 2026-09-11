@@ -178,6 +178,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const css = await readFile(join(here, '..', 'public', 'assets', 'style.css'), 'utf8');
 const app = await readFile(join(here, '..', 'public', 'assets', 'app.js'), 'utf8');
 assert.match(app, /pen\.write\(p\.s, p\.mode, p\.lucid, p\.shout, ev\.ts\)/, 'dispatch preserves token time for a recreated handwritten card');
+assert.match(app, /instrumental_situation.*instrumental_action.*instrumental_outcome/,
+  'public chronology routes instrumental situation, action, and consequence events into the feed');
 const trayRule = css.match(/(?:^|\n)\.paper \{([\s\S]*?)\n\}/);
 const journalRule = css.match(/(?:^|\n)\.cy-journal-entry \{([\s\S]*?)\n\}/);
 assert.ok(trayRule, 'chronology tray has an explicit surface rule');

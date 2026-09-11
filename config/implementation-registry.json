@@ -159,6 +159,26 @@
       "provenance": "config/model-specs/action-outcome-contingency.json"
     },
     {
+      "id": "prison_instrumental_opportunities",
+      "display_name": "PRISON INSTRUMENTAL OPPORTUNITIES",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "prison-instrumental-opportunities",
+      "status_note": "Five existing officer and inmate incident types now open explicit two-action opportunities, persist the selected action, and resolve through distinct deterministic world consequences on the following world tick. No outcome probabilities or emotional effects are introduced.",
+      "data_dependencies": ["structured_environment_event.instrumental", "structured_environment_event.action_opportunity"],
+      "version": "prison-instrumental-opportunities-v1",
+      "provenance": "config/model-specs/prison-instrumental-opportunities.json"
+    },
+    {
+      "id": "grounded_instrumental_action_selection",
+      "display_name": "GROUNDED INSTRUMENTAL ACTION SELECTION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Current prison-world actions are selected by a persisted engineering round-robin so both available branches can be exercised. This is not a psychological, behavioural or scientifically grounded choice model.",
+      "data_dependencies": [],
+      "available_future_dependencies": ["prison_instrumental_opportunities", "learned_controllability"],
+      "version": null
+    },
+    {
       "id": "perceived_controllability",
       "display_name": "PERCEIVED CONTROLLABILITY",
       "implementation_status": "NOT_IMPLEMENTED",

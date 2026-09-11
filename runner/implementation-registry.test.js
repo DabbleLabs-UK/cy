@@ -28,6 +28,8 @@ assert.equal(implementationEntry('soma_subsystems', 'learned_controllability').i
 assert.equal(implementationEntry('soma_subsystems', 'causal_controllability').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'bayesian_controllability_model_comparison').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'action_selection_from_control').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'prison_instrumental_opportunities').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'grounded_instrumental_action_selection').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'remembered_imagined_threat_cues').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'feeding_event_model').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'ingestion_ledger').implementation_status, 'IMPLEMENTED');

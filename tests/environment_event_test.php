@@ -121,6 +121,39 @@ check_environment(str_contains($controlApiSource, 'captive_is_admin'), 'exact ac
 check_environment(str_contains($controlApiSource, "'opportunities' => array_values(\$opportunities)"), 'complete action opportunities must be exposed to admin');
 check_environment(str_contains($controlApiSource, "'history' => \$history"), 'complete action-outcome update history must be exposed to admin');
 
+$instrumentalRecord = $controlRecord;
+$instrumentalRecord['world_event']['world'] = [
+    'context' => ['description' => 'Mr Proctor gave Cy a direct instruction'],
+    'instrumental' => [
+        'archetype_id' => 'officer_order',
+        'stage' => 'WORLD_OUTCOME_RESOLVED',
+        'situation_description' => 'Mr Proctor gave Cy a direct instruction',
+        'consequence_description' => 'Cy complied and Mr Proctor moved on',
+        'remaining_possibilities' => ['the routine continues'],
+        'action_selection_provenance' => 'ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL',
+    ],
+    'action_opportunity' => [
+        'available_actions' => ['action:comply_instruction', 'action:refuse_instruction'],
+        'unavailable_actions' => [],
+        'chosen_action' => 'action:comply_instruction',
+        'action_actually_executed' => 'action:comply_instruction',
+        'resolution_status' => 'RESOLVED',
+        'resolved_at' => '2026-09-10 12:00:05.000',
+        'outcome_resolution' => [[
+            'outcome_class' => 'SOCIAL_HOSTILITY',
+            'status' => 'did_not_occur',
+        ]],
+    ],
+];
+$instrumentalRecord['consumed_by'][] = 'prison-instrumental-opportunities-v1';
+$instrumentalInspection = captive_environment_record_inspection($instrumentalRecord, captive_implementation_registry());
+check_environment($instrumentalInspection['what_instrumental_agency_did']['situation'] === 'Mr Proctor gave Cy a direct instruction', 'opening instrumental situation was not retained');
+check_environment($instrumentalInspection['what_instrumental_agency_did']['action_executed'] === 'action:comply_instruction', 'executed instrumental action was not exposed');
+check_environment($instrumentalInspection['what_instrumental_agency_did']['world_consequence'] === 'Cy complied and Mr Proctor moved on', 'instrumental consequence was not exposed');
+check_environment($instrumentalInspection['what_instrumental_agency_did']['contingency_learner_update']['updated'] === true, 'instrumental learner update was not exposed');
+$instrumentalConsumers = $instrumentalInspection['what_systems_consumed_it']['consumers'];
+check_environment($instrumentalConsumers[array_key_last($instrumentalConsumers)]['public_label'] === 'LIVE', 'instrumental consumer was not labelled live');
+
 $feedingRecord = $record;
 $feedingRecord['world_event']['id'] = 'env-feeding-test';
 $feedingRecord['world_event']['event_type'] = 'lunch_consumed';

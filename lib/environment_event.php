@@ -132,6 +132,13 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Updates separate Beta-Bernoulli posteriors for executed action and explicit no-action conditions in the same context. It infers neither causal nor perceived control.',
             ];
+        } elseif ($consumer === 'prison-instrumental-opportunities-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Extends an eligible prison incident into an explicit situation, available action, executed action and factual world consequence. Live action selection is engineering round-robin, not a psychological model.',
+            ];
         } elseif ($consumer === 'feeding-event-model-v1') {
             $consumers[] = [
                 'id' => $consumer,
@@ -163,6 +170,32 @@ function captive_environment_record_inspection(array $record, array $registry): 
         }
     }
 
+    $world = (array)($record['world_event']['world'] ?? []);
+    $opportunity = (array)($world['action_opportunity'] ?? []);
+    $instrumental = (array)($world['instrumental'] ?? []);
+    $instrumentalInspection = ($instrumental['archetype_id'] ?? null) === null
+        ? [
+            'status' => 'not_applicable',
+            'detail' => 'This event is not one of the implemented prison instrumental opportunities.',
+        ]
+        : [
+            'situation' => $instrumental['situation_description'] ?? $world['context']['description'] ?? $observation['summary'] ?? null,
+            'available_actions' => $opportunity['available_actions'] ?? [],
+            'unavailable_actions' => $opportunity['unavailable_actions'] ?? [],
+            'action_selected' => $opportunity['chosen_action'] ?? 'unknown',
+            'action_executed' => $opportunity['action_actually_executed'] ?? 'unknown',
+            'action_selection_provenance' => $instrumental['action_selection_provenance'] ?? null,
+            'world_consequence' => $instrumental['consequence_description'] ?? 'not yet resolved',
+            'remaining_possibilities' => $instrumental['remaining_possibilities'] ?? [],
+            'resolution' => [
+                'stage' => $instrumental['stage'] ?? null,
+                'status' => $opportunity['resolution_status'] ?? 'unknown',
+                'resolved_at' => $opportunity['resolved_at'] ?? null,
+            ],
+            'adverse_outcome_classification' => $opportunity['outcome_resolution'] ?? [],
+            'contingency_learner_update' => $record['action_outcome_contingency'] ?? null,
+        ];
+
     return [
         'event_id' => (string)$record['world_event']['id'],
         'what_happened' => $record['world_event'],
@@ -180,6 +213,7 @@ function captive_environment_record_inspection(array $record, array $registry): 
             'status' => 'not_recorded',
             'detail' => 'This record has no explicit action opportunity, predates action-outcome learning, or did not reach that consumer.',
         ],
+        'what_instrumental_agency_did' => $instrumentalInspection,
         'what_feeding_ledger_did' => $record['feeding'] ?? [
             'status' => 'not_recorded',
             'detail' => 'This record is not a feeding event, predates the feeding ledger, or did not reach that consumer.',

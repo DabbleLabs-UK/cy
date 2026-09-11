@@ -106,14 +106,16 @@ or brain-activation value. The context is captured before the same event updates
 the threat learner, preserving the expectation available when the event arrived.
 
 `action-outcome-contingency.js` learns context-specific observational
-action-outcome evidence only from explicit structured opportunities. Current
-production opportunities are scheduled meals where accepting and refusing are
-genuinely available; missed meals mark both actions NOT_AVAILABLE and cannot
-become no-action evidence. Separate Beta(1,1) posteriors are retained for action
-and deliberate no-action conditions. Their mean difference and summed variance
-are exposed without a control score. The subsystem persists complete
-post-installation opportunities and updates, but does not infer causality,
-perceived control or helplessness and does not affect prompts, action selection,
+action-outcome evidence only from explicit structured opportunities. Scheduled
+meals provide accept/refuse trials; `instrumental-agency.js` now extends five
+existing cast incidents with genuine comply/refuse, hand-over/withhold,
+answer/silence, engage/withdraw and respond/disengage branches. Open situations
+persist through restart and resolve on the following existing world tick. The
+current selector is an explicitly non-psychological persisted round-robin; no
+new outcome probabilities are used. Separate Beta(1,1) posteriors are retained
+for action and deliberate no-action conditions. Their mean difference and
+summed variance are exposed without a control score. Neither subsystem infers
+causality, perceived control or helplessness or affects prompts,
 experienced-state values or brain activation.
 
 ## dryRun

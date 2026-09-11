@@ -820,6 +820,13 @@ function handleAmbient(p, ts, bootstrap = false) {
     if (!bootstrap) pushTicker(label);
     return;
   }
+  if (['instrumental_situation', 'instrumental_action', 'instrumental_outcome'].includes(name)) {
+    const label = p.text || name.replaceAll('_', ' ');
+    postcards.finishAnimations();
+    if (pen.event) pen.event(label, '', ts, 'prison');
+    if (!bootstrap) pushTicker(label);
+    return;
+  }
   const nice = {
     letter_arrives: p.from ? `mail from ${p.from}` : 'mail arrives',
     letter_hostile: 'hostile mail',

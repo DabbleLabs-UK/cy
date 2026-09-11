@@ -1,0 +1,143 @@
+{
+  "schema": "cy.model-spec",
+  "version": 1,
+  "id": "prison-instrumental-opportunities",
+  "implementation_version": "prison-instrumental-opportunities-v1",
+  "locked": true,
+  "public_name": "Prison instrumental opportunities",
+  "implementation_status": "IMPLEMENTED",
+  "purpose": "Extend existing prison incidents with explicit available actions, executed actions, concrete deterministic world consequences and resolved categorical outcomes for the existing action-outcome learner.",
+  "audit": {
+    "existing_candidates_found": [
+      "officer order: comply or refuse",
+      "officer cell search and requested item handover: hand over or withhold",
+      "inmate check-in question: answer or remain silent",
+      "inmate sitting alongside Cy: engage or withdraw",
+      "inmate hostile look: respond or disengage",
+      "officer refusal, write-up, lockup and kindness: no genuine action branch was already implied",
+      "other inmate events and routine outcomes: either already completed facts or lacked a sufficiently concrete action-dependent continuation"
+    ],
+    "implemented_subset_reason": "The first five candidates already contain an actor, a direct situation and an obvious executable alternative. The rest remain ordinary incidents rather than being converted into fake choices."
+  },
+  "archetypes": [
+    {
+      "id": "officer_order",
+      "source": "existing OFFICER_EVENTS order incident",
+      "actions": ["action:comply_instruction", "action:refuse_instruction"],
+      "branches": {
+        "action:comply_instruction": "instruction completed; officer moves on; routine continues",
+        "action:refuse_instruction": "instruction remains uncompleted; refusal recorded; exchange ends without further action"
+      },
+      "resolved_outcomes": ["COERCIVE_LOSS_OF_CONTROL", "SOCIAL_HOSTILITY"]
+    },
+    {
+      "id": "cell_search_handover",
+      "source": "existing OFFICER_EVENTS search incident",
+      "actions": ["action:hand_over_item", "action:withhold_item"],
+      "branches": {
+        "action:hand_over_item": "item transferred and no longer available; search ends",
+        "action:withhold_item": "cell searched; nothing found; item remains available to Cy"
+      },
+      "resolved_outcomes": ["DEPRIVATION_OR_LOSS", "COERCIVE_LOSS_OF_CONTROL", "PHYSICAL_HARM"]
+    },
+    {
+      "id": "inmate_check_in",
+      "source": "existing SOCIAL_EVENTS checked_in incident",
+      "actions": ["action:answer", "action:remain_silent"],
+      "branches": {
+        "action:answer": "conversation continues and ordinary social contact occurs",
+        "action:remain_silent": "the other inmate waits, then leaves; no conversation occurs"
+      },
+      "resolved_outcomes": ["SOCIAL_HOSTILITY", "DEPRIVATION_OR_LOSS"]
+    },
+    {
+      "id": "inmate_social_approach",
+      "source": "existing SOCIAL_EVENTS sat_with incident",
+      "actions": ["action:engage", "action:withdraw"],
+      "branches": {
+        "action:engage": "quiet company is shared and the approach is accepted",
+        "action:withdraw": "Cy moves away; the other inmate leaves him alone; the approach ends"
+      },
+      "resolved_outcomes": ["SOCIAL_HOSTILITY", "DEPRIVATION_OR_LOSS"]
+    },
+    {
+      "id": "inmate_provocation",
+      "source": "existing SOCIAL_EVENTS a_look incident",
+      "actions": ["action:respond", "action:disengage"],
+      "branches": {
+        "action:respond": "the other inmate answers back and the exchange becomes an argument",
+        "action:disengage": "the other inmate does not follow and no exchange occurs"
+      },
+      "resolved_outcomes": ["SOCIAL_HOSTILITY"]
+    }
+  ],
+  "resolution_lifecycle": "An opening record is UNRESOLVED with UNKNOWN outcomes. Its pending continuation is persisted. On the following existing runner world tick, the selected action is marked EXECUTED and a separate linked record carries the concrete consequence and resolved categorical outcomes.",
+  "action_selection": {
+    "mechanism": "Persisted deterministic round-robin over the actions explicitly available for that archetype. Tests and debug callers may force one of those available actions.",
+    "provenance": "ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL",
+    "grounded_instrumental_action_selection": "NOT_MODELLED",
+    "relationship_scalars_used": false,
+    "language_model_used": false
+  },
+  "outcome_generation": {
+    "mechanism": "Explicit deterministic factual branches listed above.",
+    "new_probabilities": [],
+    "relationship_magnitudes_used": false,
+    "emotional_magnitudes_used": false,
+    "generated_prose_used": false
+  },
+  "defensive_context_boundary": "Opening and resolution records use the same actor-specific context ID. The current defensive-context system can attach learned action-outcome evidence to that context, but no perceived control, anxiety, fear, salience or brain effect is inferred.",
+  "public_boundary": "Situation, selected action and concrete consequence are emitted as separate chronological prison events. Visitors do not choose Cy's action.",
+  "admin_boundary": "The environment-event inspector exposes situation, available and unavailable actions, selected and executed action, selection provenance, concrete consequence, remaining possibilities, resolution, adverse outcomes and the contingency learner trace.",
+  "numeric_inventory": [
+    {
+      "name": "model_spec_schema_version",
+      "value": 1,
+      "classification": "ENGINEERING / STORAGE; not a model parameter"
+    },
+    {
+      "name": "instrumental_agency_state_version",
+      "value": 1,
+      "classification": "ENGINEERING / STORAGE; not a model parameter"
+    },
+    {
+      "name": "implemented_archetype_count",
+      "value": 5,
+      "classification": "ENGINEERING / ENUMERATION; the conservative audited subset, not a psychological quantity"
+    },
+    {
+      "name": "available_actions_per_archetype",
+      "value": 2,
+      "classification": "WORLD DEFINITION / ENUMERATION; each implemented situation has exactly two executable branches"
+    },
+    {
+      "name": "canonical_action_id_count",
+      "value": 10,
+      "classification": "ENGINEERING / ENUMERATION; derived from five disjoint two-action definitions"
+    },
+    {
+      "name": "selection_cursor_initial_value",
+      "value": 0,
+      "classification": "ENGINEERING / ENUMERATION; selects the first available action, not a psychological quantity"
+    },
+    {
+      "name": "selection_cursor_increment",
+      "value": 1,
+      "classification": "ENGINEERING / ENUMERATION; advances to the next available action, not a psychological quantity"
+    }
+  ],
+  "arbitrary_or_heuristic_probabilities": [],
+  "arbitrary_or_heuristic_psychological_constants": [],
+  "not_modelled": [
+    "psychological or scientifically grounded action selection",
+    "subjective perceived control",
+    "causal control inference",
+    "action success probability",
+    "stochastic escalation probability",
+    "relationship-based outcome magnitude",
+    "anxiety or other emotional effects",
+    "prompt or prose effects",
+    "brain-region activation",
+    "visitor control over Cy's actions"
+  ]
+}

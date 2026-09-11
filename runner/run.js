@@ -116,6 +116,13 @@ import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_I
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
+import {
+  reconcileInstrumentalAgencyState,
+  openInstrumentalOpportunity,
+  queueInstrumentalOpportunity,
+  resolveInstrumentalOpportunity,
+  takePendingInstrumentalOpportunities,
+} from './instrumental-agency.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
@@ -344,6 +351,10 @@ async function main() {
   if (typeof vitals.monotony !== 'number') vitals.monotony = 0;
   // the cast + grudge map lives on the vitals object so it persists with state
   vitals.relations = reconcileRelations(vitals.relations);
+  // Open prison-world action opportunities persist independently of generated
+  // prose. A restart therefore cannot silently turn an intended action into a
+  // resolved trial or lose the concrete continuation still owed by the world.
+  vitals.instrumentalAgency = reconcileInstrumentalAgencyState(vitals.instrumentalAgency);
   // the incident ledger, last-openers ring and last-incident clock ride on the
   // vitals object too, so they persist with state.
   vitals.ledger = reconcileLedger(vitals.ledger);
@@ -629,6 +640,9 @@ async function main() {
         ...(worldWithDescription.action_opportunity && worldWithDescription.action_opportunity.id
           ? ['action-opportunity-model-v1', 'action-outcome-contingency-v1']
           : []),
+        ...(worldWithDescription.instrumental && worldWithDescription.instrumental.archetype_id
+          ? ['prison-instrumental-opportunities-v1']
+          : []),
         'current-defensive-context-v1',
         'probabilistic-threat-learning-v1',
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
@@ -643,6 +657,73 @@ async function main() {
     record.threat_learning = soma.observeThreatLearningRecord(record);
     emit({ kind: 'world_event_record', payload: record });
     return record;
+  }
+
+  function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName) {
+    const prepared = openInstrumentalOpportunity(vitals.instrumentalAgency, {
+      sourceKind,
+      sourceEventType,
+      actorKey,
+      actorName,
+      opportunityId: `instrumental:${randomUUID()}`,
+      timestamp: tsNow(),
+    });
+    if (!prepared) return null;
+    const opening = prepared.opening;
+    const structured = captureEnvironmentEvent(opening.archetypeId, {
+      eventType: opening.eventType,
+      summary: opening.text,
+      world: opening.world,
+      observation: opening.observation,
+      provisionalConsumer: false,
+    });
+    queueInstrumentalOpportunity(
+      vitals.instrumentalAgency,
+      prepared.pending,
+      structured.world_event.id,
+    );
+    emit({
+      kind: 'event',
+      payload: {
+        name: 'instrumental_situation',
+        text: opening.text,
+        environment_event_id: structured.world_event.id,
+      },
+    });
+    emit({
+      kind: 'event',
+      payload: {
+        name: 'instrumental_action',
+        text: `Cy chose ${prepared.pending.chosenAction.replace('action:', '').replaceAll('_', ' ')}`,
+        action: prepared.pending.chosenAction,
+        environment_event_id: structured.world_event.id,
+      },
+    });
+    return structured;
+  }
+
+  function resolvePendingInstrumentalIncidents() {
+    const pending = takePendingInstrumentalOpportunities(vitals.instrumentalAgency);
+    for (const opportunity of pending) {
+      const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: tsNow() });
+      const structured = captureEnvironmentEvent(outcome.archetypeId, {
+        eventType: outcome.eventType,
+        summary: outcome.text,
+        world: outcome.world,
+        observation: outcome.observation,
+        provisionalConsumer: false,
+      });
+      emit({
+        kind: 'event',
+        payload: {
+          name: 'instrumental_outcome',
+          text: outcome.text,
+          action: opportunity.chosenAction,
+          consequence: outcome.world.instrumental.consequence_id,
+          environment_event_id: structured.world_event.id,
+        },
+      });
+    }
   }
 
   function structuredEventForName(name, summary = null) {
@@ -2344,7 +2425,9 @@ async function main() {
     const archetypeId = quality === 'supportive' || quality === 'ordinary'
       ? 'friendly_interaction'
       : quality === 'rejecting' ? 'social_rejection' : 'hostile_interaction';
-    const structured = captureEnvironmentEvent(archetypeId, {
+    const actorName = (BY_KEY[castKey] || {}).name || castKey;
+    const instrumental = beginInstrumentalIncident('social', ev.type, castKey, actorName);
+    const structured = instrumental || captureEnvironmentEvent(archetypeId, {
       eventType: `social_${ev.type}`,
       summary: ev.slight,
       world: {
@@ -2365,18 +2448,20 @@ async function main() {
       somaInput: structured.soma_input, environmentEventId: structured.world_event.id,
     });
     const r = vitals.relations[castKey];
-    emit({
-      kind: 'event',
-      payload: {
-        name: 'social',
-        cast: castKey,
-        who: (BY_KEY[castKey] || {}).name || castKey,
-        type: ev.type,
-        amp: Number(a.toFixed(3)),
-        standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
-        environment_event_id: structured.world_event.id,
-      },
-    });
+    if (!instrumental) {
+      emit({
+        kind: 'event',
+        payload: {
+          name: 'social',
+          cast: castKey,
+          who: actorName,
+          type: ev.type,
+          amp: Number(a.toFixed(3)),
+          standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
+          environment_event_id: structured.world_event.id,
+        },
+      });
+    }
   }
 
   // Fire an officer event: nudge one officer's standing scaled by amp, soften
@@ -2391,7 +2476,8 @@ async function main() {
     const officerArchetype = ev.type === 'kindness'
       ? 'friendly_interaction' : ev.type === 'search' ? 'cell_search'
         : ev.type === 'refusal' ? 'cancelled_activity' : 'officer_instruction';
-    const structured = captureEnvironmentEvent(officerArchetype, {
+    const instrumental = beginInstrumentalIncident('officer', ev.type, officerKey, officerName);
+    const structured = instrumental || captureEnvironmentEvent(officerArchetype, {
       eventType: `officer_${ev.type}`,
       summary: `${officerName} ${ev.slight}`,
       world: {
@@ -2408,18 +2494,20 @@ async function main() {
     });
     officerCue = { key: officerKey, ev, until: Date.now() + 3 * 60 * 1000 };
     const r = vitals.relations[officerKey];
-    emit({
-      kind: 'event',
-      payload: {
-        name: 'officer',
-        cast: officerKey,
-        who: (BY_KEY[officerKey] || {}).name || officerKey,
-        type: ev.type,
-        amp: Number(a.toFixed(3)),
-        standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
-        environment_event_id: structured.world_event.id,
-      },
-    });
+    if (!instrumental) {
+      emit({
+        kind: 'event',
+        payload: {
+          name: 'officer',
+          cast: officerKey,
+          who: officerName,
+          type: ev.type,
+          amp: Number(a.toFixed(3)),
+          standing: { warmth: r.warmth, suspicion: r.suspicion, grudge: r.grudge },
+          environment_event_id: structured.world_event.id,
+        },
+      });
+    }
   }
 
   // Fire an overheard event: Cy half-hears something and may misinterpret it -
@@ -2556,6 +2644,11 @@ async function main() {
   // ---- deterministic environment scheduler (runs each vitals tick) ----
   function scheduler(now) {
     const { date, mins } = londonParts(new Date(now));
+
+    // An opportunity opened during the previous world tick resolves before any
+    // new incidents are generated. The pending record is persisted in vitals,
+    // so a restart resumes this continuation instead of inferring an outcome.
+    resolvePendingInstrumentalIncidents();
 
     if (date !== prevDate) {
       vitals.day = (vitals.day || 1) + 1;

@@ -24,6 +24,7 @@
     "On the Dell runner, independent Beta-Bernoulli posteriors for structured cue and categorical adverse-outcome pairs, plus the complete post-installation sequence of resolved updates with exact before and after parameters, outcome status, information-theoretic surprisal, timestamp, and source environment event identifiers",
     "On the Dell runner, current defensive-context records and their complete post-installation transition history, including present structured cue IDs, attached learned posterior snapshots, categorical world ambiguity and temporal status, objective controllability, outcome and resolution status, timestamps, and source environment event identifiers",
     "On the Dell runner, the complete post-installation structured action-opportunity ledger and context-by-action-by-outcome Beta-Bernoulli evidence, including actual action availability, deliberate selection or non-selection, execution status, timestamps, resolved outcomes, exact before/after posteriors and source environment event identifiers",
+    "On the Dell runner, pending prison instrumental opportunities, their deterministic engineering selection cursors, the selected action, actor, opening event identity, and the identifiers needed to derive the factual branch awaiting resolution so an open opportunity survives a restart",
     "On the Dell runner, a rolling context of screened Cy-generated prose, operational logs, electricity and paid-provider spend totals, and retry queues",
     "In the visitor's browser, only the numeric IDs, submission times, and waiting/responding state of that browser's postcards awaiting a reply, retained for at most 24 hours so waiting state survives a refresh"
   ],
@@ -36,7 +37,7 @@
     {
       "recipient": "cy.dabblelabs.uk server",
       "purpose": "Publish the screened experience and maintain queued visitor interactions",
-      "data": "Batched public events and private visitor, drawing, structured prison-world, exact feeding-ledger traces, exact probabilistic threat-learning traces, exact current defensive-context transitions, and exact action-opportunity/action-outcome update traces from the Dell runner"
+      "data": "Batched public events and private visitor, drawing, structured prison-world, exact feeding-ledger traces, exact probabilistic threat-learning traces, exact current defensive-context transitions, exact action-opportunity/action-outcome update traces, and prison instrumental situation/action/consequence records from the Dell runner"
     },
     {
       "recipient": "DeepSeek, only while the owner has selected the optional remote provider",
@@ -51,7 +52,7 @@
     {
       "recipient": "Public viewers",
       "purpose": "Render and replay the live or historical Cy experience",
-      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED, qualitative cue-outcome associations from the probabilistic threat learner, categorical public summaries of active current defensive contexts without source event identifiers, exact aggregate action/no-action posteriors and observational contingency differences without opportunity or source event identifiers, and recent structured feeding outcomes with last known intake and explicit continuity status"
+      "data": "Screened public event-stream content, public reply postcards and fan-mail fields, drawings, operational telemetry, Soma values labelled from the implementation registry as LIVE, PROVISIONAL, or NOT MODELLED, qualitative cue-outcome associations from the probabilistic threat learner, categorical public summaries of active current defensive contexts without source event identifiers, exact aggregate action/no-action posteriors and observational contingency differences without opportunity or source event identifiers, recent structured feeding outcomes with last known intake and explicit continuity status, and chronological prison instrumental situations, Cy actions, and factual consequences"
     }
   ],
   "does_not_store": [
@@ -74,6 +75,9 @@
     "Action-outcome learning uses separate Beta(1,1) Bernoulli posteriors for an explicitly available action being executed and deliberately not executed within the same structured context and adverse-outcome class. Unknown, unavailable, prevented, merely attempted and unresolved records do not update.",
     "The public action-outcome view exposes exact aggregate counts, posterior parameters, means, variances and their difference, but not opportunity or source event identifiers. The complete opportunity ledger and update trace are owner-only.",
     "Action-outcome differences are observational and may be confounded. They do not establish causal control, perceived control or helplessness and do not alter Anxiety, other affect, action selection, prompts, prose or brain-region activation.",
+    "Prison instrumental opportunities extend five audited existing officer and inmate incident types. They use explicit two-branch world consequences and no new probability, affect magnitude, relationship scalar, control weight or model-generated prose.",
+    "Live instrumental action selection is a persisted deterministic round-robin engineering mechanism so both available branches can occur. It is explicitly not a psychological, grounded, learned or Soma-driven model of Cy's choice.",
+    "Instrumental opportunities resolve on the next existing world scheduler tick. This introduces no separate psychological timing constant; unresolved opportunities and their selected action remain pending across runner restarts.",
     "Screened model text returns to Soma only as a bounded efference copy of Cy's action: repetition, intensity, commitments, and activation of word associations previously learned from lived input. Text sentiment cannot directly manufacture appraisal or emotional state.",
     "Fan mail is retained and made publicly replayable after runner-side screening, but it is not treated as something Cy perceived and does not affect Soma unless it is later promoted into the reply tray.",
     "Soma memory is bounded by count and preferentially retains salient older episodes alongside recent ones; a time-based deletion period is not currently implemented.",
