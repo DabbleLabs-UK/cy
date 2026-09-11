@@ -78,6 +78,23 @@ if ($sleepConfig['jsonPath'] !== '$.soma.sleepHomeostasis.sleepPressure' || $sle
     fwrite(STDERR, "FAIL: Process S history config is incorrect\n");
     exit(1);
 }
+$sleepinessPayload = json_encode([
+    'soma' => ['predictedSleepiness' => ['predictedKss' => 6.25]],
+], JSON_THROW_ON_ERROR);
+$sleepinessPoints = captive_soma_history_points(
+    [['ts_ms' => 8000, 'payload' => $sleepinessPayload]],
+    'sleepiness', 0, 10000, 10, 'sleepiness', 1.0
+);
+if (count($sleepinessPoints) !== 1 || $sleepinessPoints[0]['value'] !== 6.3) {
+    fwrite(STDERR, "FAIL: predicted KSS history was not read on its native scale\n");
+    exit(1);
+}
+$sleepinessConfig = captive_soma_history_config('24h', 'sleepiness', 'sleepiness');
+if ($sleepinessConfig['jsonPath'] !== '$.soma.predictedSleepiness.predictedKss'
+    || $sleepinessConfig['scale'] !== 1.0) {
+    fwrite(STDERR, "FAIL: predicted KSS history config is incorrect\n");
+    exit(1);
+}
 
 if (captive_soma_history_bucket_seconds(captive_soma_history_config('1h', 'anxiety')) !== 30
     || captive_soma_history_bucket_seconds(captive_soma_history_config('24h', 'anxiety')) !== 600

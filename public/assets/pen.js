@@ -6,7 +6,7 @@
 //
 // The renderer is fed:
 //   pen.write(str, mode)   - queue text to be handwritten
-//   pen.setVitals(payload) - fatigue/agitation/despair/lucidity modulate style
+//   pen.setVitals(payload) - agitation/despair/lucidity modulate style
 //   pen.setMode(mode)      - 'letter' switches to unruled paper + salutation
 //   pen.abort()            - trail off the current stroke, leave the scar
 //
@@ -663,22 +663,20 @@ export class Pen {
     // a card pen keeps its fixed small hand - vitals must not blow the size up
     // past the card's message area.
     if (this.card) return;
-    const ph = payload.physical || {};
     const me = payload.mental || {};
-    const fatigue = clamp01(ph.fatigue ?? 0.3);
     const agitation = clamp01(me.agitation ?? 0.25);
     const despair = clamp01(me.despair ?? 0.3);
     const lucidity = clamp01(me.lucidity ?? 0.65);
 
-    // fatigue -> larger, looser hand
-    this.size = 17 + fatigue * 8; // 17..25
+    // Legacy fatigue is diagnostics-only and cannot change handwriting.
+    this.size = 19;
     // agitation -> faster, heavier
     this.penSpeed = (95 + agitation * 70) * (this.size / 19); // scales with size
     this.strokeWidth = 1.5 + agitation * 1.3;
     // despair -> fainter ink
     this.inkOpacity = 0.95 - despair * 0.4; // 0.95..0.55
-    // lucidity -> tighter line; fatigue -> looser
-    const looseness = 0.5 + fatigue * 0.9 - lucidity * 0.5;
+    // lucidity -> tighter line
+    const looseness = 0.5 - lucidity * 0.5;
     this.jitterRot = 0.7 + looseness * 1.4;
     this.jitterBase = 0.5 + looseness * 1.1;
     this.jitterScale = 0.02 + looseness * 0.04;

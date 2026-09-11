@@ -259,6 +259,18 @@ export class Client {
     if (has && this.onInbox) this.onInbox(data);
   }
 
+  async fetchObservedSleepHistory() {
+    if (this.config.dryRun) return [];
+    const res = await fetch(`${this.config.apiBase}/api/sleep-history.php`, {
+      method: 'GET',
+      headers: { 'X-Cy-Key': this.config.ingestKey },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`sleep history HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.records) ? data.records : [];
+  }
+
   // Poll the viewer-driven tempo. Degrades safely: on ANY failure (network,
   // non-200, bad body) it returns without touching this.tempo, so the last known
   // value keeps driving the duty cycle rather than stalling or running flat out.

@@ -186,7 +186,8 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 subsystems: normalized homeostatic sleep pressure (Process S), the published
 five-harmonic circadian Process C waveform, structured feeding records,
 probabilistic threat learning, defensive-context records, action-outcome
-contingencies, and a structured somatic-harm and noxious-input ledger. Process C carries an explicit
+contingencies, a structured somatic-harm and noxious-input ledger, and a
+published TPM prediction of Karolinska Sleepiness Scale ratings. Process C carries an explicit
 schedule-estimated phase interval because biological phase is not observed.
 Process S and Process C remain separate and are not a subjective-fatigue claim.
 Current attention and action, prediction error, episodic-memory
@@ -228,6 +229,17 @@ Soma circuits.
   basis. Light entrainment, drift, direct biological phase, and language/action
   effects are not modelled. A specific SCN phase analogy is live without
   presenting the value as neural activation.
+- **LIVE predicted Sleepiness after calibration** (`three-process-sleepiness.js`) -
+  uses the independently validated Ingre et al. 2014 Three-Process Model
+  `S_B + C + U` and its fitted `KSS = 9.68 - 0.46 * alertness` transfer. It
+  consumes only structured observed sleep/wake transitions plus time of day,
+  retains the population-default phase `p = 16.8`, and remains CALIBRATING
+  until two complete observed sleep episodes exist. Its TPM S_B, C and U are
+  separate from the Process S/C displays above. Process W is omitted, the first
+  waking hour carries a documented sleep-inertia limitation, and the output is
+  a population-model estimate rather than a biological measurement or general
+  fatigue. Exact equations, parameters, validation population and provenance
+  are locked in `config/model-specs/three-process-sleepiness.json`.
 - **LIVE feeding and intake ledger** (`feeding-homeostasis.js`) - consumes only
   structured food expectation, offering, availability, receipt, consumption and
   portion facts. It persists the complete post-installation ledger and explicit

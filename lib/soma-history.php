@@ -8,7 +8,7 @@ const CAPTIVE_SOMA_RANGES = [
 ];
 
 const CAPTIVE_SOMA_METRICS = [
-    'anxiety', 'arousal', 'pain', 'hunger', 'fatigue', 'loneliness', 'anger', 'rumination',
+    'anxiety', 'arousal', 'pain', 'hunger', 'loneliness', 'anger', 'rumination',
 ];
 
 const CAPTIVE_SOMA_BRAIN_REGIONS = [
@@ -49,6 +49,14 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'key' => $key,
             'jsonPath' => '$.soma.sleepHomeostasis.sleepPressure',
             'scale' => 100.0,
+        ];
+    }
+    if ($scope === 'sleepiness' && $key === 'sleepiness') {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.predictedSleepiness.predictedKss',
+            'scale' => 1.0,
         ];
     }
     if ($scope === 'circadian' && $key === 'processC') {
@@ -223,6 +231,8 @@ function captive_soma_history_points(
             $payload = json_decode((string)$row['payload'], true);
             if ($scope === 'sleep') {
                 $value = $payload['soma']['sleepHomeostasis']['sleepPressure'] ?? null;
+            } elseif ($scope === 'sleepiness') {
+                $value = $payload['soma']['predictedSleepiness']['predictedKss'] ?? null;
             } elseif ($scope === 'circadian') {
                 $value = $payload['soma']['circadianProcessC']['processCEstimate'] ?? null;
             } else {

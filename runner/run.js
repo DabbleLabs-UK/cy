@@ -391,6 +391,13 @@ async function main() {
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
+  try {
+    const observedSleepHistory = await client.fetchObservedSleepHistory();
+    soma.replayObservedSleepRecords(observedSleepHistory, { now: Date.now() });
+    console.log(`[cy] TPM sleep history: ${observedSleepHistory.length} structured observations replayed`);
+  } catch (error) {
+    console.warn(`[cy] TPM sleep history unavailable; remaining CALIBRATING: ${error.message}`);
+  }
   reportSomaFailure = (failure) => {
     emit({ kind: 'event', payload: { name: 'soma_unavailable', reason: failure.reason, operation: failure.operation } });
     client.kick();
@@ -657,7 +664,7 @@ async function main() {
         'current-defensive-context-v1',
         'probabilistic-threat-learning-v1',
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
-          ? ['process-s-normalized-v1']
+          ? ['process-s-normalized-v1', 'tpm-predicted-kss-v1']
           : []),
         ...(hasSomaticFacts ? [
           'somatic-event-model-v1',
@@ -2874,7 +2881,9 @@ async function main() {
     if (experienced) {
       vitals.physical.pain = experienced.pain.value / 100;
       vitals.physical.hunger = experienced.hunger.value / 100;
-      vitals.physical.fatigue = experienced.fatigue.value / 100;
+      // Legacy fatigue remains inside the explicitly provisional diagnostic
+      // snapshot. It no longer enters compatibility vitals, brain mappings,
+      // prompt inputs, action selection or environmental behaviour.
       vitals.mental.anxiety = experienced.anxiety.value / 100;
       vitals.mental.stress = experienced.arousal.value / 100;
       vitals.mental.agitation = experienced.arousal.value / 100;

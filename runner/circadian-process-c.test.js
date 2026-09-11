@@ -158,7 +158,7 @@ assert.equal(snapshot.entrainment.publicLabel, 'NOT MODELLED');
 assert.equal(snapshot.freeRunningPhaseDrift.publicLabel, 'NOT MODELLED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
-assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('soma_variables', 'sleepiness').implementation_status, 'IMPLEMENTED');
 
 // K. BRAIN: only the specific SCN phase analogy is live; the generic
 // hypothalamic homeostasis analogy remains unimplemented and has no activation.

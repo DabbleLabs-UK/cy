@@ -471,11 +471,8 @@ export function tickExperienced(state, {
       ? 'social need is rising with time since reassuring contact'
       : 'social need is at rest until actual contact is recorded',
     now, 'social_clock');
-  const fatigue = finite(state.metrics.fatigue && state.metrics.fatigue.value, METRICS.fatigue.baseline);
   const hunger = finite(state.metrics.hunger && state.metrics.hunger.value, METRICS.hunger.baseline);
   const pain = finite(state.metrics.pain && state.metrics.pain.value, METRICS.pain.baseline);
-  setLevel(state, 'anxiety', 'coupling:fatigue-anxiety', Math.max(0, fatigue - 55) * 0.22,
-    'fatigue is reducing tolerance for uncertainty', now, 'state_coupling');
   setLevel(state, 'arousal', 'coupling:body-arousal', Math.max(0, hunger - 60) * 0.16 + Math.max(0, pain - 15) * 0.2,
     'current hunger and pain are raising bodily activation', now, 'state_coupling');
   setLevel(state, 'rumination', 'coupling:attention-rumination', 16 * clamp(attention.salience, 0, 1) + 14 * clamp(predictionError, 0, 1),
@@ -536,7 +533,7 @@ export function experiencedSnapshot(state, now = null) {
     insula: brainRegion('insula', 'Insula analogy', 0.5 * value('pain') + 0.28 * value('hunger') + 0.22 * value('arousal'), ['pain', 'hunger', 'arousal']),
     acc: brainRegion('acc', 'Anterior cingulate analogy', 0.55 * value('rumination') + 0.45 * value('pain'), ['rumination', 'pain']),
     hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination') + 0.25 * value('anxiety') + 0.2 * value('loneliness'), ['rumination', 'anxiety', 'loneliness']),
-    prefrontal: brainRegion('prefrontal', 'Prefrontal analogy', 100 - (0.45 * value('fatigue') + 0.3 * value('arousal') + 0.25 * value('pain')), ['inverse fatigue', 'inverse arousal', 'inverse pain']),
+    prefrontal: brainRegion('prefrontal', 'Prefrontal analogy', 100 - (0.3 * value('arousal') + 0.25 * value('pain')), ['inverse arousal', 'inverse pain']),
     temporalSocial: brainRegion('temporalSocial', 'Temporal / social analogy', value('loneliness'), ['loneliness']),
   };
   return {

@@ -7,7 +7,7 @@ export const EXPERIENCED_METRICS = [
   { key: 'arousal', label: 'AROUSAL / STRESS' },
   { key: 'pain', label: 'PAIN / DISCOMFORT' },
   { key: 'hunger', label: 'HUNGER' },
-  { key: 'fatigue', label: 'FATIGUE' },
+  { key: 'sleepiness', label: 'PREDICTED SLEEPINESS' },
   { key: 'loneliness', label: 'LONELINESS / SOCIAL NEED' },
   { key: 'anger', label: 'ANGER / HOSTILITY' },
   { key: 'rumination', label: 'RUMINATION / FIXATION' },
@@ -137,7 +137,7 @@ export function contributorExplanation(contributor) {
   return `${String(contributor && contributor.description || 'Unlabelled influence')} - ${effect} (${at})`;
 }
 
-export function buildHistoryPath(points, width = 280, height = 80) {
+export function buildScaledHistoryPath(points, minimum = 0, maximum = 100, width = 280, height = 80) {
   const clean = (Array.isArray(points) ? points : []).filter((point) => Number.isFinite(point.ts) && Number.isFinite(point.value));
   if (!clean.length) return '';
   const minTs = clean[0].ts;
@@ -148,10 +148,14 @@ export function buildHistoryPath(points, width = 280, height = 80) {
   const breakAt = Math.max(median * 3, 60000);
   return clean.map((point, index) => {
     const x = ((point.ts - minTs) / span) * width;
-    const y = height - (Math.max(0, Math.min(100, point.value)) / 100) * height;
+    const y = height - ((Math.max(minimum, Math.min(maximum, point.value)) - minimum) / (maximum - minimum)) * height;
     const command = index === 0 || point.ts - clean[index - 1].ts > breakAt ? 'M' : 'L';
     return `${command}${x.toFixed(1)} ${y.toFixed(1)}`;
   }).join(' ');
+}
+
+export function buildHistoryPath(points, width = 280, height = 80) {
+  return buildScaledHistoryPath(points, 0, 100, width, height);
 }
 
 export function buildHistoryUrl(base, scope, key, range) {
@@ -209,12 +213,14 @@ export function buildCircadianHistoryPaths(points, width = 280, height = 80, wav
   return { estimate, band: `${upper} ${lower} Z`, minimum, maximum };
 }
 
-function historyMarkup() {
+function historyMarkup(axisLabel = null, ariaLabel = 'Stored state history') {
   return `<div class="soma-reading-history">
     <div class="soma-ranges" aria-label="History range">
       <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
     </div>
-    <svg class="soma-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored state history"><path></path></svg>
+    ${axisLabel ? `<div class="soma-history-axis"><span>9</span><strong>${axisLabel}</strong><span>1</span></div>` : ''}
+    <svg class="soma-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="${ariaLabel}"><path></path></svg>
+    ${axisLabel ? '<p class="soma-history-display-note">Out-of-range markers are clipped to the 1-9 axis for display only; stored raw predictions are unchanged.</p>' : ''}
     <p class="soma-history-note">Open this reading to load stored history.</p>
   </div>`;
 }
@@ -259,6 +265,19 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
     <p class="circadian-entrainment"><span>CIRCADIAN ENTRAINMENT</span><strong>NOT MODELLED</strong></p>
     ${admin ? '<details class="circadian-process-inspector"><summary>CIRCADIAN PROCESS C INSPECTION</summary><pre>Waiting for a Process C evaluation.</pre></details>' : ''}
   </section></div>`;
+}
+
+function predictedSleepinessMarkup(status, admin) {
+  return `<section class="predicted-sleepiness-card status-${status.status.toLowerCase().replace('_', '-')}">
+    <div class="predicted-sleepiness-head"><span>${status.displayName}</span><strong class="predicted-sleepiness-status">CALIBRATING</strong></div>
+    <div class="predicted-sleepiness-reading"><strong class="predicted-sleepiness-value">--</strong><span>PREDICTED KSS (1-9)</span></div>
+    <p class="predicted-sleepiness-anchor">Waiting for observed sleep history.</p>
+    <p class="predicted-sleepiness-calibration">Two complete observed sleep episodes are required.</p>
+    <dl class="predicted-sleepiness-facts"><div><dt>MODEL</dt><dd>Three-Process Model of Alertness - Ingre et al. 2014</dd></div><div><dt>PHASE</dt><dd>POPULATION DEFAULT</dd></div><div><dt>SLEEP HISTORY</dt><dd>OBSERVED</dd></div></dl>
+    <p class="predicted-sleepiness-separation">The headline KSS prediction uses independently validated TPM equations. The Process S/C displays below are not numerically substituted into it.</p>
+    <p class="predicted-sleepiness-caveat">Population-model estimate; individual sleepiness can differ substantially. General fatigue is not modelled. Sleep inertia is not adequately modelled, so the first hour after waking has additional known bias.</p>
+    ${admin ? '<details class="predicted-sleepiness-inspector"><summary>TPM CALCULATION INSPECTION</summary><pre>Waiting for a live TPM calculation.</pre></details>' : ''}
+  </section>`;
 }
 
 function threatLearningMarkup(status, volatilityStatus, generalisationStatus, contextualStatus, admin) {
@@ -400,6 +419,7 @@ export class BrainHud {
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
+    this.predictedSleepinessStatus = implementationStatus(this.registry, 'soma_subsystems', 'predicted_sleepiness_tpm');
     this.circadianStatus = implementationStatus(this.registry, 'soma_subsystems', 'circadian_process_c');
     this.threatLearningStatus = implementationStatus(this.registry, 'soma_subsystems', 'probabilistic_threat_learning');
     this.threatVolatilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_volatility');
@@ -448,6 +468,7 @@ export class BrainHud {
       status: implementationStatus(this.registry, 'brain_regions', registered.id),
     }));
     this.metrics = {};
+    this.predictedSleepiness = null;
     this.latestBrain = {};
     this.rows = {};
     this.regions = {};
@@ -499,9 +520,10 @@ export class BrainHud {
     for (const definition of this.metricDefinitions) {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
+      if (definition.key === 'sleepiness') entry.classList.add('soma-sleepiness-entry');
       entry.dataset.metric = definition.key;
-      const sleepHomeostasis = definition.key === 'fatigue'
-        ? sleepHomeostasisMarkup(this.sleepHomeostasisStatus, this.circadianStatus, this.admin)
+      const sleepHomeostasis = definition.key === 'sleepiness'
+        ? `${predictedSleepinessMarkup(this.predictedSleepinessStatus, this.admin)}${sleepHomeostasisMarkup(this.sleepHomeostasisStatus, this.circadianStatus, this.admin)}`
         : '';
       const threatLearning = definition.key === 'anxiety'
         ? threatLearningMarkup(this.threatLearningStatus, this.threatVolatilityStatus, this.threatGeneralisationStatus, this.threatContextualStatus, this.admin)
@@ -564,12 +586,15 @@ export class BrainHud {
           this.admin,
         )
         : '';
-      const numericHistory = ['pain', 'loneliness'].includes(definition.key) ? '' : historyMarkup();
+      const numericHistory = ['pain', 'loneliness'].includes(definition.key) ? ''
+        : definition.key === 'sleepiness'
+          ? historyMarkup('KSS PREDICTED SLEEPINESS', 'Stored predicted KSS sleepiness history on the 1 to 9 scale')
+          : historyMarkup();
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
         <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
-      this._wireReading(entry, 'metric', definition.key);
-      if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
-      if (definition.key === 'fatigue') this._wireCircadian(entry);
+      this._wireReading(entry, definition.key === 'sleepiness' ? 'sleepiness' : 'metric', definition.key);
+      if (definition.key === 'sleepiness') this._wireSleepHomeostasis(entry);
+      if (definition.key === 'sleepiness') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
       if (definition.key === 'anxiety') this._wireControllability(entry);
@@ -658,7 +683,7 @@ export class BrainHud {
         this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
         entry,
       );
-      const registryScope = scope === 'metric' ? 'soma_variables' : 'brain_regions';
+      const registryScope = ['metric', 'sleepiness'].includes(scope) ? 'soma_variables' : 'brain_regions';
       const registered = implementationStatus(this.registry, registryScope, key);
       if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
       if (registered.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED) return;
@@ -811,6 +836,7 @@ export class BrainHud {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.sleepHomeostasis = soma.sleepHomeostasis || null;
     this.circadianProcessC = soma.circadianProcessC || null;
+    this.predictedSleepiness = soma.predictedSleepiness || null;
     this.threatLearning = soma.threatLearning || null;
     this.currentDefensiveContext = soma.currentDefensiveContext || null;
     this.learnedControllability = soma.learnedControllability || null;
@@ -823,6 +849,22 @@ export class BrainHud {
       const metric = this.metrics[definition.key];
       const row = this.rows[definition.key];
       if (!row) continue;
+      if (definition.key === 'sleepiness') {
+        const snapshot = this.predictedSleepiness;
+        const live = snapshot && snapshot.publicLabel === 'LIVE' && Number.isFinite(snapshot.predictedKss);
+        const outside = live && snapshot.outsideNominalKssRange;
+        const value = live ? snapshot.predictedKss : null;
+        row.querySelector('.soma-state-value').textContent = value == null ? '--' : `${value.toFixed(1)} / 9`;
+        row.querySelector('.soma-state-status').textContent = live ? 'LIVE' : 'CALIBRATING';
+        row.querySelector('.soma-state-trend').textContent = outside ? 'outside nominal range'
+          : live ? 'TPM population model' : 'sleep history';
+        const displayPosition = value == null ? 0 : Math.max(0, Math.min(100, ((value - 1) / 8) * 100));
+        row.querySelector('.soma-state-bar i').style.left = `${displayPosition}%`;
+        row.querySelector('.soma-state-bar i').style.width = live ? '3px' : '0';
+        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(displayPosition / 100);
+        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}${outside ? ' - raw prediction outside nominal KSS range' : ''}. ${definition.status.note}`;
+        continue;
+      }
       if (definition.status.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED || !metric) {
         row.querySelector('.soma-state-value').textContent = '--';
         row.querySelector('.soma-state-trend').textContent = definition.status.publicLabel;
@@ -839,6 +881,7 @@ export class BrainHud {
       this.renderMetric(definition.key);
     }
     this.renderSomatic();
+    this.renderPredictedSleepiness();
     this.renderSleepHomeostasis();
     this.renderCircadianProcessC();
     this.renderThreatLearning();
@@ -951,6 +994,54 @@ export class BrainHud {
       item.textContent = contributorExplanation(contributor);
       list.appendChild(item);
     }
+  }
+
+  renderPredictedSleepiness() {
+    const entry = this.rows.sleepiness;
+    if (!entry) return;
+    const snapshot = this.predictedSleepiness;
+    const card = entry.querySelector('.predicted-sleepiness-card');
+    if (!card) return;
+    const live = snapshot && snapshot.publicLabel === 'LIVE' && Number.isFinite(snapshot.predictedKss);
+    entry.querySelector('.soma-reading-description').textContent = live
+      ? `LIVE. Predicted KSS ${snapshot.predictedKss.toFixed(2)} from the published S_B + C + U Three-Process Model.`
+      : 'CALIBRATING. A live KSS estimate requires two complete observed sleep episodes.';
+    entry.querySelector('.soma-influences-title').hidden = true;
+    entry.querySelector('.soma-contributors').textContent = '';
+    card.querySelector('.predicted-sleepiness-status').textContent = live
+      ? snapshot.outsideNominalKssRange ? 'LIVE - OUTSIDE NOMINAL RANGE' : 'LIVE'
+      : 'CALIBRATING';
+    card.querySelector('.predicted-sleepiness-value').textContent = live ? `${snapshot.predictedKss.toFixed(2)} / 9` : '--';
+    card.querySelector('.predicted-sleepiness-anchor').textContent = live && snapshot.kssRegion
+      ? `Descriptive region: ${snapshot.kssRegion.description}.`
+      : 'Waiting for enough structured observed sleep history.';
+    card.querySelector('.predicted-sleepiness-calibration').textContent = snapshot
+      ? `${snapshot.completeObservedSleepEpisodes} of ${snapshot.requiredCompleteObservedSleepEpisodes} complete observed sleep episodes; current state ${String(snapshot.currentObservedSleepState || 'unknown').toUpperCase()}.`
+      : 'No TPM state has reached this view.';
+    const inspector = card.querySelector('.predicted-sleepiness-inspector pre');
+    if (inspector) inspector.textContent = snapshot ? [
+      `model: ${snapshot.modelId}`,
+      `runtime status: ${snapshot.publicLabel}`,
+      `phase basis: ${snapshot.phaseBasis}`,
+      `observed complete sleeps: ${snapshot.completeObservedSleepEpisodes}`,
+      `continuity known: ${snapshot.continuityKnown}`,
+      `TPM_S_B: ${snapshot.components && Number.isFinite(snapshot.components.tpmSB) ? snapshot.components.tpmSB.toFixed(6) : '--'}`,
+      `TPM_C: ${snapshot.components && Number.isFinite(snapshot.components.tpmC) ? snapshot.components.tpmC.toFixed(6) : '--'}`,
+      `TPM_U: ${snapshot.components && Number.isFinite(snapshot.components.tpmU) ? snapshot.components.tpmU.toFixed(6) : '--'}`,
+      `alertness S_B + C + U: ${snapshot.components && Number.isFinite(snapshot.components.alertness) ? snapshot.components.alertness.toFixed(6) : '--'}`,
+      `raw predicted KSS: ${Number.isFinite(snapshot.rawPredictedKss) ? snapshot.rawPredictedKss.toFixed(6) : '--'}`,
+      `outside nominal KSS range: ${snapshot.outsideNominalKssRange}`,
+      `transfer: KSS = 9.68 - 0.46 * alertness`,
+      `time awake: ${snapshot.components && Number.isFinite(snapshot.components.timeAwakeMs) ? elapsedFeedingLabel(snapshot.components.timeAwakeMs) : '--'}`,
+      `first hour after waking: ${snapshot.components ? snapshot.components.firstHourAfterWaking : '--'}`,
+      `circadian phase p: 16.8 h - POPULATION DEFAULT`,
+      `residual SD: ${snapshot.residualSdKss} KSS`,
+      `between-subject intercept SD: ${snapshot.betweenSubjectInterceptSdKss} KSS`,
+      `Process W: NOT USED`,
+      `general fatigue: NOT MODELLED`,
+      `sleep inertia: NOT MODELLED`,
+      `brain activation: NOT MODELLED`,
+    ].join('\n') : 'No TPM state has reached this view.';
   }
 
   renderThreatLearning() {
@@ -1308,7 +1399,7 @@ export class BrainHud {
   }
 
   renderSleepHomeostasis() {
-    const entry = this.rows.fatigue;
+    const entry = this.rows.sleepiness;
     const card = entry && entry.querySelector('.sleep-homeostasis-card');
     if (!card) return;
     const snapshot = this.sleepHomeostasis;
@@ -1351,7 +1442,7 @@ export class BrainHud {
   }
 
   renderCircadianProcessC() {
-    const entry = this.rows.fatigue;
+    const entry = this.rows.sleepiness;
     const card = entry && entry.querySelector('.circadian-process-card');
     if (!card) return;
     const snapshot = this.circadianProcessC;
@@ -1414,7 +1505,9 @@ export class BrainHud {
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.historyRequests.get(entry) !== request) return;
-      path.setAttribute('d', buildHistoryPath(data.points));
+      path.setAttribute('d', scope === 'sleepiness'
+        ? buildScaledHistoryPath(data.points, 1, 9)
+        : buildHistoryPath(data.points));
       note.textContent = data.points.length ? `${data.points.length} stored ${range} readings. Gaps mean no runner data was recorded.` : `No stored readings in the last ${range}.`;
     } catch (error) {
       if (this.historyRequests.get(entry) !== request) return;

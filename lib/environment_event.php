@@ -104,6 +104,13 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Uses only observed sleep/wake state and elapsed time in the Borbely/Daan Process S equations. It does not assign an emotional magnitude.',
             ];
+        } elseif ($consumer === 'tpm-predicted-kss-v1') {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Uses observed sleep/wake transitions, time of day and the published Ingre et al. S_B + C + U equations to predict KSS. It does not calculate general fatigue or a brain activation value.',
+            ];
         } elseif ($consumer === 'probabilistic-threat-learning-v1') {
             $consumers[] = [
                 'id' => $consumer,

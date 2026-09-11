@@ -147,7 +147,6 @@ const STYLE_RULES = [
   [(v) => over(v.physical.hunger - 0.65, 0.35), 'everything reminds you of food and you resent it'],
   [(v) => over(v.mental.despair - 0.7, 0.3), 'you write less and stop finishing thoughts'],
   [(v) => over(v.mental.dissociation - 0.6, 0.4), 'the walls stop being walls; you slip into association'],
-  [(v) => over(v.physical.fatigue - 0.75, 0.25), 'you repeat yourself'],
   [(v) => over((v.mental.anger || 0) - 0.6, 0.4), 'short and hard; you are looking for a target'],
 ];
 
@@ -186,7 +185,6 @@ const NOTATION_M = [
 const NOTATION_P = [
   ['pain', 'pain', 0.5],
   ['hunger', 'hunger', 0.5],
-  ['fatigue', 'fatigue', 0.5],
 ];
 const fmt2 = (x) => Number(x).toFixed(2).replace(/^0/, ''); // 0.82 -> '.82'
 

@@ -220,9 +220,8 @@ assert.equal(groundedSnapshot.circadianProcessC.directBiologicalPhaseObserved, f
 assert.equal(groundedSnapshot.circadianProcessC.entrainment.publicLabel, 'NOT MODELLED');
 assert.equal(groundedSnapshot.experienced.metrics.fatigue.value > 0, true, 'legacy fatigue remains separate and provisional');
 
-// Maximum fatigue may select a real period of silence, but that action cannot
-// immediately select itself forever. The last silence survives intervening
-// actions and becomes eligible again only after its cooldown.
+// Maximum legacy fatigue is diagnostic-only and cannot select silence or any
+// other expressive action.
 const tired = reconcileSoma(null, { now: t0 });
 tired.experienced.body.sleep.fatigueLoad = 88;
 tickSoma(tired, {
@@ -231,24 +230,10 @@ tickSoma(tired, {
   asleep: false,
   now: t0 + 1000,
 });
-assert.equal(chooseSomaAction(tired, { canDraw: false, now: t0 + 2000 }).name, 'silence');
-completeSomaAction(tired, 'silence');
-tickSoma(tired, {
-  physical: { pain: 0, hunger: 0, fatigue: 1 },
-  monotony: 0,
-  asleep: false,
-  now: t0 + 4 * 60000,
-});
 assert.notEqual(
-  chooseSomaAction(tired, { canDraw: false, now: t0 + 4 * 60000 }).name,
+  chooseSomaAction(tired, { canDraw: false, now: t0 + 2000 }).name,
   'silence',
-  'a completed silence cannot immediately repeat at maximum fatigue',
-);
-assert.equal(tired.action.lastSilenceAtMs, t0 + 2000, 'another action preserves the last silence time');
-assert.equal(
-  chooseSomaAction(tired, { canDraw: false, now: t0 + 16 * 60000 }).name,
-  'silence',
-  'silence becomes eligible again after fifteen minutes',
+  'legacy fatigue cannot select silence',
 );
 const legacySilence = JSON.parse(JSON.stringify(tired));
 delete legacySilence.action.lastSilenceAtMs;

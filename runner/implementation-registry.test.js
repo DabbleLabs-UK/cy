@@ -9,7 +9,7 @@ import { createEnvironmentEvent, environmentEventToSomaInput } from './environme
 const registry = implementationRegistry;
 assert.equal(registry.schema, 'cy.implementation-registry');
 assert.equal(registry.soma_variables.length, 8);
-assert.ok(registry.soma_variables.every((entry) => entry.implementation_status === 'PROVISIONAL'));
+assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 1);
 assert.equal(somaImplementationStatus(), 'provisional');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_prose_context').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_to_expressive_context').implementation_status, 'IMPLEMENTED');
@@ -19,6 +19,10 @@ assert.deepEqual(implementationEntry('soma_subsystems', 'model_mediated_expressi
 assert.equal(implementationEntry('soma_subsystems', 'heuristic_drive_expressive_selector').lifecycle_status, 'DISABLED_LEGACY');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_action_selection').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'sleep_homeostasis').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'predicted_sleepiness_tpm').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'legacy_fatigue_metric').lifecycle_status, 'DIAGNOSTICS_ONLY');
+assert.equal(implementationEntry('soma_subsystems', 'general_fatigue').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'sleep_inertia').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').phase_basis, 'schedule_estimated');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
@@ -65,7 +69,7 @@ assert.equal(implementationEntry('brain_regions', 'pagImminentDefense').implemen
 assert.equal(implementationEntry('brain_regions', 'vmpfcControl').implementation_status, 'NOT_IMPLEMENTED');
 assert.ok(implementationEntry('brain_regions', 'vmpfcControl').available_future_dependencies.includes('learned_controllability'));
 assert.equal(implementationEntry('brain_regions', 'bnstUncertainThreat').ui_exposed, false);
-assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('soma_variables', 'sleepiness').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 assert.ok(implementationEntry('brain_regions', 'hypothalamic').available_future_dependencies.includes('ingestion_ledger'));

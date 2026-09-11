@@ -31,6 +31,14 @@ import {
   tickCircadianProcessC,
 } from './circadian-process-c.js';
 import {
+  createThreeProcessSleepiness,
+  observeThreeProcessSleepState,
+  reconcileThreeProcessSleepiness,
+  replayObservedSleepRecords,
+  threeProcessSleepinessSnapshot,
+  tickThreeProcessSleepiness,
+} from './three-process-sleepiness.js';
+import {
   createThreatLearning,
   observeThreatLearningRecord as applyThreatLearningRecord,
   reconcileThreatLearning,
@@ -166,6 +174,7 @@ function blank(now, legacyPhysical = null) {
       habitualWakeMinutes: configuredHabitualWakeMinutes,
       timeZone: PRISON_SCHEDULE_TIME_ZONE,
     }),
+    predictedSleepiness: createThreeProcessSleepiness(now, PRISON_SCHEDULE_TIME_ZONE),
     threatLearning: createThreatLearning(now),
     currentDefensiveContext: createCurrentDefensiveContext(now),
     feeding: createFeedingState(now),
@@ -218,6 +227,10 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     circadianProcessC: reconcileCircadianProcessC(raw.circadianProcessC, {
       now,
       habitualWakeMinutes: habitualWakeMinutes(PRISON_SCHEDULE),
+      timeZone: PRISON_SCHEDULE_TIME_ZONE,
+    }),
+    predictedSleepiness: reconcileThreeProcessSleepiness(raw.predictedSleepiness, {
+      now,
       timeZone: PRISON_SCHEDULE_TIME_ZONE,
     }),
     threatLearning: reconcileThreatLearning(raw.threatLearning, { now }),
@@ -301,6 +314,11 @@ export function observeSomaSomaticRecord(state, record) {
 export function observeSomaSocialContactRecord(state, record) {
   if (!state || !record) return null;
   return applySocialContactRecord(state.socialContact, record);
+}
+
+export function replaySomaObservedSleepRecords(state, records, { now = Date.now() } = {}) {
+  if (!state) return null;
+  return replayObservedSleepRecords(state.predictedSleepiness, records, { now });
 }
 
 function familyOf(name, tags = []) {
@@ -561,6 +579,10 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
         now,
         source: `structured-environment-record:${observation.environmentEventId || observation.somaInput.event_id || 'unknown'}`,
       });
+      observeThreeProcessSleepState(state.predictedSleepiness, observedSleepState, {
+        now,
+        source: `structured-environment-record:${observation.environmentEventId || observation.somaInput.event_id || 'unknown'}`,
+      });
     }
   }
   const tags = Array.isArray(observation.tags) ? observation.tags : [];
@@ -703,6 +725,11 @@ export function tickSoma(state, {
     timeZone: PRISON_SCHEDULE_TIME_ZONE,
   });
 
+  tickThreeProcessSleepiness(state.predictedSleepiness, {
+    now,
+    source: 'runner-observed-sleep-state',
+  });
+
   tickExperienced(state.experienced, {
     now,
     asleep,
@@ -715,9 +742,10 @@ export function tickSoma(state, {
   const experienced = state.experienced.metrics;
   const pain = clamp(experienced.pain.value / 100);
   const hunger = clamp(experienced.hunger.value / 100);
-  const fatigue = clamp(experienced.fatigue.value / 100);
   state.drives.food = round(hunger);
-  state.drives.rest = round(asleep ? Math.max(0.2, fatigue * 0.5) : fatigue);
+  // Legacy fatigue is diagnostics-only. It must not affect even the retained
+  // compatibility drives or circuits; predicted KSS is not an action policy.
+  state.drives.rest = 0;
   state.drives.safety = round(Math.max(experienced.anxiety.value / 100, experienced.arousal.value / 120, experienced.anger.value / 140));
   state.drives.contact = round(experienced.loneliness.value / 100);
   state.drives.understanding = round(
@@ -731,7 +759,7 @@ export function tickSoma(state, {
   // Legacy body-attention competition and periodic state-led recall are disabled.
   // They had arbitrary thresholds and weights and previously steered live prose.
 
-  state.circuits.interoception = round(Math.max(pain, hunger, fatigue));
+  state.circuits.interoception = round(Math.max(pain, hunger));
   state.circuits.threatAppraisal = round(state.drives.safety);
   state.circuits.affiliation = round(Math.max(state.appraisal.affiliation, state.drives.contact));
   state.circuits.predictionError = round(state.prediction.error);
@@ -884,7 +912,7 @@ export function groundedSomaDirective(state, options) {
 export function somaSnapshot(state) {
   if (!state) return null;
   const sources = {
-    interoception: 'pain, hunger, and fatigue state',
+    interoception: 'pain and hunger state; legacy fatigue is excluded',
     threatAppraisal: 'appraisal of observed incidents',
     affiliation: 'mail, visitor, and social observations',
     predictionError: 'difference between learned expectation and observation',
@@ -910,6 +938,7 @@ export function somaSnapshot(state) {
     status: somaImplementationStatus(),
     sleepHomeostasis: sleepHomeostasisSnapshot(state.sleepHomeostasis),
     circadianProcessC: circadianProcessCSnapshot(state.circadianProcessC),
+    predictedSleepiness: threeProcessSleepinessSnapshot(state.predictedSleepiness, state.lastTickMs),
     threatLearning: threatLearningSnapshot(state.threatLearning),
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),

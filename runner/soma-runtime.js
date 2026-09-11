@@ -135,6 +135,12 @@ export function createSomaRuntime(rawState, {
       });
       return result;
     },
+    replayObservedSleepRecords(records, options) {
+      return mutate('observed sleep history replay', (current) => {
+        engine.replaySomaObservedSleepRecords(current, records, options);
+        return current;
+      });
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

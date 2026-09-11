@@ -6,6 +6,7 @@
 
 import { sleepHomeostasisSnapshot } from './sleep-homeostasis.js';
 import { circadianProcessCSnapshot } from './circadian-process-c.js';
+import { threeProcessSleepinessSnapshot } from './three-process-sleepiness.js';
 import { currentDefensiveContextInspection } from './current-defensive-context.js';
 import { feedingSnapshot } from './feeding-homeostasis.js';
 import { somaticSnapshot } from './somatic-nociceptive-substrate.js';
@@ -34,10 +35,11 @@ function section(id, title, entries) {
   return { id, title, implementationStatus: 'LIVE', entries };
 }
 
-function sleepSection(state) {
+function sleepSection(state, now) {
   const processS = sleepHomeostasisSnapshot(state.sleepHomeostasis);
   const processC = circadianProcessCSnapshot(state.circadianProcessC);
-  if (!processS && !processC) return null;
+  const predictedSleepiness = threeProcessSleepinessSnapshot(state.predictedSleepiness, now);
+  if (!processS && !processC && !predictedSleepiness) return null;
   const entries = [];
   if (processS) {
     entries.push(entry(
@@ -51,12 +53,6 @@ function sleepSection(state) {
         calibrating: processS.calibrating,
         currentObservedSleepState: processS.currentSleepState,
       },
-    ));
-    entries.push(entry(
-      EPISTEMIC_STATUS.NOT_MODELLED,
-      'sleep_homeostasis',
-      'subjective_fatigue',
-      'No subjective fatigue value is inferred from Process S.',
     ));
   }
   if (processC) {
@@ -74,6 +70,37 @@ function sleepSection(state) {
       },
     ));
   }
+  if (predictedSleepiness && predictedSleepiness.publicLabel === 'LIVE'
+    && Number.isFinite(predictedSleepiness.predictedKss)) {
+    entries.push(entry(
+      EPISTEMIC_STATUS.MODEL_ESTIMATE,
+      'predicted_sleepiness_tpm',
+      'predicted_kss',
+      {
+        estimate: predictedSleepiness.predictedKss,
+        scale: 'Karolinska Sleepiness Scale 1-9',
+        nearestPublishedAnchor: predictedSleepiness.kssAnchor,
+        model: predictedSleepiness.modelId,
+        phaseBasis: predictedSleepiness.phaseBasis,
+        residualSdKss: predictedSleepiness.residualSdKss,
+        betweenSubjectInterceptSdKss: predictedSleepiness.betweenSubjectInterceptSdKss,
+        caution: 'This is a published population-model estimate, not an observation of what Cy feels.',
+      },
+    ));
+  } else {
+    entries.push(entry(
+      EPISTEMIC_STATUS.UNKNOWN,
+      'predicted_sleepiness_tpm',
+      'predicted_kss',
+      'CALIBRATING: two complete observed sleep episodes are required before a KSS estimate is supplied.',
+    ));
+  }
+  entries.push(entry(
+    EPISTEMIC_STATUS.NOT_MODELLED,
+    'predicted_sleepiness_tpm',
+    'general_fatigue',
+    'General fatigue and sleep inertia are not modelled.',
+  ));
   return section('sleep', 'SLEEP', entries);
 }
 
@@ -404,7 +431,7 @@ export function buildGroundedProseContext(state, { now = Date.now() } = {}) {
     };
   }
   const candidates = [
-    ['sleep', sleepSection(state)],
+    ['sleep', sleepSection(state, now)],
     ['defensive', defensiveSection(state)],
     ['somatic', somaticSection(state)],
     ['feeding', feedingSection(state, now)],
@@ -463,6 +490,9 @@ function modelFacingLine(item) {
       return `[${item.epistemicStatus}] Recorded ${words(value.currentObservedSleepState)}; sleep-pressure estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}, ${value.calibrating ? 'still calibrating' : 'calibrated'}).`;
     case 'process_c':
       return `[${item.epistemicStatus}] Circadian schedule estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}; biological phase not directly observed).`;
+    case 'predicted_kss':
+      if (!value || typeof value !== 'object') return null;
+      return `[${item.epistemicStatus}] Predicted KSS ${finite(value.estimate, 2)} on the 1-9 scale (nearest anchor: ${words(value.nearestPublishedAnchor?.description)}; population-default phase; model residual SD ${finite(value.residualSdKss, 2)}). This is a model estimate, not an observed feeling.`;
     case 'active_external_context': {
       const cues = (value.cues || []).map((cue) => words(String(cue.cueId || '').split(':').pop())).filter(Boolean);
       const outcomes = (value.outcomeContexts || []).map((outcome) => compactFields(outcome, [

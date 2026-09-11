@@ -17,7 +17,7 @@ const soma = reconcileSoma(null, { now: 1 });
 tickSoma(soma, { physical: { hunger: 0.7 }, monotony: 0.2, now: 5001 });
 const snapshot = somaSnapshot(soma);
 assert.equal(snapshot.sleepHomeostasis.publicLabel, 'LIVE');
-assert.equal(implementationEntry('soma_variables', 'fatigue').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('soma_variables', 'sleepiness').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_process_c').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'circadian_entrainment').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'probabilistic_threat_learning').implementation_status, 'IMPLEMENTED');
@@ -35,7 +35,7 @@ assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
 assert.deepEqual(EXPERIENCED_METRICS.map((metric) => metric.key),
-  ['anxiety', 'arousal', 'pain', 'hunger', 'fatigue', 'loneliness', 'anger', 'rumination']);
+  ['anxiety', 'arousal', 'pain', 'hunger', 'sleepiness', 'loneliness', 'anger', 'rumination']);
 assert.deepEqual(
   [...BRAIN_REGIONS.map((region) => region.key).filter((key) => key !== 'scnCircadian')].sort(),
   [...Object.keys(snapshot.experienced.brain)].sort(),
@@ -136,7 +136,9 @@ assert.match(source, /className = `soma-state-entry soma-reading-entry/);
 assert.doesNotMatch(source, /class="soma-detail"/, 'the old shared bottom-mounted inspector must not return');
 assert.match(source, /<summary class="soma-state-row"[\s\S]*?<div class="soma-reading-detail">/, 'a Soma detail is nested immediately after its own summary');
 assert.match(source, /<summary><span class="soma-region-name"[\s\S]*?<div class="soma-reading-detail">/, 'a brain-region detail is nested immediately after its own summary');
-assert.match(source, /this\._wireReading\(entry, 'metric', definition\.key\)/);
+assert.match(source, /definition\.key === 'sleepiness' \? 'sleepiness' : 'metric'/);
+assert.match(source, /PREDICTED KSS \(1-9\)/);
+assert.match(source, /buildScaledHistoryPath\(data\.points, 1, 9\)/);
 assert.match(source, /this\._wireReading\(entry, 'brain', definition\.key\)/);
 assert.match(source, /this\._wireCircadian\(entry\)/);
 assert.match(source, /closeOtherReadings\([\s\S]*?details\.soma-state-entry, details\.soma-region-entry/,

@@ -49,10 +49,12 @@ $sleepRecord['world_event']['event_type'] = 'sleep_state_asleep';
 $sleepRecord['world_event']['event_family'] = 'homeostasis';
 $sleepRecord['soma_input']['event_id'] = 'env-sleep-test';
 $sleepRecord['soma_input']['sleep_period'] = 'sleep_period';
-$sleepRecord['consumed_by'] = ['soma-input-staging-v1', 'process-s-normalized-v1'];
+$sleepRecord['consumed_by'] = ['soma-input-staging-v1', 'process-s-normalized-v1', 'tpm-predicted-kss-v1'];
 $sleepInspection = captive_environment_record_inspection($sleepRecord, captive_implementation_registry());
 check_environment($sleepInspection['what_systems_consumed_it']['consumers'][1]['public_label'] === 'LIVE', 'Process S consumer must be LIVE');
 check_environment(str_contains($sleepInspection['what_systems_consumed_it']['consumers'][1]['detail'], 'Process S'), 'Process S consumer provenance is missing');
+check_environment($sleepInspection['what_systems_consumed_it']['consumers'][2]['public_label'] === 'LIVE', 'TPM KSS consumer must be LIVE');
+check_environment(str_contains($sleepInspection['what_systems_consumed_it']['consumers'][2]['detail'], 'predict KSS'), 'TPM KSS consumer provenance is missing');
 
 $threatRecord = $record;
 $threatRecord['consumed_by'] = ['soma-input-staging-v1', 'probabilistic-threat-learning-v1'];

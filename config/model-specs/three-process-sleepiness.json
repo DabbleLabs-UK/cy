@@ -1,0 +1,81 @@
+{
+  "schema": "cy.model-specification",
+  "version": 1,
+  "id": "ingre-akerstedt-three-process-sb-c-u",
+  "implementation_version": "tpm-predicted-kss-v1",
+  "display_name": "Predicted sleepiness",
+  "construct": "Three-Process Model predicted Karolinska Sleepiness Scale rating",
+  "construct_scope": "A population-model prediction of KSS rating from observed sleep-wake timing. It is not general fatigue, a direct report of subjective experience, a brain activation value, or Cy's separate Process S or Process C display.",
+  "selected_model": "S_B + C + U",
+  "validation_population": "The 2014 model was validated against field data from 136 self-selected aircrew participants with custom observed sleep logs. It used 5,744 home-base-time-zone KSS observations for the main analysis; the authors did not claim the sample represented all airline operations.",
+  "equations": {
+    "wake": "S_B = l_a + (s_w - l_a) * exp(d * t_aw)",
+    "sleep_original": "S_prime = h_a - (h_a - s_s) * exp(g * t_as)",
+    "sleep_brake_1": "S_prime_1 = s_s + t_as * g * (b_l - h_a)",
+    "sleep_brake_2": "S_prime_2 = h_a - (h_a - b_l) * exp(g * (t_as - b_t))",
+    "brake_time": "b_t = (b_l - s_s) / (g * (b_l - h_a))",
+    "circadian": "C = C_m + C_a * cos((2*pi/24) * (time_of_day - p))",
+    "ultradian": "U = U_m + U_a * cos((2*pi/12) * (time_of_day - p - 3))",
+    "alertness": "A = S_B + C + U",
+    "predicted_kss": "KSS = 9.68 - 0.46 * A"
+  },
+  "parameters": {
+    "h_a": { "value": 14.3, "unit": "alertness model units", "classification": "PUBLISHED" },
+    "l_a": { "value": 2.4, "unit": "alertness model units", "classification": "PUBLISHED" },
+    "d": { "value": -0.0353, "unit": "per hour", "classification": "PUBLISHED" },
+    "b_l": { "value": 12.2, "unit": "alertness model units", "classification": "PUBLISHED" },
+    "g": { "equation": "log((14.3 - 14.0) / (14.3 - 7.96)) / 8", "approximate_value": -0.3813, "unit": "per hour", "classification": "DERIVED FROM PUBLISHED EXPRESSION" },
+    "C_m": { "value": 0, "classification": "PUBLISHED" },
+    "C_a": { "value": 2.5, "classification": "PUBLISHED" },
+    "p": { "value": 16.8, "unit": "hours", "classification": "PUBLISHED / POPULATION DEFAULT PHASE" },
+    "U_m": { "value": -0.5, "classification": "PUBLISHED" },
+    "U_a": { "value": 0.5, "classification": "PUBLISHED" },
+    "kss_intercept": { "value": 9.68, "classification": "EMPIRICALLY FITTED PUBLISHED PARAMETER" },
+    "kss_alertness_slope": { "value": -0.46, "classification": "EMPIRICALLY FITTED PUBLISHED PARAMETER" },
+    "residual_sd_kss": { "value": 1.42, "classification": "VALIDATION STATISTIC" },
+    "between_subject_intercept_sd_kss": { "value": 0.84, "classification": "VALIDATION STATISTIC" },
+    "initial_alertness_at_first_observed_sleep": { "value": 8.38, "classification": "PUBLISHED / VALIDATION INITIALIZATION" }
+  },
+  "calibration": {
+    "input": "Structured observed sleep and wake transitions only",
+    "live_after": "Two complete observed sleep episodes",
+    "first_sleep": "Initializes S_B so S_B + C + U = 8.38 at observed sleep onset",
+    "unknown_intervals": "Remain unknown and do not integrate as sleep or wake",
+    "backfill": "No fabricated pre-installation KSS history"
+  },
+  "engineering_parameters": {
+    "history_interval_ms": { "value": 120000, "classification": "ENGINEERING / STORAGE" },
+    "history_retention_ms": { "value": 604800000, "classification": "ENGINEERING / STORAGE" },
+    "display_marker_range": { "value": [1, 9], "classification": "ENGINEERING / DISPLAY ONLY", "meaning": "Only the graph marker may be clipped. The raw prediction is preserved and labelled." }
+  },
+  "provenance": [
+    {
+      "citation": "Ingre M, van Leeuwen WMA, Klemets T, Ullvetter C, Hough S, Kecklund G, Karlsson D, Akerstedt T. Validating and Extending the Three Process Model of Alertness in Airline Operations. PLOS ONE. 2014;9(10):e108679.",
+      "doi": "10.1371/journal.pone.0108679",
+      "url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0108679"
+    },
+    {
+      "citation": "Akerstedt T, Folkard S. Validation of the S and C components of the three-process model of alertness regulation. Sleep. 1995;18(1):1-6.",
+      "doi": "10.1093/sleep/18.1.1",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/7761737/"
+    },
+    {
+      "citation": "Akerstedt T, Folkard S. The three-process model of alertness and its extension to performance, sleep latency, and sleep length. Chronobiology International. 1997;14(2):115-123.",
+      "doi": "10.3109/07420529709001149",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/9095372/"
+    }
+  ],
+  "model_boundaries": {
+    "existing_process_s": "Cy's separate Borbely/Daan normalized Process S remains an independent display and is not substituted into this model.",
+    "existing_process_c": "Cy's separate Borbely/Achermann five-harmonic Process C remains an independent display and is not substituted into this model.",
+    "biological_measurement": "No biological phase, physiology or subjective sleepiness is measured.",
+    "fatigue": "General, physical, mental, motivational fatigue and exhaustion are not modelled."
+  },
+  "limitations": [
+    "Population-default phase is used; Cy has no observed biological phase marker.",
+    "Prediction uncertainty includes residual and between-subject variation reported by the source model.",
+    "Process W was excluded because it worsened fit in the selected validation model.",
+    "The first hour after waking has additional known bias consistent with sleep inertia, which the headline model does not adequately model.",
+    "Sleep inertia, general fatigue and brain activation are not modelled."
+  ]
+}

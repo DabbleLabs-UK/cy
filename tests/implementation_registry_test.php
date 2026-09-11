@@ -25,7 +25,9 @@ check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'circadian_process_c')['implementation_status'] === 'IMPLEMENTED', 'Process C must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'circadian_process_c')['phase_basis'] === 'schedule_estimated', 'Process C phase must be schedule-estimated');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'circadian_entrainment')['implementation_status'] === 'NOT_IMPLEMENTED', 'circadian entrainment must remain not implemented');
-check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'fatigue')['implementation_status'] === 'PROVISIONAL', 'subjective fatigue must remain provisional');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'sleepiness')['implementation_status'] === 'IMPLEMENTED', 'predicted sleepiness must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'legacy_fatigue_metric')['lifecycle_status'] === 'DIAGNOSTICS_ONLY', 'legacy fatigue must be diagnostics only');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'general_fatigue')['implementation_status'] === 'NOT_IMPLEMENTED', 'general fatigue must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'brain_regions', 'scnCircadian')['implementation_status'] === 'IMPLEMENTED', 'specific SCN circadian analogy must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'brain_regions', 'hypothalamic')['implementation_status'] === 'NOT_IMPLEMENTED', 'hypothalamic mapping must not be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'feeding_event_model')['implementation_status'] === 'IMPLEMENTED', 'feeding event model must be implemented');
