@@ -320,6 +320,27 @@ function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatu
   </section>`;
 }
 
+function socialContactMarkup(status, setPointStatus, errorStatus, adaptationStatus, toleranceStatus, aversiveStatus, admin) {
+  return `<section class="social-contact-card status-${status.status.toLowerCase().replace('_', '-')}">
+    <div class="social-contact-head"><span>${status.displayName}</span><strong class="social-contact-status">${status.publicLabel}</strong></div>
+    <p class="social-contact-explanation">Factual contact and opportunity history. Contact form, reciprocity and structured character stay separate; none is converted into Loneliness.</p>
+    <dl class="social-contact-facts">
+      <div><dt>CURRENT SITUATION</dt><dd data-social="current">UNKNOWN</dd></div>
+      <div><dt>LAST RECIPROCAL CONTACT</dt><dd data-social="reciprocal">NONE OBSERVED</dd></div>
+      <div><dt>LAST SUPPORTIVE CONTACT</dt><dd data-social="supportive">NONE OBSERVED</dd></div>
+      <div><dt>LATEST SOCIAL EPISODE</dt><dd data-social="latest">NONE OBSERVED</dd></div>
+      <div><dt>RECENT REJECTION</dt><dd data-social="rejection">NONE OBSERVED</dd></div>
+      <div><dt>OBSERVATION RECORD</dt><dd data-social="continuity">UNKNOWN</dd></div>
+    </dl>
+    <div class="social-ranges" aria-label="Factual social history range">
+      <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+    </div>
+    <div class="social-contact-timeline"><p class="social-contact-empty">No structured social episodes have reached this view.</p></div>
+    <div class="social-contact-limits"><span>${setPointStatus.displayName}</span><strong>${setPointStatus.publicLabel}</strong><span>${errorStatus.displayName}</span><strong>${errorStatus.publicLabel}</strong><span>${adaptationStatus.displayName}</span><strong>${adaptationStatus.publicLabel}</strong><span>${toleranceStatus.displayName}</span><strong>${toleranceStatus.publicLabel}</strong><span>${aversiveStatus.displayName}</span><strong>${aversiveStatus.publicLabel}</strong><span>SUBJECTIVE LONELINESS</span><strong>PROVISIONAL</strong></div>
+    ${admin ? '<details class="social-contact-inspector"><summary>SOCIAL CONTACT LEDGER INSPECTION</summary><pre>Open to load exact structured provenance.</pre></details>' : ''}
+  </section>`;
+}
+
 export function elapsedFeedingLabel(milliseconds) {
   if (!Number.isFinite(milliseconds) || milliseconds < 0) return 'UNKNOWN';
   const totalMinutes = Math.floor(milliseconds / 60000);
@@ -357,7 +378,7 @@ function contingencyEvidenceText(value) {
 }
 
 export class BrainHud {
-  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', learnedControllabilityUrl = '', feedingUrl = '', somaticUrl = '', registry = null, admin = false } = {}) {
+  constructor(root, { historyUrl = '', threatLearningUrl = '', defensiveContextUrl = '', learnedControllabilityUrl = '', feedingUrl = '', somaticUrl = '', socialContactUrl = '', registry = null, admin = false } = {}) {
     this.root = root;
     this.historyUrl = historyUrl;
     this.threatLearningUrl = threatLearningUrl;
@@ -365,6 +386,7 @@ export class BrainHud {
     this.learnedControllabilityUrl = learnedControllabilityUrl;
     this.feedingUrl = feedingUrl;
     this.somaticUrl = somaticUrl;
+    this.socialContactUrl = socialContactUrl;
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
@@ -395,6 +417,12 @@ export class BrainHud {
     this.peripheralSensitisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'peripheral_sensitisation');
     this.centralSensitisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'central_sensitisation');
     this.nocifensiveActionStatus = implementationStatus(this.registry, 'soma_subsystems', 'nocifensive_action_model');
+    this.socialContactStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_contact_ledger');
+    this.socialSetPointStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_set_point');
+    this.socialErrorStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_homeostatic_error');
+    this.socialAdaptationStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_set_point_adaptation');
+    this.socialToleranceStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_tolerance_dynamic_range');
+    this.socialAversiveStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_aversive_value');
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
@@ -512,9 +540,20 @@ export class BrainHud {
           this.admin,
         )
         : '';
-      const numericHistory = definition.key === 'pain' ? '' : historyMarkup();
+      const socialContact = definition.key === 'loneliness'
+        ? socialContactMarkup(
+          this.socialContactStatus,
+          this.socialSetPointStatus,
+          this.socialErrorStatus,
+          this.socialAdaptationStatus,
+          this.socialToleranceStatus,
+          this.socialAversiveStatus,
+          this.admin,
+        )
+        : '';
+      const numericHistory = ['pain', 'loneliness'].includes(definition.key) ? '' : historyMarkup();
       entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${threatLearning}${defensiveContext}${learnedControllability}${feeding}${sleepHomeostasis}</div>`;
+        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${threatLearning}${defensiveContext}${learnedControllability}${feeding}${sleepHomeostasis}${socialContact}</div>`;
       this._wireReading(entry, 'metric', definition.key);
       if (definition.key === 'fatigue') this._wireSleepHomeostasis(entry);
       if (definition.key === 'fatigue') this._wireCircadian(entry);
@@ -523,6 +562,7 @@ export class BrainHud {
       if (definition.key === 'anxiety') this._wireControllability(entry);
       if (definition.key === 'hunger') this._wireFeeding(entry);
       if (definition.key === 'pain') this._wireSomatic(entry);
+      if (definition.key === 'loneliness') this._wireSocialContact(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
     }
@@ -729,6 +769,23 @@ export class BrainHud {
     });
   }
 
+  _wireSocialContact(entry) {
+    const load = (range, exact = false) => this.loadSocialContact(entry, range, exact);
+    entry.addEventListener('toggle', () => {
+      if (!entry.open) return;
+      const active = entry.querySelector('.social-ranges button.active');
+      load(active ? active.dataset.range : '24h');
+    });
+    entry.querySelectorAll('.social-ranges button').forEach((button) => button.addEventListener('click', () => {
+      entry.querySelectorAll('.social-ranges button').forEach((item) => item.classList.toggle('active', item === button));
+      load(button.dataset.range);
+    }));
+    const inspector = entry.querySelector('.social-contact-inspector');
+    if (inspector) inspector.addEventListener('toggle', () => {
+      if (inspector.open) load('all', true);
+    });
+  }
+
   setSoma(soma) {
     if (!soma || !soma.experienced || !soma.experienced.metrics) return;
     this.sleepHomeostasis = soma.sleepHomeostasis || null;
@@ -738,6 +795,7 @@ export class BrainHud {
     this.learnedControllability = soma.learnedControllability || null;
     this.feeding = soma.feeding || null;
     this.somaticNociceptive = soma.somaticNociceptive || null;
+    this.socialContact = soma.social || null;
     this.metrics = soma.experienced.metrics;
     this.latestBrain = soma.experienced.brain || {};
     for (const definition of this.metricDefinitions) {
@@ -766,6 +824,7 @@ export class BrainHud {
     this.renderCurrentDefensiveContext();
     this.renderControllability();
     this.renderFeeding();
+    this.renderSocialContact();
     for (const definition of this.regionDefinitions) {
       const reading = definition.key === 'scnCircadian'
         ? this.circadianProcessC && this.circadianProcessC.scnAnalogy
@@ -1140,6 +1199,90 @@ export class BrainHud {
       detail.textContent = `${feedingTimestampLabel(record.timestamp)}; offered ${String(record.offeredStatus || 'UNKNOWN').replaceAll('_', ' ')}; consumed ${String(record.consumptionStatus || 'UNKNOWN').replaceAll('_', ' ')}; portion ${portion}.`;
       item.append(heading, detail);
       timeline.appendChild(item);
+    }
+  }
+
+  renderSocialContact(episodes = null) {
+    const entry = this.rows.loneliness;
+    const card = entry && entry.querySelector('.social-contact-card');
+    if (!card) return;
+    const snapshot = this.socialContact;
+    const live = this.socialContactStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
+      && snapshot && snapshot.status === 'implemented';
+    card.querySelector('.social-contact-status').textContent = live ? this.socialContactStatus.publicLabel : 'UNAVAILABLE';
+    const age = (value) => Number.isFinite(value) ? `${elapsedFeedingLabel(value)} ago` : 'NONE OBSERVED';
+    const episodeLabel = (episode) => {
+      if (!episode) return 'NONE OBSERVED';
+      const who = episode.participants && episode.participants.actorLabel ? episode.participants.actorLabel : 'participant unknown';
+      const action = episode.opportunity && episode.opportunity.actionExecuted
+        ? `; ${displayIdentifier(episode.opportunity.actionExecuted)}` : '';
+      return `${who}; ${String(episode.contactForm || episode.episodeType || 'UNKNOWN').replaceAll('_', ' ')}; ${String(episode.reciprocity || 'UNKNOWN').replaceAll('_', ' ')}; ${String(episode.socialCharacter || 'UNKNOWN')}${action}`;
+    };
+    const facts = {
+      current: live && snapshot.currentContext && snapshot.currentContext.currentlyInteracting
+        ? `INTERACTING WITH ${snapshot.currentContext.currentlyWith || 'UNKNOWN'}`
+        : live && snapshot.currentContext && snapshot.currentContext.currentlyAlone ? 'ALONE - CONTINUOUSLY OBSERVED'
+          : live ? 'UNKNOWN / NO CURRENT INTERACTION OBSERVED' : 'UNKNOWN',
+      reciprocal: live ? age(snapshot.elapsedSinceReciprocalContactMs) : 'UNKNOWN',
+      supportive: live ? age(snapshot.elapsedSinceSupportiveContactMs) : 'UNKNOWN',
+      latest: live ? episodeLabel(snapshot.latestEpisode) : 'UNKNOWN',
+      rejection: live ? episodeLabel(snapshot.recentRejection) : 'UNKNOWN',
+      continuity: live && snapshot.observationContinuity ? String(snapshot.observationContinuity.status || 'UNKNOWN') : 'UNKNOWN',
+    };
+    for (const [key, value] of Object.entries(facts)) {
+      const target = card.querySelector(`[data-social="${key}"]`);
+      if (target) target.textContent = value;
+    }
+    const timeline = card.querySelector('.social-contact-timeline');
+    timeline.textContent = '';
+    const records = Array.isArray(episodes) ? episodes : live && Array.isArray(snapshot.recentEpisodes) ? snapshot.recentEpisodes : [];
+    if (!records.length) {
+      const empty = document.createElement('p');
+      empty.className = 'social-contact-empty';
+      empty.textContent = live ? 'No structured social episodes have been observed yet.' : 'No grounded social ledger has reached this view.';
+      timeline.appendChild(empty);
+      return;
+    }
+    for (const episode of records) {
+      const item = document.createElement('article');
+      item.className = `social-contact-item social-${String(episode.socialCharacter || 'UNKNOWN').toLowerCase()}`;
+      const heading = document.createElement('strong');
+      heading.textContent = `${String(episode.episodeType || 'UNKNOWN').replaceAll('_', ' ')} - ${String(episode.socialCharacter || 'UNKNOWN')}`;
+      const detail = document.createElement('p');
+      const who = episode.participants && episode.participants.actorLabel ? episode.participants.actorLabel : 'participant unknown';
+      const duration = Number.isFinite(episode.durationMs) ? `; duration ${elapsedFeedingLabel(episode.durationMs)}` : '';
+      const action = episode.opportunity && episode.opportunity.actionExecuted
+        ? `; action ${displayIdentifier(episode.opportunity.actionExecuted)}` : '';
+      detail.textContent = `${feedingTimestampLabel(episode.startTimestamp)}; ${who}; ${String(episode.channel || 'UNKNOWN').replaceAll('_', ' ')}; ${String(episode.contactForm || 'UNKNOWN').replaceAll('_', ' ')}; ${String(episode.reciprocity || 'UNKNOWN').replaceAll('_', ' ')}${duration}${action}.`;
+      item.append(heading, detail);
+      timeline.appendChild(item);
+    }
+  }
+
+  async loadSocialContact(entry, range, exact = false) {
+    if (!this.socialContactUrl) return;
+    const separator = this.socialContactUrl.includes('?') ? '&' : '?';
+    try {
+      const response = await fetch(`${this.socialContactUrl}${separator}range=${encodeURIComponent(range)}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`social contact ${response.status}`);
+      const data = await response.json();
+      const gaps = data.current && Array.isArray(data.current.observationGaps)
+        ? data.current.observationGaps.map((gap) => ({
+          episodeType: 'OBSERVATION_GAP', socialCharacter: 'UNKNOWN', channel: 'UNKNOWN',
+          contactForm: 'UNKNOWN', reciprocity: 'UNKNOWN', participants: {},
+          startTimestamp: gap.startTimestamp, endTimestamp: gap.endTimestamp,
+          durationMs: Date.parse(gap.endTimestamp) - Date.parse(gap.startTimestamp),
+        })) : [];
+      const timeline = [...(data.episodes || []), ...gaps].sort((a, b) =>
+        Date.parse(a.startTimestamp || '') - Date.parse(b.startTimestamp || ''));
+      if (!exact) this.renderSocialContact(timeline);
+      if (exact) {
+        const target = entry.querySelector('.social-contact-inspector pre');
+        if (target) target.textContent = JSON.stringify(data.inspection || data, null, 2);
+      }
+    } catch (error) {
+      const target = exact ? entry.querySelector('.social-contact-inspector pre') : entry.querySelector('.social-contact-empty');
+      if (target) target.textContent = error && error.message ? error.message : 'Social contact history unavailable.';
     }
   }
 

@@ -1,0 +1,83 @@
+{
+  "schema": "cy.model-spec",
+  "version": 1,
+  "id": "social-contact-detector-ledger",
+  "implementation_version": "social-contact-detector-ledger-v1",
+  "status": "IMPLEMENTED",
+  "scope": "Factual social detector and post-installation experience ledger only",
+  "conceptual_framework": {
+    "summary": "Social-homeostasis frameworks distinguish detection of social contact from an individual set-point, comparison/error process and behavioural effectors. Quantity and quality are distinct; individual and acute/chronic conditions matter.",
+    "claim_limit": "The references do not provide a universal quantitative equation for human loneliness, and this implementation does not invent one.",
+    "references": [
+      {
+        "citation": "Matthews GA, Tye KM. Neural mechanisms of social homeostasis. Ann N Y Acad Sci. 2019;1457(1):5-25.",
+        "doi": "10.1111/nyas.14016"
+      },
+      {
+        "citation": "Lee CR, Chen A, Tye KM. The neural circuitry of social homeostasis: Consequences of acute versus chronic social isolation. Cell. 2021;184(6):1500-1516.",
+        "doi": "10.1016/j.cell.2021.02.028"
+      }
+    ]
+  },
+  "architecture": [
+    "STRUCTURED_SOCIAL_WORLD_EVENT",
+    "SOCIAL_CONTACT_OR_OPPORTUNITY_RECORD",
+    "SOCIAL_EXPERIENCE_LEDGER",
+    "CURRENT_FACTUAL_SOCIAL_CONTEXT"
+  ],
+  "episode_schema": {
+    "schema": "cy.social-episode",
+    "channels": ["IN_PERSON", "POSTCARD", "OFFICER_INTERACTION", "OTHER", "UNKNOWN"],
+    "contact_forms": ["DIRECT_INTERACTION", "PASSIVE_CO_PRESENCE", "ATTEMPTED_CONTACT", "MESSAGE_RECEIVED", "MESSAGE_SENT", "UNKNOWN"],
+    "directions": ["INITIATED_BY_CY", "INITIATED_BY_OTHER", "MUTUAL", "UNKNOWN"],
+    "reciprocity": ["RECIPROCAL", "ONE_WAY", "REJECTED", "NO_RESPONSE", "UNKNOWN"],
+    "characters": ["SUPPORTIVE", "ORDINARY", "HOSTILE", "REJECTING", "AMBIGUOUS", "UNKNOWN"],
+    "resolutions": ["ONGOING", "COMPLETED", "INTERRUPTED", "UNKNOWN"]
+  },
+  "semantics": {
+    "quality_provenance": "Explicit structured world facts or deterministic implemented world branches only",
+    "opportunity_contact_distinction": "An opportunity is retained even when no reciprocal contact occurs",
+    "rejection": "REJECTED requires explicit refusal or ignoring; absent evidence remains UNKNOWN or NO_RESPONSE",
+    "postcards": "Arrival is one-way MESSAGE_RECEIVED with UNKNOWN character. A reply may make the mediated episode RECIPROCAL without making it SUPPORTIVE.",
+    "observation_gaps": "Runner downtime is recorded as unknown observation continuity and never inferred as isolation",
+    "confirmed_isolation": "Requires explicit continuous observation, aloneness and no contact"
+  },
+  "legacy_exclusions": [
+    "regex postcard warmth or hostility",
+    "cast warmth, suspicion or grudge scalars",
+    "legacy affiliation appraisal",
+    "legacy Loneliness baseline, impulses, decay and elapsed-time clock",
+    "language-model output"
+  ],
+  "presentation_windows": ["1h", "24h", "7d"],
+  "introduced_psychological_numbers": [],
+  "engineering_numbers": [
+    {
+      "value": 1,
+      "use": "schema and implementation version",
+      "classification": "ENGINEERING VERSION IDENTIFIER"
+    },
+    {
+      "value": 12,
+      "use": "recent episode transport bound in frequent vitals snapshots; complete history remains in persisted state and environment-event storage",
+      "classification": "ARBITRARY DISPLAY / TRANSPORT LIMIT, NOT PSYCHOLOGICAL"
+    },
+    {
+      "values": ["1h", "24h", "7d"],
+      "use": "public history range controls",
+      "classification": "ARBITRARY PRESENTATION WINDOWS, NOT PSYCHOLOGICAL"
+    }
+  ],
+  "not_modelled": [
+    "social set-point",
+    "social homeostatic error",
+    "social set-point plasticity",
+    "social tolerance or dynamic range",
+    "social aversive value",
+    "subjective loneliness",
+    "social-processing brain activation",
+    "emotional consequences",
+    "prompt or action-selection effects"
+  ],
+  "public_notes_principle": "Cy's brain display is deliberately a functional analogy, not a fake brain scan. Real psychological and bodily processes are distributed across interacting systems, so the project avoids inventing single 'centres' or precise-looking activation where the model does not justify one."
+}

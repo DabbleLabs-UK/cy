@@ -602,6 +602,7 @@ async function main() {
     const eventTimestamp = tsNow();
     const suppliedOpportunity = world.action_opportunity && typeof world.action_opportunity === 'object'
       ? world.action_opportunity : null;
+    const suppliedSocial = world.social && typeof world.social === 'object' ? world.social : null;
     const worldWithDescription = {
       ...world,
       context: {
@@ -622,6 +623,18 @@ async function main() {
           ])],
         },
       } : {}),
+      ...(suppliedSocial && suppliedSocial.episode_type ? {
+        social: {
+          ...suppliedSocial,
+          episode_id: suppliedSocial.episode_id || `social:${eventId}`,
+          start_at: suppliedSocial.start_at || eventTimestamp,
+          end_at: suppliedSocial.end_at || null,
+          linked_event_ids: [...new Set([
+            ...(Array.isArray(suppliedSocial.linked_event_ids) ? suppliedSocial.linked_event_ids : []),
+            eventId,
+          ])],
+        },
+      } : {}),
     };
     const event = createEnvironmentEvent(archetypeId, {
       id: eventId,
@@ -632,6 +645,7 @@ async function main() {
       observation: { summary, ...observation },
     });
     const somaticFacts = event.world.somatic;
+    const socialFacts = event.world.social;
     const hasSomaticFacts = somaticFacts.stimulus.id != null
       || somaticFacts.stimulus.noxious_stimulus !== 'UNKNOWN'
       || somaticFacts.stimulus.status !== 'UNKNOWN'
@@ -662,11 +676,16 @@ async function main() {
           'injury-ledger-v1',
           'computational-nociceptive-input-analogue-v1',
         ] : []),
+        ...(socialFacts && socialFacts.episode_id ? [
+          'social-episode-model-v1',
+          'social-contact-detector-ledger-v1',
+        ] : []),
         ...(provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
       ],
     });
     record.feeding = soma.observeFeedingRecord(record);
     record.somatic_nociceptive = soma.observeSomaticRecord(record);
+    record.social_contact = soma.observeSocialContactRecord(record);
     record.action_outcome_contingency = soma.observeControllabilityRecord(record);
     record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
     record.threat_learning = soma.observeThreatLearningRecord(record);
@@ -685,10 +704,22 @@ async function main() {
     });
     if (!prepared) return null;
     const opening = prepared.opening;
+    const socialOpportunity = ['social', 'officer'].includes(sourceKind) ? {
+      episode_id: `social:${prepared.pending.opportunityId}`,
+      episode_type: 'OPPORTUNITY', start_at: prepared.pending.onsetAt,
+      actor_id: prepared.pending.actorKey, actor_label: prepared.pending.actorName,
+      target_id: 'cy:7734', target_label: 'Cy', relationship_ref: prepared.pending.actorKey,
+      channel: sourceKind === 'officer' ? 'OFFICER_INTERACTION' : 'IN_PERSON',
+      contact_form: 'ATTEMPTED_CONTACT', direction: 'INITIATED_BY_OTHER', reciprocity: 'ONE_WAY',
+      character: prepared.pending.archetypeId === 'inmate_provocation' ? 'HOSTILE'
+        : prepared.pending.archetypeId === 'inmate_check_in' ? 'SUPPORTIVE' : 'ORDINARY',
+      resolution: 'ONGOING', opportunity_id: prepared.pending.opportunityId,
+      opportunity_status: 'OPEN', action_executed: null,
+    } : null;
     const structured = captureEnvironmentEvent(opening.archetypeId, {
       eventType: opening.eventType,
       summary: opening.text,
-      world: opening.world,
+      world: { ...opening.world, ...(socialOpportunity ? { social: socialOpportunity } : {}) },
       observation: opening.observation,
       provisionalConsumer: false,
     });
@@ -720,11 +751,34 @@ async function main() {
   function resolvePendingInstrumentalIncidents() {
     const pending = takePendingInstrumentalOpportunities(vitals.instrumentalAgency);
     for (const opportunity of pending) {
-      const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: tsNow() });
+      const resolutionTimestamp = tsNow();
+      const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: resolutionTimestamp });
+      const isSocial = opportunity.archetypeId.startsWith('inmate_')
+        || ['officer_order', 'cell_search_handover'].includes(opportunity.archetypeId);
+      const actualContact = ![
+        'action:remain_silent', 'action:withdraw', 'action:disengage',
+      ].includes(opportunity.chosenAction);
+      const socialOutcome = isSocial ? {
+        episode_id: `social:${opportunity.opportunityId}`,
+        episode_type: actualContact ? 'CONTACT' : 'OPPORTUNITY',
+        start_at: opportunity.onsetAt, end_at: resolutionTimestamp,
+        actor_id: opportunity.actorKey, actor_label: opportunity.actorName,
+        target_id: 'cy:7734', target_label: 'Cy', relationship_ref: opportunity.actorKey,
+        channel: opportunity.archetypeId.startsWith('inmate_') ? 'IN_PERSON' : 'OFFICER_INTERACTION',
+        contact_form: actualContact ? 'DIRECT_INTERACTION' : 'ATTEMPTED_CONTACT',
+        direction: actualContact ? 'MUTUAL' : 'INITIATED_BY_OTHER',
+        reciprocity: actualContact ? 'RECIPROCAL' : 'ONE_WAY',
+        character: opportunity.archetypeId === 'inmate_provocation' && opportunity.chosenAction === 'action:respond'
+          ? 'HOSTILE' : opportunity.archetypeId === 'inmate_check_in' && opportunity.chosenAction === 'action:answer'
+            ? 'SUPPORTIVE' : 'ORDINARY',
+        resolution: 'COMPLETED', opportunity_id: opportunity.opportunityId,
+        opportunity_status: 'RESOLVED', action_executed: opportunity.chosenAction,
+        linked_event_ids: [opportunity.openingEnvironmentEventId],
+      } : null;
       const structured = captureEnvironmentEvent(outcome.archetypeId, {
         eventType: outcome.eventType,
         summary: outcome.text,
-        world: outcome.world,
+        world: { ...outcome.world, ...(socialOutcome ? { social: socialOutcome } : {}) },
         observation: outcome.observation,
         provisionalConsumer: false,
       });
@@ -1829,6 +1883,15 @@ async function main() {
         summary: postcardText,
         world: {
           participants: { actor: pc.from_name || null, target: 'cy', relationship_ref: pc.visitor_id || null },
+          social: {
+            episode_id: `postcard:${pc.id}`,
+            episode_type: 'CONTACT',
+            actor_id: pc.visitor_id || null, actor_label: pc.from_name || 'postcard sender',
+            target_id: 'cy:7734', target_label: 'Cy', relationship_ref: pc.visitor_id || null,
+            channel: 'POSTCARD', contact_form: 'MESSAGE_RECEIVED',
+            direction: 'INITIATED_BY_OTHER', reciprocity: 'ONE_WAY',
+            character: 'UNKNOWN', resolution: 'COMPLETED',
+          },
           context: { location: 'cell' },
         },
         observation: {
@@ -1927,7 +1990,29 @@ async function main() {
     // the public, streamed record of Cy's reply (kept as postcard_out)
     const reply = (r.full || '').trim();
     if (reply) {
-      emit({ kind: 'postcard_out', payload: { id: pc.id, reply_to: pc.id, body: reply } });
+      const replyAt = tsNow();
+      const replyRecord = captureEnvironmentEvent('social_episode', {
+        eventType: 'postcard_reply',
+        summary: 'Cy sent a reply to a received postcard',
+        world: {
+          social: {
+            episode_id: `postcard:${pc.id}`, episode_type: 'CONTACT',
+            start_at: postcardRecord.world_event.timestamp, end_at: replyAt,
+            actor_id: 'cy:7734', actor_label: 'Cy', target_id: pc.visitor_id || null,
+            target_label: pc.from_name || 'postcard sender', relationship_ref: pc.visitor_id || null,
+            channel: 'POSTCARD', contact_form: 'MESSAGE_SENT', direction: 'MUTUAL',
+            reciprocity: 'RECIPROCAL', character: 'UNKNOWN', resolution: 'COMPLETED',
+            linked_event_ids: [postcardRecord.world_event.id],
+          },
+          context: { location: 'cell', previous_event_ids: [postcardRecord.world_event.id] },
+        },
+        observation: { modality: 'system', certainty: 'certain', observed_facts: { reply_sent: true } },
+        provisionalConsumer: false,
+      });
+      emit({ kind: 'postcard_out', payload: {
+        id: pc.id, reply_to: pc.id, body: reply,
+        environment_event_id: replyRecord.world_event.id,
+      } });
     } else {
       // Do not let a failed/empty generation silently occupy the server's bounded
       // reply tray forever. The server reclasses it as retained fan mail, and the
@@ -2427,6 +2512,34 @@ async function main() {
     return a;
   }
 
+  function inmateSocialFacts(type, castKey, actorName) {
+    const supportive = new Set(['kindness', 'shared_joke', 'lent_book']);
+    const hostile = new Set(['swapped_tray', 'borrowed']);
+    const rejecting = new Set(['unanswered', 'talked_over']);
+    const passive = type === 'sat_with';
+    return {
+      episode_type: 'CONTACT', actor_id: castKey, actor_label: actorName,
+      target_id: 'cy:7734', target_label: 'Cy', relationship_ref: castKey,
+      channel: 'IN_PERSON', contact_form: passive ? 'PASSIVE_CO_PRESENCE' : 'DIRECT_INTERACTION',
+      direction: passive ? 'INITIATED_BY_OTHER' : 'MUTUAL',
+      reciprocity: passive || type === 'lent_book' ? 'ONE_WAY' : 'RECIPROCAL',
+      character: supportive.has(type) ? 'SUPPORTIVE' : hostile.has(type) ? 'HOSTILE'
+        : rejecting.has(type) ? 'REJECTING' : 'ORDINARY',
+      resolution: 'COMPLETED',
+    };
+  }
+
+  function officerSocialFacts(type, officerKey, officerName) {
+    return {
+      episode_type: 'CONTACT', actor_id: officerKey, actor_label: officerName,
+      target_id: 'cy:7734', target_label: 'Cy', relationship_ref: officerKey,
+      channel: 'OFFICER_INTERACTION', contact_form: 'DIRECT_INTERACTION',
+      direction: 'INITIATED_BY_OTHER', reciprocity: 'RECIPROCAL',
+      character: type === 'kindness' ? 'SUPPORTIVE' : type === 'refusal' ? 'REJECTING' : 'ORDINARY',
+      resolution: 'COMPLETED',
+    };
+  }
+
   // Fire a social event: nudge one inmate's standing, scaled by amp, and knock
   // monotony down (a slight is still an event). Emits the standing so viewers can
   // watch a feud build.
@@ -2436,17 +2549,19 @@ async function main() {
     applySocialEvent(vitals.relations, castKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
     const { mins } = londonParts();
-    const quality = ev.social && ev.social.quality ? ev.social.quality : 'unknown';
-    const archetypeId = quality === 'supportive' || quality === 'ordinary'
-      ? 'friendly_interaction'
-      : quality === 'rejecting' ? 'social_rejection' : 'hostile_interaction';
     const actorName = (BY_KEY[castKey] || {}).name || castKey;
+    const groundedSocial = inmateSocialFacts(ev.type, castKey, actorName);
+    const quality = ev.social && ev.social.quality ? ev.social.quality : 'unknown';
+    const archetypeId = ['SUPPORTIVE', 'ORDINARY'].includes(groundedSocial.character)
+      ? 'friendly_interaction'
+      : groundedSocial.character === 'REJECTING' ? 'social_rejection' : 'hostile_interaction';
     const instrumental = beginInstrumentalIncident('social', ev.type, castKey, actorName);
     const structured = instrumental || captureEnvironmentEvent(archetypeId, {
       eventType: `social_${ev.type}`,
       summary: ev.slight,
       world: {
         participants: { actor: castKey, target: 'cy', relationship_ref: castKey },
+        social: groundedSocial,
         situation: {
           social_contact: 'present',
           social_contact_quality: quality,
@@ -2497,6 +2612,7 @@ async function main() {
       summary: `${officerName} ${ev.slight}`,
       world: {
         participants: { actor: officerKey, target: 'cy', relationship_ref: officerKey },
+        social: officerSocialFacts(ev.type, officerKey, officerName),
         situation: { agency: 'officer' },
         context: { location: ev.type === 'search' ? 'cell' : 'wing' },
       },

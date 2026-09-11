@@ -165,6 +165,13 @@ function captive_environment_record_inspection(array $record, array $registry): 
                 'public_label' => 'LIVE',
                 'detail' => 'Reads only structured somatic facts and preserves explicit unknowns. It calculates no subjective Pain, healing, sensitisation, action or brain activation.',
             ];
+        } elseif (in_array($consumer, ['social-episode-model-v1', 'social-contact-detector-ledger-v1'], true)) {
+            $consumers[] = [
+                'id' => $consumer,
+                'status' => 'IMPLEMENTED',
+                'public_label' => 'LIVE',
+                'detail' => 'Reads only explicit structured social facts and records contact, opportunity, reciprocity, character and continuity separately. It calculates no Loneliness or affiliation magnitude.',
+            ];
         } elseif ($consumer === 'legacy-experienced-state-v2') {
             $consumers[] = [
                 'id' => $consumer,
@@ -233,6 +240,10 @@ function captive_environment_record_inspection(array $record, array $registry): 
         'what_somatic_noxious_substrate_did' => $record['somatic_nociceptive'] ?? [
             'status' => 'not_recorded',
             'detail' => 'This record has no structured somatic facts, predates the somatic substrate, or did not reach that consumer.',
+        ],
+        'what_social_contact_substrate_did' => $record['social_contact'] ?? [
+            'status' => 'not_recorded',
+            'detail' => 'This record has no canonical social episode, predates the social ledger, or did not reach that consumer.',
         ],
         'what_systems_consumed_it' => [
             'consumers' => $consumers,

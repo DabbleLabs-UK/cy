@@ -62,6 +62,13 @@ import {
   somaticSnapshot,
 } from './somatic-nociceptive-substrate.js';
 import {
+  createSocialContactState,
+  observeSocialContactRecord as applySocialContactRecord,
+  reconcileSocialContactState,
+  socialContactSnapshot,
+  touchSocialObservation,
+} from './social-contact-substrate.js';
+import {
   PRISON_SCHEDULE,
   PRISON_SCHEDULE_TIME_ZONE,
   habitualWakeMinutes,
@@ -164,6 +171,7 @@ function blank(now, legacyPhysical = null) {
     feeding: createFeedingState(now),
     learnedControllability: createControllabilityState(now),
     somaticNociceptive: createSomaticState(now),
+    socialContact: createSocialContactState(now),
     experienced: reconcileExperienced(null, { now, legacyPhysical }),
   };
 }
@@ -217,6 +225,7 @@ export function reconcileSoma(raw, { now = Date.now(), legacyPhysical = null } =
     feeding: reconcileFeedingState(raw.feeding, { now }),
     learnedControllability: reconcileControllabilityState(raw.learnedControllability, { now }),
     somaticNociceptive: reconcileSomaticState(raw.somaticNociceptive, { now }),
+    socialContact: reconcileSocialContactState(raw.socialContact, { now }),
     experienced: reconcileExperienced(raw.experienced, { now, legacyPhysical }),
   };
   out.memory.episodes = Array.isArray(out.memory.episodes)
@@ -284,6 +293,13 @@ export function observeSomaControllabilityRecord(state, record) {
 export function observeSomaSomaticRecord(state, record) {
   if (!state || !record) return null;
   return applySomaticRecord(state.somaticNociceptive, record);
+}
+
+// Factual social episodes enter a separate detector/history ledger. This path
+// never reads prose, legacy relationship scalars or the provisional Loneliness.
+export function observeSomaSocialContactRecord(state, record) {
+  if (!state || !record) return null;
+  return applySocialContactRecord(state.socialContact, record);
 }
 
 function familyOf(name, tags = []) {
@@ -681,6 +697,7 @@ export function tickSoma(state, {
 } = {}) {
   if (!state) return state;
   touchFeedingContinuity(state.feeding, now);
+  touchSocialObservation(state.socialContact, now);
   const elapsed = clamp((now - finite(state.lastTickMs, now)) / 1000, 0, 60);
   state.lastTickMs = now;
   const decay = Math.exp(-elapsed / 600);
@@ -972,6 +989,7 @@ export function somaSnapshot(state) {
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),
     learnedControllability: controllabilitySnapshot(state.learnedControllability),
     somaticNociceptive: somaticSnapshot(state.somaticNociceptive),
+    social: socialContactSnapshot(state.socialContact, state.lastTickMs),
     experienced: experiencedSnapshot(state.experienced),
     circuits,
     appraisal: Object.fromEntries(Object.entries(state.appraisal).map(([key, value]) => [key, round(value)])),

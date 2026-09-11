@@ -175,6 +175,7 @@ async function boot() {
     learnedControllabilityUrl: CFG.learnedControllability,
     feedingUrl: CFG.feeding,
     somaticUrl: CFG.somatic,
+    socialContactUrl: CFG.socialContact,
     registry: CFG.implementationRegistry,
     admin: !!CFG.admin,
   });

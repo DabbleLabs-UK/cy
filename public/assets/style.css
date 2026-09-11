@@ -1922,3 +1922,37 @@ body.cy-paused::after {
   box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.7);
 }
 .feed-jump:hover { background: #366fa3; }
+.social-contact-card {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #31576b;
+  background: #0c141b;
+}
+.social-contact-head,
+.social-contact-facts div,
+.social-contact-limits {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+.social-contact-head { color: #8fcbe6; letter-spacing: .08em; }
+.social-contact-explanation,
+.social-contact-item p,
+.social-contact-empty { color: #9cafba; line-height: 1.45; }
+.social-contact-facts { margin: 10px 0; }
+.social-contact-facts div { padding: 5px 0; border-top: 1px solid #20313b; }
+.social-contact-facts dt,
+.social-contact-limits span { color: #708c9b; font-size: .72em; letter-spacing: .06em; }
+.social-contact-facts dd { margin: 0; color: #d0dae0; text-align: right; }
+.social-ranges { display: flex; gap: 5px; margin: 8px 0; }
+.social-ranges button.active { border-color: #79c4e4; color: #bce9fb; }
+.social-contact-item { padding: 8px; margin: 6px 0; border-left: 2px solid #597888; background: #101b22; }
+.social-contact-item.social-supportive { border-left-color: #55ba8a; }
+.social-contact-item.social-hostile,
+.social-contact-item.social-rejecting { border-left-color: #dc765b; }
+.social-contact-item strong { color: #d7e3e8; }
+.social-contact-item p { margin: 4px 0 0; }
+.social-contact-limits { margin-top: 10px; padding-top: 8px; border-top: 1px solid #31576b; }
+.social-contact-limits strong { color: #c9a565; font-size: .76em; }
+.social-contact-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b9cbd4; }

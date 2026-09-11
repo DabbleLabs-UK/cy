@@ -10,6 +10,7 @@ export const INSPECTION_HEADINGS = [
   ['what_instrumental_agency_did', 'WHAT INSTRUMENTAL AGENCY DID'],
   ['what_feeding_ledger_did', 'WHAT FEEDING LEDGER DID'],
   ['what_somatic_noxious_substrate_did', 'WHAT SOMATIC / NOXIOUS INPUT SUBSTRATE DID'],
+  ['what_social_contact_substrate_did', 'WHAT SOCIAL CONTACT SUBSTRATE DID'],
   ['what_systems_consumed_it', 'WHAT SYSTEMS CONSUMED IT'],
 ];
 

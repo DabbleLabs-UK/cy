@@ -296,13 +296,38 @@ function routineFacts(routine, outcome, text) {
     || outcome === 'yard_bench_company' || outcome === 'association_quiet_company') {
     return {
       archetypeId: 'friendly_interaction',
-      world: { situation: { social_contact: 'present', social_contact_quality: outcome.includes('shared_joke') || outcome.includes('connected') ? 'supportive' : 'ordinary' }, context: { location: routine } },
+      world: {
+        social: {
+          episode_type: 'CONTACT',
+          actor_label: outcome === 'phone_call_connected' ? 'caller' : 'another inmate',
+          target_id: 'cy:7734', target_label: 'Cy',
+          channel: outcome === 'phone_call_connected' ? 'OTHER' : 'IN_PERSON',
+          contact_form: outcome === 'yard_bench_company' || outcome === 'association_quiet_company'
+            ? 'PASSIVE_CO_PRESENCE' : 'DIRECT_INTERACTION',
+          direction: 'MUTUAL', reciprocity: 'RECIPROCAL',
+          character: outcome.includes('shared_joke') || outcome.includes('connected') ? 'SUPPORTIVE' : 'ORDINARY',
+          resolution: 'COMPLETED',
+        },
+        situation: { social_contact: 'present', social_contact_quality: outcome.includes('shared_joke') || outcome.includes('connected') ? 'supportive' : 'ordinary' },
+        context: { location: routine },
+      },
     };
   }
   if (outcome === 'association_kept_apart' || outcome === 'phone_no_answer') {
     return {
       archetypeId: 'social_rejection',
-      world: { situation: { social_contact: outcome === 'phone_no_answer' ? 'attempted' : 'present', social_contact_quality: 'rejecting' }, context: { location: routine } },
+      world: {
+        social: {
+          episode_type: 'OPPORTUNITY', actor_label: outcome === 'phone_no_answer' ? 'intended recipient' : 'other inmates',
+          target_id: 'cy:7734', target_label: 'Cy', channel: outcome === 'phone_no_answer' ? 'OTHER' : 'IN_PERSON',
+          contact_form: 'ATTEMPTED_CONTACT', direction: 'INITIATED_BY_CY',
+          reciprocity: outcome === 'phone_no_answer' ? 'NO_RESPONSE' : 'REJECTED',
+          character: outcome === 'phone_no_answer' ? 'UNKNOWN' : 'REJECTING', resolution: 'COMPLETED',
+          opportunity_status: 'RESOLVED',
+        },
+        situation: { social_contact: outcome === 'phone_no_answer' ? 'attempted' : 'present', social_contact_quality: 'rejecting' },
+        context: { location: routine },
+      },
     };
   }
   if (outcome.endsWith('_missed') || outcome.endsWith('_cancelled')) {

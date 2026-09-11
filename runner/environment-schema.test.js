@@ -7,8 +7,8 @@ import {
   serializeEnvironmentRecord,
 } from './environment-schema.js';
 
-assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 21);
-assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 21);
+assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 24);
+assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 24);
 
 const event = createEnvironmentEvent('meal', {
   id: 'env-test-meal',
@@ -41,6 +41,7 @@ assert.deepEqual(record.soma_input.instrumental.remaining_possibilities, []);
 assert.equal(record.soma_input.action_opportunity.id, null);
 assert.deepEqual(record.soma_input.action_opportunity.available_actions, []);
 assert.equal(record.soma_input.action_opportunity.action_actually_executed, 'unknown');
+assert.equal(record.soma_input.social.episode_type, 'UNKNOWN');
 assert.equal(record.observation.summary, 'lunch arrived and some was eaten');
 assert.equal(record.consumed_by[0], 'soma-input-staging-v1');
 assert.equal('observation' in record.world_event, false);
@@ -78,6 +79,17 @@ const forcedWake = createEnvironmentEvent('forced_wakefulness', {
   timestamp: '2026-09-10 23:15:00.000',
 });
 assert.equal(createEnvironmentRecord(forcedWake).soma_input.sleep_period, 'forced_wakefulness');
+
+const social = createEnvironmentEvent('social_episode', {
+  id: 'env-test-social',
+  timestamp: '2026-09-10 19:00:00.000',
+  world: { social: {
+    episode_id: 'social:test', episode_type: 'CONTACT', channel: 'POSTCARD',
+    contact_form: 'MESSAGE_RECEIVED', reciprocity: 'ONE_WAY', character: 'UNKNOWN',
+  } },
+});
+assert.equal(createEnvironmentRecord(social).soma_input.social.episode_id, 'social:test');
+assert.equal(createEnvironmentRecord(social).soma_input.social.character, 'UNKNOWN');
 assert.equal(createEnvironmentRecord(forcedWake).soma_input.sleep_interruption, 'present');
 
 const search = createEnvironmentEvent('cell_search', {

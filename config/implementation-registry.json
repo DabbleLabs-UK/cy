@@ -69,8 +69,9 @@
       "display_name": "SOCIAL NEED / LONELINESS",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Richer social-event distinctions exist, but their conversion into a social-need value is an unapproved heuristic.",
+      "status_note": "A factual social contact detector and ledger are LIVE separately. The displayed Loneliness value remains the older arbitrary baseline, contact/rejection impulses and elapsed-time clock; no approved model converts social history into subjective loneliness.",
       "data_dependencies": ["social_contact", "social_contact_quality", "rejection_support", "persistence"],
+      "available_future_dependencies": ["social_episode_model", "social_contact_ledger", "social_contact_detector", "social_set_point"],
       "version": "legacy-experienced-state-v2"
     },
     {
@@ -493,6 +494,97 @@
       "status_note": "No light/zeitgeber phase-response model or free-running phase drift is implemented. Process C is treated as stably entrained to the configured prison schedule.",
       "data_dependencies": [],
       "version": null
+    },
+    {
+      "id": "social_episode_model",
+      "display_name": "SOCIAL EPISODE MODEL",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "social-contact-detector-ledger",
+      "status_note": "Canonical factual social episodes preserve channel, form, direction, reciprocity, character and resolution without calculating social need.",
+      "data_dependencies": ["structured_social_world_event"],
+      "version": "social-contact-detector-ledger-v1",
+      "provenance": "config/model-specs/social-contact-substrate.json"
+    },
+    {
+      "id": "social_contact_ledger",
+      "display_name": "SOCIAL CONTACT LEDGER",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "social-contact-detector-ledger",
+      "status_note": "Persistent post-installation social contact, opportunity, isolation and observation-gap history.",
+      "data_dependencies": ["social_episode_model"],
+      "version": "social-contact-detector-ledger-v1"
+    },
+    {
+      "id": "social_contact_detector",
+      "display_name": "SOCIAL CONTACT DETECTOR",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "social-contact-detector-ledger",
+      "status_note": "Derives current factual social context from canonical episodes only.",
+      "data_dependencies": ["social_contact_ledger"],
+      "version": "social-contact-detector-ledger-v1"
+    },
+    {
+      "id": "social_opportunity_representation",
+      "display_name": "SOCIAL OPPORTUNITY REPRESENTATION",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "social-contact-detector-ledger",
+      "status_note": "Records social opportunities separately from actual contact outcomes.",
+      "data_dependencies": ["action_opportunity"],
+      "version": "social-contact-detector-ledger-v1"
+    },
+    {
+      "id": "confirmed_social_isolation_representation",
+      "display_name": "CONFIRMED SOCIAL ISOLATION REPRESENTATION",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "social-contact-detector-ledger",
+      "status_note": "Accepts isolation only when continuous observation, aloneness and no contact are all explicitly established.",
+      "data_dependencies": ["structured_social_world_event"],
+      "version": "social-contact-detector-ledger-v1"
+    },
+    {
+      "id": "social_set_point",
+      "display_name": "SOCIAL SET-POINT",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Cy's individual preferred amount and quality of contact are unknown.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "social_homeostatic_error",
+      "display_name": "SOCIAL HOMEOSTATIC ERROR",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No set-point comparison or deficit calculation exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "social_set_point_adaptation",
+      "display_name": "SOCIAL SET-POINT PLASTICITY",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No chronic adaptation rate or mechanism is implemented.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "social_tolerance_dynamic_range",
+      "display_name": "SOCIAL TOLERANCE / DYNAMIC RANGE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No individual tolerance or dynamic range is modelled.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "social_aversive_value",
+      "display_name": "SOCIAL AVERSIVE VALUE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Hostility, rejection and isolation are not assigned a common subjective magnitude.",
+      "data_dependencies": [],
+      "version": null
     }
   ],
   "brain_regions": [
@@ -599,8 +691,9 @@
       "display_name": "SOCIAL-PROCESSING NETWORK ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent social-processing activity if later justified. The displayed runner mapping simply mirrors the provisional loneliness value.",
+      "status_note": "The factual social contact ledger is available as a future dependency, but no approved distributed neural activation mapping exists. The older runner mapping simply mirrors provisional Loneliness and is not shown as live activation.",
       "data_dependencies": ["loneliness", "social_contact_quality", "rejection_support"],
+      "available_future_dependencies": ["social_episode_model", "social_contact_ledger", "social_contact_detector"],
       "version": "legacy-brain-map-v1"
     }
   ]

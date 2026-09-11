@@ -8,6 +8,7 @@ export const ENVIRONMENT_SCHEMA = 'cy.environment-event';
 export const ENVIRONMENT_SCHEMA_VERSION = 1;
 export const SOMA_INPUT_SCHEMA = 'cy.soma-input';
 export const SOMATIC_EVENT_SCHEMA = 'cy.somatic-event';
+export const SOCIAL_EPISODE_SCHEMA = 'cy.social-episode';
 
 const UNKNOWN = 'unknown';
 const FORBIDDEN_MODEL_OUTPUT_KEYS = new Set([
@@ -49,6 +50,32 @@ function assertNoModelOutputs(value, path = 'event') {
 
 const BASE_WORLD = Object.freeze({
   participants: { actor: null, target: null, relationship_ref: null },
+  social: {
+    schema: SOCIAL_EPISODE_SCHEMA,
+    version: 1,
+    episode_id: null,
+    episode_type: 'UNKNOWN',
+    start_at: null,
+    end_at: null,
+    linked_event_ids: [],
+    actor_id: null,
+    actor_label: null,
+    target_id: null,
+    target_label: null,
+    relationship_ref: null,
+    channel: 'UNKNOWN',
+    contact_form: 'UNKNOWN',
+    direction: 'UNKNOWN',
+    reciprocity: 'UNKNOWN',
+    character: 'UNKNOWN',
+    resolution: 'UNKNOWN',
+    opportunity_id: null,
+    opportunity_status: 'UNKNOWN',
+    action_executed: null,
+    continuously_observed: false,
+    alone_established: false,
+    no_contact_established: false,
+  },
   physical: {
     injury: UNKNOWN,
     nociceptive_impact: UNKNOWN,
@@ -173,6 +200,9 @@ export const REFERENCE_EVENT_ARCHETYPES = Object.freeze([
   { id: 'ordinary_postcard', family: 'mail', world: { situation: { social_contact: 'present', social_contact_quality: 'ordinary', rejection_support: 'none', intent: 'neutral', resolution_status: 'resolved' } }, observation: { modality: 'read', certainty: 'certain' } },
   { id: 'hostile_postcard', family: 'mail', world: { situation: { possible_harm: 'possible', social_contact: 'present', social_contact_quality: 'hostile', rejection_support: 'rejection', intent: 'hostile', resolution_status: UNKNOWN } }, observation: { modality: 'read', certainty: 'certain' } },
   { id: 'prolonged_social_absence', family: 'social', world: { situation: { social_contact: 'none', social_contact_quality: 'none', rejection_support: 'none', deprivation_outcome: 'ongoing', resolution_status: 'unresolved' }, temporal: { onset: UNKNOWN, persistence: 'ongoing', recurrence: UNKNOWN } }, observation: { modality: 'direct', certainty: 'certain' } },
+  { id: 'social_episode', family: 'social', world: {}, observation: { modality: 'direct', certainty: 'certain' } },
+  { id: 'social_observation_gap', family: 'social', world: {}, observation: { modality: 'system', certainty: 'certain' } },
+  { id: 'confirmed_social_isolation', family: 'social', world: {}, observation: { modality: 'direct', certainty: 'certain' } },
 ]);
 
 export function referenceEventArchetype(id) {
@@ -283,6 +313,7 @@ export function environmentEventToSomaInput(event) {
     instrumental: deepClone(event.world.instrumental),
     action_opportunity: deepClone(event.world.action_opportunity),
     somatic: deepClone(event.world.somatic),
+    social: deepClone(event.world.social),
   };
 }
 

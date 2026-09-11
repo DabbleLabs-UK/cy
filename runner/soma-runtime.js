@@ -127,6 +127,14 @@ export function createSomaRuntime(rawState, {
       });
       return result;
     },
+    observeSocialContactRecord(record) {
+      let result = null;
+      mutate('social contact and opportunity ledger', (current) => {
+        result = engine.observeSomaSocialContactRecord(current, record);
+        return current;
+      });
+      return result;
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },
