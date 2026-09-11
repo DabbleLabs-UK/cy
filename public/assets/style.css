@@ -1013,6 +1013,18 @@ body.cy-paused::after {
 .somatic-model-limits strong { color: #8d96aa; }
 .somatic-input-inspector { margin-top: 7px; color: #a2abc2; font-size: 8px; }
 .somatic-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bfc5d4; font: inherit; line-height: 1.45; }
+.soma-substrate-more { margin-top: 9px; border-top: 1px solid #2d3a45; }
+.soma-substrate-more > summary {
+  padding: 7px 0 2px;
+  color: #8295a3;
+  cursor: pointer;
+  font-size: 7.5px;
+  letter-spacing: .09em;
+  list-style: none;
+}
+.soma-substrate-more > summary::-webkit-details-marker { display: none; }
+.soma-substrate-more > summary::before { content: '+ '; }
+.soma-substrate-more[open] > summary::before { content: '- '; }
 .circadian-process-card { padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
 .circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 8px; letter-spacing: 0.08em; }
 .circadian-process-status { color: #65d59a; font-size: 8px; }

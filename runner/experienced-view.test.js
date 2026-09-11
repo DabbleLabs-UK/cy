@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   buildHistoryPath,
   buildHistoryUrl,
+  closeOtherReadings,
   contributorExplanation,
   metricExplanation,
   metricStateSummary,
@@ -41,4 +42,12 @@ assert.equal(
   '/api/soma-history.php?scope=brain&key=temporalSocial&range=7d',
   'brain regions and Soma metrics share the same history URL builder',
 );
+
+const anxietyReading = { open: true };
+const arousalReading = { open: true };
+const brainReading = { open: true };
+closeOtherReadings([anxietyReading, arousalReading, brainReading], arousalReading);
+assert.equal(anxietyReading.open, false, 'opening another reading closes the previously open Soma row');
+assert.equal(arousalReading.open, true, 'the newly opened reading stays open');
+assert.equal(brainReading.open, false, 'the single-open behavior also spans brain-region rows');
 console.log('experienced-view.test.js: all checks passed');

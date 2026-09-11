@@ -124,6 +124,10 @@ assert.match(source, /SOMATIC \/ NOXIOUS INPUT TRACE/);
 assert.match(source, /subjectivePainStatus/);
 assert.doesNotMatch(source, /definition\.key === 'pain' \? historyMarkup\(\)/,
   'the Pain detail must not present the factual somatic substrate as a numeric Pain graph');
+assert.match(source, /EVENT HISTORY AND MODEL LIMITS/,
+  'the long somatic event trace and unmodelled dependency list stay behind a secondary disclosure');
+assert.match(source, /CONTACT HISTORY AND MODEL LIMITS/,
+  'the long social history and unmodelled dependency list stay behind a secondary disclosure');
 assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
   'unimplemented region placeholders without artwork must remain hidden');
 assert.doesNotMatch(source, /Learned outcome probability/);
@@ -135,6 +139,8 @@ assert.match(source, /<summary><span class="soma-region-name"[\s\S]*?<div class=
 assert.match(source, /this\._wireReading\(entry, 'metric', definition\.key\)/);
 assert.match(source, /this\._wireReading\(entry, 'brain', definition\.key\)/);
 assert.match(source, /this\._wireCircadian\(entry\)/);
+assert.match(source, /closeOtherReadings\([\s\S]*?details\.soma-state-entry, details\.soma-region-entry/,
+  'Soma metrics and brain regions participate in one single-open accordion');
 assert.match(source, /buildHistoryUrl\(this\.historyUrl, scope, key, range\)/);
 assert.doesNotMatch(
   source,

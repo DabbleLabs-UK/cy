@@ -159,6 +159,12 @@ export function buildHistoryUrl(base, scope, key, range) {
   return `${base}${separator}scope=${encodeURIComponent(scope)}&key=${encodeURIComponent(key)}&range=${encodeURIComponent(range)}`;
 }
 
+export function closeOtherReadings(readings, activeReading) {
+  for (const reading of readings || []) {
+    if (reading !== activeReading && reading.open) reading.open = false;
+  }
+}
+
 function signed(value, digits = 3) {
   if (!Number.isFinite(value)) return '--';
   return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
@@ -314,8 +320,10 @@ function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatu
       <div><dt>TISSUE DAMAGE</dt><dd data-somatic="damage">UNKNOWN</dd></div>
       <div><dt>KNOWLEDGE</dt><dd data-somatic="knowledge">NO SOMATIC RECORD</dd></div>
     </dl>
-    <div class="somatic-timeline"><p class="somatic-timeline-empty">No structured somatic records have reached this view.</p></div>
-    <div class="somatic-model-limits"><span>${painStatus.displayName}</span><strong>${painStatus.publicLabel}</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
+    <details class="soma-substrate-more"><summary>EVENT HISTORY AND MODEL LIMITS</summary>
+      <div class="somatic-timeline"><p class="somatic-timeline-empty">No structured somatic records have reached this view.</p></div>
+      <div class="somatic-model-limits"><span>${painStatus.displayName}</span><strong>${painStatus.publicLabel}</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
+    </details>
     ${admin ? '<details class="somatic-input-inspector"><summary>SOMATIC / NOXIOUS INPUT TRACE</summary><pre>Waiting for the complete somatic ledger.</pre></details>' : ''}
   </section>`;
 }
@@ -332,11 +340,13 @@ function socialContactMarkup(status, setPointStatus, errorStatus, adaptationStat
       <div><dt>RECENT REJECTION</dt><dd data-social="rejection">NONE OBSERVED</dd></div>
       <div><dt>OBSERVATION RECORD</dt><dd data-social="continuity">UNKNOWN</dd></div>
     </dl>
-    <div class="social-ranges" aria-label="Factual social history range">
-      <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
-    </div>
-    <div class="social-contact-timeline"><p class="social-contact-empty">No structured social episodes have reached this view.</p></div>
-    <div class="social-contact-limits"><span>${setPointStatus.displayName}</span><strong>${setPointStatus.publicLabel}</strong><span>${errorStatus.displayName}</span><strong>${errorStatus.publicLabel}</strong><span>${adaptationStatus.displayName}</span><strong>${adaptationStatus.publicLabel}</strong><span>${toleranceStatus.displayName}</span><strong>${toleranceStatus.publicLabel}</strong><span>${aversiveStatus.displayName}</span><strong>${aversiveStatus.publicLabel}</strong><span>SUBJECTIVE LONELINESS</span><strong>PROVISIONAL</strong></div>
+    <details class="soma-substrate-more"><summary>CONTACT HISTORY AND MODEL LIMITS</summary>
+      <div class="social-ranges" aria-label="Factual social history range">
+        <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+      </div>
+      <div class="social-contact-timeline"><p class="social-contact-empty">No structured social episodes have reached this view.</p></div>
+      <div class="social-contact-limits"><span>${setPointStatus.displayName}</span><strong>${setPointStatus.publicLabel}</strong><span>${errorStatus.displayName}</span><strong>${errorStatus.publicLabel}</strong><span>${adaptationStatus.displayName}</span><strong>${adaptationStatus.publicLabel}</strong><span>${toleranceStatus.displayName}</span><strong>${toleranceStatus.publicLabel}</strong><span>${aversiveStatus.displayName}</span><strong>${aversiveStatus.publicLabel}</strong><span>SUBJECTIVE LONELINESS</span><strong>PROVISIONAL</strong></div>
+    </details>
     ${admin ? '<details class="social-contact-inspector"><summary>SOCIAL CONTACT LEDGER INSPECTION</summary><pre>Open to load exact structured provenance.</pre></details>' : ''}
   </section>`;
 }
@@ -641,6 +651,10 @@ export class BrainHud {
     entry.dataset.readingKey = key;
     entry.addEventListener('toggle', () => {
       if (!entry.open) return;
+      closeOtherReadings(
+        this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
+        entry,
+      );
       const registryScope = scope === 'metric' ? 'soma_variables' : 'brain_regions';
       const registered = implementationStatus(this.registry, registryScope, key);
       if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
@@ -670,6 +684,10 @@ export class BrainHud {
   _wireCircadian(entry) {
     entry.addEventListener('toggle', () => {
       if (!entry.open || this.circadianStatus.status !== IMPLEMENTATION_STATUS.IMPLEMENTED) return;
+      closeOtherReadings(
+        this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
+        entry,
+      );
       const active = entry.querySelector('.circadian-ranges button.active');
       this.loadCircadianHistory(entry, active ? active.dataset.range : '24h');
     });
