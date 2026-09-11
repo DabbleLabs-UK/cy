@@ -1,7 +1,8 @@
 // incidents.js - the incident ledger.
-// MODEL STATUS: grudge salience, mail-silence and incident-selection thresholds
-// are ARBITRARY / HEURISTIC and PROVISIONAL. Ledger size and text-length limits
-// are engineering constraints.
+// MODEL STATUS: this is a bounded fictional-world continuity ledger, not a
+// psychological memory model. The live runner supplies no relationship state
+// when building incidents; older grudge helpers remain compatibility code.
+// Ledger size and text-length limits are engineering constraints.
 //
 // Ambient events used to move only numbers, so the model had a mood but no
 // SUBSTANCE - nothing concrete to write about. This turns every ambient / social
@@ -36,8 +37,8 @@ function officerName(key, rnd = Math.random) {
   return rnd() < 0.5 ? fullName(key) : bareName(key);
 }
 
-// The inmate whose standing is most charged right now (a hot grudge), else a
-// random one - so texture incidents tend to name whoever is already on his mind.
+// LEGACY / PROVISIONAL compatibility helper. The live runner passes an empty
+// relations object, so its result is random rather than psychology-weighted.
 function salientInmate(relations, rnd = Math.random) {
   const t = topGrudge(relations || {});
   if (t && INMATE_KEYS.includes(t.c.key) && t.r.grudge > 0.35 && rnd() < 0.6) return t.c.key;
@@ -231,8 +232,9 @@ export function resolveThreads(ledger, kinds) {
   return n;
 }
 
-// The dangling things still hanging over him: open ledger threads, plus a hot
-// grudge (> 0.7) and a long mail silence. Deduped by kind+subject, newest first.
+// The dangling real ledger threads and a factual long mail silence. A legacy
+// optional relations argument remains for non-live compatibility tools; the
+// live caller omits it. Deduped by kind+subject, newest first.
 export function unresolvedThreads(ledger, { relations = {}, mailWaitMs = 0, rnd = Math.random } = {}) {
   const out = [];
   const seen = new Set();

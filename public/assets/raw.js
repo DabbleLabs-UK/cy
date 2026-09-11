@@ -543,13 +543,18 @@ function burstDetail(ev, drops) {
       ? JSON.stringify(p.grounded_soma_context.omitted, null, 2) : null,
   ));
   promptSec.appendChild(zoneBlock(
-    'PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL',
-    'heuristic memory and attention continuity material; not grounded state or action selection',
+    'PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL',
+    'heuristically selected real archived event with exact source identity; not measured memory or attention',
     p.provisional_cognitive_directive,
   ));
-  promptSec.appendChild(zoneBlock('ZONE A', 'voice / fixed (cached prefix)', p.zone_a));
-  promptSec.appendChild(zoneBlock('ZONE B', 'context - Cy\'s fed-back prose', p.zone_b));
-  promptSec.appendChild(zoneBlock('ZONE C', 'directives - volatile, rebuilt per burst', p.zone_c));
+  promptSec.appendChild(zoneBlock('FIXED CHARACTER FICTION (ZONE A)', 'fixed cached persona and world premise', p.zone_a));
+  promptSec.appendChild(zoneBlock('REAL RECENT CY EXPRESSION (ZONE B)', 'post-warden prose continuity; not evidence that its claims happened', p.zone_b));
+  promptSec.appendChild(zoneBlock('CURRENT FACTS + ENGINEERING DIRECTIVES (ZONE C)', 'volatile event facts, regime cues and output controls', p.zone_c));
+  promptSec.appendChild(zoneBlock(
+    'ENGINEERING / FICTIONAL WORLD MECHANICS',
+    'generation, retry, form and timing controls; not psychological state',
+    p.engineering_world_mechanics ? JSON.stringify(p.engineering_world_mechanics, null, 2) : null,
+  ));
   box.appendChild(promptSec);
 
   // --- OUTPUT ---
@@ -677,7 +682,7 @@ function expressiveChoiceDetail(ev) {
     p.current_incident_context_supplied,
   ));
   choice.appendChild(zoneBlock(
-    'PROVISIONAL COGNITIVE CONTEXT SUPPLIED',
+    'PROVISIONAL TRACEABLE RETRIEVAL SUPPLIED',
     'optional PROVISIONAL MEMORY CANDIDATE only',
     p.provisional_cognitive_context_supplied
       ? JSON.stringify(p.provisional_cognitive_context_supplied, null, 2) : null,
@@ -785,18 +790,22 @@ function burstPlain(ev, drops) {
   L.push(p.grounded_soma_context && p.grounded_soma_context.omitted
     ? JSON.stringify(p.grounded_soma_context.omitted, null, 2) : '(not emitted)');
   L.push('');
-  L.push('PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL');
+  L.push('PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL');
   L.push(p.provisional_cognitive_directive != null
     ? String(p.provisional_cognitive_directive) : '(not emitted)');
   L.push('');
-  L.push(`ZONE A [${len(p.zone_a)} chars] - voice / fixed`);
+  L.push(`FIXED CHARACTER FICTION / ZONE A [${len(p.zone_a)} chars]`);
   L.push(p.zone_a != null ? String(p.zone_a) : '(not emitted)');
   L.push('');
-  L.push(`ZONE B [${len(p.zone_b)} chars] - context`);
+  L.push(`REAL RECENT CY EXPRESSION / ZONE B [${len(p.zone_b)} chars]`);
   L.push(p.zone_b != null ? String(p.zone_b) : '(not emitted)');
   L.push('');
-  L.push(`ZONE C [${len(p.zone_c)} chars] - directives`);
+  L.push(`CURRENT FACTS + ENGINEERING DIRECTIVES / ZONE C [${len(p.zone_c)} chars]`);
   L.push(p.zone_c != null ? String(p.zone_c) : '(not emitted)');
+  L.push('');
+  L.push('ENGINEERING / FICTIONAL WORLD MECHANICS');
+  L.push(p.engineering_world_mechanics
+    ? JSON.stringify(p.engineering_world_mechanics, null, 2) : '(not emitted)');
   L.push('');
   L.push(`OUTPUT [${len(p.output)} chars, post-warden]`);
   L.push(p.output != null ? String(p.output) : '(not emitted)');

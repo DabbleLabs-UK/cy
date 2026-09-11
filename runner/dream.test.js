@@ -103,8 +103,8 @@ assert.equal(isMurmur(shapeMurmur('mother at the gate again and again and again 
 ok('isMurmur accepts 3-8 lowercase words with no terminal stop, rejects the rest');
 
 // ---- 3. the dream-vs-waking temperature split ------------------------------
-// waking sampling stays coherent (well under the dream floor); dream sampling
-// lives in its own high band 1.1-1.35, INDEPENDENT of the waking formula.
+// Waking and dream settings are fixed engineering profiles. Legacy
+// dissociation cannot change either one.
 const vw = wakeVitals();
 const wakeTemp = sampling(vw).temperature;
 assert.ok(wakeTemp < 1.1, `waking temp ${wakeTemp} stays below the dream floor`);
@@ -112,7 +112,7 @@ for (const diss of [0, 0.25, 0.5, 0.75, 1]) {
   const v = wakeVitals();
   v.mental.dissociation = diss;
   const dt = dreamSampling(v).temperature;
-  assert.ok(dt >= 1.1 && dt <= 1.35, `dream temp ${dt} within [1.1,1.35] at dissoc ${diss}`);
+  assert.equal(dt, 1.12, `dream temp is fixed at dissoc ${diss}`);
   assert.ok(dt > wakeTemp, `dream temp ${dt} > waking temp ${wakeTemp}`);
 }
 // options() routes the split by mode: dream uses the dream band, journal does not
@@ -121,7 +121,7 @@ const wakeOpts = options(vw, 4, 'journal');
 assert.ok(dreamOpts.temperature >= 1.1, 'options(dream) temperature is in the dream band');
 assert.equal(wakeOpts.temperature, wakeTemp, 'options(journal) temperature is the waking value');
 assert.ok(dreamOpts.temperature > wakeOpts.temperature, 'dream hotter than waking via options()');
-ok('dream temperature 1.1-1.35, independent of and always above the waking formula');
+ok('dream temperature is fixed engineering configuration and remains above waking');
 
 // ---- 4. waking directives do NOT leak into dream, and vice versa -----------
 const v4 = wakeVitals();

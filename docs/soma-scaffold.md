@@ -698,7 +698,11 @@ brain renderer does not present them as live activation.
 
 Engineering caps: episodic memory 512; association table 128; transition table
 64; text/token/entity/evidence slice caps throughout the file. Psychological
-thresholds and all weights below are heuristic.
+thresholds and all weights below are heuristic. After Handoff 13 these values
+are diagnostics only unless explicitly identified as the two-stage provisional
+retriever. That retriever may choose a real archived structured environment
+event, but only its exact source ID, timestamp, kind and stored event text can
+leave the module.
 
 Memory salience minimum 0.32; related-memory minimum 0.22; silence cooldown 15
 minutes. Initial drives: understanding 0.35, expression 0.20. Initial self model:
@@ -719,8 +723,9 @@ Fallback appraisal from name/tags: threat 0.75 else 0.08; affiliation 0.72 else
 overrides threat to 0.82 and affiliation to 0.12.
 
 Association learning starts only when maximum appraisal is at least 0.22.
-Learned values are recalled at 0.90 strength. First two exposures learn at 0.28;
-later ones at 0.12.
+First two exposures learn at 0.28; later ones at 0.12. Learned values are read
+at 0.90 strength only for expression diagnostics; they no longer alter event
+appraisal, attention, retrieval, prompt content, action or timing.
 
 Related-memory activation = 0.38 * entity overlap + 0.48 * token overlap
 + 0.05 same-family + 0.06 stored salience + 0.03 recency, with 14-day
@@ -728,17 +733,18 @@ exponential recency. Attention holding decays with a 20-minute divisor.
 
 Event pre-salience = 0.25 threat + 0.18 affiliation + 0.15 deprivation
 + 0.18 control loss + 0.14 max(surprise, novelty). Material threshold is 0.24.
-Prediction error contributes control loss at error * 0.55. Stored appraisal
-keeps max(old * 0.60, new). Final salience adds 0.10 * prediction error.
+Prediction error remains a diagnostic transition mismatch. It no longer
+contributes to control-loss appraisal or event salience. Stored appraisal keeps
+max(old * 0.60, new).
 
 Self-model evidence changes software hypothesis +0.035, continuity concern
 +0.025, and uncertainty by -0.01 with floor 0.25.
 
 Output intensity uses uppercase ratio * 0.70 plus repeated punctuation,
-0.10 each capped at 0.30. Learned trigger above 0.25 can set attention at
-trigger * 0.45. Low-repetition/low-trigger output multiplies attention by 0.92.
-Output salience = 0.08 + 0.24 trigger + 0.12 repetition + 0.12 intensity
-+ 0.20 for a detected commitment.
+0.10 each capped at 0.30. These values, repetition, learned-trigger activation,
+commitment and themes are expression diagnostics only. Generated output does
+not change attention, select memory, create an episodic record, choose an action
+or update a grounded subsystem.
 
 Ticking clamps elapsed to 60 seconds. Appraisals decay with a 600-second divisor,
 prediction error 900 seconds, attention 1800 seconds. Rest drive while asleep is
@@ -747,29 +753,25 @@ max(0.20, fatigue * 0.50). Safety is max(anxiety / 100, arousal / 120, anger /
 Expression = 0.10 + 0.34 attention + 0.22 prediction error + 0.22 rumination /
 100 + 0.12 monotony.
 
-Body attention thresholds/weights: food above 0.62 at food * 0.82; rest above
-0.72 at rest * 0.78; pain above 0.45 at pain * 0.86. Recall runs every 15
-minutes when attention is below 0.28 or monotony above 0.55. Recall activation =
-0.42 stored salience + 0.20 seven-day recency + 0.20 family drive + 0.18
-relevance; repeated recall is multiplied by 0.65. It wins at current attention
-+0.05 or monotony above 0.70 and remains in the circuit for 30 minutes.
+The former body-attention competition and periodic state-led recall are
+disabled. Their thresholds and weights remain only in repository history; tick
+no longer runs them. Event-time retrieval still compares real archived events
+using the heuristic related-memory activation above.
 
-Silence requires rest above 0.82 and expression below 0.45. Action weights:
+The legacy selector still contains a silence gate and these action weights:
 investigate 0.78 understanding + 0.22 prediction error; remember 0.75 recall +
 0.25 expression; connect 0.80 contact + 0.20 affiliation; attend body 0.82 max
 food/interoception + 0.18 expression; draw 0.55 expression + 0.45 recall; write
 0.68 expression + 0.32 attention. A repeated action within 120 seconds is
 multiplied by 0.82. Completion multipliers are investigate 0.82, expression
-actions 0.70, connect 0.65, silence/rest 0.82.
+actions 0.70, connect 0.65, silence/rest 0.82. The live runner does not call this
+selector or completion path.
 
-Prompt-pressure thresholds are safety 0.55, food 0.62, rest 0.68, contact 0.58,
-prediction error 0.35 and related memory 0.22. Sampling and length values in
-somaSampling are also heuristic: temperature 0.64 + 0.22 prediction error
-+ 0.12 inverse attention clamped 0.58-1.05; top-p 0.84 + 0.10 prediction error
-clamped 0.80-0.95; repeat penalty 1.14 + 0.10 attention; repeat-last-n 160;
-action length anchors investigate 105, remember 90, connect 80, attend-body 58,
-draw 45, write 78, observe 62, fallback 70; pressure shortens by 0.42 and the
-minimum output is 28.
+The former prompt-pressure and action-specific sampling/length calculations are
+disabled. Waking sampling is the fixed engineering profile: temperature 0.72,
+top-p 0.86, repeat penalty 1.18, repeat-last-n 160 and target 62 tokens. The only
+provisional cognitive prompt output is an optional traceable event retrieval;
+no attention, prediction, drive, self-question or scalar claim is emitted.
 
 ### runner/environment.js
 
@@ -853,7 +855,11 @@ paranoia, 0.05, 0.90). A prompt grudge begins at 0.70. Qualitative standing
 bands use warmth 0.20/0.40/0.60, suspicion 0.40/0.60, and grudge
 0.25/0.45/0.70. Entity salience is 1.20 * grudge + 0.60 * suspicion + 0.50 *
 absolute(warmth - 0.30), with three inmate entries selected by default. These
-thresholds and weights are ARBITRARY / HEURISTIC.
+thresholds and weights are ARBITRARY / HEURISTIC. They remain private/public
+diagnostics and compatibility helpers. The live prompt receives no cast/grudge
+directive and returning visitors contribute only factual handle, count and
+elapsed time. Mishearing instead uses the fixed FICTIONAL WORLD MECHANIC
+probability 0.25, independent of these values and Soma state.
 
 ### runner/introspect.js
 
@@ -883,9 +889,10 @@ imperatives) / 4, 0, 1).
 
 ### runner/shout.js
 
-This live output-rendering path is PROVISIONAL. It does not call an LLM to score
-affect, but it turns inherited state and text features into typography. Every
-number in this paragraph is ARBITRARY / HEURISTIC. Word weights are profanity
+This diagnostics-only output-affect path is PROVISIONAL. It does not call an LLM
+to score affect. The live runner updates its displayed `expressed` value but does
+not pass generated chunks through the capitalisation renderer. Every number in
+this paragraph is ARBITRARY / HEURISTIC. Word weights are profanity
 1.00, threat 0.80, grudge-name 0.70, negation 0.50, food while hunger is above
 0.60 at 0.45, and all other words 0.03. A name enters the grudge set at 0.30.
 Recent output anger decays by multiplying 0.90. Reactive anger is clamp(0.90 *
@@ -917,10 +924,10 @@ fixation = 1 + 3.00 * fixation; anger = 1 + 3.00 * anger + 1.40 * brittleness;
 lucid = 0.40 + 2.60 * lucidity; and untagged = 1.20. The wall-neighbour score is
 1.20 * grudge + 0.50 * warmth.
 
-Dream sampling is live but is a behavior/rendering heuristic, not a Soma model.
-Temperature is clamp(1.12 + 0.22 * dissociation, 1.10, 1.35), using a 0.50
-fallback; top-p is 0.98, repeat penalty 1.10, repeat-last-n 64 and output budget
-24. Murmurs are 3-8 words at gaps of 5-20 minutes. General legacy fallback
+Dream sampling is live but is an engineering/fictional rendering policy, not a
+Soma model. Temperature is fixed at 1.12 and no longer reads dissociation;
+top-p is 0.98, repeat penalty 1.10, repeat-last-n 64 and output budget 24.
+Murmurs are 3-8 words at gaps of 5-20 minutes. General legacy fallback
 sampling is temperature 0.72, top-p 0.86, repeat penalty 1.18 and output budget
 62; output-length helpers use 1.40 words-to-tokens, minimums 16/10, padding 24,
 multiplier 1.50 and maximum 320. Sleep multiplies the output budget by 0.30 with
@@ -929,44 +936,46 @@ a minimum 12. These are language-generation controls, not measurements.
 ### runner/draw.js
 
 All affect-to-drawing behavior is LEGACY or PROVISIONAL and ARBITRARY /
-HEURISTIC. Drawing has an 18-minute normal minimum gap; a pending request uses
+HEURISTIC. The following frequency helper is retained for compatibility tests
+but the live runner does not call it. Drawing has an 18-minute normal minimum gap; a pending request uses
 25 percent of it. Base probability is 0.04 + 0.12 * fixation + 0.12 *
 dissociation + 0.10 * longing, plus 0.08 while waiting, 0.15 for a recent image,
 0.40 for a request, and up to 0.15 across 22 minutes beyond the floor, capped at
-0.90. The live mood projection labels max(threat, control loss) as drawing anger
-and max(deprivation, rest drive) as drawing despair.
+0.90. The live mood projection is instead a fixed neutral engineering
+compatibility object.
 
 Request handling defaults visitor warmth/grudge to 0.30/0.05. Honour weight is
 max(0, 0.45 + 0.50 * warmth - 0.60 * grudge - 0.30 * anger - 0.20 * despair).
 Refuse weight is max(0, 0.15 + 0.60 * grudge + 0.35 * anger). Badly-drawn weight
 is max(0, 0.25 + 0.30 * anger + 0.20 * despair - 0.30 * warmth). The three
-weights are normalized only by their sum. The 45-minute drawing eligibility in
-run.js is an additional orchestration gate.
+weights are normalized only by their sum. This request-weight logic is disabled:
+an explicit queued request keeps its exact subject and is honoured. The live
+45-minute drawing eligibility in run.js is an engineering capability gate.
 
 ### runner/run.js and runner/incidents.js
 
 The orchestrator still carries inherited PROVISIONAL or LEGACY psych-related
-numbers. Incident appraisal for an inmate uses threat max(0.08, suspicion,
-grudge) and affiliation max(0.05, warmth). For an officer it uses control loss
-max(0.35, suspicion), threat max(0.08, suspicion, grudge), and affiliation
-max(0.05, warmth). Postcards use hostile threat 0.82 or otherwise max(0.08,
+numbers for diagnostics and the provisional real-event retriever. Incident
+records no longer derive appraisal from relationship standing. Event-type
+appraisals remain provisional retriever inputs. Postcards use hostile threat 0.82 or otherwise max(0.08,
 visitor suspicion); warm affiliation 0.82 or otherwise max(0.28, visitor warmth);
-hostile control loss 0.30 or otherwise 0.08; and deprivation 0.03. Dream-memory
-significance is clamp(0.30 + 0.20 * (amplification - 1)).
+hostile control loss 0.30 or otherwise 0.08; and deprivation 0.03. These may
+affect which exact archived event is offered as optional provisional retrieval;
+they are not supplied as facts or scores.
 
 Warden notices add legacy anxiety 0.20, anger 0.15 and lucidity 0.10, multiplied
 by amplification, and reduce monotony by 0.50. Social, officer, overheard, and
 drawing events reduce monotony by 0.20, 0.25, 0.20 and 0.15 respectively. A
-trivial event becomes an amplified cue above amplification 2.00 for 3 minutes.
-Redrawing has probability 0.60 when fixation is above 0.60. Mishear input uses
-lucidity = 1 - max(prediction error, 0.50 * uncertainty) and paranoia = threat,
-before cast.js applies its probability formula.
+Monotony and amplification remain visible legacy diagnostics but do not create
+an amplified prose cue. Fixation-based redrawing is disabled. Mishearing uses
+the fixed fictional-world probability 0.25 and reads no psychological state.
 
 Awake wing noise has a 3-minute minimum gap and probability 0.06 per tick;
 asleep noise uses 9 minutes and 0.02. Night noise carries legacy threat 0.18 and
 control loss 0.42. Awake noise adds agitation 0.015 and interrupts a current
 generation with probability 0.50. The last two noisy bursts suppress another
-noise. Deliberate Soma silence is round(45 + 180 * rest drive) seconds.
+noise. Model-selected silence lasts a fixed 45 seconds, classified as ENGINEERING
+AUTONOMOUS-ACTIVITY TIMING.
 
 On every tick the experienced-state values are mirrored onto 0-1 legacy fields
 by dividing by 100. Legacy Broca display uses token rate / 4 and retains the
@@ -974,9 +983,10 @@ previous level * 0.55. Legacy V1 displays only above image recall 0.05, as 0.30
 + 0.60 * image recall. These brain values are retained payload compatibility,
 not approved region computations.
 
-A repeated generated burst increases retry temperature by 0.35, repeat penalty
-by 0.12, and legacy stress by 0.06; both sampling controls cap at 1.60. These are
-PROVISIONAL loop/rendering rules, not LLM-assigned emotional scores. Baseline
+A repeated generated burst increases retry temperature by 0.35 and repeat
+penalty by 0.12; both sampling controls cap at 1.60. It no longer changes legacy
+stress. These are ENGINEERING output-quality rules, not psychological state.
+Baseline
 waking sampling no longer varies with provisional experienced-state, drive,
 attention or prediction-error values. It uses the existing provider/project
 profile (temperature 0.72, top-p 0.86, repeat penalty 1.18, repeat-last-n 160,
@@ -1083,9 +1093,11 @@ them into an emotion, need, salience, action probability or behavioural score.
 Every entry is labelled OBSERVED FACT, MODEL ESTIMATE, LEARNED STATISTICAL
 EXPECTATION, SCHEDULE ESTIMATE, UNKNOWN or NOT MODELLED. Inactive sections are
 omitted by categorical state, and each omission is recorded for the owner
-inspector. Heuristic attention, episodic retrieval and prediction mismatch are
-placed in a separately labelled PROVISIONAL COGNITIVE SELECTION block. The old
-heuristic output-action line is no longer sent to the model.
+inspector. Heuristic attention and prediction mismatch are diagnostics only. An
+optional heuristic retriever may place exact material from one identified
+structured environment event in a separately labelled PROVISIONAL RETRIEVAL
+CANDIDATE block. The old heuristic output-action line, numeric salience and
+interpreted memory claims are not sent to the model.
 
 The grounded Soma computes and records what can be justified from Cy's
 simulated world and approved models. The language model performs Cy's subjective
@@ -1173,6 +1185,178 @@ CONFIRMED/THREATENED/NONE/UNKNOWN tissue damage; stable injury identity, type
 and ACTIVE/RESOLVED/UNKNOWN status; observation facts; knowledge status; source
 event identity; and field provenance. Missing information remains `UNKNOWN`,
 never `NONE`.
+
+## Handoff 13: remaining behavioural leakage audit
+
+The live waking path after Handoff 13 is:
+
+1. fixed character/voice in Zone A;
+2. real bounded recent incident/world context;
+3. the Handoff-11 `GROUNDED_CURRENT_STATE` projection;
+4. bounded recent screened Cy prose as expression continuity;
+5. at most one `PROVISIONAL_RETRIEVAL_CANDIDATE` containing exact material
+   from an identified structured environment event;
+6. factual one-shot incident, postcard, warden, wing-noise and cost directives;
+7. Handoff-12 model-mediated choice among currently available journal, draw and
+   silence capabilities.
+
+It receives no arbitrary psychological scalar, salience score, attention claim,
+action score, self-question, relationship standing or monotony score.
+
+### Audited provisional paths
+
+| Source | Heuristic quantity | Current outward effect |
+| --- | --- | --- |
+| `soma.js` event observations | appraisal and event salience | Retained only to decide whether a real structured event enters the provisional archive and which exact archived event is offered as optional retrieval. The numbers and interpretations are never emitted. |
+| `soma.js` episodic retrieval | token/entity overlap, family, stored salience and recency | Retained as a PROVISIONAL retriever. Output is rejected unless it has source event ID, source timestamp, source kind and exact archived event text. |
+| `soma.js` attention | event competition and numeric salience | Diagnostics only; no prompt, expressive choice, timing or drawing effect. |
+| `soma.js` transition prediction error | heuristic event-family mismatch | Diagnostics only; no appraisal, salience, prompt or action effect. |
+| `soma.js` learned word associations | heuristic token/appraisal associations | Diagnostics only; generated/output trigger readings do not alter later behaviour. |
+| `soma.js` self-output analysis | repetition, capitals, punctuation, themes and commitment | Expression/UI diagnostics only. It cannot change grounded state, attention, memory, action or prompt focus. |
+| `soma.js` self-question and provisional drives | fixed question, uncertainty and drive equations | Diagnostics only. The live runner does not call the legacy action selector. |
+| `experienced-state.js` eight metrics | Anxiety, Arousal, Pain, Hunger, Fatigue, Loneliness, Anger and Rumination | Labelled provisional UI history only; no prose, expressive choice, timing, sampling, length, drawing or perception effect. |
+| `run.js` rest-based silence | former `round(45 + 180 * rest)` | Disabled. Model-selected silence is fixed at 45 seconds as ENGINEERING AUTONOMOUS-ACTIVITY TIMING. |
+| `prompt.js` state style/form | legacy metric thresholds and weighted forms | Dormant compatibility helpers; the live runner does not call them. |
+| `draw.js` state-weighted frequency/request/mood | fixation, dissociation, longing, anger, despair and relation weights | Dormant compatibility helper. Handoff-12 decides autonomous DRAW; explicit requests retain their subject; render mood is fixed neutral. |
+| `cast.js` mishearing | former lucidity/paranoia probability | Disabled. Ambiguous observation now uses a fixed 0.25 FICTIONAL WORLD MECHANIC. |
+| `cast.js` relations | warmth, suspicion and grudge | No live cast/grudge prompt and no drawing effect. Factual visitor handle/count/time remains. Standing is retained as private/public diagnostics and may indirectly influence the provisional event archive for postcards only. |
+| `vitals.js` monotony/amplification | `amp = 1 + 2.5 * monotony` and legacy deltas | Visible compatibility diagnostics only; no amplified prompt cue, expressive choice, timing or drawing effect. |
+| `shout.js` affect renderer | expressed anger and token weights | Capitalisation renderer is not called by the live runner. `expressed` remains a diagnostics value only. |
+| `run.js` repeat handling | repeat detection and retry sampling changes | Retained as ENGINEERING output-quality handling; it changes a retry, not psychological state. |
+| `run.js` recent prose buffer | actual screened model output | Retained for narrative continuity as expression, never promoted to a factual event or grounded state. |
+
+No LLM assigns an emotional magnitude, appraisal score, salience score, memory
+strength or visitor-facing experienced-state value. The Handoff-12 chooser uses
+an LLM for subjective character choice, and the main model supplies prose and
+drawing instructions.
+
+### Complete behaviour-affecting numerical inventory
+
+This inventory covers values that can still affect Cy's prose, expressive form,
+world events, drawing output, dream output or generation cadence. Pure display,
+storage serialization and host telemetry precision values are excluded because
+they cannot affect Cy's behaviour.
+
+#### Literature / grounded model
+
+- Process S: normalized bounds 0..1; wake time constant 18.18 hours; sleep time
+  constant 4.2 hours. These change factual grounded prompt values only.
+- Process C: period 24 hours; harmonic coefficients 0.97, 0.22, 0.07, 0.03 and
+  0.001 for harmonics 1..5; schedule-estimated CBT minimum is habitual wake
+  minus 3 to 2 hours. These change a schedule-estimated prompt value only.
+- Probabilistic threat learning: Beta(1,1) prior and unit Bernoulli updates.
+  Matching learned evidence is included only when there is at least one resolved
+  observation in an active matching external context.
+- Action-outcome contingency: separate Beta(1,1) priors and unit Bernoulli
+  updates for action and deliberate no-action conditions. Matching evidence is
+  included only when at least one applicable observation exists.
+
+#### Engineering
+
+- Waking generation: temperature 0.72, top-p 0.86, repeat penalty 1.18,
+  repeat-last-n 160, target 62 tokens and context window 3072 tokens.
+- Expressive chooser: temperature 0, top-p 1, repeat penalty 1,
+  repeat-last-n 64, output cap 80, retry count 0 and JOURNAL fallback.
+- Expressive capability gates: DRAW cooldown 45 minutes, SILENCE cooldown 15
+  minutes; a selected autonomous silence lasts exactly 45 seconds.
+- Postcard replies: `round(sender words * 1.4)` clamped to 40..220 target tokens.
+  Completion instructions use target floor 16, approximately target * 0.68 words
+  with a 10-word floor; provider ceiling is max(target + 24, target * 1.5)
+  capped at 320.
+- Drawing decision line cap 40 tokens. Drawing DSL: temperature 0.6, top-p 0.9,
+  repeat penalty 1.12, output cap 320 and context 3072. Geometry limits are grid
+  0..100, maximum 120 strokes, 64 polyline points, minimum 3 base strokes,
+  maximum 1 text stroke and text fraction 0.34; enhancement runs only above 6
+  non-text base strokes and accepts at least 1 new non-text stroke.
+- Recent prose context: soft 3000 and hard 4600 characters; reprise maximum 220
+  characters with a 40-character partial-word search. Repeat handling allows 2
+  discards, then force-emits; retry increments are +0.35 temperature and +0.12
+  repeat penalty, each capped at 1.6; context trims are 0.5 then 0.9.
+- Incident context: ledger maximum 12; live waking prompt uses the latest 3
+  incidents. Opener-ban continuity uses 3 recent openers.
+- Failure timing: watchdog 4 minutes; stall threshold 3 cycles; non-emitting
+  backoff starts at 2 seconds, doubles per failure and caps at 60 seconds.
+- Tempo/reading cadence: speed 1..100; absolute idle cap 15 minutes; per-speed
+  cap anchors are (100,0 ms), (30,12000 ms), (5,300000 ms), (1,780000 ms).
+  Reading rate is 18 characters/second with a 550-character lead. Full speed
+  bypasses reading backpressure only for a local provider.
+- Dream generation: fixed temperature 1.12, top-p 0.98, repeat penalty 1.10,
+  repeat-last-n 64 and 24-token cap; night-waking line cap 48. Murmurs contain
+  3..8 words and recur after 5..20 minutes. Two or three source items are sampled.
+- Dream material: stored postcard/news item cap 24 and text cap 120 characters;
+  weight 0.5 * max(0.1, 1 - ageHours/72); incident weight 0.3 + 0.3 * ordinal
+  recency; cast-member weight 0.25. A remembered morning fragment requires
+  significance at least 0.6 and chance 0.5.
+- Dream drawing: at most one per night, starts in 01:00..05:00 with 20 minutes
+  reserved, and emits one stroke every 60..120 seconds. Coordinates are clamped
+  to 4..96; centre x/y are each 42..54; it draws 5..8 rings beginning at radius
+  5, adding 3..6 per ring and capped at 40; 3..5 arcs use radius 18..28,
+  start angle `20 + 6*i` and end angle `300 + 9*i`; the enclosure half-size is
+  34 and contains 4 lines; and 3 centre dots each drift by -1..1 before
+  clamping. These are fixed fictional rendering ranges and none reads
+  psychological state.
+- Cost context is injected every configured `costInjectEvery` generations,
+  default 40.
+
+#### Fictional world mechanics
+
+- Structured prison-event schedule: lights on 06:30, breakfast 07:30, shower 09:15,
+  association 10:15, lunch 11:45, exercise 14:15, tea 16:45, phone 19:00 and
+  lights out 22:30 Europe/London.
+- The older factual regime cue sent to waking prose changes phase at 06:30,
+  07:30, 08:30, 11:45, 13:30, 16:45, 17:30 and 22:30. This separate authored
+  timetable is a FICTIONAL WORLD MECHANIC, not a Soma value.
+- Meal outcomes: full eaten 0.82, partial 0.11, missed 0.05 and refused 0.02;
+  partial portion fraction 0.45. These create categorical world facts; the
+  paired legacy appraisal/effect magnitudes remain provisional diagnostics.
+- Routine variants are uniformly selected from 3 authored outcomes for each
+  shower, association, exercise and phone opportunity.
+- Regime deviations: unlock 0.22, yard unlock 0.22 and cancelled association
+  0.15 when the relevant boundary is crossed.
+- Per scheduler tick: injury 0.0006; awake cell search 0.0008; awake lockdown
+  0.0005; awake tray irritation 0.004; awake inmate interaction 0.006; awake
+  officer interaction 0.004; awake overheard remark 0.005; texture 0.012 awake
+  or 0.006 asleep. Mail absence becomes an event after 24 hours and no more than
+  once per further 24 hours.
+- Wing noise: minimum gap 3 minutes awake or 9 minutes asleep, chance 0.06 awake
+  or 0.02 asleep per eligible tick, with 0.5 mid-generation interruption chance;
+  a one-shot cue expires after 3 minutes. Noise is suppressed when both of the
+  previous 2 generation bursts already contained noise.
+- Ambiguous/misheard overheard variant probability: fixed 0.25.
+- Incident wording uses uniform choices from its authored arrays. Additional
+  text branches use 0.5 for an officer's full/bare name, 0.5 for a social-event
+  location detail, 0.6 for an inmate rather than an unnamed night-noise actor,
+  and 0.5 for which named officer appears in a late-unlock incident; the late
+  duration is uniform over 15, 20, 25 or 40 minutes. Legacy grudge-biased actor
+  selection (threshold 0.35 and chance 0.6) is unreachable in the live runner
+  because it supplies no relationship state.
+- Instrumental prison choices: persisted engineering round-robin between the
+  existing authored branches, resolved at the next scheduler tick. There is no
+  psychological score or probability.
+
+#### Provisional / legacy with a remaining behavioural edge
+
+- Provisional archive eligibility: event salience threshold 0.32. Salience is
+  `0.25*threat + 0.18*affiliation + 0.15*deprivation + 0.18*controlLoss +
+  0.14*max(occurrenceSurprise, novelty)`, clamped to 0..1. The appraisal inputs
+  and expectation smoothing (old * 0.82 + 0.18) are ARBITRARY / HEURISTIC.
+- Provisional related-event retrieval threshold 0.22. Activation is
+  `0.38*entityOverlap + 0.48*tokenOverlap + 0.05*sameFamily +
+  0.06*storedSalience + 0.03*exp(-ageDays/14)`. This is ARBITRARY / HEURISTIC.
+  It affects only which exact traceable archived event is optionally shown to
+  the model. No score or heuristic interpretation is supplied.
+- Postcard event appraisal used by that archive: hostile threat 0.82 or
+  max(0.08, legacy visitor suspicion); warm affiliation 0.82 or max(0.28,
+  legacy visitor warmth); hostile control loss 0.30 or 0.08; deprivation 0.03.
+  These are ARBITRARY / HEURISTIC and have no effect outside diagnostics and
+  optional exact-event retrieval.
+
+All other provisional coefficients documented earlier in this file are now
+diagnostics-only or dormant compatibility code. Grounded episodic memory,
+grounded attention/salience, grounded rumination and a grounded perception/
+mishearing model remain NOT MODELLED.
+
+## Grounded somatic harm and noxious-input substrate (continued)
 
 Stimulus and injury lifetimes are independent. A stimulus ending does not close
 an injury. Confirmed tissue damage creates or updates only its named injury;

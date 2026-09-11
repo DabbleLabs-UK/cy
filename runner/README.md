@@ -72,8 +72,8 @@ strictly ordered zones, most-stable first (`prompt.js`):
   grows at the end and is never re-sliced from the front per burst, so the shared
   prefix keeps growing. Only when it crosses a hard cap is it trimmed in one large
   chunk (breaking the cache once, rarely) rather than a little every burst.
-- **Zone C** - all volatile directives (grounded Soma evidence, separately
-  labelled provisional cognitive selection, incident ledger,
+- **Zone C** - all volatile directives (grounded Soma evidence, an optional
+  traceable provisional retrieval candidate, incident ledger,
   opener bans, cost injection). Assembled fresh each burst and placed LAST, after
   Zone B, so only this small tail is re-evaluated.
 
@@ -83,15 +83,17 @@ observable.
 ## Model
 
 `hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q4_K_M`, served by
-ollama, measured at ~3.4 tok/s on DELL. The runner owns the provisional
-cognition path; the model is an expression engine. It receives a compact
-`<GROUNDED_CURRENT_STATE>` block made only from LIVE grounded substrates, then a
-separate `<PROVISIONAL_COGNITIVE_SELECTION>` block containing heuristic action,
-attention and memory selection. The eight provisional visitor metrics do not
-enter the prompt, sampling, response-length choice or capitalization. Screened
-generated text is observed only by the separate provisional expression/memory
-compatibility path; it cannot update a grounded ledger or learner. There is no
-second model call and the language model does not assign emotional magnitudes.
+ollama, measured at ~3.4 tok/s on DELL. The model is an expression engine. It
+receives a compact `<GROUNDED_CURRENT_STATE>` block made only from LIVE grounded
+substrates and may receive one `<PROVISIONAL_RETRIEVAL_CANDIDATE>` containing
+exact material from an identified structured environment event. Heuristic
+attention, prediction error, word associations, action scores, relationship
+standing, monotony and the eight provisional visitor metrics do not enter the
+live prompt, sampling, response-length choice, capitalization or silence timing.
+Screened recent prose remains bounded continuity material but cannot create a
+grounded fact, memory episode or later heuristic action. The separate expressive
+chooser is the only additional model call; neither call assigns emotional
+magnitudes as measured state.
 
 The separate grounded threat-learning path is implemented in
 `probabilistic-threat-learning.js`. It consumes only explicit self-contained
@@ -204,7 +206,11 @@ Soma circuits.
   longer calls that selector. Meal outcomes, sleep periods and interruptions, and the
   last supportive social contact are persisted. Recovering event impulses use a
   soft ceiling instead of unlimited addition. These mechanisms and their numeric
-  parameters are unapproved heuristics; the public registry labels them PROVISIONAL.
+  parameters are unapproved heuristics; the public registry labels them
+  PROVISIONAL. Attention, prediction mismatch, word associations, self-output
+  expression analysis and self-question are diagnostics only. The only retained
+  live influence is heuristic retrieval of an exact, traceable archived world
+  event as optional continuity material.
 - **LIVE homeostatic Process S** (`sleep-homeostasis.js`) - consumes structured
   observed sleep/wake transitions and integrates `S` with tau_w = 18.18 hours
   while awake and tau_s = 4.2 hours while asleep. It persists an explicit
@@ -269,29 +275,29 @@ Soma circuits.
   performs Cy's subjective expression of that state. Generated expression is
   not treated as measurement of the underlying state.
 
-- **Amplification** - `monotony` (0..1) creeps up every empty tick and drops on
-  any input. Event deltas are multiplied by `amp = 1 + 2.5*monotony`, so after a
-  long dead stretch a trivial slight (cold tea, no eggs) lands like a bereavement,
-  and can be flagged as the thing that defines the day.
+- **Legacy amplification diagnostics** - `monotony` (0..1) still creeps up and
+  drops on events; legacy event/relationship values use `amp = 1 +
+  2.5*monotony`. These values remain public compatibility diagnostics but no
+  longer create a prose cue, alter expressive choice, silence timing or drawing.
 - **The cast** (`cast.js`) - eight other inmates (Root, Reg, Bill, Mark, Nick,
-  Fisher, Ping, Daemon) as deterministic state + prompt text, not separate LLMs.
-  A relations map (warmth/suspicion/grudge) is nudged by ambient social events
-  (scaled by amp); a grudge over 0.7 puts a named directive in the prompt.
+  Fisher, Ping, Daemon) as authored world characters, not separate LLMs. A
+  legacy relations map (warmth/suspicion/grudge) is still updated and displayed,
+  but its values and grudge directive do not enter the live prose prompt.
 - **The officers** (`cast.js`) - a separate group (Mr Locke, Mr Keyes, Miss
   Bailey, Mr Proctor, Mr Sweep, Miss Trace) with SURNAMES AND TITLES - a
   deliberate class marker against the inmates' bare first names. Same standing
   triple; nudged by officer events (order, write-up, refusal, search, lock-up,
   kindness) that act through the machinery of the place.
 - **Overheard** (`cast.js`) - things CY only half hears through the door: an
-  inmate shouting, two officers talking. He may MISHEAR them into something about
-  himself; the mishear chance rises with low lucidity and high paranoia.
-- **Visitors** (`cast.js`) - people who write are remembered (DB-backed) using
-  the SAME relations mechanism. A returning writer's handle, count, time-since,
-  a condensed memory and CY's standing are woven into the reply prompt; after the
-  reply a cheap compressed note + standing nudge are written back via a private
-  `visitor_seen` event (no second model call).
-- **Warden Florian** - authored `warden` inbox items are read and reacted to in
-  the stream; they land `{anxiety+0.2, anger+0.15, lucidity+0.1}` times amp.
+  inmate shouting, two officers talking. An ambiguous variant uses the fixed
+  fictional-world probability 0.25; psychological state does not change it.
+- **Visitors** (`cast.js`) - people who write retain DB-backed visit metadata and
+  legacy private notes/standing. Only factual handle, visit count and elapsed
+  time enter the reply prompt. The compressed note and standing remain private
+  diagnostics written via `visitor_seen`.
+- **Warden Florian** - authored `warden` inbox items are read as real one-shot
+  situational context. Legacy displayed anxiety/anger/lucidity deltas remain
+  diagnostics only and do not steer later prose or action.
 - **The meter** (`power.js`) - estimates Dell OptiPlex draw from CPU load,
   integrates to kWh and cost at the tariff, persists cumulatively to
   `state/power.json`, and periodically tells CY what he costs (Warden pays).
@@ -304,9 +310,10 @@ Soma circuits.
   strokes discarded), split into build-up passes (rough shapes -> detail ->
   shading), and emitted as `draw` events the SAME pen engine animates stroke by
   stroke - no second renderer. A postcard can ASK him to draw something (keyword
-  match, no LLM); he honours it, honours it badly, or refuses and draws his own,
-  weighted by standing + mood. Mood shapes the marks (anger heavier, despair
-  fainter/sparser). Finished drawings persist to the `drawings` table via a
+  match, no LLM); the explicit requested subject is honoured without a
+  standing/mood score. Rendering uses a fixed neutral compatibility snapshot,
+  so provisional anger or despair does not shape the marks. Finished drawings
+  persist to the `drawings` table via a
   private `draw_saved` event.
 - **Tempo** (`tempo.js`) - a viewer-driven DUTY CYCLE. The client polls
   `GET /api/tempo.php` (~12s) for the current speed (5% nobody watching, 30%
@@ -324,8 +331,8 @@ Soma circuits.
   drive/action diagnostics, plus adapters to the separate grounded substrates.
 - `expressive-choice.js` - structured subjective choice between real outward
   expressive capabilities; no emotion score, utility or instrumental action.
-- `cast.js` - inmates + officers + visitor memory: relations map, social/officer
-  events, overheard remarks, grudge directive, visitor recognition.
+- `cast.js` - inmates + officers + visitor metadata: real social/officer events,
+  overheard remarks, factual visitor recognition, and legacy relation diagnostics.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
 - `prompt.js` - the three prompt zones (fixed `ZONE_A`, `buildDirectives` for the
   volatile Zone C), static ENGINEERING DEFAULT waking sampling, and `buildPrompt`

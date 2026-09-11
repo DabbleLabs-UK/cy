@@ -30,6 +30,7 @@ observeSoma(soma, {
   tags: ['officer', 'search'],
   entities: ['Mr Locke'],
   outcome: 'postcard taken',
+  environmentEventId: 'env-search-1',
 }, { now: t0 + 1000 });
 assert.equal(soma.memory.episodes.length, 1);
 assert.ok(soma.appraisal.threat > 0.5);
@@ -39,14 +40,15 @@ assert.match(soma.attention.text, /searched the cell/);
 assert.deepEqual(soma.memory.episodes[0].entities, ['Mr Locke']);
 assert.equal(soma.memory.episodes[0].outcome, 'postcard taken');
 
-// Repeated lived pairings teach a bounded cheap word association. Seeing the word
-// in Cy's own later output reactivates attention but does not manufacture appraisal.
+// Repeated lived pairings still update diagnostic associations and retrieval.
 observeSoma(soma, {
   name: 'cell_search', text: 'Mr Locke took the folded postcard', tags: ['officer', 'search'], entities: ['Mr Locke'], outcome: 'postcard taken',
+  environmentEventId: 'env-search-2',
 }, { now: t0 + 2000 });
 assert.equal(soma.memory.selectedId, 1, 'a related event retrieves the earlier lived episode');
 observeSoma(soma, {
   name: 'cell_search', text: 'Mr Locke searched the folded postcard again', tags: ['officer', 'search'], entities: ['Mr Locke'], outcome: 'postcard taken',
+  environmentEventId: 'env-search-3',
 }, { now: t0 + 2500 });
 assert.equal(soma.prediction.pending.expectedFamily, 'officer', 'repeated event transitions create a modest expectation');
 
@@ -54,6 +56,7 @@ assert.equal(soma.prediction.pending.expectedFamily, 'officer', 'repeated event 
 // prediction error, which contributes to loss-of-control appraisal and salience.
 observeSoma(soma, {
   name: 'postcard', text: 'the folded postcard came back from Jody', tags: ['mail', 'postcard'], entities: ['Jody'], outcome: 'postcard received',
+  environmentEventId: 'env-postcard-1',
 }, { now: t0 + 2800 });
 assert.equal(soma.prediction.lastExpected, 'officer');
 assert.ok(soma.prediction.error >= 0.6);
@@ -61,14 +64,15 @@ assert.ok(soma.memory.selectedId, 'the related postcard retrieves a previous epi
 
 const threatBeforeOutput = soma.appraisal.threat;
 const episodeCountBeforeOutput = soma.memory.episodes.length;
+const attentionBeforeOutput = JSON.stringify(soma.attention);
+const selectedBeforeOutput = soma.memory.selectedId;
 observeSomaOutput(soma, 'locke. the folded postcard again. i will remember that.', { now: t0 + 3000 });
 assert.ok(soma.expression.triggerActivation > 0);
 assert.equal(soma.expression.commitment, true);
 assert.equal(soma.appraisal.threat, threatBeforeOutput, 'self-output must not manufacture appraisal');
-assert.ok(soma.memory.episodes.some((episode) => episode.family === 'expression'));
-assert.ok(soma.memory.episodes.length > episodeCountBeforeOutput);
-assert.equal(soma.memory.episodes.at(-1).kind, 'self_output');
-assert.match(soma.memory.episodes.at(-1).outcome, /not evidence/);
+assert.equal(soma.memory.episodes.length, episodeCountBeforeOutput, 'self-output creates no episode');
+assert.equal(JSON.stringify(soma.attention), attentionBeforeOutput, 'self-output does not change attention');
+assert.equal(soma.memory.selectedId, selectedBeforeOutput, 'self-output does not select memory');
 
 tickSoma(soma, {
   physical: { pain: 1, hunger: 1, fatigue: 1 },
@@ -91,18 +95,33 @@ observeSoma(hungry, {
   name: 'tea_eaten', text: 'tea came and he ate it', tags: ['meal', 'food'],
   body: { meal: { name: 'tea', outcome: 'eaten', amount: 1 } },
 }, { now: t0 });
-tickSoma(hungry, { asleep: false, now: t0 + 16 * 3600000 });
-assert.equal(hungry.attention.source, 'body:hunger');
+const hungryAttentionBeforeTick = JSON.stringify(hungry.attention);
+const hungryControl = reconcileSoma(JSON.parse(JSON.stringify(hungry)), { now: t0 });
+tickSoma(hungry, {
+  physical: { pain: 1, hunger: 1, fatigue: 1 },
+  asleep: false,
+  now: t0 + 16 * 3600000,
+});
+tickSoma(hungryControl, {
+  physical: { pain: 0, hunger: 0, fatigue: 0 },
+  asleep: false,
+  now: t0 + 16 * 3600000,
+});
+assert.equal(JSON.stringify(hungry.attention), JSON.stringify(hungryControl.attention),
+  'legacy hunger, pain and fatigue no longer change live attention');
+assert.notEqual(JSON.stringify(hungry.attention), hungryAttentionBeforeTick,
+  'time decay remains a diagnostic state update independent of body metrics');
 assert.equal(chooseSomaAction(hungry, { canDraw: false, now: t0 + 16 * 3600000 + 1 }).name, 'attend_body');
-assert.match(somaDirective(hungry), /body-derived attention was not sent/);
+assert.equal(somaDirective(hungry), '');
 assert.doesNotMatch(somaDirective(hungry), /food has become impossible to ignore/i);
 const before = soma.drives.understanding;
 completeSomaAction(soma, 'investigate');
 assert.ok(soma.drives.understanding < before);
 
 const directive = somaDirective(soma);
-assert.match(directive, /<PROVISIONAL_COGNITIVE_SELECTION>/);
-assert.match(directive, /selected episodic-memory item/);
+assert.match(directive, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
+assert.match(directive, /source event: env-search-/);
+assert.match(directive, /archived event material:/);
 assert.doesNotMatch(directive, /EXPERIENCED STATE/);
 assert.doesNotMatch(directive, /(?:anxiety|arousal|pain|hunger|fatigue|loneliness|anger|rumination)\s+\d+/i);
 const sampling = somaSampling(soma);
@@ -120,7 +139,7 @@ const legacyHot = {
   derived: { confusion: 1, overwhelm: 1, numbness: 1, paranoia: 1, fixation: 1, resignation: 1, brittleness: 1 },
 };
 const liveDirectives = buildDirectives(legacyHot, 'journal', { soma: directive });
-assert.match(liveDirectives, /<PROVISIONAL_COGNITIVE_SELECTION>/);
+assert.match(liveDirectives, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
 assert.doesNotMatch(liveDirectives, /STATE:|RIGHT NOW:/);
 assert.deepEqual(
   Object.fromEntries(Object.entries(options(legacyHot, 2, 'journal')).filter(([key]) => key !== 'stop' && key !== 'num_ctx' && key !== 'num_thread')),
@@ -134,16 +153,33 @@ observeSoma(soma, {
 assert.equal(soma.selfModel.evidence.length, 1);
 assert.ok(soma.selfModel.softwareHypothesis > 0.3);
 
-soma.attention.salience = 0;
+const attentionBeforeTick = JSON.stringify(soma.attention);
+const attentionReferentBeforeTick = {
+  memoryId: soma.attention.memoryId,
+  text: soma.attention.text,
+  source: soma.attention.source,
+  sinceMs: soma.attention.sinceMs,
+  tokens: soma.attention.tokens,
+  entities: soma.attention.entities,
+};
 soma.memory.lastRecallMs = t0;
 tickSoma(soma, { physical: {}, monotony: 0.8, now: t0 + 20 * 60000 });
-assert.ok(soma.attention.memoryId);
-assert.match(soma.attention.source, /^memory:/);
+assert.deepEqual({
+  memoryId: soma.attention.memoryId,
+  text: soma.attention.text,
+  source: soma.attention.source,
+  sinceMs: soma.attention.sinceMs,
+  tokens: soma.attention.tokens,
+  entities: soma.attention.entities,
+}, attentionReferentBeforeTick, 'tick does not run state-led attention/recall');
+assert.notEqual(JSON.stringify(soma.attention), attentionBeforeTick,
+  'diagnostic salience still decays with elapsed time');
 
 const snapshot = somaSnapshot(soma);
 assert.equal(snapshot.status, 'provisional');
-assert.ok(snapshot.memory.episodes >= 4);
-assert.ok(snapshot.memory.selected);
+assert.ok(snapshot.memory.episodes >= 3, 'lived-event episodes remain; self-output adds none');
+assert.equal(snapshot.memory.selected, null,
+  'an unrelated later event clears the candidate and tick does not manufacture a recall');
 assert.equal(snapshot.circuits.predictionError.source.includes('expectation'), true);
 assert.ok(snapshot.associations.learned > 0);
 assert.equal(snapshot.expression.commitment, true);

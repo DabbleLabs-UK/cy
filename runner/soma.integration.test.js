@@ -109,6 +109,7 @@ runtime.observe({
   tags: ['officer', 'search'],
   entities: ['Mr Locke'],
   outcome: 'blue postcard moved',
+  environmentEventId: 'env-search-1',
 }, { now: t0 + 1000 });
 assert.equal(runtime.state.memory.episodes.length, 1);
 
@@ -118,6 +119,7 @@ runtime.observe({
   tags: ['officer', 'search'],
   entities: ['Mr Locke'],
   outcome: 'blue postcard moved',
+  environmentEventId: 'env-search-2',
 }, { now: t0 + 2000 });
 runtime.observe({
   name: 'cell_search',
@@ -125,6 +127,7 @@ runtime.observe({
   tags: ['officer', 'search'],
   entities: ['Mr Locke'],
   outcome: 'blue postcard moved',
+  environmentEventId: 'env-search-3',
 }, { now: t0 + 3000 });
 runtime.observe({
   name: 'postcard',
@@ -132,6 +135,7 @@ runtime.observe({
   tags: ['mail', 'postcard'],
   entities: ['Jody'],
   outcome: 'postcard received',
+  environmentEventId: 'env-postcard-1',
 }, { now: t0 + 4000 });
 
 assert.ok(runtime.state.prediction.error >= 0.6);
@@ -162,10 +166,11 @@ const zoneC = buildDirectives(vitals, 'journal', {
 });
 const prompt = buildPrompt('', 'journal', null, zoneC);
 assert.match(prompt, /<GROUNDED_CURRENT_STATE>/);
-assert.match(prompt, /<PROVISIONAL_COGNITIVE_SELECTION>/);
+assert.match(prompt, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
 assert.doesNotMatch(prompt, /output action selected:/);
-assert.match(prompt, /selected episodic-memory item/);
-assert.match(prompt, /was expected next/i);
+assert.match(prompt, /source event: env-search-/);
+assert.match(prompt, /archived event material:/);
+assert.doesNotMatch(prompt, /was expected next/i);
 assert.ok(prompt.indexOf('<GROUNDED_CURRENT_STATE>') > prompt.indexOf('ONE THING'));
 
 const appraisalBeforeOutput = { ...runtime.state.appraisal };

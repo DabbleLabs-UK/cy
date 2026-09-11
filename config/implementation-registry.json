@@ -88,7 +88,7 @@
       "display_name": "RUMINATION / FIXATION",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The current unresolved-event and repeated-output mechanism is an unapproved heuristic.",
+      "status_note": "The current unresolved-event and repeated-output mechanism is an unapproved heuristic retained for labelled UI diagnostics only. Generated wording no longer changes live attention, memory selection, action, timing, prompt focus or drawing.",
       "data_dependencies": ["resolution_status", "goal_obstruction", "novelty", "learned_context"],
       "version": "legacy-experienced-state-v2"
     }
@@ -135,6 +135,96 @@
       "data_dependencies": [],
       "version": "legacy-soma-action-selector-v1",
       "provenance": "runner/soma.js"
+    },
+    {
+      "id": "legacy_experienced_state_behavioural_influence",
+      "display_name": "LEGACY EXPERIENCED-STATE BEHAVIOURAL INFLUENCE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "lifecycle_status": "DISABLED_LEGACY",
+      "model_spec_id": null,
+      "status_note": "The eight provisional visitor-facing metrics remain available to labelled UI diagnostics. They no longer alter waking prompts, expressive choice, silence duration, drawing subject/style, sampling, output length or mishearing probability.",
+      "data_dependencies": [],
+      "version": "legacy-experienced-state-v2",
+      "provenance": "runner/soma.js"
+    },
+    {
+      "id": "provisional_rest_silence_duration",
+      "display_name": "PROVISIONAL REST TO SILENCE DURATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "lifecycle_status": "DISABLED_LEGACY",
+      "model_spec_id": null,
+      "status_note": "The former 45 + 180 * Rest rule is disabled. Model-selected silence uses a fixed engineering autonomous-activity interval and does not read psychological state.",
+      "data_dependencies": [],
+      "version": null,
+      "provenance": "runner/run.js"
+    },
+    {
+      "id": "heuristic_word_association_behaviour",
+      "display_name": "HEURISTIC WORD-ASSOCIATION BEHAVIOUR",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "lifecycle_status": "DIAGNOSTICS_ONLY",
+      "model_spec_id": null,
+      "status_note": "Legacy token associations may still be recorded and displayed, but they cannot alter appraisal, prompt context, attention, memory selection, action or timing.",
+      "data_dependencies": [],
+      "version": "legacy-soma-association-v1",
+      "provenance": "runner/soma.js"
+    },
+    {
+      "id": "heuristic_attention_behaviour",
+      "display_name": "HEURISTIC ATTENTION BEHAVIOUR",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "lifecycle_status": "DISABLED_LEGACY",
+      "model_spec_id": null,
+      "status_note": "Legacy attention values remain diagnostic state only. No attention text or numeric salience is supplied to the live prompt or expressive chooser.",
+      "data_dependencies": [],
+      "version": "legacy-soma-attention-v1",
+      "provenance": "runner/soma.js"
+    },
+    {
+      "id": "heuristic_memory_retrieval",
+      "display_name": "HEURISTIC MEMORY RETRIEVAL",
+      "implementation_status": "PROVISIONAL",
+      "model_spec_id": null,
+      "status_note": "A heuristic retriever may surface optional continuity material only when it resolves to a real structured environment-event ID, timestamp, kind and exact archived event text. Generated prose and heuristic reinterpretations are excluded.",
+      "data_dependencies": ["structured_environment_event_archive"],
+      "version": "provisional-traceable-retrieval-v1",
+      "provenance": "runner/soma.js"
+    },
+    {
+      "id": "grounded_memory_model",
+      "display_name": "GROUNDED EPISODIC MEMORY",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No approved grounded episodic-memory model exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "grounded_attention_model",
+      "display_name": "GROUNDED ATTENTION / SALIENCE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No approved grounded attention or salience model exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "grounded_rumination_model",
+      "display_name": "GROUNDED RUMINATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No approved grounded rumination model exists.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "grounded_perception_mishearing_model",
+      "display_name": "GROUNDED PERCEPTION / MISHEARING",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No grounded perception or mishearing model exists. Occasional ambiguous variants are a fixed fictional-world mechanic with engineering provenance.",
+      "data_dependencies": [],
+      "version": null
     },
     {
       "id": "grounded_soma_action_selection",

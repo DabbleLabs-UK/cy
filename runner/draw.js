@@ -231,43 +231,22 @@ export function subjectLooksProse(subject) {
   return t.split(/\s+/).filter(Boolean).length > MAX_SUBJECT_WORDS;
 }
 
-// A shallow snapshot of the vitals that shape the marks + get stored with the
-// drawing (the mood he drew it in).
-export function moodSnapshot(v) {
-  const cognition = v.cognition;
-  if (cognition) {
-    const appraisal = cognition.appraisal || {};
-    const drives = cognition.drives || {};
-    return {
-      physical: { ...(v.physical || {}) },
-      // Kept in this compatibility shape because the pen renderer consumes these
-      // two visual style inputs. In the live runner they are projections of Soma,
-      // not the legacy mood axes.
-      mental: {
-        anger: Math.max(appraisal.threat || 0, appraisal.controlLoss || 0),
-        despair: Math.max(appraisal.deprivation || 0, drives.rest || 0),
-      },
-      soma: {
-        action: cognition.action && cognition.action.name,
-        attention: cognition.attention && cognition.attention.text,
-      },
-    };
-  }
+// Fixed compatibility snapshot for the renderer. Drawing geometry and pen style
+// must not encode provisional emotion, attention, relationships or legacy vitals.
+export function moodSnapshot(_v) {
   return {
-    physical: { ...(v.physical || {}) },
-    mental: { ...(v.mental || {}) },
-    derived: { ...(v.derived || {}) },
+    physical: {},
+    mental: { anger: 0, despair: 0 },
+    soma: { classification: 'ENGINEERING NEUTRAL DRAWING RENDER' },
   };
 }
 
-// ---- when he draws --------------------------------------------------------
+// ---- legacy draw-frequency diagnostic ------------------------------------
 //
-// Occasional, not constant: roughly one drawing per 20-40 minutes of waking
-// time, weighted by state - likelier when fixation, dissociation or longing are
-// high, when a postcard image just arrived, or when he is waiting on something.
-// Never while asleep. Checked once per waking burst opportunity; a hard gap
-// floor stops it clustering, and the odds climb the longer it has been so it
-// does not go silent for hours.
+// LEGACY / PROVISIONAL DIAGNOSTICS ONLY. This arbitrary state-weighted helper is
+// retained for compatibility tests and is not called by the live runner.
+// Handoff-12 model-mediated expressive choice decides autonomous drawing; a
+// queued visitor drawing request remains an explicit external request.
 export const DRAW_MIN_GAP_MS = 18 * 60 * 1000;
 
 export function drawDecision(v, opts = {}) {
@@ -319,31 +298,12 @@ export function detectDrawRequest(body) {
   return { isRequest: true, subject: subject.slice(0, 60) };
 }
 
-// Whether/how he honours a request, weighted by his standing toward the sender
-// and his current mood. He may honour it, honour it badly, or refuse and draw
-// something of his own. Returns { mode, subject, requestedBy }.
-export function resolveRequest(req, v, { rnd = Math.random } = {}) {
-  const m = v.mental || {};
-  const cognition = v.cognition;
-  const warmth = typeof req.warmth === 'number' ? req.warmth : 0.3;
-  const grudge = typeof req.grudge === 'number' ? req.grudge : 0.05;
-  const anger = cognition
-    ? Math.max(cognition.appraisal.threat || 0, cognition.appraisal.controlLoss || 0)
-    : (m.anger || 0);
-  const despair = cognition
-    ? Math.max(cognition.appraisal.deprivation || 0, cognition.drives.rest || 0)
-    : (m.despair || 0);
-
-  let honour = Math.max(0, 0.45 + 0.5 * warmth - 0.6 * grudge - 0.3 * anger - 0.2 * despair);
-  let refuse = Math.max(0, 0.15 + 0.6 * grudge + 0.35 * anger);
-  let badly = Math.max(0, 0.25 + 0.3 * anger + 0.2 * despair - 0.3 * warmth);
-  const total = honour + refuse + badly || 1;
-
+// A queued visitor drawing request is honoured as the explicit source material.
+// Whether Cy draws at all is selected by the model-mediated expressive chooser;
+// no provisional score then changes compliance or treatment of the request.
+export function resolveRequest(req, _v, _options = {}) {
   const subject = (req.subject && req.subject.trim()) || 'what they asked for';
-  const r = rnd() * total;
-  if (r < honour) return { mode: 'honour', subject, requestedBy: req.visitor_id || null };
-  if (r < honour + refuse) return { mode: 'refuse', subject: null, requestedBy: null };
-  return { mode: 'badly', subject, requestedBy: req.visitor_id || null };
+  return { mode: 'honour', subject, requestedBy: req.visitor_id || null };
 }
 
 // A short subject keyword pulled out of his one-line decision, for the fixation

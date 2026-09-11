@@ -83,15 +83,20 @@ export function buildExpressiveChoiceRequest({
 } = {}) {
   const actions = normaliseAvailableActions(availableActions);
   const incident = cleanText(currentIncidentContext);
-  const memory = provisionalMemoryCandidate && typeof provisionalMemoryCandidate === 'object'
+  const candidateIsTraceable = provisionalMemoryCandidate
+    && typeof provisionalMemoryCandidate === 'object'
+    && cleanText(provisionalMemoryCandidate.sourceEventId)
+    && cleanText(provisionalMemoryCandidate.sourceTimestamp)
+    && cleanText(provisionalMemoryCandidate.sourceKind)
+    && cleanText(provisionalMemoryCandidate.archivedEventText);
+  const memory = candidateIsTraceable
     ? {
         classification: 'PROVISIONAL MEMORY CANDIDATE',
-        id: 'memory:provisional',
-        text: cleanText(provisionalMemoryCandidate.text),
-        entities: Array.isArray(provisionalMemoryCandidate.entities)
-          ? provisionalMemoryCandidate.entities.map(cleanText).filter(Boolean) : [],
-        outcome: provisionalMemoryCandidate.outcome == null
-          ? null : cleanText(provisionalMemoryCandidate.outcome),
+        id: `memory:event:${cleanText(provisionalMemoryCandidate.sourceEventId)}`,
+        sourceEventId: cleanText(provisionalMemoryCandidate.sourceEventId),
+        sourceTimestamp: cleanText(provisionalMemoryCandidate.sourceTimestamp),
+        sourceKind: cleanText(provisionalMemoryCandidate.sourceKind),
+        archivedEventText: cleanText(provisionalMemoryCandidate.archivedEventText),
       }
     : null;
   const allowedFocusRefs = groundedRefs(groundedContext);

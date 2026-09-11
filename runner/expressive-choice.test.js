@@ -38,9 +38,10 @@ const base = {
   groundedDirective,
   currentIncidentContext: 'INCIDENTS (3 most recent): cell search in progress',
   provisionalMemoryCandidate: {
-    text: 'Proctor moved the blue postcard',
-    entities: ['Proctor'],
-    outcome: 'postcard moved',
+    sourceEventId: 'env-17',
+    sourceTimestamp: '2026-09-10T10:00:00.000Z',
+    sourceKind: 'cell_search',
+    archivedEventText: 'Proctor moved the blue postcard',
   },
   availableActions: ['journal', 'draw', 'silence'],
 };
@@ -62,13 +63,13 @@ assert.equal(lowMetrics.groundedDirective, groundedDirective, 'B: grounded conte
 assert.equal(lowMetrics.provisionalMemoryCandidate.classification, 'PROVISIONAL MEMORY CANDIDATE',
   'J: heuristic memory is visibly provisional');
 assert.deepEqual(lowMetrics.allowedFocusRefs,
-  ['grounded:defensive', 'incident:current', 'memory:provisional']);
+  ['grounded:defensive', 'incident:current', 'memory:event:env-17']);
 let legacySelectorCalled = false;
 const prepared = prepareSomaGeneration({
   tick() {},
   chooseAction() { legacySelectorCalled = true; throw new Error('legacy selector called'); },
   groundedDirective() { return { context: groundedContext, directive: groundedDirective }; },
-  provisionalDirective() { return '<PROVISIONAL_COGNITIVE_SELECTION />'; },
+  provisionalDirective() { return '<PROVISIONAL_RETRIEVAL_CANDIDATE />'; },
   provisionalMemoryCandidate() { return base.provisionalMemoryCandidate; },
 }, { now: 1000 });
 assert.equal(legacySelectorCalled, false, 'A: pre-language preparation never invokes the legacy selector');

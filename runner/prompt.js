@@ -1,10 +1,10 @@
 // prompt.js - builds the system + continuation prompt and the vitals-derived
 // sampling params for each ollama /api/generate call.
 //
-// The system prompt fixes who CY is. The live volatile block receives the
-// action and attention selected by Soma before language. Sampling is derived
-// from PROVISIONAL heuristic Soma circuits. Legacy mood/style helpers remain exported
-// only for old diagnostics and tests; the live runner does not use them.
+// The system prompt fixes who CY is. The live volatile block receives grounded
+// facts, real event context and at most one traceable provisional event retrieval.
+// Sampling is fixed engineering configuration. Legacy mood/style helpers remain
+// exported only for old diagnostics and tests; the live runner does not use them.
 // Every numerical mood-to-style rule retained below is ARBITRARY / HEURISTIC
 // and LEGACY unless the comment at that section says it is operational plumbing.
 
@@ -114,8 +114,8 @@ const EXAMPLES = [
 
 // The fixed roster: who is in here, characterisations that never change. Built
 // from the cast/officer tables so it stays in sync, but as a CONSTANT string -
-// current standing (warmth/suspicion/grudge) is deliberately excluded, it is
-// volatile and belongs in Zone C (castForPrompt).
+// current standing (warmth/suspicion/grudge) is deliberately excluded from the
+// live prompt. The old castForPrompt helper is retained for compatibility only.
 const ROSTER = (() => {
   const line = (c) => `- ${c.name}: ${c.blurb}`;
   return [
@@ -283,9 +283,8 @@ function wallNeighbour(relations) {
   return best ? best.name : 'the next cell';
 }
 
-// Pick a form for this burst. ~60% of the time it is the dominant train-of-
-// thought directive; otherwise one of the variation forms, weighted by state.
-// Returns a directive string.
+// LEGACY / PROVISIONAL DIAGNOSTIC HELPER. The live runner does not call this
+// arbitrary state-weighted form selector. Retained for compatibility tools.
 export function pickForm(v, { relations = {}, rnd = Math.random } = {}) {
   if (rnd() < TRAIN_SHARE) return TRAIN_FORM;
   const m = v.mental || {};
@@ -419,15 +418,11 @@ export function dreamMurmurGapMs(rnd = Math.random) {
   return Math.round((5 + rnd() * 15) * 60 * 1000);
 }
 
-// Dream sampling lives in its own HIGH band (1.1-1.35), pushed by dissociation,
-// INDEPENDENT of the waking `sampling` formula. This is where high temperature
-// belongs; the waking prose must stay coherent and is unaffected by this.
-export function dreamSampling(v) {
-  const m = (v && v.mental) || {};
-  const diss = typeof m.dissociation === 'number' ? m.dissociation : 0.5;
-  const temperature = Number(Math.max(1.1, Math.min(1.35, 1.12 + 0.22 * diss)).toFixed(3));
+// ENGINEERING dream-generation settings. They are fixed and do not read legacy
+// dissociation or any provisional/grounded psychological state.
+export function dreamSampling(_v) {
   return {
-    temperature,
+    temperature: 1.12,
     top_p: 0.98,
     repeat_penalty: 1.1,
     repeat_last_n: 64,
@@ -441,10 +436,11 @@ export function dreamSampling(v) {
 // incident ledger, opener bans, cost injection) so it MUST sit at the very end
 // of the prompt (after the append-only context, Zone B) or it invalidates the KV
 // cache. This builds the block; buildPrompt() places it last. ctx carries the
-// contextual injections assembled by the loop:
-//   { bans, regime, cast, grudge, officer, overheard, wingnoise, visitor,
-//     amplified, warden, cost, incidents, groundedSoma,
-//     provisionalCognition, length, form } - any may be omitted/empty.
+// contextual injections assembled by the live loop:
+//   { bans, regime, officer, overheard, wingnoise, visitor, warden, cost,
+//     incidents, groundedSoma, provisionalCognition, length, form }.
+// Older cast/grudge/amplified/regime keys remain accepted for inspection tools,
+// but the live runner does not supply them.
 export function buildDirectives(v, mode, ctx = {}) {
   // DREAM is a wholly separate branch. It shares only the persona/voice in the
   // cached Zone A; NONE of the waking Zone C directives (state style, form, one-
@@ -468,9 +464,9 @@ export function buildDirectives(v, mode, ctx = {}) {
   // every burst to the very end. Ordered wrong (a per-tick line first) the cache
   // breaks at the Zone C boundary and the entire ~500-token block is re-evaluated;
   // ordered right, an event-free burst re-evaluates only the small volatile tail.
-  // Legacy mood-to-wording directives are deliberately excluded from the live
-  // prompt. Soma selects attention and action before language, and the model
-  // receives that causal result without being handed pseudo-emotions.
+  // Legacy mood-to-wording, attention and action-score directives are excluded
+  // from the live prompt. Grounded Soma facts and an optional traceable archived
+  // event are the only cognitive/state material supplied here.
   const style = '';
   if (mode === 'sleep') {
     const parts = [];
@@ -550,8 +546,8 @@ export function wingnoiseDirective(line, mid = false, wake = false) {
   return `THE WING, RIGHT NOW: ${line}. you clock it, no more than that, and it goes into the stream.`;
 }
 
-// A trivial thing, happening under high amplification, must land as the day's
-// event - not noted wryly, but allowed to define or ruin the day.
+// LEGACY / PROVISIONAL DIAGNOSTIC HELPER. The live runner no longer supplies an
+// amplification directive to prose.
 export function amplifiedDirective(label) {
   return (
     'TODAY, THIS: ' +

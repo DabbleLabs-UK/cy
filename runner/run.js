@@ -35,7 +35,6 @@ import {
   brainRegions,
   computeDerived,
   clamp,
-  TRIVIAL_EVENTS,
   vitalsLoadIssue,
 } from './vitals.js';
 import {
@@ -46,7 +45,6 @@ import {
   letterPredict,
   completionDirective,
   completionBudget,
-  amplifiedDirective,
   bansDirective,
   wingnoiseDirective,
   applyBurstSeparator,
@@ -98,8 +96,6 @@ import {
   reconcileRelations,
   pickSocial,
   applySocialEvent,
-  castForPrompt,
-  grudgeDirective,
   pickOfficer,
   applyOfficerEvent,
   officerDirective,
@@ -141,6 +137,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // discarded, so without a cap he writes constantly and publishes nothing while
 // pinning the CPU. 2 is enough - slightly repetitive prose beats total silence.
 const MAX_DISCARDS = 2;
+
+// ENGINEERING AUTONOMOUS-ACTIVITY TIMING. A model-selected silence has this
+// fixed duration; no provisional fatigue/rest score changes its length.
+export const AUTONOMOUS_SILENCE_SECONDS = 45;
 
 // WATCHDOG. A stall is NOT a long gap - the tempo deliberately asks for gaps of
 // minutes at low speed, and a deliberate silence is chosen stillness; neither is
@@ -250,9 +250,8 @@ const isAsleep = isSleepWindow;
 
 // THE REGIME - the shape of a British prison day. The current phase is put in
 // every waking prompt so the day has structure; some transitions can DEVIATE
-// (late unlock, cancelled association, a lockdown), and a deviation is itself an
-// incident, amplified by the monotony multiplier so a 20-minute late unlock in a
-// dead week becomes the event of the day.
+// (late unlock, cancelled association, a lockdown). Legacy amplification remains
+// a visible fictional-world diagnostic and does not create a prose directive.
 const REGIME = [
   { mins: 6 * 60 + 30, phase: 'lights_on', label: 'lights on. the strip light. awake whether you want to be or not.' },
   { mins: 7 * 60 + 30, phase: 'unlock_slop', label: 'unlock and slop. doors off, breakfast such as it is.' },
@@ -277,22 +276,6 @@ function regimeDirective(mins) {
   const hh = String(Math.floor(mins / 60)).padStart(2, '0');
   const mm = String(mins % 60).padStart(2, '0');
   return `REGIME ${hh}:${mm}: ${r.label}`;
-}
-
-// Is any standing charged enough that the volatile cast block earns its chars?
-// The fixed roster (names + blurbs) always sits in cached Zone A, so at true
-// baseline the Zone C standing block adds nothing the model does not already
-// have. Only surface it once a feud/warmth has actually moved past the start
-// values - conditional inclusion, the single biggest saving in the calm case.
-function castCharged(relations) {
-  for (const k in relations || {}) {
-    const r = relations[k];
-    if (!r) continue;
-    if ((r.grudge || 0) >= 0.35 || (r.suspicion || 0) >= 0.7 || (r.warmth || 0) >= 0.6 || (r.warmth || 0) <= 0.05) {
-      return true;
-    }
-  }
-  return false;
 }
 
 // Regime transitions that can go wrong, and the deviation each throws. Checked
@@ -549,37 +532,20 @@ async function main() {
     }
   }
 
-  // A trivial event that fired under high amp becomes the day's defining thing.
-  // Consumed by the next generation, then cleared.
-  let amplifiedCue = null; // { label, until }
-  const TRIVIAL_LABELS = {
-    no_eggs: 'no eggs on the tray this morning',
-    cold_tea: 'the tea came cold',
-    delayed_unlock: 'unlock came late, no reason given',
-    assoc_cancelled: 'association cancelled, banged up through it',
-  };
-
   // Build one incident and file it: stamp the time, push onto the rolling
   // ledger, and reset the "fresh incident" clock the silence engine reads.
   function recordIncident(kind, ctx = {}) {
-    const inc = makeIncident(kind, { relations: vitals.relations, ...ctx });
+    const inc = makeIncident(kind, { ...ctx, relations: {} });
     inc.ts = tsNow();
     pushIncident(vitals.ledger, inc);
     vitals.lastIncidentMs = Date.now();
-    const standing = ctx.actorKey ? vitals.relations[ctx.actorKey] : null;
-    const relationalAppraisal = standing ? {
-      threat: Math.max(0.08, standing.suspicion || 0, standing.grudge || 0),
-      affiliation: Math.max(0.05, standing.warmth || 0),
-      controlLoss: kind === 'officer' ? Math.max(0.35, standing.suspicion || 0) : 0.08,
-    } : undefined;
-    const appraisal = { ...(relationalAppraisal || {}), ...(ctx.appraisal || {}) };
     soma.observe(
       {
         name: kind,
         text: ctx.text || incidentLine(inc),
         tags: [kind, ctx.evType, ...(ctx.tags || []), inc.sub, inc.verb].filter(Boolean),
         entities: [inc.actor, inc.subject].filter(Boolean),
-        appraisal,
+        appraisal: ctx.appraisal,
         body: ctx.body,
         social: ctx.social,
         effects: ctx.effects,
@@ -845,28 +811,24 @@ async function main() {
     return null;
   }
 
-  // Capture a piece of memory into the dream pool: a postcard image/caption or a
-  // news headline. `sig` (0..1, from the amplification the event landed under) is
-  // stored so significant material weighs heavier in dreams; the timestamp lets
-  // recency decay it. Capped so the pool stays small and recent.
-  function pushDreamMemory(kind, text, sig) {
+  // Capture real postcard/news material into the bounded dream pool. Selection
+  // later uses only fixed engineering weights and recency, not emotional scores.
+  function pushDreamMemory(kind, text) {
     const t = (text || '').toString().trim();
     if (!t) return;
-    vitals.dreamPool.push({ kind, text: t.slice(0, 120), sig: clamp(typeof sig === 'number' ? sig : 0.5), ts: Date.now() });
+    vitals.dreamPool.push({ kind, text: t.slice(0, 120), ts: Date.now() });
     while (vitals.dreamPool.length > 24) vitals.dreamPool.shift();
   }
 
-  // Assemble the weighted candidate pool a dream recombines: recent images/
-  // headlines (significance * recency decay), older incidents from the ledger,
-  // and the cast (whoever is charged rises). Weight folds significance and
-  // recency exactly as the image significance/decay weighting does.
+  // Assemble real candidate material with fixed engineering content-selection
+  // weights. Recency is used only to bound and vary dream source material.
   function buildDreamPool() {
     const now = Date.now();
     const out = [];
     for (const it of vitals.dreamPool || []) {
       const ageH = (now - (it.ts || now)) / 3600000;
       const decay = Math.max(0.1, 1 - ageH / 72); // ~3-day fade
-      const w = (typeof it.sig === 'number' ? it.sig : 0.5) * decay;
+      const w = 0.5 * decay;
       if (w > 0.02) out.push({ kind: it.kind, text: it.text, weight: Number(w.toFixed(3)) });
     }
     const led = Array.isArray(vitals.ledger) ? vitals.ledger : [];
@@ -877,9 +839,7 @@ async function main() {
       out.push({ kind: 'incident', text, weight: Number((0.3 + 0.3 * recency).toFixed(3)) });
     });
     for (const c of CAST) {
-      const r = (vitals.relations || {})[c.key] || {};
-      const charge = (r.grudge || 0) + (r.warmth || 0) * 0.5 + (r.suspicion || 0) * 0.4;
-      out.push({ kind: 'person', text: c.name, weight: Number((0.25 + charge).toFixed(3)) });
+      out.push({ kind: 'person', text: c.name, weight: 0.25 });
     }
     return out;
   }
@@ -1163,6 +1123,25 @@ async function main() {
           ? String(detail.groundedSomaDirective) : null,
         provisional_cognitive_directive: detail.provisionalCognitiveDirective != null
           ? String(detail.provisionalCognitiveDirective) : null,
+        prompt_context_classes: {
+          fixed_character_fiction: 'zone_a',
+          real_recent_cy_expression: 'zone_b',
+          grounded_world_and_soma: ['grounded_soma_context', 'grounded_soma_directive'],
+          provisional_traceable_retrieval: 'provisional_cognitive_directive',
+          mixed_current_facts_and_engineering_directives: 'zone_c',
+        },
+        engineering_world_mechanics: {
+          classification: 'ENGINEERING / FICTIONAL WORLD MECHANICS',
+          sampling: {
+            temperature: typeof o.temperature === 'number' ? o.temperature : null,
+            top_p: typeof o.top_p === 'number' ? o.top_p : null,
+            repeat_penalty: typeof o.repeat_penalty === 'number' ? o.repeat_penalty : null,
+            num_predict: typeof o.num_predict === 'number' ? o.num_predict : null,
+          },
+          near_repeat_discard_cap: MAX_DISCARDS,
+          autonomous_silence_seconds: AUTONOMOUS_SILENCE_SECONDS,
+          form_directive: detail.form != null ? String(detail.form) : null,
+        },
         // the full generated output for this burst, post-warden, as one block
         output: detail.output != null ? String(detail.output) : (r.full || null),
         // the active form and which style directives fired, for the burst detail
@@ -1817,9 +1796,8 @@ async function main() {
     }
   }
 
-  // Assemble the contextual prompt injections for a waking generation: the cast
-  // standing, any hot grudge, an amplified trivial event, and - on a cadence or a
-  // whole-pound crossing - the running electricity cost.
+  // Assemble factual/grounded prompt injections plus explicit engineering cues.
+  // Legacy relationship, monotony-amplification and attention state do not enter.
   function buildCtx(cognition = null) {
     genCount++;
     const grounded = cognition && cognition.groundedDirective != null
@@ -1828,18 +1806,10 @@ async function main() {
     const provisional = cognition && cognition.provisionalDirective != null
       ? cognition.provisionalDirective : soma.provisionalDirective();
     const ctx = {
-      grudge: grudgeDirective(vitals.relations),
       groundedSoma: grounded.directive,
       groundedSomaContext: grounded.context,
       provisionalCognition: provisional,
     };
-    // cast standing block only when a relation is actually charged (roster itself
-    // is always in Zone A); keeps Zone C small on calm days.
-    if (castCharged(vitals.relations)) ctx.cast = castForPrompt(vitals.relations);
-    if (amplifiedCue && Date.now() < amplifiedCue.until) {
-      ctx.amplified = amplifiedDirective(amplifiedCue.label);
-      amplifiedCue = null; // fire once
-    }
     if (officerCue && Date.now() < officerCue.until) {
       ctx.officer = officerDirective(officerCue.key, officerCue.ev);
       officerCue = null; // fire once
@@ -1935,10 +1905,7 @@ async function main() {
     });
     if (pc.image_path) {
       vitals.lastImageMs = Date.now(); // a picture just came - he may draw off it
-      // remember the picture for dreams: its caption/attribution is the material,
-      // significance scaled by the amplification the mail landed under.
-      const sig = clamp(0.3 + 0.2 * (ampOf(vitals) - 1));
-      pushDreamMemory('image', pc.caption || pc.image_attrib || 'a picture through the door', sig);
+      pushDreamMemory('image', pc.caption || pc.image_attrib || 'a picture through the door');
     }
     // a reply arriving clears the mail-wait / awaiting-reply threads in the ledger
     resolveThreads(vitals.ledger, ['reply', 'message', 'mail']);
@@ -1959,7 +1926,8 @@ async function main() {
       },
     });
 
-    // recognition: fold the visitor into the relations mechanism for this reply
+    // Recognition supplies factual visitor identity/count/timing only. Legacy
+    // relation values are retained for private visitor diagnostics, not prose.
     const visitor = pc.visitor ? { ...pc.visitor, from_name: pc.from_name } : null;
     const ctx = buildCtx(cognition);
     const recog = visitorForPrompt(visitor, { now: Date.now() });
@@ -2111,12 +2079,6 @@ async function main() {
     const req = pendingDrawRequests.shift() || null;
     const intent = req ? resolveRequest(req, vitals) : { mode: 'spontaneous', subject: null, requestedBy: null };
 
-    // fixation: he keeps redrawing the same thing
-    const fixation = soma.state
-      ? Math.max(soma.state.circuits.memoryRecall || 0, soma.state.circuits.attention || 0)
-      : 0;
-    const redraw = !req && fixation > 0.6 && vitals.lastDrawSubject && Math.random() < 0.6;
-
     // ---- stage 1: the one-line decision, in voice, streamed to the page ----
     // A bespoke prompt (drawDecidePrompt) whose LAST line is the naming cue, NOT a
     // reprise of his prose - otherwise the model just carries the journal on and the
@@ -2124,7 +2086,7 @@ async function main() {
     const ctx = buildCtx(cognition);
     if (incidentContext) ctx.incidents = incidentContext;
     ctx.bans = bansDirective(vitals.recentOpeners);
-    ctx.form = drawIntentDirective(intent, { redrawSubject: redraw ? vitals.lastDrawSubject : null });
+    ctx.form = drawIntentDirective(intent);
     const dir1 = buildDirectives(vitals, 'journal', ctx);
     const p1 = drawDecidePrompt(contextText(), dir1);
     const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
@@ -2137,15 +2099,13 @@ async function main() {
     // not, a cycle that put a line on the page counts as emitted, never empty.
     const decisionEmitted = !!line;
 
-    // what he is actually drawing. A requested subject is concrete already; a redraw
-    // reuses the last subject; a spontaneous subject is extracted from his line and
-    // must read as a short concrete thing - if it comes back as prose, skip quietly.
+    // What he is actually drawing. A requested subject is concrete already; a
+    // spontaneous subject is extracted from the model's line and must be short.
     let subject;
     if (intent.mode === 'honour' || intent.mode === 'badly') subject = intent.subject || subjectFromLine(line);
-    else if (redraw) subject = vitals.lastDrawSubject;
     else subject = subjectFromLine(line);
     subject = (subject || '').trim();
-    if (!subject || (!redraw && intent.mode !== 'honour' && intent.mode !== 'badly' && subjectLooksProse(subject))) {
+    if (!subject || (intent.mode !== 'honour' && intent.mode !== 'badly' && subjectLooksProse(subject))) {
       // stage 1 gave prose, not a subject: no drawing this time, the line still stands.
       await logDrawFail('unusable', line);
       vitals.lastDrawMs = now;
@@ -2298,9 +2258,8 @@ async function main() {
       interrupt = true;
     }
     for (const n of data.news || []) {
-      const a = fireEvent('news_arrives', { headline: n.headline || null });
-      // a headline is dream material too: significance from the amp it landed under
-      if (n.headline) pushDreamMemory('headline', n.headline, clamp(0.3 + 0.2 * (a - 1)));
+      fireEvent('news_arrives', { headline: n.headline || null });
+      if (n.headline) pushDreamMemory('headline', n.headline);
     }
     for (const w of data.warden || []) {
       if (!w || !w.text) continue;
@@ -2471,9 +2430,8 @@ async function main() {
     if (currentAbort) currentAbort.abort(); // cut the burst; the loop re-decides asleep now
   };
 
-  // Fire a named event: capture amp BEFORE it resets monotony, apply it, and if
-  // it was a trivial thing landing under high amplification, arm the "this is the
-  // day" cue. Returns the amp that was applied.
+  // Fire a named event: capture the legacy diagnostic amplification before the
+  // event update and publish it for inspection. It does not create a prose cue.
   function fireEvent(name, extra = {}, { observe = true, observation = null, environmentRecord = null } = {}) {
     const a = ampOf(vitals);
     applyEvent(vitals, name, { now: Date.now() });
@@ -2504,9 +2462,6 @@ async function main() {
         },
         { now: Date.now() },
       );
-    }
-    if (TRIVIAL_EVENTS.has(name) && a > 2.0) {
-      amplifiedCue = { label: TRIVIAL_LABELS[name] || name, until: Date.now() + 3 * 60 * 1000 };
     }
     emit({
       kind: 'event',
@@ -2548,9 +2503,9 @@ async function main() {
     };
   }
 
-  // Fire a social event: nudge one inmate's standing, scaled by amp, and knock
-  // monotony down (a slight is still an event). Emits the standing so viewers can
-  // watch a feud build.
+  // Fire a social event. Legacy standing and monotony values remain visible
+  // fictional-world diagnostics; the structured factual event independently
+  // feeds grounded substrates and the bounded incident context.
   function fireSocial() {
     const { castKey, ev } = pickSocial();
     const a = ampOf(vitals);
@@ -2602,8 +2557,8 @@ async function main() {
     }
   }
 
-  // Fire an officer event: nudge one officer's standing scaled by amp, soften
-  // monotony, arm a prompt cue, and emit the standing so viewers see it build.
+  // Fire an officer event. Legacy standing/monotony updates remain diagnostics;
+  // the one-shot officer cue describes the real event without those scores.
   function fireOfficer() {
     const { officerKey, ev } = pickOfficer();
     const a = ampOf(vitals);
@@ -2649,19 +2604,11 @@ async function main() {
     }
   }
 
-  // Fire an overheard event: Cy half-hears something and may misinterpret it -
-  // more likely at low lucidity or high paranoia. Arms a prompt cue and emits
-  // the fact (but not the paranoid content) for the ticker.
+  // Fire an overheard event. The ambiguous variant uses a fixed fictional-world
+  // probability and does not read provisional or grounded psychological state.
   function fireOverheard() {
     const item = pickOverheard();
-    const cognition = soma.state;
-    const uncertainty = cognition ? cognition.selfModel.uncertainty || 0 : 0;
-    const predictionError = cognition ? cognition.prediction.error || 0 : 0;
-    const threat = cognition ? cognition.appraisal.threat || 0 : 0;
-    const p = mishearChance({
-      lucidity: 1 - Math.max(predictionError, uncertainty * 0.5),
-      paranoia: threat,
-    });
+    const p = mishearChance();
     const misheard = Math.random() < p;
     vitals.monotony = clamp((vitals.monotony || 0) - 0.2);
     const { mins } = londonParts();
@@ -2880,8 +2827,8 @@ async function main() {
       vitals.mental.longing = experienced.loneliness.value / 100;
       vitals.derived = computeDerived(vitals);
     }
-    // Expressed anger trails the canonical anger mirror so shouting responds
-    // to the same state the public panel explains.
+    // Retain the historical expressed-anger value for labelled diagnostics.
+    // Generated chunks are not passed through the heuristic shout renderer.
     updateAffect(vitals, { amp: ampOf(vitals) });
 
     const winMs = config.tickMs > 0 ? config.tickMs : 5000;
@@ -3370,7 +3317,6 @@ async function main() {
       // Reuse the same bounded recent-incident view in the chooser and in any
       // resulting journal/drawing prompt. No full ledger or day history is sent.
       const incidentContext = incidentsDirective(vitals.ledger, {
-        relations: vitals.relations,
         mailWaitMs: nowMs - (vitals.lastMailMs || nowMs),
         rnd: () => 0,
       });
@@ -3427,11 +3373,10 @@ async function main() {
       });
       const selectedAction = expressiveChoice.selectedAction;
 
-      // The silence duration remains the pre-existing scheduling mechanism. This
-      // handoff replaces WHAT is chosen, not the runner's overall timing model.
-      // Publish only after the quiet period has elapsed so the event marks its end.
+      // Publish only after the fixed engineering interval has elapsed so the
+      // event marks its end. Provisional rest/fatigue does not change duration.
       if (selectedAction === 'silence') {
-        const seconds = Math.round(45 + 180 * ((soma.state && soma.state.drives.rest) || 0));
+        const seconds = AUTONOMOUS_SILENCE_SECONDS;
         await recordOutcome('deliberate-silence');
         await recordCompletedSilence(seconds, {
           idle: idleSilently,
@@ -3472,9 +3417,9 @@ async function main() {
         directives = buildDirectives(vitals, 'journal', ctx);
       }
       const baseOpts = { ...targetOpts, num_predict: completionBudget(targetOpts.num_predict) };
-      // Forms that restate a phrase on purpose (the repeat form, "you repeat
-      // yourself" from fatigue) opt out of the within-burst repeat guard, so a
-      // deliberate refrain is not cut short.
+      // Explicit one-shot wording can opt out of the within-burst repeat guard,
+      // so a deliberately authored refrain is not cut short. No provisional
+      // fatigue or fixation score creates this exemption.
       const allowRepeat = /say it again|cannot get past|you repeat yourself/.test(directives);
 
       const burstStart = Date.now();
@@ -3521,18 +3466,13 @@ async function main() {
           lastOpts = opts;
           break;
         }
-        // near-repeat: discard, then ESCALATE THE ESCAPE. The remaining context is
-        // just as repetitive as the part removed, so bump randomness MEANINGFULLY
-        // and, on the 2nd discard, trim away nearly all of the context (not just
-        // half). A discard is real evidence he is stuck in a loop, so raise the
-        // fixation pressure (via stress, which fixation reads) rather than hiding
-        // it - his being stuck shows in the vitals instead of vanishing.
+        // ENGINEERING output-quality retry: vary sampling and trim recent context.
+        // A discarded generation is not evidence about Cy's psychological state.
         discards++;
         await logDiscard(mode, r.full, discards);
         await recordOutcome('discarded-repeat'); // each discard is a visible outcome
         tempBump += 0.35;
         penBump += 0.12;
-        applyDeltas(vitals, { stress: +0.06 }, 1); // fixation = f(stress, monotony)
         trimContext(discards >= 2 ? 0.9 : 0.5);
       }
       const burstMs = Date.now() - burstStart;
@@ -3742,12 +3682,10 @@ async function main() {
   const sampleCtx = {
     bans: bansDirective(vitals.recentOpeners),
     regime: regimeDirective(londonParts().mins),
-    grudge: grudgeDirective(vitals.relations),
     groundedSoma: sampleGrounded.directive,
     provisionalCognition: soma.provisionalDirective(),
-    incidents: incidentsDirective(vitals.ledger, { relations: vitals.relations, mailWaitMs: 0, rnd: () => 0 }),
+    incidents: incidentsDirective(vitals.ledger, { mailWaitMs: 0, rnd: () => 0 }),
   };
-  if (castCharged(vitals.relations)) sampleCtx.cast = castForPrompt(vitals.relations);
   const sampleC = buildDirectives(vitals, 'journal', sampleCtx);
   console.log(
     `[cy] prompt zones (chars): A(fixed,cached)=${ZONE_A.length} | ` +

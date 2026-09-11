@@ -220,7 +220,7 @@ export function applyOfficerEvent(relations, officerKey, ev, amp = 1) {
 export function officerDirective(officerKey, ev) {
   const o = BY_KEY[officerKey];
   if (!o) return '';
-  return `ON THE WING: ${officerLine(o.name, ev)}. ${o.blurb} let it colour the mood, in your voice, not as a report.`;
+  return `ON THE WING: ${officerLine(o.name, ev)}. ${o.blurb} This event has just happened.`;
 }
 
 // OVERHEARD - things Cy only half hears through the door or down the wing: an
@@ -268,10 +268,11 @@ export function pickOverheard(rnd = Math.random) {
   return OVERHEARD[Math.floor(rnd() * OVERHEARD.length)];
 }
 
-// Probability that Cy mishears an overheard remark, rising with low lucidity and
-// high paranoia. Clamped to a sane band so it is neither never nor always.
-export function mishearChance({ lucidity = 0.65, paranoia = 0 } = {}) {
-  return clamp(0.12 + 0.55 * (1 - lucidity) + 0.5 * paranoia, 0.05, 0.9);
+// FICTIONAL WORLD MECHANIC / ENGINEERING. The fixed chance creates occasional
+// ambiguous perception without claiming a psychological or perceptual model.
+export const OVERHEARD_AMBIGUOUS_VARIANT_CHANCE = 0.25;
+export function mishearChance(_state = {}) {
+  return OVERHEARD_AMBIGUOUS_VARIANT_CHANCE;
 }
 
 // A prompt block for an overheard remark. `misheard` selects the paranoid twist.
@@ -384,7 +385,7 @@ function describeVisitor(r) {
 }
 
 // The recognition block: who they are, how often they write, roughly how long
-// since last time, a condensed memory of what they said, and Cy's standing. He
+// since last time, and a condensed record of what they said. He
 // should recognise them in his own voice, never as a database readout. Returns
 // '' for a genuine first-timer (nothing to recognise yet).
 export function visitorForPrompt(visitor, { now = Date.now() } = {}) {
@@ -395,14 +396,10 @@ export function visitorForPrompt(visitor, { now = Date.now() } = {}) {
   const handle = (visitor.handle && String(visitor.handle).trim()) || visitor.from_name || 'them';
   const since = sincePhrase(visitor.prev_posted_at, now);
   const times = count > 1 ? `${count} postcards now` : 'written before';
-  const std = describeVisitor(visitorRelation(visitor));
-  const memory = visitor.notes && String(visitor.notes).trim() ? String(visitor.notes).trim() : null;
   const lines = [
     `YOU KNOW THIS ONE. ${handle} - ${times}${since ? ', last ' + since : ''}.`,
   ];
-  if (memory) lines.push(`what they have sent before: ${memory}`);
-  if (std) lines.push(`toward them: ${std}.`);
-  lines.push('recognise them the way you would in here - a name you know, a thread picked back up - not as a record. do not list facts; just let it be someone you know writing again.');
+  lines.push('This is factual visitor continuity only. Do not infer trust, suspicion, warmth, hostility or any other relationship state.');
   return lines.join('\n');
 }
 

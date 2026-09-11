@@ -118,7 +118,8 @@ globalThis.fetch = async (url) => {
             mode: 'journal',
             grounded_soma_directive: '<GROUNDED_CURRENT_STATE>fact</GROUNDED_CURRENT_STATE>',
             grounded_soma_context: { omitted: [{ subsystem: 'somatic', reason: 'NO_ACTIVE' }] },
-            provisional_cognitive_directive: '<PROVISIONAL_COGNITIVE_SELECTION>selection</PROVISIONAL_COGNITIVE_SELECTION>',
+            provisional_cognitive_directive: '<PROVISIONAL_RETRIEVAL_CANDIDATE>selection</PROVISIONAL_RETRIEVAL_CANDIDATE>',
+            engineering_world_mechanics: { classification: 'ENGINEERING / FICTIONAL WORLD MECHANICS' },
           },
         },
         {
@@ -127,7 +128,8 @@ globalThis.fetch = async (url) => {
             grounded_directive_supplied: '<GROUNDED_CURRENT_STATE>fact</GROUNDED_CURRENT_STATE>',
             current_incident_context_supplied: 'cell search',
             provisional_cognitive_context_supplied: {
-              classification: 'PROVISIONAL MEMORY CANDIDATE', text: 'blue postcard moved',
+              classification: 'PROVISIONAL MEMORY CANDIDATE', sourceEventId: 'env-17',
+              archivedEventText: 'blue postcard moved',
             },
             selected_action: 'silence',
             selection_mechanism: 'MODEL-MEDIATED SUBJECTIVE CHARACTER CHOICE',
@@ -161,7 +163,8 @@ const allText = (node) => [node.textContent, ...(node.children || []).flatMap((c
 })].join('\n');
 assert.match(allText(genRow), /GROUNDED SOMA CONTEXT SENT TO MODEL/);
 assert.match(allText(genRow), /GROUNDED SOMA INFORMATION OMITTED/);
-assert.match(allText(genRow), /PROVISIONAL COGNITIVE CONTEXT SENT TO MODEL/);
+assert.match(allText(genRow), /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
+assert.match(allText(genRow), /ENGINEERING \/ FICTIONAL WORLD MECHANICS/);
 
 const choiceRow = raw.log().children.find((row) => row.dataset.kind === 'expressive_choice');
 choiceRow.children[0].dispatchEvent({ type: 'click', target: null });

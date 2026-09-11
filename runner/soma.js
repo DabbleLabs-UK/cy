@@ -1,10 +1,9 @@
 // soma.js - Cy's non-language cognitive state.
 //
-// Environment and body observations enter here. The module appraises them,
-// updates expectations and durable episodic memory, selects one focus, and
-// chooses an action. Generated prose returns only as an efference copy of an
-// action Cy took: it can record repetition, commitments and activation of an
-// already-learned trigger, but its sentiment never manufactures mental state.
+// Environment and body observations enter here. Grounded substrates consume the
+// structured record directly. The older appraisal, attention and association
+// machinery remains available to diagnostics, but only a traceable archived
+// event may leave this module as a provisional retrieval candidate.
 
 import {
   reconcileExperienced,
@@ -516,6 +515,10 @@ function remember(state, observation, salience, now, family, { kind = 'lived_eve
     outcome: observation.outcome == null ? null : String(observation.outcome).slice(0, 160),
     kind,
     salience: round(salience),
+    sourceEventId: observation.environmentEventId == null
+      ? null : String(observation.environmentEventId).slice(0, 160),
+    sourceType: observation.environmentEventId == null
+      ? null : 'structured_environment_event',
   };
   state.memory.episodes.push(episode);
   if (state.memory.episodes.length > MEMORY_MAX) {
@@ -572,10 +575,6 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
   const tokens = contentTokens(observation.text || observation.name);
   const entities = observationEntities(observation);
   const app = appraisalFor(observation, family);
-  const learned = learnedAppraisal(state, tokens);
-  for (const key of ['threat', 'affiliation', 'deprivation', 'controlLoss']) {
-    app[key] = Math.max(app[key], learned[key]);
-  }
   const seenFamily = state.memory.episodes.some((e) => e.family === family);
   const novelty = seenFamily ? occurrenceSurprise * 0.35 : 1;
   const preSalience = clamp(
@@ -583,7 +582,6 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
       0.18 * app.controlLoss + 0.14 * Math.max(occurrenceSurprise, novelty),
   );
   const prediction = updatePrediction(state, family, observation.name, now, { material: preSalience >= 0.24 });
-  if (prediction.error > 0) app.controlLoss = Math.max(app.controlLoss, prediction.error * 0.55);
   for (const key of ['threat', 'affiliation', 'deprivation', 'controlLoss']) {
     state.appraisal[key] = round(Math.max(state.appraisal[key] * 0.6, app[key]));
   }
@@ -591,7 +589,7 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
 
   const salience = clamp(
     0.25 * app.threat + 0.18 * app.affiliation + 0.15 * app.deprivation +
-      0.18 * app.controlLoss + 0.14 * Math.max(occurrenceSurprise, novelty) + 0.1 * prediction.error,
+      0.18 * app.controlLoss + 0.14 * Math.max(occurrenceSurprise, novelty),
   );
   const recalled = relatedMemory(state, { family, tokens, entities }, now);
   selectMemory(state, recalled, now);
@@ -625,10 +623,10 @@ export function observeSoma(state, observation, { now = Date.now() } = {}) {
   return state;
 }
 
-// Feed Cy's own emitted words back as evidence of an ACTION, not as a mood
-// detector. This is an efference-copy channel: it records what he expressed and
-// lets a word that acquired meaning through earlier lived outcomes reactivate the
-// attended material. It never changes threat/affiliation/etc from prose sentiment.
+// Feed Cy's own emitted words back as expression diagnostics only. Generated
+// wording must not select memory, alter attention, create an episode or update a
+// grounded substrate. Recent prose continuity is maintained separately by the
+// runner's append-only context buffer.
 export function observeSomaOutput(state, text, { mode = 'journal', now = Date.now() } = {}) {
   if (!state || !String(text || '').trim()) return state;
   const clean = String(text).replace(/\s+/g, ' ').trim().slice(0, 640);
@@ -644,7 +642,6 @@ export function observeSomaOutput(state, text, { mode = 'journal', now = Date.no
   const learned = learnedAppraisal(state, tokens);
   const triggerActivation = Math.max(...Object.values(learned));
   const commitment = /\b(?:i will|i'll|i am going to|i promise|tomorrow i)\b/i.test(clean);
-  const related = relatedMemory(state, { family: '', tokens, entities: [] }, now);
   const themes = tokens.filter((token) => {
     const assoc = state.associations && state.associations[token];
     return (assoc && finite(assoc.exposures, 0) >= 2) || previousTokens.has(token);
@@ -661,24 +658,8 @@ export function observeSomaOutput(state, text, { mode = 'journal', now = Date.no
     themes,
   };
 
-  // A self-spoken learned trigger can keep the already-selected episode active,
-  // but cannot create a new appraisal or reverse-engineer an emotion from tone.
-  if (state.attention && state.attention.memoryId && triggerActivation > 0.25) {
-    state.attention.salience = round(Math.max(state.attention.salience, triggerActivation * 0.45));
-  } else if (state.attention && repetition < 0.1 && triggerActivation < 0.15) {
-    state.attention.salience = round(state.attention.salience * 0.92);
-  }
-  selectMemory(state, related, now);
-  const outputSalience = clamp(0.08 + 0.24 * triggerActivation + 0.12 * repetition + 0.12 * intensity + (commitment ? 0.2 : 0));
-  if (outputSalience >= MEMORY_SALIENCE_MIN) {
-    remember(state, {
-      name: 'self_expression',
-      text: clean,
-      tags: ['self-output', mode, commitment ? 'commitment' : 'expression'],
-      ts: new Date(now).toISOString(),
-      outcome: 'Cy expressed this; it is not evidence that its content happened',
-    }, outputSalience, now, 'expression', { kind: 'self_output', tokens });
-  }
+  // This legacy experienced-state observer only feeds explicitly provisional UI
+  // diagnostics. It has no live prompt, action, timing or rendering consumer.
   observeExperiencedOutput(state.experienced, {
     repetition,
     triggerActivation,
@@ -747,88 +728,8 @@ export function tickSoma(state, {
       0.22 * experienced.rumination.value / 100 + 0.12 * clamp(monotony),
   );
 
-  // Body state competes for attention before language. This is not sentiment
-  // inferred from prose: it comes from the persisted meal, sleep and pain state.
-  const bodyCandidates = [];
-  const nutrition = state.experienced.body && state.experienced.body.nutrition;
-  if (state.drives.food > 0.62) {
-    bodyCandidates.push({
-      source: 'body:hunger',
-      salience: state.drives.food * 0.82,
-      text: nutrition && nutrition.lastMealName
-        ? `the ${nutrition.lastMealName} that was eaten is a long way behind him now`
-        : 'the empty pull in his stomach keeps interrupting everything else',
-    });
-  }
-  if (state.drives.rest > 0.72) {
-    bodyCandidates.push({
-      source: 'body:fatigue',
-      salience: state.drives.rest * 0.78,
-      text: 'tiredness keeps breaking concentration and making the next action harder',
-    });
-  }
-  if (pain > 0.45) {
-    bodyCandidates.push({
-      source: 'body:pain',
-      salience: pain * 0.86,
-      text: 'bodily discomfort keeps interrupting the present thought',
-    });
-  }
-  const bodyWinner = bodyCandidates.sort((a, b) => b.salience - a.salience)[0];
-  if (bodyWinner && bodyWinner.salience > finite(state.attention.salience, 0)) {
-    state.attention = {
-      memoryId: null,
-      text: bodyWinner.text,
-      source: bodyWinner.source,
-      salience: round(bodyWinner.salience),
-      sinceMs: now,
-      tokens: contentTokens(bodyWinner.text),
-      entities: [],
-    };
-  }
-
-  // Retrieval is deterministic and state-led. When the present focus has faded
-  // (or monotony is high), older episodes compete by stored salience, recency,
-  // and relevance to the strongest current need. This is actual episodic recall,
-  // not a fresh model invention presented as memory.
-  const recallDue = now - finite(state.memory.lastRecallMs, 0) >= 15 * 60 * 1000;
-  if (recallDue && state.memory.episodes.length && (state.attention.salience < 0.28 || monotony > 0.55)) {
-    const familyDrive = {
-      meal: state.drives.food,
-      mail: state.drives.contact,
-      social: state.drives.contact,
-      conflict: state.drives.safety,
-      officer: state.drives.safety,
-      machine: state.drives.understanding,
-      disruption: state.drives.expression,
-      texture: state.drives.expression,
-    };
-    const focusTokens = normaliseList(state.attention.tokens, 16);
-    const focusEntities = normaliseList(state.attention.entities, 8);
-    const ranked = state.memory.episodes.filter((episode) => episode.kind !== 'self_output').map((episode) => {
-      const ageDays = Math.max(0, now - Date.parse(episode.ts || '')) / 86400000;
-      const recency = Number.isFinite(ageDays) ? Math.exp(-ageDays / 7) : 0;
-      const relevance = Math.max(overlapRatio(focusTokens, episode.tokens || []), overlapRatio(focusEntities, episode.entities || []));
-      let activation = 0.42 * clamp(episode.salience) + 0.2 * recency +
-        0.2 * clamp(familyDrive[episode.family]) + 0.18 * relevance;
-      if (episode.id === state.memory.lastRecalledId) activation *= 0.65;
-      return { episode, activation };
-    }).sort((a, b) => b.activation - a.activation || b.episode.id - a.episode.id);
-    const recalled = ranked[0];
-    if (recalled && (recalled.activation > state.attention.salience + 0.05 || monotony > 0.7)) {
-      selectMemory(state, recalled, now);
-      state.attention = {
-        memoryId: recalled.episode.id,
-        text: recalled.episode.text,
-        source: `memory:${recalled.episode.family}`,
-        salience: round(recalled.activation),
-        sinceMs: now,
-        tokens: normaliseList(recalled.episode.tokens, 16),
-        entities: normaliseList(recalled.episode.entities, 8),
-      };
-    }
-    state.memory.lastRecallMs = now;
-  }
+  // Legacy body-attention competition and periodic state-led recall are disabled.
+  // They had arbitrary thresholds and weights and previously steered live prose.
 
   state.circuits.interoception = round(Math.max(pain, hunger, fatigue));
   state.circuits.threatAppraisal = round(state.drives.safety);
@@ -911,42 +812,33 @@ export function completeSomaAction(state, name) {
 }
 
 export function provisionalCognitiveDirective(state) {
-  if (!state) return '';
-  const lines = [
-    '<PROVISIONAL_COGNITIVE_SELECTION>',
-    'This section is heuristic selection, not grounded observation, measured emotion or bodily state.',
-  ];
-  if (state.attention && state.attention.text
-    && !String(state.attention.source || '').startsWith('body:')) {
-    lines.push(`- [PROVISIONAL HEURISTIC] selected attention text: ${state.attention.text}`);
-  } else if (state.attention && String(state.attention.source || '').startsWith('body:')) {
-    lines.push('- [PROVISIONAL HEURISTIC OMITTED] body-derived attention was not sent because its source is an ungrounded experienced-state metric.');
-  }
-  const selected = selectedEpisode(state);
-  if (selected && state.memory.selectedActivation >= RELATED_MEMORY_MIN) {
-    const who = selected.entities && selected.entities.length ? ` involving ${selected.entities.join(', ')}` : '';
-    lines.push(`- [PROVISIONAL HEURISTIC] selected episodic-memory item${who}: ${selected.text}`);
-  }
-  if (state.prediction.error > 0.35 && state.prediction.lastObserved) {
-    lines.push(`- [PROVISIONAL HEURISTIC] selected prediction mismatch: ${state.prediction.lastExpected || 'something else'} was expected next; ${state.prediction.lastObserved} happened`);
-  }
-  if (state.expression && state.expression.themes && state.expression.themes.length) {
-    lines.push(`- [GENERATED EXPRESSION, NOT EVIDENCE] recent wording themes: ${state.expression.themes.slice(0, 4).join(', ')}`);
-  }
-  lines.push('Use these only for continuity and output form. Do not treat them as facts about the world or Cy\'s subjective state.');
-  lines.push('</PROVISIONAL_COGNITIVE_SELECTION>');
-  return lines.join('\n');
+  const candidate = provisionalMemoryCandidate(state);
+  if (!candidate) return '';
+  return [
+    '<PROVISIONAL_RETRIEVAL_CANDIDATE>',
+    'This is heuristic retrieval of a real archived event, not measured memory strength, emotion or attention.',
+    `- source event: ${candidate.sourceEventId}`,
+    `- archived event time: ${candidate.sourceTimestamp}`,
+    `- archived event kind: ${candidate.sourceKind}`,
+    `- archived event material: ${candidate.archivedEventText}`,
+    'Use it only as optional continuity material. Do not repeat it as a new event or treat selection as psychological evidence.',
+    '</PROVISIONAL_RETRIEVAL_CANDIDATE>',
+  ].join('\n');
 }
 
 export function provisionalMemoryCandidate(state) {
   if (!state) return null;
   const selected = selectedEpisode(state);
   if (!selected || state.memory.selectedActivation < RELATED_MEMORY_MIN) return null;
+  if (selected.kind === 'self_output') return null;
+  if (selected.sourceType !== 'structured_environment_event' || !selected.sourceEventId) return null;
+  if (!String(selected.text || '').trim()) return null;
   return {
     classification: 'PROVISIONAL MEMORY CANDIDATE',
-    text: selected.text,
-    entities: Array.isArray(selected.entities) ? selected.entities.slice(0, 8) : [],
-    outcome: selected.outcome == null ? null : selected.outcome,
+    sourceEventId: selected.sourceEventId,
+    sourceTimestamp: selected.ts,
+    sourceKind: selected.name,
+    archivedEventText: selected.text,
   };
 }
 
