@@ -79,6 +79,20 @@ if ($sleepConfig['jsonPath'] !== '$.soma.sleepHomeostasis.sleepPressure' || $sle
     exit(1);
 }
 
+if (captive_soma_history_bucket_seconds(captive_soma_history_config('1h', 'anxiety')) !== 30
+    || captive_soma_history_bucket_seconds(captive_soma_history_config('24h', 'anxiety')) !== 600
+    || captive_soma_history_bucket_seconds(captive_soma_history_config('7d', 'anxiety')) !== 3600) {
+    fwrite(STDERR, "FAIL: history query buckets do not match the bounded graph resolutions\n");
+    exit(1);
+}
+$historyQuery = captive_soma_history_query('$.soma.experienced.metrics.anxiety.value', 600);
+if (!str_contains($historyQuery, 'FORCE INDEX (idx_kind_ts)')
+    || !str_contains($historyQuery, 'SELECT MAX(seq) AS seq')
+    || !str_contains($historyQuery, 'GROUP BY FLOOR(UNIX_TIMESTAMP(ts) / 600)')) {
+    fwrite(STDERR, "FAIL: history query does not sample indexed time buckets before reading payload JSON\n");
+    exit(1);
+}
+
 $circadianConfig = captive_soma_history_config('24h', 'processC', 'circadian');
 if ($circadianConfig['jsonPath'] !== '$.soma.circadianProcessC.processCEstimate'
     || $circadianConfig['mathematicallyReconstructed'] !== true

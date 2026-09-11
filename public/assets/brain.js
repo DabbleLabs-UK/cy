@@ -1389,7 +1389,7 @@ export class BrainHud {
     this.historyRequests.set(entry, request);
     note.textContent = 'Loading stored history...';
     try {
-      const response = await fetch(buildHistoryUrl(this.historyUrl, scope, key, range), { cache: 'no-store' });
+      const response = await fetch(buildHistoryUrl(this.historyUrl, scope, key, range));
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.historyRequests.get(entry) !== request) return;
@@ -1410,7 +1410,7 @@ export class BrainHud {
     this.sleepHistoryRequests.set(entry, request);
     note.textContent = 'Loading stored Process S history...';
     try {
-      const response = await fetch(buildHistoryUrl(this.historyUrl, 'sleep', 'sleepPressure', range), { cache: 'no-store' });
+      const response = await fetch(buildHistoryUrl(this.historyUrl, 'sleep', 'sleepPressure', range));
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.sleepHistoryRequests.get(entry) !== request) return;
@@ -1434,7 +1434,7 @@ export class BrainHud {
     this.circadianHistoryRequests.set(entry, request);
     note.textContent = 'Reconstructing Process C from the stored schedule phase basis...';
     try {
-      const response = await fetch(buildHistoryUrl(this.historyUrl, 'circadian', 'processC', range), { cache: 'no-store' });
+      const response = await fetch(buildHistoryUrl(this.historyUrl, 'circadian', 'processC', range));
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.circadianHistoryRequests.get(entry) !== request) return;

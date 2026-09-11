@@ -136,6 +136,11 @@ assert.match(source, /this\._wireReading\(entry, 'metric', definition\.key\)/);
 assert.match(source, /this\._wireReading\(entry, 'brain', definition\.key\)/);
 assert.match(source, /this\._wireCircadian\(entry\)/);
 assert.match(source, /buildHistoryUrl\(this\.historyUrl, scope, key, range\)/);
+assert.doesNotMatch(
+  source,
+  /fetch\(buildHistoryUrl\([^\n]+\), \{ cache: 'no-store' \}\)/,
+  'history graphs should allow the endpoint short-lived browser cache to make immediate reopens instant',
+);
 assert.match(source, /setRegionAssociation\(definition\.key, true\)/);
 assert.match(source, /region\.classList\.toggle\('is-associated', associated\)/);
 assert.match(source, /entry\.classList\.toggle\('is-associated', associated\)/);

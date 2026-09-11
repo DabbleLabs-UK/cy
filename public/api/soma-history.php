@@ -5,7 +5,7 @@ require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/soma-history.php';
 
-header('Cache-Control: no-store');
+header('Cache-Control: private, max-age=5');
 
 $range = strtolower(trim((string)($_GET['range'] ?? '24h')));
 $scope = strtolower(trim((string)($_GET['scope'] ?? 'metric')));
@@ -50,12 +50,10 @@ try {
         ]);
     }
     $jsonPath = $config['jsonPath'];
-    $stmt = $db->prepare(
-        "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$jsonPath')) AS value
-         FROM events
-         WHERE kind = 'vitals' AND ts >= ?
-         ORDER BY ts ASC"
-    );
+    $stmt = $db->prepare(captive_soma_history_query(
+        $jsonPath,
+        captive_soma_history_bucket_seconds($config)
+    ));
     $stmt->execute([$fromSql]);
     $points = captive_soma_history_points(
         $stmt->fetchAll(),

@@ -63,6 +63,25 @@ function captive_soma_history_config(string $range, string $key, string $scope =
     throw new InvalidArgumentException($scope === 'brain' ? 'unknown Soma brain region' : 'unknown Soma metric');
 }
 
+function captive_soma_history_bucket_seconds(array $config): int
+{
+    return max(1, (int)ceil((int)$config['seconds'] / max(1, (int)$config['points'])));
+}
+
+function captive_soma_history_query(string $jsonPath, int $bucketSeconds): string
+{
+    $bucketSeconds = max(1, $bucketSeconds);
+    return "SELECT e.ts, JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$jsonPath')) AS value
+            FROM events e
+            JOIN (
+                SELECT MAX(seq) AS seq
+                FROM events FORCE INDEX (idx_kind_ts)
+                WHERE kind = 'vitals' AND ts >= ?
+                GROUP BY FLOOR(UNIX_TIMESTAMP(ts) / $bucketSeconds)
+            ) sampled ON sampled.seq = e.seq
+            ORDER BY e.ts ASC";
+}
+
 function captive_circadian_normalize_hour(float $hours): float
 {
     $value = fmod($hours, CAPTIVE_PROCESS_C_PERIOD_HOURS);
