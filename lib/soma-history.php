@@ -78,7 +78,73 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'mathematicallyReconstructed' => true,
         ];
     }
+    if ($scope === 'somatic' && $key === 'somatic_harm_headline') {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.somaticNociceptive.headline.activeInjuryCount',
+            'scale' => 1.0,
+        ];
+    }
     throw new InvalidArgumentException($scope === 'brain' ? 'unknown Soma brain region' : 'unknown Soma metric');
+}
+
+function captive_somatic_history_events(array $rows, int $fromMs, int $toMs): array
+{
+    $events = [];
+    foreach ($rows as $row) {
+        $record = json_decode((string)($row['record'] ?? ''), true);
+        $trace = is_array($record) ? ($record['somatic_nociceptive'] ?? null) : null;
+        $event = is_array($trace) ? ($trace['event'] ?? null) : null;
+        if (!is_array($event) || ($trace['updated'] ?? false) !== true) {
+            continue;
+        }
+        $timestamp = (string)($event['timestamp'] ?? '');
+        $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $timestamp, new DateTimeZone('Europe/London'))
+            ?: DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $timestamp, new DateTimeZone('Europe/London'));
+        if ($date === false) {
+            continue;
+        }
+        $tsMs = $date->getTimestamp() * 1000 + (int)floor((int)$date->format('u') / 1000);
+        if ($tsMs < $fromMs || $tsMs > $toMs) {
+            continue;
+        }
+        $stimulus = is_array($event['stimulus'] ?? null) ? $event['stimulus'] : [];
+        $body = is_array($event['body'] ?? null) ? $event['body'] : [];
+        $tissue = is_array($event['tissue'] ?? null) ? $event['tissue'] : [];
+        $injuryReason = (string)($trace['injuryUpdate']['reason'] ?? '');
+        $types = [];
+        if (($stimulus['noxiousStimulus'] ?? null) === 'YES') {
+            $stimulusStatus = (string)($stimulus['status'] ?? 'UNKNOWN');
+            if ($stimulusStatus === 'ACTIVE') {
+                $types[] = 'NOXIOUS_STIMULUS_ONSET';
+            } elseif ($stimulusStatus === 'ENDED') {
+                $types[] = 'NOXIOUS_STIMULUS_END';
+            } elseif ($stimulusStatus === 'POINT') {
+                $types[] = 'NOXIOUS_STIMULUS';
+            }
+        }
+        if ($injuryReason === 'injury_created') {
+            $types[] = 'INJURY_CREATION';
+        } elseif ($injuryReason === 'injury_resolved') {
+            $types[] = 'INJURY_RESOLUTION';
+        } elseif ($injuryReason === 'injury_followup') {
+            $types[] = 'INJURY_OBSERVATION';
+        }
+        foreach (array_values(array_unique($types)) as $type) {
+            $events[] = [
+                'ts' => $tsMs,
+                'type' => $type,
+                'bodySite' => (string)($body['site'] ?? 'UNKNOWN'),
+                'laterality' => (string)($body['laterality'] ?? 'UNKNOWN'),
+                'modality' => (string)($stimulus['modality'] ?? 'UNKNOWN'),
+                'tissueDamage' => (string)($tissue['damageStatus'] ?? 'UNKNOWN'),
+                'injuryStatus' => (string)($tissue['injuryStatus'] ?? 'UNKNOWN'),
+            ];
+        }
+    }
+    usort($events, static fn(array $left, array $right): int => $left['ts'] <=> $right['ts']);
+    return $events;
 }
 
 function captive_soma_history_bucket_seconds(array $config): int

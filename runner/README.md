@@ -257,8 +257,9 @@ Soma circuits.
   of incoming nociceptive information, not biological nociception or subjective
   Pain. Active factual records may enter the grounded prose block, but the
   subsystem does not calculate Pain magnitude, general discomfort, healing,
-  sensitisation, action selection or brain activation. The existing numeric
-  Pain / Discomfort value remains separately PROVISIONAL.
+  sensitisation, action selection or brain activation. The primary visitor row
+  is categorical `SOMATIC HARM`; the old numeric Pain / Discomfort value remains
+  LEGACY / PROVISIONAL / DIAGNOSTICS_ONLY and has no outward behavioural edge.
 - **Prison environment** (`environment.js`) - turns clocked opportunities into
   concrete outcomes for meals, showers, association, yard, phone calls and sleep.
   Each outcome now carries objective/categorical world facts and a separate

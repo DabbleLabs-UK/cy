@@ -120,7 +120,7 @@ export function computeDerived(v) {
   const mean = (a, b) => (a + b) / 2;
   const d = {
     confusion: clamp(mean(1 - m.lucidity, m.dissociation)),
-    overwhelm: clamp(0.5 * m.stress + 0.3 * m.agitation + 0.2 * (p.pain + p.hunger) / 2),
+    overwhelm: clamp(0.5 * m.stress + 0.3 * m.agitation + 0.1 * p.hunger),
     numbness: clamp(m.despair * (1 - m.agitation)),
     paranoia: clamp(0.6 * m.anxiety + 0.4 * suspicionPeak),
     fixation: clamp(0.5 * m.stress + 0.5 * (v.monotony || 0)),
@@ -199,7 +199,7 @@ export function heartRate(v, asleep = false) {
   const a = asleep ? 1 : 0;
   return Math.round(
     clamp(
-      62 + 46 * m.agitation + 30 * m.anxiety + 22 * p.pain + 10 * p.hunger,
+      62 + 46 * m.agitation + 30 * m.anxiety + 10 * p.hunger,
       48,
       150,
     ),
@@ -215,8 +215,8 @@ export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
   const m = v.mental;
   const r = {
     amygdala: 0.2 + 0.7 * m.anxiety + 0.3 * m.agitation,
-    acc: 0.25 + 0.6 * m.stress + 0.3 * p.pain,
-    insula: 0.2 + 0.6 * p.pain + 0.4 * p.hunger,
+    acc: 0.25 + 0.6 * m.stress,
+    insula: 0.2 + 0.4 * p.hunger,
     hippocampus: 0.3 + 0.5 * (v.imageRecall || 0),
     dlpfc: 0.85 * m.lucidity,
     broca,

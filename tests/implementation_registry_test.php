@@ -13,7 +13,7 @@ function check_registry(bool $condition, string $message): void {
 
 $registry = captive_implementation_registry();
 check_registry($registry['schema'] === 'cy.implementation-registry', 'wrong registry schema');
-check_registry(count($registry['soma_variables']) === 8, 'registry must contain eight Soma variables');
+check_registry(count($registry['soma_variables']) === 9, 'registry must contain nine Soma variables');
 check_registry(captive_implementation_overall_status($registry) === 'provisional', 'overall status must be provisional');
 check_registry(captive_implementation_public_label($registry, 'IMPLEMENTED') === 'LIVE', 'implemented public label');
 check_registry(captive_implementation_public_label($registry, 'PROVISIONAL') === 'PROVISIONAL', 'provisional public label');
@@ -35,6 +35,8 @@ check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'feeding_deprivation_history')['implementation_status'] === 'IMPLEMENTED', 'feeding history must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'energy_homeostatic_state')['implementation_status'] === 'NOT_IMPLEMENTED', 'energy homeostasis must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'satiety')['implementation_status'] === 'IMPLEMENTED', 'physiological Satiety must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'somatic_harm_headline')['implementation_status'] === 'IMPLEMENTED', 'Somatic Harm headline must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'pain')['lifecycle_status'] === 'DIAGNOSTICS_ONLY', 'legacy Pain must be diagnostics only');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'gut_satiety')['implementation_status'] === 'IMPLEMENTED', 'GI satiety physiology must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'action_opportunity_model')['implementation_status'] === 'IMPLEMENTED', 'action opportunity model must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'learned_controllability')['implementation_status'] === 'IMPLEMENTED', 'action-outcome contingency must be implemented');

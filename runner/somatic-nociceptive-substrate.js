@@ -9,8 +9,16 @@ export const SOMATIC_STATE_SCHEMA = 'cy.somatic-nociceptive-substrate';
 export const SOMATIC_EVENT_SCHEMA = 'cy.somatic-event';
 export const SOMATIC_STATE_VERSION = 1;
 export const SOMATIC_MODEL_ID = 'structured-somatic-harm-ledger';
-export const SOMATIC_MODEL_VERSION = 'somatic-nociceptive-substrate-v1';
+export const SOMATIC_MODEL_VERSION = 'somatic-nociceptive-substrate-v2';
 export const SOMATIC_PROVENANCE = 'config/model-specs/somatic-nociceptive-substrate.json';
+
+export const SOMATIC_HARM_CATEGORIES = Object.freeze([
+  'CLEAR',
+  'ACTIVE_NOXIOUS_STIMULUS',
+  'ACTIVE_INJURY',
+  'ACTIVE_NOXIOUS_AND_INJURY',
+  'UNKNOWN',
+]);
 
 export const STIMULUS_MODALITIES = Object.freeze([
   'MECHANICAL', 'THERMAL', 'CHEMICAL', 'OTHER', 'UNKNOWN',
@@ -171,7 +179,7 @@ export function reconcileSomaticState(raw, { now = Date.now() } = {}) {
 
 function upsertStimulus(state, event) {
   const facts = event.stimulus;
-  if (!facts.id || (facts.noxiousStimulus === 'UNKNOWN' && facts.status === 'UNKNOWN')) return false;
+  if (!facts.id) return false;
   const prior = state.stimuli[facts.id] || null;
   state.stimuli[facts.id] = {
     id: facts.id,
@@ -271,6 +279,42 @@ function publicEvent(event) {
   return out;
 }
 
+export function deriveSomaticHeadline(state) {
+  const stimuli = Object.values(state && state.stimuli || {});
+  const injuries = Object.values(state && state.injuries || {});
+  const activeNoxiousStimuli = stimuli.filter((item) =>
+    item.status === 'ACTIVE' && item.noxiousStimulus === 'YES');
+  const activeInjuries = injuries.filter((item) => item.status === 'ACTIVE');
+  const uncertain = stimuli.some((item) => item.status === 'UNKNOWN'
+      || (item.status === 'ACTIVE' && item.noxiousStimulus === 'UNKNOWN'))
+    || injuries.some((item) => item.status === 'UNKNOWN');
+
+  let category = 'CLEAR';
+  if (activeNoxiousStimuli.length && activeInjuries.length) category = 'ACTIVE_NOXIOUS_AND_INJURY';
+  else if (activeNoxiousStimuli.length) category = 'ACTIVE_NOXIOUS_STIMULUS';
+  else if (activeInjuries.length) category = 'ACTIVE_INJURY';
+  else if (uncertain) category = 'UNKNOWN';
+
+  const activeInjuryCount = activeInjuries.length;
+  let display = 'NO ACTIVE INJURY';
+  if (category === 'ACTIVE_INJURY') {
+    display = `${activeInjuryCount} ACTIVE ${activeInjuryCount === 1 ? 'INJURY' : 'INJURIES'}`;
+  } else if (category === 'ACTIVE_NOXIOUS_STIMULUS') {
+    display = 'ACTIVE NOXIOUS STIMULUS';
+  } else if (category === 'ACTIVE_NOXIOUS_AND_INJURY') {
+    display = `ACTIVE NOXIOUS + ${activeInjuryCount} ACTIVE ${activeInjuryCount === 1 ? 'INJURY' : 'INJURIES'}`;
+  } else if (category === 'UNKNOWN') {
+    display = 'STATE UNCERTAIN';
+  }
+
+  return {
+    category,
+    display,
+    activeInjuryCount,
+    activeNoxiousStimulusCount: activeNoxiousStimuli.length,
+  };
+}
+
 function summary(state, includePrivate = false) {
   const stimuli = Object.values(state && state.stimuli || {});
   const injuries = Object.values(state && state.injuries || {});
@@ -280,10 +324,14 @@ function summary(state, includePrivate = false) {
   const activeInjuries = injuries.filter((item) => item.status === 'ACTIVE');
   const bodySites = [...new Set([...activeNoxiousStimuli, ...activeInjuries]
     .map((item) => item.bodySite).filter(Boolean))];
-  const stimulusModalities = [...new Set(activeNoxiousStimuli.map((item) => item.modality))];
+  const stimulusModalities = [...new Set([
+    ...activeNoxiousStimuli.map((item) => item.modality),
+    ...activeInjuries.map((item) => item.mechanism),
+  ].filter(Boolean))];
   const tissueDamageStatus = activeInjuries.length ? 'CONFIRMED'
     : history.length ? history[history.length - 1].tissue.damageStatus : 'UNKNOWN';
   const sourceEvents = [...new Set(history.flatMap((item) => item.sourceEnvironmentEventIds || []))];
+  const headline = deriveSomaticHeadline(state);
   const result = {
     status: 'implemented',
     publicLabel: 'LIVE',
@@ -291,6 +339,7 @@ function summary(state, includePrivate = false) {
     modelId: SOMATIC_MODEL_ID,
     modelVersion: SOMATIC_MODEL_VERSION,
     provenance: SOMATIC_PROVENANCE,
+    headline,
     activeNoxiousStimuli: includePrivate ? clone(activeNoxiousStimuli)
       : activeNoxiousStimuli.map(({ sourceEnvironmentEventIds, ...item }) => clone(item)),
     activeInjuries: includePrivate ? clone(activeInjuries)
@@ -300,12 +349,16 @@ function summary(state, includePrivate = false) {
     tissueDamageStatus,
     sourceEvents: includePrivate ? sourceEvents : [],
     knowledgeStatus: history.length ? 'POST_INSTALLATION_STRUCTURED_RECORD_AVAILABLE' : 'NO_SOMATIC_RECORD',
+    latestSomaticEvent: history.length
+      ? (includePrivate ? clone(history[history.length - 1]) : publicEvent(history[history.length - 1]))
+      : null,
     recentSomaticEvents: (includePrivate ? clone(history) : history.map(publicEvent)).slice(-8),
     totalSomaticEvents: history.length,
     subjectivePain: 'NOT_MODELLED',
     generalDiscomfortIntegration: 'NOT_MODELLED',
     predictivePainInference: 'NOT_MODELLED',
     injuryHealingDynamics: 'NOT_MODELLED',
+    injurySeverity: 'NOT_MODELLED',
     peripheralSensitisation: 'NOT_MODELLED',
     centralSensitisation: 'NOT_MODELLED',
     allodynia: 'NOT_MODELLED',

@@ -821,6 +821,11 @@ body.cy-paused::after {
 .soma-state-entry.status-not-implemented .soma-state-value,
 .soma-state-entry.status-not-implemented .soma-state-trend { color: #64717c; }
 .soma-state-entry.status-not-implemented .soma-state-bar { opacity: 0.35; }
+.soma-somatic-entry .soma-state-row { grid-template-columns: minmax(0, 1fr) auto; }
+.soma-somatic-entry .soma-state-value {
+  grid-column: 1 / -1; text-align: left; color: #d8ddec; font-size: 9px; letter-spacing: 0.05em;
+}
+.soma-somatic-entry .somatic-input-card { margin-top: 0; border-width: 0; border-top-width: 1px; }
 .brain-figure { position: relative; border: 1px solid var(--line); background: radial-gradient(circle at 46% 45%, rgba(65,85,102,0.22), rgba(8,11,15,0.7) 68%); }
 .brain-svg { width: 100%; height: auto; display: block; }
 .brain-shell, .brain-cerebellum, .brain-stem {
@@ -1045,6 +1050,10 @@ body.cy-paused::after {
 .somatic-model-limits strong { color: #8d96aa; }
 .somatic-input-inspector { margin-top: 7px; color: #a2abc2; font-size: 8px; }
 .somatic-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bfc5d4; font: inherit; line-height: 1.45; }
+.somatic-history-axis { display: flex; justify-content: center; margin: 2px 0 3px; color: #858da5; font-size: 7px; letter-spacing: 0.08em; }
+.somatic-history path { stroke: #c4cbe0; }
+.somatic-event-markers { position: relative; height: 10px; margin: -5px 2px 4px; border-top: 1px solid rgba(112, 121, 147, 0.45); }
+.somatic-event-markers span { position: absolute; top: -3px; width: 5px; height: 5px; border: 1px solid #d99d45; background: #11151e; transform: translateX(-50%) rotate(45deg); }
 .soma-substrate-more { margin-top: 9px; border-top: 1px solid #2d3a45; }
 .soma-substrate-more > summary {
   padding: 7px 0 2px;

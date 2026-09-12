@@ -36,14 +36,32 @@
       "version": "legacy-experienced-state-v2"
     },
     {
+      "id": "somatic_harm_headline",
+      "display_name": "SOMATIC HARM",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "structured-somatic-harm-ledger",
+      "status_note": "A factual categorical headline reports active noxious stimuli and unresolved injuries from the structured somatic ledger. It is not a subjective Pain or general-discomfort score.",
+      "data_dependencies": ["somatic"],
+      "version": "somatic-nociceptive-substrate-v2",
+      "provenance": "config/model-specs/somatic-nociceptive-substrate.json"
+    },
+    {
       "id": "pain",
-      "display_name": "PAIN / DISCOMFORT",
+      "display_name": "LEGACY PAIN / DISCOMFORT",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Injury and discomfort plumbing exists, but the current magnitude and recovery rules are unapproved heuristics.",
-      "data_dependencies": ["actual_harm", "nociceptive_impact", "physical_discomfort", "environmental_discomfort"],
+      "status_note": "An older arbitrary scalar remains for compatibility diagnostics only. It is not shown as a primary state and cannot drive prose, expressive choice, drawing, brain regions or the grounded somatic ledger.",
+      "data_dependencies": [],
       "available_future_dependencies": ["somatic_event_model", "noxious_stimulus_representation", "injury_ledger", "computational_nociceptive_input_analogue"],
-      "version": "legacy-experienced-state-v2"
+      "version": "legacy-experienced-state-v2",
+      "ui_exposed": false,
+      "diagnostics_only": true,
+      "lifecycle_status": "DIAGNOSTICS_ONLY",
+      "classification": [
+        "LEGACY",
+        "PROVISIONAL",
+        "DIAGNOSTICS_ONLY"
+      ]
     },
     {
       "id": "satiety",
@@ -397,7 +415,7 @@
       "model_spec_id": "structured-somatic-harm-ledger",
       "status_note": "Canonical structured events preserve stimulus, body-site, tissue-harm, injury-status, observation and explicit unknown fields without assigning subjective Pain.",
       "data_dependencies": ["structured_environment_event.somatic"],
-      "version": "somatic-nociceptive-substrate-v1",
+      "version": "somatic-nociceptive-substrate-v2",
       "provenance": "config/model-specs/somatic-nociceptive-substrate.json"
     },
     {
@@ -407,7 +425,7 @@
       "model_spec_id": "structured-somatic-harm-ledger",
       "status_note": "Represents observed mechanical, thermal, chemical, other or unknown stimulus modality and categorical noxious status. It is a world-fact representation, not biological nociception.",
       "data_dependencies": ["somatic_event_model"],
-      "version": "somatic-nociceptive-substrate-v1"
+      "version": "somatic-nociceptive-substrate-v2"
     },
     {
       "id": "injury_ledger",
@@ -416,7 +434,16 @@
       "model_spec_id": "structured-somatic-harm-ledger",
       "status_note": "Persists stable post-installation injury identities, origin, site, mechanism, status, follow-ups, resolution and provenance. No healing is inferred from elapsed time.",
       "data_dependencies": ["somatic_event_model"],
-      "version": "somatic-nociceptive-substrate-v1"
+      "version": "somatic-nociceptive-substrate-v2"
+    },
+    {
+      "id": "active_injury_count",
+      "display_name": "ACTIVE INJURY COUNT",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "structured-somatic-harm-ledger",
+      "status_note": "Counts unresolved ACTIVE injury identities exactly. The count is factual and is not interpreted as Pain intensity or injury severity.",
+      "data_dependencies": ["injury_ledger"],
+      "version": "somatic-nociceptive-substrate-v2"
     },
     {
       "id": "computational_nociceptive_input_analogue",
@@ -425,7 +452,7 @@
       "model_spec_id": "structured-somatic-harm-ledger",
       "status_note": "A functional computational analogue that carries structured noxious-input facts. Cy has no biological nociceptors, and this is neither nociception nor subjective Pain.",
       "data_dependencies": ["noxious_stimulus_representation", "injury_ledger"],
-      "version": "somatic-nociceptive-substrate-v1"
+      "version": "somatic-nociceptive-substrate-v2"
     },
     {
       "id": "injury_healing_dynamics",
@@ -442,7 +469,7 @@
       "display_name": "SUBJECTIVE PAIN",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "No model converts noxious input or injury facts into a subjective Pain experience. The separate public Pain / Discomfort value remains a provisional legacy heuristic.",
+      "status_note": "No model converts noxious input or injury facts into a subjective Pain experience. The old Pain scalar is compatibility diagnostics only and is not visitor-facing.",
       "data_dependencies": [],
       "available_future_dependencies": ["computational_nociceptive_input_analogue", "injury_ledger"],
       "version": null
@@ -453,6 +480,15 @@
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
       "status_note": "No grounded model combines injury, environmental discomfort, hunger, fatigue or other bodily facts into a general discomfort state.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "injury_severity_model",
+      "display_name": "INJURY SEVERITY",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Structured events do not carry an approved factual severity classification. Event names and injury counts are never converted into severity.",
       "data_dependencies": [],
       "version": null
     },
@@ -825,8 +861,8 @@
       "display_name": "INSULAR / INTEROCEPTIVE ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent interoceptive processing. Feeding input history is now available as a future dependency, but no internal physiological or gut state is modelled. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
-      "data_dependencies": ["pain", "hunger", "arousal", "interoception"],
+      "status_note": "The structured somatic-input substrate is LIVE separately, but neural integration and activation are not modelled. No percentage or injury-derived lighting is shown.",
+      "data_dependencies": [],
       "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety", "computational_nociceptive_input_analogue", "subjective_pain"],
       "version": "legacy-brain-map-v1"
     },
@@ -845,8 +881,8 @@
       "display_name": "ANTERIOR-CINGULATE CONFLICT / CONTROL ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The live threat learner provides expected outcome, uncertainty, and outcome surprisal as possible future dependencies, but no approved anterior-cingulate mapping exists. The older displayed mapping remains an unapproved linear heuristic and is not shown as live activation.",
-      "data_dependencies": ["expected_outcome", "uncertainty", "outcome_surprisal", "rumination", "pain", "goal_obstruction", "control"],
+      "status_note": "No approved mapping exists from injury count, subjective Pain, conflict, aversive valuation or control into anterior-cingulate activation. No percentage is shown.",
+      "data_dependencies": [],
       "available_future_dependencies": ["computational_nociceptive_input_analogue", "subjective_pain"],
       "version": "legacy-brain-map-v1"
     },
@@ -864,8 +900,8 @@
       "display_name": "PREFRONTAL REGULATION / ACTION-CONTROL ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent regulation and action-control processes. Objective control and observational action-outcome contingency are represented separately, but perceived control and neural regulation remain unmodelled. The displayed runner mapping is an unapproved inverse linear heuristic and is not shown as live activation.",
-      "data_dependencies": ["arousal", "pain", "action_control"],
+      "status_note": "Intended to represent regulation and action-control processes. Objective control and observational action-outcome contingency are represented separately, but perceived control and neural regulation remain unmodelled. No legacy-Pain mapping is retained.",
+      "data_dependencies": [],
       "available_future_dependencies": ["sleep_homeostasis", "objective_controllability", "perceived_controllability", "learned_controllability"],
       "version": "legacy-brain-map-v1"
     },

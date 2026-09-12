@@ -45,7 +45,7 @@ try {
             'publicLabel' => 'LIVE',
             'model' => [
                 'modelId' => $latest['modelId'] ?? 'structured-somatic-harm-ledger',
-                'modelVersion' => $latest['modelVersion'] ?? 'somatic-nociceptive-substrate-v1',
+                'modelVersion' => $latest['modelVersion'] ?? 'somatic-nociceptive-substrate-v2',
                 'provenance' => $latest['provenance'] ?? 'config/model-specs/somatic-nociceptive-substrate.json',
             ],
             'current' => $latest,
@@ -54,6 +54,7 @@ try {
             'generalDiscomfortIntegration' => 'NOT_MODELLED',
             'predictivePainInference' => 'NOT_MODELLED',
             'injuryHealingDynamics' => 'NOT_MODELLED',
+            'injurySeverity' => 'NOT_MODELLED',
             'peripheralSensitisation' => 'NOT_MODELLED',
             'centralSensitisation' => 'NOT_MODELLED',
             'nocifensiveActionModel' => 'NOT_MODELLED',

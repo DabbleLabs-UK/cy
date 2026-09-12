@@ -8,8 +8,8 @@ import { createEnvironmentEvent, environmentEventToSomaInput } from './environme
 
 const registry = implementationRegistry;
 assert.equal(registry.schema, 'cy.implementation-registry');
-assert.equal(registry.soma_variables.length, 8);
-assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 2);
+assert.equal(registry.soma_variables.length, 9);
+assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 3);
 assert.equal(somaImplementationStatus(), 'provisional');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_prose_context').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_to_expressive_context').implementation_status, 'IMPLEMENTED');
@@ -52,8 +52,12 @@ assert.equal(implementationEntry('soma_subsystems', 'learned_meal_anticipation')
 assert.equal(implementationEntry('soma_subsystems', 'feeding_action_selection').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'cy_embodiment_model').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'somatic_event_model').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_variables', 'somatic_harm_headline').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_variables', 'pain').lifecycle_status, 'DIAGNOSTICS_ONLY');
 assert.equal(implementationEntry('soma_subsystems', 'noxious_stimulus_representation').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'injury_ledger').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'active_injury_count').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'injury_severity_model').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'computational_nociceptive_input_analogue').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'injury_healing_dynamics').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'subjective_pain').implementation_status, 'NOT_IMPLEMENTED');

@@ -5,7 +5,7 @@
 export const EXPERIENCED_METRICS = [
   { key: 'anxiety', label: 'ANXIETY' },
   { key: 'arousal', label: 'AROUSAL / STRESS' },
-  { key: 'pain', label: 'PAIN / DISCOMFORT' },
+  { key: 'somaticHarm', registryKey: 'somatic_harm_headline', label: 'SOMATIC HARM' },
   { key: 'satiety', label: 'PHYSIOLOGICAL SATIETY' },
   { key: 'sleepiness', label: 'PREDICTED SLEEPINESS' },
   { key: 'loneliness', label: 'LONELINESS / SOCIAL NEED' },
@@ -156,6 +156,24 @@ export function buildScaledHistoryPath(points, minimum = 0, maximum = 100, width
 
 export function buildHistoryPath(points, width = 280, height = 80) {
   return buildScaledHistoryPath(points, 0, 100, width, height);
+}
+
+export function buildCountStepPath(points, fromMs, toMs, width = 280, height = 64) {
+  const clean = (Array.isArray(points) ? points : [])
+    .filter((point) => Number.isFinite(point.ts) && Number.isInteger(point.value) && point.value >= 0)
+    .sort((left, right) => left.ts - right.ts);
+  if (!clean.length) return '';
+  const start = Number.isFinite(fromMs) ? fromMs : clean[0].ts;
+  const end = Number.isFinite(toMs) ? toMs : clean[clean.length - 1].ts;
+  const span = Math.max(1, end - start);
+  const maximum = Math.max(1, ...clean.map((point) => point.value));
+  const x = (ts) => Math.max(0, Math.min(width, ((ts - start) / span) * width));
+  const y = (value) => height - (value / maximum) * height;
+  let path = `M${x(clean[0].ts).toFixed(1)} ${y(clean[0].value).toFixed(1)}`;
+  for (let index = 1; index < clean.length; index++) {
+    path += ` H${x(clean[index].ts).toFixed(1)} V${y(clean[index].value).toFixed(1)}`;
+  }
+  return `${path} H${x(end).toFixed(1)}`;
 }
 
 export function buildHistoryUrl(base, scope, key, range) {
@@ -350,19 +368,28 @@ function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, an
 
 function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatus, peripheralStatus, centralStatus, actionStatus, admin) {
   return `<section class="somatic-input-card status-${somaticStatus.status.toLowerCase().replace('_', '-')}">
-    <div class="somatic-input-head"><span>${somaticStatus.displayName}</span><strong class="somatic-input-status">${somaticStatus.publicLabel}</strong></div>
-    <p class="somatic-input-explanation">Structured bodily harm and noxious-input facts. This is a computational functional analogue only: Cy has no biological nociceptors, and this does not calculate subjective Pain.</p>
+    <div class="somatic-input-head"><span>CURRENT STRUCTURED STATE</span><strong class="somatic-input-status">LIVE</strong></div>
+    <p class="somatic-input-explanation">Somatic Harm records noxious events and injuries in Cy's simulated body. It does not claim how painful Cy experiences them.</p>
     <dl class="somatic-input-facts">
-      <div><dt>ACTIVE NOXIOUS STIMULI</dt><dd data-somatic="stimuli">0</dd></div>
-      <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">0</dd></div>
-      <div><dt>BODY SITES</dt><dd data-somatic="sites">UNKNOWN</dd></div>
-      <div><dt>MODALITIES</dt><dd data-somatic="modalities">UNKNOWN</dd></div>
+      <div><dt>CURRENT STATE</dt><dd data-somatic="category">UNKNOWN</dd></div>
+      <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">UNKNOWN</dd></div>
+      <div><dt>LATEST</dt><dd data-somatic="latest">UNKNOWN</dd></div>
+      <div><dt>NOXIOUS STIMULUS</dt><dd data-somatic="stimulus-status">UNKNOWN</dd></div>
       <div><dt>TISSUE DAMAGE</dt><dd data-somatic="damage">UNKNOWN</dd></div>
-      <div><dt>KNOWLEDGE</dt><dd data-somatic="knowledge">NO SOMATIC RECORD</dd></div>
+      <div><dt>INJURY</dt><dd data-somatic="injury-status">UNKNOWN</dd></div>
     </dl>
-    <details class="soma-substrate-more"><summary>EVENT HISTORY AND MODEL LIMITS</summary>
-      <div class="somatic-timeline"><p class="somatic-timeline-empty">No structured somatic records have reached this view.</p></div>
-      <div class="somatic-model-limits"><span>${painStatus.displayName}</span><strong>${painStatus.publicLabel}</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
+    <details class="soma-substrate-more" open><summary>EVENT HISTORY</summary>
+      <div class="soma-reading-history somatic-history-wrap">
+        <div class="soma-ranges" aria-label="Somatic event history range"><button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button></div>
+        <div class="somatic-history-axis"><strong>ACTIVE INJURIES</strong></div>
+        <svg class="soma-history somatic-history" viewBox="0 0 280 64" preserveAspectRatio="none" role="img" aria-label="Factual active injury count"><path></path></svg>
+        <div class="somatic-event-markers" aria-label="Somatic event markers"></div>
+        <p class="soma-history-note">Open this reading to load factual somatic events.</p>
+        <div class="somatic-timeline"></div>
+      </div>
+    </details>
+    <details class="soma-substrate-more"><summary>MODEL / LIMITATIONS</summary>
+      <div class="somatic-model-limits"><span>${painStatus.displayName}</span><strong>${painStatus.publicLabel}</strong><span>GENERAL DISCOMFORT</span><strong>NOT MODELLED</strong><span>INJURY SEVERITY</span><strong>NOT MODELLED / UNKNOWN</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
     </details>
     ${admin ? '<details class="somatic-input-inspector"><summary>SOMATIC / NOXIOUS INPUT TRACE</summary><pre>Waiting for the complete somatic ledger.</pre></details>' : ''}
   </section>`;
@@ -477,7 +504,7 @@ export class BrainHud {
     const regionGeometry = new Map(BRAIN_REGIONS.map((region) => [region.key, region]));
     this.metricDefinitions = EXPERIENCED_METRICS.map((definition) => ({
       ...definition,
-      status: implementationStatus(this.registry, 'soma_variables', definition.key),
+      status: implementationStatus(this.registry, 'soma_variables', definition.registryKey || definition.key),
     }));
     const registeredRegions = Array.isArray(this.registry.brain_regions) && this.registry.brain_regions.length
       ? this.registry.brain_regions.filter((entry) => entry.ui_exposed !== false)
@@ -542,6 +569,7 @@ export class BrainHud {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
       if (definition.key === 'sleepiness') entry.classList.add('soma-sleepiness-entry');
+      if (definition.key === 'somaticHarm') entry.classList.add('soma-somatic-entry');
       entry.dataset.metric = definition.key;
       const sleepHomeostasis = definition.key === 'sleepiness'
         ? `${predictedSleepinessMarkup(this.predictedSleepinessStatus, this.admin)}${sleepHomeostasisMarkup(this.sleepHomeostasisStatus, this.circadianStatus, this.admin)}`
@@ -584,7 +612,7 @@ export class BrainHud {
           this.admin,
         )
         : '';
-      const somatic = definition.key === 'pain'
+      const somatic = definition.key === 'somaticHarm'
         ? somaticMarkup(
           this.somaticStatus,
           this.subjectivePainStatus,
@@ -607,21 +635,28 @@ export class BrainHud {
           this.admin,
         )
         : '';
-      const numericHistory = ['pain', 'loneliness', 'satiety'].includes(definition.key) ? ''
+      const numericHistory = ['somaticHarm', 'loneliness', 'satiety'].includes(definition.key) ? ''
         : definition.key === 'sleepiness'
           ? historyMarkup('KSS PREDICTED SLEEPINESS', 'Stored predicted KSS sleepiness history on the 1 to 9 scale')
           : historyMarkup();
-      entry.innerHTML = `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>
-        <div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${somatic}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
-      this._wireReading(entry, definition.key === 'sleepiness' ? 'sleepiness'
-        : definition.key === 'satiety' ? 'satiety' : 'metric', definition.key);
+      const summary = definition.key === 'somaticHarm'
+        ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE - structured bodily state</span><strong class="soma-state-value">--</strong></summary>`
+        : `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>`;
+      const detail = definition.key === 'somaticHarm'
+        ? somatic
+        : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
+      entry.innerHTML = `${summary}${detail}`;
+      const historyScope = definition.key === 'sleepiness' ? 'sleepiness'
+        : definition.key === 'satiety' ? 'satiety'
+          : definition.key === 'somaticHarm' ? 'somatic' : 'metric';
+      this._wireReading(entry, historyScope, definition.registryKey || definition.key);
       if (definition.key === 'sleepiness') this._wireSleepHomeostasis(entry);
       if (definition.key === 'sleepiness') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
       if (definition.key === 'anxiety') this._wireControllability(entry);
       if (definition.key === 'satiety') this._wireFeeding(entry);
-      if (definition.key === 'pain') this._wireSomatic(entry);
+      if (definition.key === 'somaticHarm') this._wireSomatic(entry);
       if (definition.key === 'loneliness') this._wireSocialContact(entry);
       readout.appendChild(entry);
       this.rows[definition.key] = entry;
@@ -705,7 +740,7 @@ export class BrainHud {
         this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
         entry,
       );
-      const registryScope = ['metric', 'sleepiness', 'satiety'].includes(scope) ? 'soma_variables' : 'brain_regions';
+      const registryScope = ['metric', 'sleepiness', 'satiety', 'somatic'].includes(scope) ? 'soma_variables' : 'brain_regions';
       const registered = implementationStatus(this.registry, registryScope, key);
       if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
       if (registered.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED) return;
@@ -872,6 +907,7 @@ export class BrainHud {
       const metric = this.metrics[definition.key];
       const row = this.rows[definition.key];
       if (!row) continue;
+      if (definition.key === 'somaticHarm') continue;
       if (definition.key === 'satiety') {
         const headline = this.physiologicalSatiety && this.physiologicalSatiety.headline;
         const live = this.physiologicalSatiety && this.physiologicalSatiety.status === 'LIVE'
@@ -1256,7 +1292,7 @@ export class BrainHud {
   }
 
   renderSomatic() {
-    const entry = this.rows.pain;
+    const entry = this.rows.somaticHarm;
     const card = entry && entry.querySelector('.somatic-input-card');
     if (!card) return;
     const snapshot = this.somaticNociceptive;
@@ -1264,47 +1300,31 @@ export class BrainHud {
       && snapshot && snapshot.status === 'implemented';
     card.querySelector('.somatic-input-status').textContent = live
       ? this.somaticStatus.publicLabel : 'UNAVAILABLE';
+    const headline = live && snapshot.headline ? snapshot.headline : null;
+    entry.querySelector('.soma-state-value').textContent = headline ? headline.display : 'STATE UNAVAILABLE';
+    entry.querySelector('.soma-state-status').textContent = live
+      ? 'LIVE - structured bodily state' : 'UNAVAILABLE';
+    entry.querySelector('summary').title = live
+      ? `SOMATIC HARM. ${headline.display}. Structured noxious events and injuries; subjective Pain is not modelled.`
+      : 'SOMATIC HARM. Grounded state unavailable.';
+    const latest = live && snapshot.latestSomaticEvent ? snapshot.latestSomaticEvent : null;
+    const latestStimulus = latest && latest.stimulus || {};
+    const latestTissue = latest && latest.tissue || {};
+    const latestBody = latest && latest.body || {};
+    const latestDescription = latest
+      ? `${latestBody.site || 'UNKNOWN'} - ${latestStimulus.modality || 'UNKNOWN'}` : 'NO SOMATIC RECORD';
     const facts = {
-      stimuli: live && Array.isArray(snapshot.activeNoxiousStimuli)
-        ? String(snapshot.activeNoxiousStimuli.length) : 'UNKNOWN',
+      category: headline ? String(headline.category).replaceAll('_', ' ') : 'UNKNOWN',
       injuries: live && Array.isArray(snapshot.activeInjuries)
         ? String(snapshot.activeInjuries.length) : 'UNKNOWN',
-      sites: live && Array.isArray(snapshot.bodySites) && snapshot.bodySites.length
-        ? snapshot.bodySites.join(', ') : 'UNKNOWN',
-      modalities: live && Array.isArray(snapshot.stimulusModalities) && snapshot.stimulusModalities.length
-        ? snapshot.stimulusModalities.join(', ') : 'UNKNOWN',
+      latest: latestDescription,
+      'stimulus-status': latest ? String(latestStimulus.status || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
       damage: live ? String(snapshot.tissueDamageStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
-      knowledge: live ? String(snapshot.knowledgeStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
+      'injury-status': latest ? String(latestTissue.injuryStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
     };
     for (const [key, value] of Object.entries(facts)) {
       const target = card.querySelector(`[data-somatic="${key}"]`);
       if (target) target.textContent = value;
-    }
-    const timeline = card.querySelector('.somatic-timeline');
-    timeline.textContent = '';
-    const records = live && Array.isArray(snapshot.recentSomaticEvents)
-      ? snapshot.recentSomaticEvents : [];
-    if (!records.length) {
-      const empty = document.createElement('p');
-      empty.className = 'somatic-timeline-empty';
-      empty.textContent = live
-        ? 'No structured somatic records have been observed yet.'
-        : 'No grounded somatic ledger has reached this view.';
-      timeline.appendChild(empty);
-      return;
-    }
-    for (const record of records) {
-      const item = document.createElement('article');
-      item.className = 'somatic-timeline-item';
-      const tissue = record.tissue || {};
-      const stimulus = record.stimulus || {};
-      const body = record.body || {};
-      const heading = document.createElement('strong');
-      heading.textContent = `${String(tissue.damageStatus || 'UNKNOWN').replaceAll('_', ' ')} TISSUE STATUS`;
-      const detail = document.createElement('p');
-      detail.textContent = `${feedingTimestampLabel(record.timestamp)}; site ${body.site || 'UNKNOWN'}; modality ${stimulus.modality || 'UNKNOWN'}; noxious ${stimulus.noxiousStimulus || 'UNKNOWN'}; injury ${tissue.injuryStatus || 'UNKNOWN'}.`;
-      item.append(heading, detail);
-      timeline.appendChild(item);
     }
   }
 
@@ -1575,7 +1595,37 @@ export class BrainHud {
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.historyRequests.get(entry) !== request) return;
-      if (scope === 'satiety') {
+      if (scope === 'somatic') {
+        const events = Array.isArray(data.events) ? data.events : [];
+        path.setAttribute('d', events.length
+          ? buildCountStepPath(data.points, data.fromMs, data.toMs) : '');
+        const markers = entry.querySelector('.somatic-event-markers');
+        const timeline = entry.querySelector('.somatic-timeline');
+        markers.textContent = '';
+        timeline.textContent = '';
+        if (!events.length) {
+          note.textContent = 'NO SOMATIC EVENTS IN THIS PERIOD';
+          return;
+        }
+        const span = Math.max(1, data.toMs - data.fromMs);
+        for (const event of events) {
+          const marker = document.createElement('span');
+          marker.style.left = `${Math.max(0, Math.min(100, ((event.ts - data.fromMs) / span) * 100))}%`;
+          marker.title = `${String(event.type || 'SOMATIC EVENT').replaceAll('_', ' ')} - ${new Date(event.ts).toLocaleString()}`;
+          markers.appendChild(marker);
+          const item = document.createElement('article');
+          item.className = 'somatic-timeline-item';
+          const heading = document.createElement('strong');
+          heading.textContent = String(event.type || 'SOMATIC EVENT').replaceAll('_', ' ');
+          const detail = document.createElement('p');
+          const site = event.bodySite || 'UNKNOWN';
+          const laterality = event.laterality && event.laterality !== 'UNKNOWN' ? ` ${event.laterality}` : '';
+          detail.textContent = `${new Date(event.ts).toLocaleString()}; site ${site}${laterality}; modality ${event.modality || 'UNKNOWN'}; tissue ${event.tissueDamage || 'UNKNOWN'}; injury ${event.injuryStatus || 'UNKNOWN'}.`;
+          item.append(heading, detail);
+          timeline.appendChild(item);
+        }
+        note.textContent = `${events.length} factual somatic ${events.length === 1 ? 'event' : 'events'} in ${range}. The step line is the stored ACTIVE INJURIES count, not Pain.`;
+      } else if (scope === 'satiety') {
         const paths = buildCircadianHistoryPaths(data.points, 280, 80, { minimum: 1, maximum: 10 });
         entry.querySelector('.satiety-history-line').setAttribute('d', paths.estimate);
         entry.querySelector('.satiety-history-band').setAttribute('d', paths.band);

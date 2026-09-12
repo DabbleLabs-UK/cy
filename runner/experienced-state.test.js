@@ -74,17 +74,19 @@ const observe = (subject, name, appraisal, tags = [], at = T0 + 1000) => observe
   assert.ok(experiencedSnapshot(s).metrics.rumination.value > before);
 }
 
-// G: event categories recover differently: arousal falls much faster than pain.
+// G: injury words cannot manufacture or change the legacy Pain scalar.
 {
   const s = state();
+  const painBefore = experiencedSnapshot(s).metrics.pain.value;
   observe(s, 'injury', { threat: 0.65 }, ['injury', 'pain']);
   const peak = experiencedSnapshot(s);
   tickExperienced(s, { now: T0 + 2 * HOUR, asleep: false });
   const later = experiencedSnapshot(s);
   const arousalRetained = later.metrics.arousal.value - later.metrics.arousal.baseline;
-  const painRetained = later.metrics.pain.value - later.metrics.pain.baseline;
   assert.ok(arousalRetained < peak.metrics.arousal.value - peak.metrics.arousal.baseline);
-  assert.ok(painRetained > arousalRetained);
+  assert.equal(peak.metrics.pain.value, painBefore);
+  assert.equal(later.metrics.pain.value, painBefore);
+  assert.deepEqual(peak.metrics.pain.contributors, []);
 }
 
 // H: restart reconciliation preserves current values, contributors and history.

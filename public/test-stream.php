@@ -276,8 +276,8 @@ function fake_vitals(int $seq): array
 
     $brain = [
         'amygdala' => round(min(1, $hot), 3),
-        'acc' => round(min(1, 0.25 + 0.6 * $stress + 0.3 * $pain), 3),
-        'insula' => round(min(1, 0.2 + 0.6 * $pain + 0.4 * $hunger), 3),
+        'acc' => round(min(1, 0.25 + 0.6 * $stress), 3),
+        'insula' => round(min(1, 0.2 + 0.4 * $hunger), 3),
         'hippocampus' => round(min(1, 0.3 - 0.2 * $fatigue + 0.4 * $hope), 3),
         'dlpfc' => round(0.85 * $lucidity, 3),
         'broca' => round($osc(0.3, 0.1, 0.9), 3),
@@ -287,7 +287,7 @@ function fake_vitals(int $seq): array
         'thalamus' => round(min(1, 0.5 + 0.3 * $lucidity), 3),
     ];
 
-    $hr = (int)round(62 + 46 * $agitation + 30 * $anxiety + 22 * $pain);
+    $hr = (int)round(62 + 46 * $agitation + 30 * $anxiety);
 
     // derived composite states the CORTICAL READOUT renders as bars. Real runs
     // carry a full derived{} object; mirror its seven keys here so the panel can

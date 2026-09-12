@@ -2879,7 +2879,8 @@ async function main() {
     // not a second simulation deciding whether Cy is hungry, tired or tense.
     const experienced = soma.state && soma.state.experienced && soma.state.experienced.metrics;
     if (experienced) {
-      vitals.physical.pain = experienced.pain.value / 100;
+      // Legacy Pain remains in its own diagnostics state and is not mirrored
+      // into compatibility vitals, derived state or brain mappings.
       vitals.physical.hunger = experienced.hunger.value / 100;
       // Legacy fatigue remains inside the explicitly provisional diagnostic
       // snapshot. It no longer enters compatibility vitals, brain mappings,

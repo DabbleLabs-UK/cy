@@ -379,10 +379,8 @@ export function observeExperienced(state, { observation = {}, appraisal = {}, pr
     addImpulse(state, 'arousal', `${id}:arousal`, 27 * threat + 20 * control,
       `immediate activation from: ${subject}`, now);
   }
-  if (/injur|pain|hurt|blood/.test(structural)) {
-    addImpulse(state, 'pain', `${id}:pain`, 38, `physical discomfort from: ${subject}`, now, 'body_event');
-    addImpulse(state, 'arousal', `${id}:pain-arousal`, 16, `pain raised activation after: ${subject}`, now);
-  }
+  // Legacy Pain is retained as stored diagnostics only. Free text and event
+  // names are not evidence of injury, subjective Pain or bodily activation.
   if (/hostile|fight|conflict|threat/.test(structural)) {
     addImpulse(state, 'anger', `${id}:anger`, 22 + 25 * threat + 13 * control,
       `hostility or unfairness in: ${subject}`, now);
@@ -472,9 +470,8 @@ export function tickExperienced(state, {
       : 'social need is at rest until actual contact is recorded',
     now, 'social_clock');
   const hunger = finite(state.metrics.hunger && state.metrics.hunger.value, METRICS.hunger.baseline);
-  const pain = finite(state.metrics.pain && state.metrics.pain.value, METRICS.pain.baseline);
-  setLevel(state, 'arousal', 'coupling:body-arousal', Math.max(0, hunger - 60) * 0.16 + Math.max(0, pain - 15) * 0.2,
-    'current hunger and pain are raising bodily activation', now, 'state_coupling');
+  setLevel(state, 'arousal', 'coupling:body-arousal', Math.max(0, hunger - 60) * 0.16,
+    'current legacy hunger is raising bodily activation', now, 'state_coupling');
   setLevel(state, 'rumination', 'coupling:attention-rumination', 16 * clamp(attention.salience, 0, 1) + 14 * clamp(predictionError, 0, 1),
     attention.text ? `present attention remains on: ${clean(attention.text)}` : 'unresolved attention and prediction mismatch',
     now, 'cognitive_state');
@@ -530,10 +527,19 @@ export function experiencedSnapshot(state, now = null) {
   const value = (key) => metrics[key].value;
   const brain = {
     amygdala: brainRegion('amygdala', 'Amygdala analogy', 0.65 * value('anxiety') + 0.35 * value('anger'), ['anxiety', 'anger']),
-    insula: brainRegion('insula', 'Insula analogy', 0.5 * value('pain') + 0.28 * value('hunger') + 0.22 * value('arousal'), ['pain', 'hunger', 'arousal']),
-    acc: brainRegion('acc', 'Anterior cingulate analogy', 0.55 * value('rumination') + 0.45 * value('pain'), ['rumination', 'pain']),
+    insula: {
+      key: 'insula', label: 'Insula analogy', value: null, level: 'unavailable', sources: [],
+      explanation: 'Somatic input is recorded, but neural integration and activation are not modelled.',
+    },
+    acc: {
+      key: 'acc', label: 'Anterior cingulate analogy', value: null, level: 'unavailable', sources: [],
+      explanation: 'No subjective Pain, affective Pain or control-conflict activation mapping is modelled.',
+    },
     hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination') + 0.25 * value('anxiety') + 0.2 * value('loneliness'), ['rumination', 'anxiety', 'loneliness']),
-    prefrontal: brainRegion('prefrontal', 'Prefrontal analogy', 100 - (0.3 * value('arousal') + 0.25 * value('pain')), ['inverse arousal', 'inverse pain']),
+    prefrontal: {
+      key: 'prefrontal', label: 'Prefrontal analogy', value: null, level: 'unavailable', sources: [],
+      explanation: 'No validated mapping from legacy Pain or current bodily facts to prefrontal activation is modelled.',
+    },
     temporalSocial: brainRegion('temporalSocial', 'Temporal / social analogy', value('loneliness'), ['loneliness']),
   };
   return {
@@ -553,7 +559,7 @@ export function experiencedDirective(state, now = null) {
   if (!state) return '';
   now = Number.isFinite(now) ? now : finite(state.updatedAtMs, Date.now());
   const snapshot = experiencedSnapshot(state, now);
-  const active = Object.values(snapshot.metrics).map((metric) => ({
+  const active = Object.entries(snapshot.metrics).filter(([key]) => key !== 'pain').map(([, metric]) => ({
     ...metric, distance: Math.abs(metric.value - metric.baseline),
   })).filter((metric) => metric.distance >= 8).sort((a, b) => b.distance - a.distance).slice(0, 3);
   if (!active.length) return 'EXPERIENCED STATE: no pressure is far from its resting tendency.';
@@ -561,7 +567,6 @@ export function experiencedDirective(state, now = null) {
   const consequences = {
     anxiety: 'notice danger, uncertainty and loss of control more readily',
     arousal: 'favour immediate, less settled responses',
-    pain: 'let bodily discomfort interrupt other concerns',
     hunger: 'let food and deprivation compete for attention',
     fatigue: 'favour shorter output, rest or silence',
     loneliness: 'notice contact, rejection and social absence',

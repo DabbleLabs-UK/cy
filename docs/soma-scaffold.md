@@ -1094,24 +1094,25 @@ The complete legacy event-delta table is:
 The derived-state formulas are:
 
 - confusion = mean(1 - lucidity, dissociation)
-- overwhelm = 0.5 stress + 0.3 agitation + 0.2 mean(pain, hunger)
+- overwhelm = 0.5 stress + 0.3 agitation + 0.1 hunger
 - numbness = despair * (1 - agitation)
 - paranoia = 0.6 anxiety + 0.4 peak suspicion
 - fixation = 0.5 stress + 0.5 monotony
 - resignation = despair * lucidity
-- brittleness = 0.4 fatigue + 0.3 hunger + 0.3 anger
-- heart rate = 62 + 46 agitation + 30 anxiety + 22 pain + 10 hunger
-  - 8 fatigue * asleep
+- brittleness = 0.3 hunger + 0.3 anger
+- heart rate = 62 + 46 agitation + 30 anxiety + 10 hunger
 
 Heart rate is clamped 48-150. The legacy brain-region formulas are amygdala
-0.20 + 0.70 anxiety + 0.30 agitation; anterior cingulate 0.25 + 0.60 stress
-+ 0.30 pain; insula 0.20 + 0.60 pain + 0.40 hunger; hippocampus 0.30 + 0.50
-image recall - 0.30 fatigue; dorsolateral prefrontal 0.85 * lucidity; locus
+0.20 + 0.70 anxiety + 0.30 agitation; anterior cingulate 0.25 + 0.60 stress;
+insula 0.20 + 0.40 hunger; hippocampus 0.30 + 0.50 image recall;
+dorsolateral prefrontal 0.85 * lucidity; locus
 coeruleus 0.20 + 0.80 agitation; default-mode analogy 0.30 + 0.60
 dissociation; thalamus 0.02 asleep or 0.50 + 0.30 lucidity awake. Broca and V1
 are direct caller inputs. All outputs are clamped 0-1.
 
-These old brainRegions mappings are separate from the provisional
+The legacy Pain value remains stored and may drift or receive legacy event
+deltas, but it has been removed from every derived-state, heart-rate and brain
+formula above. These old brainRegions mappings are separate from the provisional
 experienced-state mappings listed above and are not visitor-facing live brain
 activity.
 
@@ -1257,7 +1258,7 @@ action score, self-question, relationship standing or monotony score.
 | `soma.js` learned word associations | heuristic token/appraisal associations | Diagnostics only; generated/output trigger readings do not alter later behaviour. |
 | `soma.js` self-output analysis | repetition, capitals, punctuation, themes and commitment | Expression/UI diagnostics only. It cannot change grounded state, attention, memory, action or prompt focus. |
 | `soma.js` self-question and provisional drives | fixed question, uncertainty and drive equations | Diagnostics only. The live runner does not call the legacy action selector. |
-| `experienced-state.js` eight metrics | Anxiety, Arousal, Pain, Hunger, Fatigue, Loneliness, Anger and Rumination | Labelled provisional UI history only; no prose, expressive choice, timing, sampling, length, drawing or perception effect. |
+| `experienced-state.js` legacy metrics | Anxiety, Arousal, legacy Pain, Hunger, Fatigue, Loneliness, Anger and Rumination | Labelled provisional or diagnostics-only UI history; no prose, expressive choice, timing, sampling, length, drawing or perception effect. Legacy Pain is not a primary visitor metric. |
 | `run.js` rest-based silence | former `round(45 + 180 * rest)` | Disabled. Model-selected silence is fixed at 45 seconds as ENGINEERING AUTONOMOUS-ACTIVITY TIMING. |
 | `prompt.js` state style/form | legacy metric thresholds and weighted forms | Dormant compatibility helpers; the live runner does not call them. |
 | `draw.js` state-weighted frequency/request/mood | fixation, dissociation, longing, anger, despair and relation weights | Dormant compatibility helper. Handoff-12 decides autonomous DRAW; explicit requests retain their subject; render mood is fixed neutral. |
@@ -1409,18 +1410,39 @@ existing `PHYSICAL_HARM` outcome as occurred, did-not-occur or unknown, but that
 binary classification cannot invent a site, mechanism, type, severity,
 duration or subjective experience.
 
-The public Pain / Discomfort row remains `PROVISIONAL` because it still displays
-the old heuristic value. Its detail now contains the separate LIVE factual
-somatic/noxious-input status and event timeline instead of presenting a new
-numeric Pain history as grounded. The owner inspector exposes complete event
-traces and source identifiers. Subjective Pain, general discomfort integration,
+The primary public row is now `SOMATIC HARM`, with status
+`LIVE - structured bodily state`. It reports only one of five factual display
+categories: `CLEAR`, `ACTIVE_NOXIOUS_STIMULUS`, `ACTIVE_INJURY`,
+`ACTIVE_NOXIOUS_AND_INJURY`, or `UNKNOWN`. It may show the exact active-injury
+count plus known body site, laterality, modality, tissue-damage status and
+stimulus/injury status. Counts do not imply severity or subjective experience.
+
+The one-hour, 24-hour and seven-day public histories contain only factual
+noxious-stimulus onset/end, injury creation/resolution, point-stimulus and
+injury-observation markers. When at least one event exists, an integer step line
+labelled `ACTIVE INJURIES` may show the stored count. With no events, the UI says
+`NO SOMATIC EVENTS IN THIS PERIOD`. It never plots a Pain level or a 0-100 harm
+scale.
+
+The legacy Pain / Discomfort scalar is `LEGACY / PROVISIONAL /
+DIAGNOSTICS_ONLY`. It cannot supply the headline or history and cannot affect
+prose, expressive choice, drawing, grounded somatic state or visitor-facing
+brain regions. The owner inspector exposes complete event traces and source
+identifiers. Subjective Pain, general discomfort integration, injury severity,
 predictive Pain inference, injury healing, peripheral and central sensitisation,
 allodynia, hyperalgesia, nocifensive action, and brain activation all remain
 `NOT MODELLED`.
 
+No pain-related brain region becomes LIVE. The Insula and ACC remain
+PROVISIONAL functional analogies, while PAG modulation remains PROVISIONAL or
+NOT MODELLED. A factual injury count does not produce a neural activation value.
+
 The scientific scope and complete numerical inventory are in
-`config/model-specs/somatic-nociceptive-substrate.json`. The only added numeric
-choices are schema version 1, an arbitrary public display tail of 8 events, and
-an arbitrary 160-character identity validation limit. They are engineering
-choices, not biological or psychological parameters; there is no equation,
-coefficient, decay rate, threshold or clamp in the grounded substrate.
+`config/model-specs/somatic-nociceptive-substrate.json`. Handoff 16 changes the
+implementation specification to version 2 while retaining state schema version
+1, the existing public display tail of 8 events, and the existing 160-character
+identity validation limit. Its only new classifications are the five headline
+categories and the factual history event labels. The one-hour, 24-hour and
+seven-day windows reuse the existing Soma history windows. These are engineering
+or display choices, not biological or psychological parameters; there is no
+equation, coefficient, decay rate, threshold or clamp in the grounded substrate.

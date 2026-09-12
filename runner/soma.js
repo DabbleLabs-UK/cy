@@ -757,7 +757,6 @@ export function tickSoma(state, {
   });
 
   const experienced = state.experienced.metrics;
-  const pain = clamp(experienced.pain.value / 100);
   const hunger = clamp(experienced.hunger.value / 100);
   state.drives.food = round(hunger);
   // Legacy fatigue is diagnostics-only. It must not affect even the retained
@@ -776,7 +775,7 @@ export function tickSoma(state, {
   // Legacy body-attention competition and periodic state-led recall are disabled.
   // They had arbitrary thresholds and weights and previously steered live prose.
 
-  state.circuits.interoception = round(Math.max(pain, hunger));
+  state.circuits.interoception = round(hunger);
   state.circuits.threatAppraisal = round(state.drives.safety);
   state.circuits.affiliation = round(Math.max(state.appraisal.affiliation, state.drives.contact));
   state.circuits.predictionError = round(state.prediction.error);
@@ -929,7 +928,7 @@ export function groundedSomaDirective(state, options) {
 export function somaSnapshot(state) {
   if (!state) return null;
   const sources = {
-    interoception: 'pain and hunger state; legacy fatigue is excluded',
+    interoception: 'legacy hunger state only; legacy pain and fatigue are excluded',
     threatAppraisal: 'appraisal of observed incidents',
     affiliation: 'mail, visitor, and social observations',
     predictionError: 'difference between learned expectation and observation',

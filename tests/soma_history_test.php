@@ -219,4 +219,49 @@ foreach ($circadianPoints as $point) {
         exit(1);
     }
 }
+
+$somaticConfig = captive_soma_history_config('24h', 'somatic_harm_headline', 'somatic');
+if ($somaticConfig['jsonPath'] !== '$.soma.somaticNociceptive.headline.activeInjuryCount'
+    || $somaticConfig['scale'] !== 1.0) {
+    fwrite(STDERR, "FAIL: Somatic Harm history config is incorrect\n");
+    exit(1);
+}
+$somaticEvent = static function (string $timestamp, string $stimulusStatus, string $injuryReason): array {
+    return ['record' => json_encode([
+        'somatic_nociceptive' => [
+            'updated' => true,
+            'injuryUpdate' => ['reason' => $injuryReason],
+            'event' => [
+                'timestamp' => $timestamp,
+                'stimulus' => [
+                    'status' => $stimulusStatus,
+                    'noxiousStimulus' => 'YES',
+                    'modality' => 'MECHANICAL',
+                ],
+                'body' => ['site' => 'left_hand', 'laterality' => 'LEFT'],
+                'tissue' => ['damageStatus' => 'CONFIRMED', 'injuryStatus' => 'ACTIVE'],
+            ],
+        ],
+    ], JSON_THROW_ON_ERROR)];
+};
+$somaticFrom = (int)(new DateTimeImmutable('2026-09-11 10:00:00', new DateTimeZone('Europe/London')))->format('Uv');
+$somaticRows = [
+    $somaticEvent('2026-09-11 10:15:00.000', 'ACTIVE', 'injury_created'),
+    $somaticEvent('2026-09-11 10:45:00.000', 'ENDED', 'no_injury_identity'),
+];
+$somaticEvents = captive_somatic_history_events($somaticRows, $somaticFrom, $somaticFrom + 3600 * 1000);
+if (array_column($somaticEvents, 'type') !== [
+    'NOXIOUS_STIMULUS_ONSET', 'INJURY_CREATION', 'NOXIOUS_STIMULUS_END',
+]) {
+    fwrite(STDERR, "FAIL: Somatic Harm history did not preserve factual event transitions\n");
+    exit(1);
+}
+if ($somaticEvents[0]['bodySite'] !== 'left_hand' || $somaticEvents[0]['modality'] !== 'MECHANICAL') {
+    fwrite(STDERR, "FAIL: Somatic Harm history did not preserve factual site and modality\n");
+    exit(1);
+}
+if (captive_somatic_history_events($somaticRows, $somaticFrom - 7200000, $somaticFrom - 3600000) !== []) {
+    fwrite(STDERR, "FAIL: Somatic Harm history included an event outside the selected range\n");
+    exit(1);
+}
 echo "ALL PASS\n";

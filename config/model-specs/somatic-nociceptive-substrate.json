@@ -1,20 +1,23 @@
 {
   "schema": "cy.model-spec",
-  "version": 1,
+  "version": 2,
   "id": "structured-somatic-harm-ledger",
-  "implementation_version": "somatic-nociceptive-substrate-v1",
+  "implementation_version": "somatic-nociceptive-substrate-v2",
   "implementation_status": "IMPLEMENTED",
   "title": "Structured somatic harm and noxious-input substrate",
   "scope": "A factual event and persistence model for explicit noxious bodily stimuli and injuries in Cy's represented prison world.",
   "scientific_boundary": {
-    "pain": "A personal sensory and emotional experience associated with, or resembling that associated with, actual or potential tissue damage.",
-    "nociception": "Neural encoding of noxious stimuli. Cy has no biological nociceptors, so the implementation is only a computational functional analogue of incoming nociceptive information.",
+    "pain": "An unpleasant sensory and emotional experience associated with, or resembling that associated with, actual or potential tissue damage.",
+    "nociception": "The neural process of encoding noxious stimuli. Cy has no biological nociceptors, so the implementation is only a computational functional analogue of incoming nociceptive information.",
+    "iasp_distinction": "Pain and nociception are different phenomena. Pain cannot be inferred solely from activity in sensory neurons.",
     "noxious_stimulus": "A stimulus represented as capable of causing tissue damage. Capability is stored categorically and is not inferred from prose.",
     "implemented": [
       "structured somatic event facts",
       "categorical noxious-stimulus representation",
       "persistent injury identity and follow-up ledger",
-      "functional computational analogue of incoming nociceptive information"
+      "functional computational analogue of incoming nociceptive information",
+      "categorical Somatic Harm headline",
+      "factual active-injury count and event history"
     ],
     "not_implemented": [
       "subjective Pain",
@@ -26,6 +29,37 @@
       "nocifensive action selection",
       "brain-region activation"
     ]
+  },
+  "headline_semantics": {
+    "label": "SOMATIC HARM",
+    "status_label": "LIVE - structured bodily state",
+    "categories": {
+      "CLEAR": "No active noxious stimulus and no active known injury.",
+      "ACTIVE_NOXIOUS_STIMULUS": "At least one explicitly noxious stimulus is currently active and no known injury is active.",
+      "ACTIVE_INJURY": "At least one injury remains explicitly ACTIVE and no explicitly noxious stimulus is currently active.",
+      "ACTIVE_NOXIOUS_AND_INJURY": "At least one explicitly noxious stimulus and at least one injury are both currently active.",
+      "UNKNOWN": "No active known condition is present, but at least one current stimulus or injury status remains UNKNOWN."
+    },
+    "active_injury_count": "The exact count of distinct injury identities whose structured status is ACTIVE. It is not Pain intensity, harm severity or distress.",
+    "unknown_rule": "UNKNOWN is preserved as unknown and is never converted to CLEAR, NONE or zero.",
+    "no_numeric_scale": true
+  },
+  "history_representation": {
+    "ranges": ["1H", "24H", "7D"],
+    "events": ["NOXIOUS_STIMULUS_ONSET", "NOXIOUS_STIMULUS_END", "INJURY_CREATION", "INJURY_RESOLUTION"],
+    "factual_step_line": "ACTIVE INJURIES",
+    "empty_label": "NO SOMATIC EVENTS IN THIS PERIOD",
+    "rules": [
+      "Only stored structured somatic events are displayed.",
+      "Body site, laterality and modality remain UNKNOWN unless supplied by the structured event.",
+      "The active-injury step line is an integer count and has no 0-100 scale."
+    ]
+  },
+  "brain_boundary": {
+    "principle": "Cy's brain display is a functional analogy, not a brain scan. Pain-related processing is distributed, so injury presence or count does not produce a region activation value.",
+    "insula": "PROVISIONAL; the somatic input substrate is LIVE, but neural integration and activation are NOT MODELLED.",
+    "anterior_cingulate": "PROVISIONAL; no injury-count or subjective-Pain activation mapping exists.",
+    "periaqueductal_grey": "PROVISIONAL / NOT MODELLED; no descending Pain-modulation activation mapping exists."
   },
   "sources": [
     {
@@ -66,6 +100,7 @@
       "Only confirmed structured tissue damage creates an injury ledger record.",
       "Only an explicit structured resolution naming an existing injury closes it.",
       "Elapsed time does not imply healing.",
+      "No injury-severity classification is inferred from event names, injury types or counts.",
       "A PHYSICAL_HARM binary outcome cannot invent body site, modality, injury type, duration or subjective Pain.",
       "Generated prose is not admissible evidence."
     ]
@@ -77,8 +112,13 @@
   "clamps": [],
   "numerical_inventory": [
     {
+      "value": 2,
+      "role": "model specification and implementation version",
+      "basis": "ENGINEERING VERSION IDENTIFIER; not a scientific parameter"
+    },
+    {
       "value": 1,
-      "role": "schema and implementation version",
+      "role": "persisted state and structured-event schema version retained for compatibility",
       "basis": "ENGINEERING VERSION IDENTIFIER; not a scientific parameter"
     },
     {
@@ -98,6 +138,10 @@
     "legacy_pain_decay": "not read",
     "legacy_migration_values": "not read",
     "grounded_prompt_projection": "Active stimulus and injury facts may be supplied factually to the language model.",
-    "subjective_affect_or_action_mapping": "none"
+    "subjective_affect_or_action_mapping": "none",
+    "public_primary_headline": "not used",
+    "public_history": "not used",
+    "brain_activation": "not used",
+    "drawing_or_expressive_choice": "not used"
   }
 }

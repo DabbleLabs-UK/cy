@@ -7,6 +7,7 @@ import {
   BRAIN_REGIONS,
   IMPLEMENTATION_STATUS,
   canRenderDynamicActivity,
+  buildCountStepPath,
   elapsedFeedingLabel,
 } from '../public/assets/brain.js';
 import { reconcileSoma, somaSnapshot, tickSoma } from './soma.js';
@@ -35,7 +36,7 @@ assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
 assert.deepEqual(EXPERIENCED_METRICS.map((metric) => metric.key),
-  ['anxiety', 'arousal', 'pain', 'satiety', 'sleepiness', 'loneliness', 'anger', 'rumination']);
+  ['anxiety', 'arousal', 'somaticHarm', 'satiety', 'sleepiness', 'loneliness', 'anger', 'rumination']);
 assert.deepEqual(
   [...BRAIN_REGIONS.map((region) => region.key).filter((key) => key !== 'scnCircadian')].sort(),
   [...Object.keys(snapshot.experienced.brain)].sort(),
@@ -122,13 +123,22 @@ assert.equal(elapsedFeedingLabel(0), '0m');
 assert.equal(elapsedFeedingLabel((2 * 60 + 17) * 60000), '2h 17m');
 assert.equal(elapsedFeedingLabel((25 * 60 + 3) * 60000), '1d 1h 3m');
 assert.equal(elapsedFeedingLabel(null), 'UNKNOWN');
-assert.match(source, /Structured bodily harm and noxious-input facts/);
+assert.match(source, /Somatic Harm records noxious events and injuries/);
 assert.match(source, /SOMATIC \/ NOXIOUS INPUT TRACE/);
 assert.match(source, /subjectivePainStatus/);
-assert.doesNotMatch(source, /definition\.key === 'pain' \? historyMarkup\(\)/,
-  'the Pain detail must not present the factual somatic substrate as a numeric Pain graph');
-assert.match(source, /EVENT HISTORY AND MODEL LIMITS/,
-  'the long somatic event trace and unmodelled dependency list stay behind a secondary disclosure');
+assert.match(source, /somatic_harm_headline/);
+assert.match(source, /LIVE - structured bodily state/);
+assert.match(source, /ACTIVE INJURIES/);
+assert.match(source, /NO SOMATIC EVENTS IN THIS PERIOD/);
+assert.doesNotMatch(source, /data-metric="pain"/,
+  'the legacy Pain scalar must not be a primary visitor row');
+assert.match(source, /<summary>EVENT HISTORY<\/summary>/);
+assert.match(source, /<summary>MODEL \/ LIMITATIONS<\/summary>/);
+assert.equal(
+  buildCountStepPath([{ ts: 1000, value: 1 }, { ts: 2000, value: 2 }], 0, 3000),
+  'M93.3 32.0 H186.7 V0.0 H280.0',
+  'active-injury history uses a factual integer step line rather than a 0-100 Pain curve',
+);
 assert.match(source, /CONTACT HISTORY AND MODEL LIMITS/,
   'the long social history and unmodelled dependency list stay behind a secondary disclosure');
 assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
@@ -139,7 +149,8 @@ assert.match(source, /className = `soma-state-entry soma-reading-entry/);
 assert.doesNotMatch(source, /class="soma-detail"/, 'the old shared bottom-mounted inspector must not return');
 assert.match(source, /<summary class="soma-state-row"[\s\S]*?<div class="soma-reading-detail">/, 'a Soma detail is nested immediately after its own summary');
 assert.match(source, /<summary><span class="soma-region-name"[\s\S]*?<div class="soma-reading-detail">/, 'a brain-region detail is nested immediately after its own summary');
-assert.match(source, /definition\.key === 'sleepiness' \? 'sleepiness'[\s\S]*definition\.key === 'satiety' \? 'satiety' : 'metric'/);
+assert.match(source, /definition\.key === 'somaticHarm' \? 'somatic'/,
+  'Somatic Harm history uses the factual somatic-event endpoint rather than metric history');
 assert.match(source, /PREDICTED KSS \(1-9\)/);
 assert.match(source, /buildScaledHistoryPath\(data\.points, 1, 9\)/);
 assert.match(source, /this\._wireReading\(entry, 'brain', definition\.key\)/);

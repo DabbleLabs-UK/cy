@@ -145,7 +145,6 @@ const over = (excess, span) => (excess > 0 ? Math.min(1, excess / span) : 0);
 const STYLE_RULES = [
   [(v) => over(0.35 - v.mental.lucidity, 0.35), 'your sentences break off and lose the thread; you restart mid-idea'],
   [(v) => over(v.mental.anxiety - 0.6, 0.4), 'keep it short and clipped; you keep checking the door'],
-  [(v) => over(v.physical.pain - 0.5, 0.5), 'the pain interrupts the sentence and gets into the words'],
   [(v) => over(v.physical.hunger - 0.65, 0.35), 'everything reminds you of food and you resent it'],
   [(v) => over(v.mental.despair - 0.7, 0.3), 'you write less and stop finishing thoughts'],
   [(v) => over(v.mental.dissociation - 0.6, 0.4), 'the walls stop being walls; you slip into association'],
@@ -185,7 +184,6 @@ const NOTATION_M = [
   ['hope', 'hope', 'lo', 0.25],
 ];
 const NOTATION_P = [
-  ['pain', 'pain', 0.5],
   ['hunger', 'hunger', 0.5],
 ];
 const fmt2 = (x) => Number(x).toFixed(2).replace(/^0/, ''); // 0.82 -> '.82'

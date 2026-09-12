@@ -49,6 +49,42 @@ try {
             'waveformRange' => $circadian['waveformRange'] ?? null,
         ]);
     }
+    if ($scope === 'somatic') {
+        $eventStmt = $db->prepare(
+            "SELECT record FROM environment_events
+             WHERE occurred_at >= ?
+               AND JSON_UNQUOTE(JSON_EXTRACT(record, '$.somatic_nociceptive.updated')) = 'true'
+             ORDER BY occurred_at ASC, event_id ASC"
+        );
+        $eventStmt->execute([$fromSql]);
+        $events = captive_somatic_history_events($eventStmt->fetchAll(), $fromMs, $toMs);
+        $countStmt = $db->prepare(captive_soma_history_query(
+            $config['jsonPath'],
+            captive_soma_history_bucket_seconds($config)
+        ));
+        $countStmt->execute([$fromSql]);
+        $points = captive_soma_history_points(
+            $countStmt->fetchAll(),
+            $key,
+            $fromMs,
+            $toMs,
+            $config['points'],
+            $scope,
+            1.0
+        );
+        captive_json_response([
+            'ok' => true,
+            'scope' => $scope,
+            'key' => $key,
+            'range' => $range,
+            'fromMs' => $fromMs,
+            'toMs' => $toMs,
+            'events' => $events,
+            'points' => $events === [] ? [] : $points,
+            'axisLabel' => 'ACTIVE INJURIES',
+            'sampledFromStoredVitals' => true,
+        ]);
+    }
     $jsonPath = $config['jsonPath'];
     $stmt = $db->prepare(captive_soma_history_query(
         $jsonPath,

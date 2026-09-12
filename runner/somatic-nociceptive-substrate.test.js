@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   createSomaticState,
+  deriveSomaticHeadline,
   observeSomaticRecord,
   physicalHarmOutcomeFromSomaticFacts,
   reconcileSomaticState,
@@ -9,6 +10,7 @@ import {
 } from './somatic-nociceptive-substrate.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import { implementationEntry } from './implementation-registry.js';
+import { brainRegions, computeDerived, heartRate } from './vitals.js';
 
 const T0 = '2026-09-11 12:00:00.000';
 const T1 = '2026-09-11 12:05:00.000';
@@ -163,5 +165,85 @@ assert.equal(repeatedInspection.peripheralSensitisation, 'NOT_MODELLED');
 assert.equal(repeatedInspection.centralSensitisation, 'NOT_MODELLED');
 assert.equal(repeatedInspection.events.some((event) => 'magnitude' in event), false,
   'O: repeated injuries do not create sensitisation or escalating magnitudes');
+
+// Handoff 16 acceptance matrix: the visitor headline is categorical and reads
+// only the factual stimulus and injury ledgers.
+const clearState = createSomaticState(Date.parse(T0));
+assert.equal(deriveSomaticHeadline(clearState).category, 'CLEAR', 'A: an empty active ledger is CLEAR');
+assert.equal(deriveSomaticHeadline(clearState).display, 'NO ACTIVE INJURY');
+
+const stimulusState = createSomaticState(Date.parse(T0));
+observeSomaticRecord(stimulusState, record('active-hot', T0, {
+  stimulus: { id: 'stimulus:active-hot', modality: 'THERMAL', status: 'ACTIVE', noxious_stimulus: 'YES' },
+  body: { site: 'right_hand', laterality: 'RIGHT', certainty: 'CERTAIN' },
+  tissue: { damage_status: 'THREATENED', injury_status: 'UNKNOWN' },
+  knowledge_status: 'PARTIAL', field_provenance: { stimulus: 'STRUCTURED_WORLD_FACT' },
+}));
+assert.equal(deriveSomaticHeadline(stimulusState).category, 'ACTIVE_NOXIOUS_STIMULUS',
+  'B: an ongoing known noxious stimulus has its own category');
+
+const injuryState = createSomaticState(Date.parse(T0));
+observeSomaticRecord(injuryState, record('injury-only', T0, injuryFacts('injury:only')));
+assert.equal(deriveSomaticHeadline(injuryState).category, 'ACTIVE_INJURY',
+  'C: an unresolved injury remains active after its point stimulus');
+
+const bothState = createSomaticState(Date.parse(T0));
+observeSomaticRecord(bothState, record('both', T0, injuryFacts('injury:both', {
+  stimulus: { id: 'stimulus:both', modality: 'MECHANICAL', status: 'ACTIVE', noxious_stimulus: 'YES' },
+})));
+assert.equal(deriveSomaticHeadline(bothState).category, 'ACTIVE_NOXIOUS_AND_INJURY',
+  'D: concurrent stimulus and injury use the combined category');
+
+const uncertainState = createSomaticState(Date.parse(T0));
+observeSomaticRecord(uncertainState, record('uncertain-stimulus', T0, {
+  stimulus: { id: 'stimulus:uncertain', modality: 'UNKNOWN', status: 'UNKNOWN', noxious_stimulus: 'UNKNOWN' },
+  body: { site: 'UNKNOWN', laterality: 'UNKNOWN', certainty: 'UNKNOWN' },
+  tissue: { damage_status: 'UNKNOWN', injury_status: 'UNKNOWN' },
+  knowledge_status: 'UNKNOWN', field_provenance: {},
+}));
+assert.equal(deriveSomaticHeadline(uncertainState).category, 'UNKNOWN',
+  'E: an explicit unresolved unknown is not presented as CLEAR');
+
+assert.equal(deriveSomaticHeadline(repeated).activeInjuryCount, 2,
+  'F: distinct active injury identities are counted exactly');
+assert.equal(somaticSnapshot(injuryState).activeInjuries[0].bodySite, 'left_forearm');
+assert.equal(somaticSnapshot(state).activeInjuries.some((injury) => injury.bodySite === 'UNKNOWN'), true,
+  'G: an unknown site remains UNKNOWN');
+assert.equal(deriveSomaticHeadline(state).activeInjuryCount, 2,
+  'H/I: stimulus ending did not heal an injury and explicit resolution closed only its named injury');
+
+const beforeLegacyHeadline = deriveSomaticHeadline(injuryState);
+const beforeLegacyHistory = JSON.stringify(injuryState.history);
+injuryState.legacyPain = 100;
+injuryState.metrics = { pain: { value: 0 } };
+assert.deepEqual(deriveSomaticHeadline(injuryState), beforeLegacyHeadline, 'J: legacy Pain cannot alter the headline');
+assert.equal(JSON.stringify(injuryState.history), beforeLegacyHistory, 'J: legacy Pain cannot alter somatic history');
+assert.equal(observeSomaticRecord(injuryState, { generated_text: "my hand's killing me" }).updated, false,
+  'K: prose cannot create or resolve an injury');
+assert.equal(somaticSnapshot(injuryState).headline.category, 'ACTIVE_INJURY');
+assert.equal(somaticSnapshot(injuryState).subjectivePain, 'NOT_MODELLED');
+assert.equal(somaticSnapshot(injuryState).injurySeverity, 'NOT_MODELLED');
+assert.equal(implementationEntry('soma_variables', 'somatic_harm_headline').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_variables', 'pain').diagnostics_only, true);
+const legacyVitals = {
+  physical: { pain: 0, hunger: 0.25, fatigue: 0.3 },
+  mental: {
+    anxiety: 0.2, stress: 0.25, despair: 0.1, hope: 0.2, lucidity: 0.7,
+    agitation: 0.2, dissociation: 0.1, anger: 0.1, longing: 0.2,
+  },
+  relations: {}, monotony: 0.2, imageRecall: 0,
+};
+const highLegacyPain = structuredClone(legacyVitals);
+highLegacyPain.physical.pain = 1;
+assert.deepEqual(computeDerived(highLegacyPain), computeDerived(legacyVitals),
+  'J: legacy Pain cannot alter compatibility-derived state');
+assert.equal(heartRate(highLegacyPain), heartRate(legacyVitals),
+  'J: legacy Pain cannot alter the synthetic heart-rate diagnostic');
+assert.deepEqual(brainRegions(highLegacyPain), brainRegions(legacyVitals),
+  'J/N: legacy Pain cannot alter any emitted brain-region value');
+for (const key of ['insula', 'acc', 'prefrontal']) {
+  assert.notEqual(implementationEntry('brain_regions', key).implementation_status, 'IMPLEMENTED',
+    `N: ${key} must not become LIVE from Somatic Harm`);
+}
 
 console.log('somatic-nociceptive-substrate.test.js: all checks passed');
