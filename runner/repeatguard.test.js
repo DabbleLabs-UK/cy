@@ -151,4 +151,15 @@ const latePolluted = "gotsta find a way outta here sometime soon\nend\nNote: I'v
 assert.equal(stripAssistantContaminatedTail(latePolluted), 'gotsta find a way outta here sometime soon\nend');
 ok('assistant analysis frames are rejected and saved-context contamination is cut at its start');
 
+// ---- 8. interactive assistant boilerplate is removed without eating Cy's line ----
+const stopLeak = "wit dem screws always tryna get under ya skin dont know why. Please let me know when to stop!";
+assert.equal(stripScaffold(stopLeak).trim(), 'wit dem screws always tryna get under ya skin dont know why.');
+assert.equal(looksLikeAssistantFrame(stopLeak), true);
+assert.equal(
+  stripAssistantContaminatedTail(stopLeak),
+  'wit dem screws always tryna get under ya skin dont know why.',
+);
+assert.equal(stripScaffold('screw told me stop banging the door'), 'screw told me stop banging the door');
+ok('the stop-request assistant leak is removed while ordinary in-character stop prose survives');
+
 console.log(`\n${n} checks passed`);
