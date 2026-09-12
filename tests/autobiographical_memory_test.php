@@ -1,0 +1,90 @@
+<?php
+declare(strict_types=1);
+
+require __DIR__ . '/../lib/autobiographical_memory.php';
+
+$sender = str_repeat('a', 32);
+$other = str_repeat('b', 32);
+$row = [
+    'id' => '00000000-0000-4000-8000-000000000001',
+    'memory_type' => 'PERSON', 'status' => 'ACTIVE',
+    'privacy_scope' => 'SENDER_RECALLABLE', 'subject_visitor_id' => $sender,
+    'content' => 'A returning visitor asked about the cell.', 'public_summary' => null,
+    'classification' => 'visitor history', 'consistency_status' => 'CONSISTENT',
+    'created_at' => '2026-09-12 10:00:00.000', 'updated_at' => '2026-09-12 10:00:00.000',
+    'last_retrieved_at' => null, 'tags' => 'cell,postcard', 'source_count' => 2,
+];
+$public = array_replace($row, [
+    'id' => '00000000-0000-4000-8000-000000000002',
+    'memory_type' => 'MOTIF', 'privacy_scope' => 'PUBLIC_RECALLABLE',
+    'subject_visitor_id' => $other, 'content' => 'Private wording with a displayed name.',
+    'public_summary' => 'Someone else once raised a similar question about the cell.',
+    'tags' => 'cell,confinement',
+]);
+$archived = array_replace($row, ['id' => '00000000-0000-4000-8000-000000000003', 'status' => 'ARCHIVED']);
+
+$checks = [];
+$checks['same sender memory is eligible'] = captive_memory_visible_to_prompt($row, $sender);
+$checks['different sender memory is filtered'] = !captive_memory_visible_to_prompt($row, $other);
+$checks['public memory is cross-visitor eligible'] = captive_memory_visible_to_prompt($public, $sender);
+$checks['archived memory is filtered'] = !captive_memory_visible_to_prompt($archived, $sender);
+
+$same = captive_memory_rank_candidates([$public, $row], ['text' => 'cell', 'tags' => ['postcard']], $sender);
+$checks['same sender receives direct history first'] = ($same[0]['id'] ?? '') === $row['id'];
+$checks['same sender reason is traceable'] = in_array('DIRECT_SENDER_HISTORY', $same[0]['retrieval_reasons'] ?? [], true);
+
+$different = captive_memory_rank_candidates([$row, $public], ['text' => 'cell', 'tags' => ['cell']], $other);
+$checks['private memory does not leak to different sender'] = count($different) === 1 && $different[0]['id'] === $public['id'];
+$item = captive_memory_public_item($public);
+$checks['public browser uses public summary not private content'] = $item['summary'] === $public['public_summary'];
+$checks['public browser omits memory id'] = !array_key_exists('id', $item);
+$checks['public browser omits subject visitor id'] = !array_key_exists('subject_visitor_id', $item);
+
+$validated = captive_memory_validate_operation([
+    'decision' => 'CREATE', 'memoryId' => '00000000-0000-4000-8000-000000000004',
+    'type' => 'EPISODIC', 'privacyScope' => 'INTERNAL_ONLY',
+    'source' => ['sourceType' => 'ENVIRONMENT_EVENT', 'sourceId' => 'env-test'],
+]);
+$checks['create operation validates'] = $validated['type'] === 'EPISODIC';
+$bad = false;
+try {
+    captive_memory_validate_operation([
+        'decision' => 'CREATE', 'memoryId' => '00000000-0000-4000-8000-000000000004',
+        'type' => 'INVENTED', 'privacyScope' => 'PUBLIC_RECALLABLE',
+        'source' => ['sourceType' => 'ENVIRONMENT_EVENT', 'sourceId' => 'env-test'],
+    ]);
+} catch (InvalidArgumentException) {
+    $bad = true;
+}
+$checks['unknown memory type is rejected'] = $bad;
+$missingSource = false;
+try {
+    captive_memory_validate_operation([
+        'decision' => 'CREATE', 'memoryId' => '00000000-0000-4000-8000-000000000005',
+        'type' => 'EPISODIC', 'privacyScope' => 'INTERNAL_ONLY',
+    ]);
+} catch (InvalidArgumentException) {
+    $missingSource = true;
+}
+$checks['memory without provenance is rejected'] = $missingSource;
+
+$source = file_get_contents(__DIR__ . '/../public/api/memory.php');
+$checks['public query hard-codes public recall scope'] = is_string($source)
+    && str_contains($source, "m.privacy_scope = 'PUBLIC_RECALLABLE'");
+$checks['technical candidate response requires ingest key'] = is_string($source)
+    && strpos($source, 'captive_require_ingest_key()') < strpos($source, "if (\$action === 'query')");
+
+$migration = file_get_contents(__DIR__ . '/../sql/015_autobiographical_memory.sql');
+$checks['canonical motif is data not prompt text'] = is_string($migration)
+    && str_contains($migration, 'handoff-17:8-by-4')
+    && str_contains($migration, "'MOTIF'");
+
+$failed = 0;
+foreach ($checks as $label => $ok) {
+    echo ($ok ? '  ok   ' : '  FAIL ') . $label . "\n";
+    if (!$ok) {
+        $failed++;
+    }
+}
+echo $failed === 0 ? "ALL PASS\n" : $failed . " FAILED\n";
+exit($failed === 0 ? 0 : 1);
