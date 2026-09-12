@@ -189,3 +189,13 @@ test('T public UI and API enforce public scope and omit IDs', async () => {
   assert.doesNotMatch(publicUi, /subject_visitor_id|candidate_memory_ids/);
   assert.match(publicUi, /current_sender_memory_count/);
 });
+
+test('U live memory calls use compact model-facing grounded text', async () => {
+  const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
+  assert.match(run, /groundedContext:\s*cognition\.groundedDirective/);
+  assert.match(run, /refreshPendingMemory\(`journal:\$\{nowMs\}`, cognition\.groundedDirective\)/);
+  assert.match(run, /formMemoryAfterVisibleOutput\(cognition\.groundedDirective, true\)/);
+  assert.match(run, /formMemoryAfterVisibleOutput\(burstGroundedDirective\)/);
+  assert.doesNotMatch(run, /refreshPendingMemory\([^\n]*cognition\.groundedContext/);
+  assert.doesNotMatch(run, /formMemoryAfterVisibleOutput\([^\n]*(?:cognition|burst)\.groundedContext/);
+});

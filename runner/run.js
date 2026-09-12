@@ -2077,7 +2077,7 @@ async function main() {
       currentVisitorId: pc.visitor_id || null,
       senderLabel: pc.from_name || 'the sender',
       publicSituation: `A postcard has arrived: ${postcardText.slice(0, 600)}`,
-      groundedContext: cognition.groundedContext,
+      groundedContext: cognition.groundedDirective,
       generationRef: `postcard:${pc.id}`,
     });
 
@@ -2144,7 +2144,7 @@ async function main() {
       // next inbox poll creates the public archive receipt.
       emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
     }
-    await formMemoryAfterVisibleOutput(cognition.groundedContext, true);
+    await formMemoryAfterVisibleOutput(cognition.groundedDirective, true);
     // remember them: a cheap compressed note + a standing nudge, written back to
     // the DB via a private visitor_seen event (never enters the public stream).
     if (visitor && visitor.visitor_id) {
@@ -3493,7 +3493,7 @@ async function main() {
       });
       if (pendingMemoryQuery) {
         pendingMemoryQuery.publicSituation = pendingMemoryQuery.publicSituation || incidentContext;
-        await refreshPendingMemory(`journal:${nowMs}`, cognition.groundedContext);
+        await refreshPendingMemory(`journal:${nowMs}`, cognition.groundedDirective);
       }
 
       if (hasDrawRequest) {
@@ -3808,7 +3808,7 @@ async function main() {
           );
           if (source) autobiographicalMemory.queueSource(source);
         }
-        await formMemoryAfterVisibleOutput(burstGroundedContext);
+        await formMemoryAfterVisibleOutput(burstGroundedDirective);
         // Language remains expression rather than evidence. No grounded state or
         // provisional drive is updated as a consequence of this selected form.
       }
