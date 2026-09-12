@@ -40,6 +40,11 @@ assert.match(chromeCss, /\.panel-collapsible\[open\]\s*>\s*\.panel-toggle::after
 
 const app = await readFile(new URL('../public/assets/app.js', import.meta.url), 'utf8');
 assert.match(app, /new Tempo\(tempoEl, TEMPO_ENDPOINT, \$\('#watchers'\)\)/);
+assert.match(app, /if \(!liveCursorReady\) return;/, 'live polling cannot start from an uninitialised cursor');
+assert.match(app, /fetchStream\(-100\)/, 'fallback bootstrap uses the bounded safe tail');
+assert.doesNotMatch(app, /fetchStream\(-400\)/, 'the oversized fallback tail is gone');
+assert.match(app, /Math\.max\(advanceStreamCursor\(lastSeq, events\), Number\(data\.now\) \|\| 0\)/,
+  'a successful fallback establishes its frozen server head before live polling');
 
 const tempo = await readFile(new URL('../public/assets/tempo.js', import.meta.url), 'utf8');
 assert.doesNotMatch(tempo, /tp-watchers/);

@@ -14,7 +14,7 @@ declare(strict_types=1);
 //   ts=<datetime> anchor by time: resolve to the first event at/after ts, then
 //                 page forward from just before it (so that event is included)
 //   date=YYYY-MM-DD constrain the page to one Europe/London calendar day
-//   limit=<n>     page size, default 200, capped server-side at 500
+//   limit=<n>     page size, default 100, capped server-side at 100
 //   kinds=a,b,c   optional whitelist filter (e.g. text,mode,postcard_in) to trim
 //                 the firehose (power/host/vitals) for a lean handwriting replay
 //
@@ -25,8 +25,8 @@ declare(strict_types=1);
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 
-const RANGE_DEFAULT_LIMIT = 200;
-const RANGE_MAX_LIMIT = 500;
+const RANGE_DEFAULT_LIMIT = 100;
+const RANGE_MAX_LIMIT = 100;
 
 header('Cache-Control: public, max-age=15');
 

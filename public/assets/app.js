@@ -48,6 +48,8 @@ let polling = false;
 let feedLoading = false;
 let feedRenderToken = 0;
 let viewTransitionToken = 0;
+let bootstrapping = false;
+let liveCursorReady = false;
 let currentDate = /^\d{4}-\d{2}-\d{2}$/.test(String(CFG.today || '')) ? CFG.today : null;
 // DAY N pill: seeded from the server's real count (see lib/tempo.php,
 // window.CY.day) so it is right from first paint, then advanced by exactly 1 on
@@ -224,10 +226,13 @@ async function boot() {
   }
 
   // first load fills the page mid-stream, drawn instantly
-  await firstLoad();
+  await ensureFirstLoad();
 
   // then poll live
-  setInterval(poll, POLL_MS);
+  setInterval(() => {
+    if (liveCursorReady) void poll();
+    else void ensureFirstLoad();
+  }, POLL_MS);
 }
 
 async function loadFont() {
@@ -239,26 +244,38 @@ async function loadFont() {
 async function firstLoad() {
   if (document.body.dataset.test !== '1' && currentDate) {
     try {
-      await renderFeedDay(currentDate, { history: false });
+      const rendered = await renderFeedDay(currentDate, { history: false });
+      if (!rendered) return false;
       led.lastSeq = lastSeq;
+      liveCursorReady = true;
       setStatus('Live', false);
-      return;
+      return true;
     } catch (e) {
       // Fall through to the old bounded stream bootstrap if the range endpoint is
       // unavailable. Live viewing remains useful; only full-day backscroll is lost.
       resetFeedSurfaces();
     }
   }
-  await firstLoadRecent();
+  return firstLoadRecent();
+}
+
+async function ensureFirstLoad() {
+  if (bootstrapping || liveCursorReady || historyMode) return false;
+  bootstrapping = true;
+  try {
+    return await firstLoad();
+  } finally {
+    bootstrapping = false;
+  }
 }
 
 async function firstLoadRecent() {
   let data;
   try {
-    data = await fetchStream(-400);
+    data = await fetchStream(-100);
   } catch (e) {
     setStatus('offline', true);
-    return;
+    return false;
   }
   pen.setInstant(true);
   postcards.setInstant(true);
@@ -290,14 +307,15 @@ async function firstLoadRecent() {
   }
   pen.setInstant(false);
   postcards.setInstant(false);
-  // Advance only through rows actually received. The bounded endpoint can gain
-  // a newer server head while its page is being assembled; using that head here
-  // would skip those newly inserted events on the next poll.
-  lastSeq = advanceStreamCursor(lastSeq, events);
+  // stream.php freezes `now` before selecting this tail, so everything at or
+  // below that head is an old baseline. Later inserts remain for the next poll.
+  lastSeq = Math.max(advanceStreamCursor(lastSeq, events), Number(data.now) || 0);
   // The LED stays idle through the backlog fill; only inference events newer than
   // the load point may ever drive it, so replayed history can never light it.
   led.lastSeq = lastSeq;
+  liveCursorReady = true;
   setStatus('Live', false);
+  return true;
 }
 
 function resetFeedSurfaces() {
@@ -346,6 +364,7 @@ async function renderFeedDay(date, { history }) {
       if (window.__cyPlain && window.__cyPlain.scrollToStart) window.__cyPlain.scrollToStart();
     } else {
       lastSeq = Math.max(lastSeq, day.head || 0, snapshot.head || 0);
+      liveCursorReady = true;
       if (pen.scrollToEnd) pen.scrollToEnd();
       if (window.__cyPlain && window.__cyPlain.scrollToEnd) window.__cyPlain.scrollToEnd();
     }
@@ -470,6 +489,7 @@ const CATCHUP_TOKENS = 50;
 const ANIMATE_TAIL = 25;
 
 async function poll() {
+  if (!liveCursorReady) return;
   if (polling) return; // never overlap
   if (feedLoading) return; // a complete-day surface is being reconstructed
   if (historyMode) return; // reading the past: do not follow the live edge

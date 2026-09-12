@@ -59,6 +59,19 @@ check_soma($implemented['soma']['physiologicalSatiety'] === $state['physiologica
 check_soma(!isset($implemented['soma']['physiologicalSatietyInspection']), 'admin-only raw physiological state is stripped from the public Soma response');
 $publicVitals = captive_public_event_payload('vitals', ['soma' => $state]);
 check_soma(!isset($publicVitals['soma']['physiologicalSatietyInspection']), 'admin-only raw physiological state is stripped from public event streams');
+$publicGen = captive_public_event_payload('gen', [
+    'tokens_in' => 2711,
+    'mode' => 'journal',
+    'form' => 'write',
+    'zone_a' => str_repeat('private prompt ', 1000),
+    'grounded_soma_context' => ['large' => str_repeat('state ', 1000)],
+    'output' => 'rendered separately as text events',
+]);
+check_soma($publicGen['tokens_in'] === 2711 && $publicGen['mode'] === 'journal', 'public generation telemetry is preserved');
+check_soma($publicGen['form'] === 'write', 'public generation form is preserved');
+check_soma(!isset($publicGen['zone_a']), 'full prompt zones are stripped from public event streams');
+check_soma(!isset($publicGen['grounded_soma_context']), 'large grounded prompt context is stripped from public event streams');
+check_soma(!isset($publicGen['output']), 'duplicated full generation output is stripped from public event streams');
 check_soma($implemented['soma']['learnedControllability'] === $state['learnedControllability'], 'action-outcome evidence is returned without recomputation');
 check_soma($implemented['implementation_registry']['schema'] === 'cy.implementation-registry', 'registry accompanies the state');
 

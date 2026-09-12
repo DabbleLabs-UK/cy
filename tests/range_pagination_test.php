@@ -30,4 +30,9 @@ if (substr_count($source, 'SELECT COALESCE(MAX(seq), 0) FROM events') !== 1) {
     exit(1);
 }
 
+if (strpos($source, 'const RANGE_MAX_LIMIT = 100;') === false) {
+    fwrite(STDERR, "FAIL: range pages must be capped at the safe 100-row limit\n");
+    exit(1);
+}
+
 echo "range_pagination_test.php: all checks passed\n";

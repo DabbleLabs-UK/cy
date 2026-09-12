@@ -143,14 +143,20 @@ export async function fetchDaySnapshot({
 } = {}) {
   if (!validDate(date)) throw new Error('history date must be YYYY-MM-DD');
   const before = Math.min(Number.MAX_SAFE_INTEGER, Math.max(1, Number(head) + 1));
-  const data = await getJson(fetchImpl, endpoint(rangeUrl, {
+  // The visitor only needs the newest operational state of each kind. Fetching
+  // the last 500 mixed rows repeated the very large Soma vitals snapshot dozens
+  // of times and could exhaust the server before first paint.
+  const pages = await Promise.all(kinds.map((kind) => getJson(fetchImpl, endpoint(rangeUrl, {
     date,
     before,
-    limit,
-    kinds: kinds.join(','),
-  }));
+    limit: 1,
+    kinds: kind,
+  }))));
+  const events = pages
+    .flatMap((page) => page.events)
+    .sort((a, b) => Number(a.seq) - Number(b.seq));
   return {
-    events: data.events,
+    events,
     // This snapshot was explicitly anchored to `head`. A newer server `now`
     // belongs to the next live poll and must not advance the stream cursor.
     head: Number(head) || 0,

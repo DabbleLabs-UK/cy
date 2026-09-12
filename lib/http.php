@@ -21,6 +21,44 @@ function captive_client_ip(): string
 
 function captive_public_event_payload(string $kind, mixed $payload): mixed
 {
+    if ($kind === 'gen' && is_array($payload)) {
+        // A generation row also stores the full prompt/debug inspection used by
+        // the runner's private diagnostics. Repeating those hundreds of KB on
+        // the visitor feed made ordinary day loads and catch-up pages exhaust
+        // PHP memory. The public UI consumes only this compact telemetry.
+        $publicKeys = [
+            'tokens_in',
+            'tokens_out',
+            'prompt_tok_s',
+            'gen_tok_s',
+            'ttft_ms',
+            'total_ms',
+            'load_ms',
+            'mode',
+            'anger',
+            'expressed',
+            'ctx_chars',
+            'duty',
+            'next_idle_ms',
+            'cadence_ms',
+            'idle_reason',
+            'ahead_chars',
+            'threads',
+            'provider',
+            'model',
+            'num_ctx',
+            'inbox_ok',
+            'tempo_ok',
+            'last_error',
+            'form',
+            'temperature',
+            'top_p',
+            'repeat_penalty',
+            'num_predict',
+            'token_limited',
+        ];
+        return array_intersect_key($payload, array_flip($publicKeys));
+    }
     if ($kind === 'vitals' && is_array($payload) && isset($payload['soma']) && is_array($payload['soma'])) {
         unset($payload['soma']['physiologicalSatietyInspection']);
     }

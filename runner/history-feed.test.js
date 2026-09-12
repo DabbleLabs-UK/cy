@@ -110,6 +110,25 @@ assert.deepEqual(snapshot.events.map((e) => e.seq), [150]);
 assert.equal(snapshot.head, 200, 'snapshot stays on its requested page head');
 assert.equal(snapshotCalls[0].searchParams.get('date'), '2026-09-04');
 assert.equal(snapshotCalls[0].searchParams.get('before'), '201');
+assert.equal(snapshotCalls[0].searchParams.get('limit'), '1');
+
+const compactSnapshotCalls = [];
+const compactSnapshot = await fetchDaySnapshot({
+  rangeUrl: '/api/range.php',
+  date: '2026-09-04',
+  head: 300,
+  kinds: ['vitals', 'host', 'power'],
+  fetchImpl: async (url) => {
+    const parsed = new URL(url, 'https://cy.invalid');
+    compactSnapshotCalls.push(parsed);
+    const kind = parsed.searchParams.get('kinds');
+    const seq = { vitals: 290, host: 280, power: 295 }[kind];
+    return { ok: true, json: async () => ({ ok: true, now: 301, events: [{ seq, kind }] }) };
+  },
+});
+assert.deepEqual(compactSnapshot.events.map((event) => event.seq), [280, 290, 295]);
+assert.equal(compactSnapshotCalls.length, 3, 'snapshot requests one latest row per operational kind');
+assert.ok(compactSnapshotCalls.every((call) => call.searchParams.get('limit') === '1'));
 
 await assert.rejects(
   () => fetchDayEvents({ rangeUrl: '/x', date: 'not-a-day', fetchImpl }),
