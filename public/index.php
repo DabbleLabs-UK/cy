@@ -124,6 +124,9 @@ function cy_import_map(): string
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/timetravel.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('postcard-layout.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('shell-layout.css'), ENT_QUOTES) ?>">
+<?php if ($isAdmin): ?>
+<link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('world-inspection.css'), ENT_QUOTES) ?>">
+<?php endif; ?>
 <script>
 window.CY = {
   stream: <?= json_encode($streamEndpoint, JSON_UNESCAPED_SLASHES) ?>,
@@ -144,6 +147,7 @@ window.CY = {
   socialContact: 'api/social-contact.php',
   memory: 'api/memory.php',
   memoryInspection: <?= $isAdmin ? json_encode('api/memory-inspection.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>,
+  worldInspection: <?= $isAdmin ? json_encode('api/world-inspection.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>,
   environmentEvent: <?= $rawEnabled ? "'api/environment-event.php'" : 'null' ?>,
   implementationRegistry: <?= json_encode($implementationRegistry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>,
   // Hershey glyph data app.js fetches (not a JS import, so the import map below
@@ -218,6 +222,12 @@ window.CY = {
       <div class="panel-title">AUTOBIOGRAPHICAL MEMORY</div>
       <div id="memory"></div>
     </div>
+    <?php if ($isAdmin): ?>
+    <details class="panel world-inspection-panel">
+      <summary class="panel-title">CONTEXT / WORLD INSPECTION</summary>
+      <div id="world-inspection" data-endpoint="<?= htmlspecialchars('api/world-inspection.php' . (array_key_exists('111', $_GET) ? '?111' : ''), ENT_QUOTES) ?>"></div>
+    </details>
+    <?php endif; ?>
   </aside>
 
   <section class="col col-paper">
@@ -353,5 +363,8 @@ window.CY = {
      registers window.__cyTimeTravel, which the live pill opens. Loaded after app.js
      so the global is present by the time the pill is wired (same pattern as plain.js). -->
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/timetravel.js'), ENT_QUOTES) ?>"></script>
+<?php if ($isAdmin): ?>
+<script type="module" src="<?= htmlspecialchars(cy_asset('world-inspection.js'), ENT_QUOTES) ?>"></script>
+<?php endif; ?>
 </body>
 </html>

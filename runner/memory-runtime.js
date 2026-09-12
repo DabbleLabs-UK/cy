@@ -15,13 +15,15 @@ import {
   parseFormationResponse,
   parseSurfacingResponse,
 } from './autobiographical-memory.js';
+import { CONTEXT_CONSUMERS } from './context-broker.js';
 
 export class AutobiographicalMemoryRuntime {
-  constructor({ client, generate, makeId, now = () => Date.now() }) {
+  constructor({ client, generate, makeId, now = () => Date.now(), contextBroker = null }) {
     this.client = client;
     this.generate = generate;
     this.makeId = makeId;
     this.now = now;
+    this.contextBroker = contextBroker;
     this.pending = [];
     this.pendingIds = new Set();
     this.working = { directive: '', selected: [], inspection: null };
@@ -58,8 +60,19 @@ export class AutobiographicalMemoryRuntime {
       return this.working;
     }
     const candidates = Array.isArray(response && response.candidates) ? response.candidates : [];
+    const brokered = typeof this.contextBroker === 'function' ? this.contextBroker({
+      consumer: CONTEXT_CONSUMERS.MEMORY_SURFACING,
+      generationRef: generationRef || `memory-surfacing:${this.now()}`,
+      currentSenderId: currentVisitorId,
+      currentPostcard: publicSituation || text,
+      groundedContext,
+      memoryCandidates: candidates,
+      fallback: groundedContext || '',
+      databaseQueries: 1,
+    }) : null;
     const surfaced = buildSurfacingRequest(candidates, {
-      currentVisitorId, senderLabel, publicSituation, groundedContext,
+      currentVisitorId, senderLabel, publicSituation,
+      groundedContext: brokered && brokered.rendering || groundedContext,
     });
     let selectedIds = [];
     if (surfaced.candidates.length) {
@@ -116,7 +129,21 @@ export class AutobiographicalMemoryRuntime {
         limit: 5,
       });
       candidates = Array.isArray(response && response.candidates) ? response.candidates : [];
-      const request = buildFormationRequest(source, candidates, groundedContext);
+      const brokered = typeof this.contextBroker === 'function' ? this.contextBroker({
+        consumer: CONTEXT_CONSUMERS.MEMORY_FORMATION,
+        generationRef: `memory-formation:${source.sourceType}:${this.now()}`,
+        currentSenderId: source.subjectVisitorId || null,
+        provenanceSource: source,
+        groundedContext,
+        memoryCandidates: candidates,
+        fallback: groundedContext || '',
+        databaseQueries: 1,
+      }) : null;
+      const request = buildFormationRequest(
+        source,
+        candidates,
+        brokered && brokered.rendering || groundedContext,
+      );
       const raw = await this.generate(request);
       const operation = parseFormationResponse(raw, {
         source,

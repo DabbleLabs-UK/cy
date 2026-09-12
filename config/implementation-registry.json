@@ -893,6 +893,98 @@
       "version": null
     }
   ],
+  "world_systems": [
+    {
+      "id": "shared_context_broker",
+      "display_name": "SHARED CONTEXT BROKER",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Privacy-first role-specific working-set assembly with epistemic labels, knowledge boundaries, per-section budgets, provenance deduplication and owner inspection. This is engineering context policy, not biological working memory.",
+      "data_dependencies": ["world_canon", "current_world_state", "recent_world_history", "grounded_soma", "autobiographical_memory", "visitor_context", "open_world_threads"],
+      "version": "shared-context-broker-v1"
+    },
+    {
+      "id": "role_specific_context_packets",
+      "display_name": "ROLE-SPECIFIC CONTEXT PACKETS",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Separate pre-model access profiles exist for Cy prose, expressive choice, memory formation, memory surfacing and ambient world generation.",
+      "data_dependencies": ["shared_context_broker"],
+      "version": "shared-context-broker-v1"
+    },
+    {
+      "id": "ambient_world_generator",
+      "display_name": "AMBIENT PRISON WORLD GENERATOR",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Low-priority model-mediated structured candidates are deterministically validated before entering world state. This is a narrative world-simulation mechanism, not a cognitive model of Cy.",
+      "data_dependencies": ["shared_context_broker", "world_canon", "recent_world_history", "open_world_threads"],
+      "version": "ambient-world-generator-v1"
+    },
+    {
+      "id": "ambient_world_validator",
+      "display_name": "AMBIENT WORLD VALIDATOR",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Deterministic schema, cast, location, chronology, causality, object, privacy, knowledge and forbidden-output validation gates every candidate.",
+      "data_dependencies": ["ambient_world_generator"],
+      "version": "ambient-world-generator-v1"
+    },
+    {
+      "id": "open_world_threads",
+      "display_name": "OPEN WORLD THREADS",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Persistent unresolved world threads and minimal object state support validated causal continuations without requiring scheduled resolution.",
+      "data_dependencies": ["ambient_world_validator", "structured_environment_event"],
+      "version": "ambient-world-generator-v1"
+    },
+    {
+      "id": "awg_idle_scheduler",
+      "display_name": "AMBIENT WORLD IDLE SCHEDULER",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Ambient generation runs at the lowest explicit inference priority and only inside spare waking throttle time with no reply, critical retrieval or memory-formation backlog.",
+      "data_dependencies": ["tempo_idle_window", "memory_formation_queue", "visitor_reply_queue"],
+      "version": "ambient-world-generator-v1"
+    },
+    {
+      "id": "biological_global_workspace",
+      "display_name": "BIOLOGICAL GLOBAL WORKSPACE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The engineering context broker makes no claim to reproduce biological conscious access.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "biological_attention",
+      "display_name": "BIOLOGICAL ATTENTION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No biological attention model is implemented by the context broker or world generator.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "world_actor_theory_of_mind",
+      "display_name": "WORLD-ACTOR THEORY OF MIND",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Per-actor beliefs and mental-state inference are not modelled. Only explicit observation and knowledge scopes are stored.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "new_cast_generation",
+      "display_name": "NEW CAST GENERATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Ambient candidates may use only the existing cast roster. Creating new named prisoners or officers is disabled.",
+      "data_dependencies": [],
+      "version": null
+    }
+  ],
   "brain_regions": [
     {
       "id": "scnCircadian",

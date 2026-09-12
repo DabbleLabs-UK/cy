@@ -27,8 +27,8 @@ assert.equal(clampSpeed(0), 1);
 assert.equal(clampSpeed(101), 100);
 
 const runSource = await readFile(new URL('./run.js', import.meta.url), 'utf8');
-assert.match(runSource, /idleSilently\(idleMs, \{ breakOnTempo: true \}\)/,
-  'a tempo change interrupts a long duty-cycle wait');
+assert.match(runSource, /idleSilently\(idleMs, \{ breakOnTempo: true, allowAwg: true \}\)/,
+  'a tempo change interrupts a long duty-cycle wait and that wait alone offers spare AWG capacity');
 assert.match(runSource, /if \(nextIdleTempoSpeed !== idleTempoSpeed\) \{[\s\S]*?tempoEpoch\+\+;/,
   'only a real speed change interrupts the current duty-cycle wait');
 assert.doesNotMatch(runSource, /client\.onTempo = \(t\) => \{\s*tempoEpoch\+\+;/,

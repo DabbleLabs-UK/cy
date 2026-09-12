@@ -186,6 +186,10 @@ const BASE_OBSERVATION = Object.freeze({
 // full, partial, missed or refused meal share the meal archetype and override
 // only the facts that actually differ.
 export const REFERENCE_EVENT_ARCHETYPES = Object.freeze([
+  // Accepted Ambient World Generator candidates enter through this neutral
+  // archetype. It contains no inferred appraisal or Soma output; the candidate's
+  // objective facts and explicit observation are merged by the runner.
+  { id: 'ambient_world_event', family: 'ambient_world', world: {}, observation: { modality: UNKNOWN, certainty: UNKNOWN } },
   { id: 'meal_expected', family: 'homeostasis', world: { physical: { food: { scheduled: 'yes', intake_outcome: 'expected' } }, situation: { predictability: 'routine', resolution_status: 'unresolved' } }, observation: { modality: 'direct' } },
   { id: 'meal', family: 'homeostasis', world: { situation: { predictability: 'routine' } }, observation: { modality: 'direct' } },
   { id: 'somatic_event', family: 'physical', world: {}, observation: { modality: 'direct' } },

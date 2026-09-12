@@ -7,6 +7,7 @@ require __DIR__ . '/../../lib/admin.php';
 require __DIR__ . '/../../lib/tempo.php';
 require __DIR__ . '/../../lib/postcard_queue.php';
 require __DIR__ . '/../../lib/environment_event.php';
+require __DIR__ . '/../../lib/world_simulation.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -73,6 +74,47 @@ try {
             stroke_count = VALUES(stroke_count), title = VALUES(title),
             subject = VALUES(subject), requested_by = VALUES(requested_by)'
     );
+    $contextInspectionInsert = $db->prepare(
+        'INSERT INTO context_broker_inspections
+            (generation_ref, consumer, generated_at, packet, final_rendering, metrics, created_at)
+         VALUES (:generation_ref, :consumer, :generated_at, :packet, :rendering, :metrics, :created_at)'
+    );
+    $awgRunInsert = $db->prepare(
+        'INSERT INTO ambient_world_runs
+            (run_id, ran_at, candidate_type, context_packet_summary, candidate_output,
+             validation_status, rejection_reason, created_world_event_ids, thread_changes,
+             model_latency_ms, validation_latency_ms, total_latency_ms, provider, model, created_at)
+         VALUES
+            (:run_id, :ran_at, :candidate_type, :context_summary, :candidate_output,
+             :validation_status, :rejection_reason, :created_event_ids, :thread_changes,
+             :model_latency_ms, :validation_latency_ms, :total_latency_ms, :provider, :model, :created_at)
+         ON DUPLICATE KEY UPDATE validation_status = VALUES(validation_status),
+             rejection_reason = VALUES(rejection_reason), total_latency_ms = VALUES(total_latency_ms)'
+    );
+    $worldThreadUpsert = $db->prepare(
+        'INSERT INTO world_threads
+            (thread_id, thread_type, state, summary, participants, source_event_ids,
+             next_eligible_at, resolution, visibility, created_at, updated_at)
+         VALUES
+            (:thread_id, :thread_type, :state, :summary, :participants, :source_event_ids,
+             :next_eligible_at, :resolution, :visibility, :created_at, :updated_at)
+         ON DUPLICATE KEY UPDATE thread_type = VALUES(thread_type), state = VALUES(state),
+             summary = VALUES(summary), participants = VALUES(participants),
+             source_event_ids = VALUES(source_event_ids), next_eligible_at = VALUES(next_eligible_at),
+             resolution = VALUES(resolution), visibility = VALUES(visibility), updated_at = VALUES(updated_at)'
+    );
+    $worldObjectUpsert = $db->prepare(
+        'INSERT INTO world_objects
+            (object_id, object_type, owner_id, holder_id, location, status,
+             visibility, source_event_id, created_at, updated_at)
+         VALUES
+            (:object_id, :object_type, :owner_id, :holder_id, :location, :status,
+             :visibility, :source_event_id, :created_at, :updated_at)
+         ON DUPLICATE KEY UPDATE object_type = VALUES(object_type), owner_id = VALUES(owner_id),
+             holder_id = VALUES(holder_id), location = VALUES(location), status = VALUES(status),
+             visibility = VALUES(visibility), source_event_id = VALUES(source_event_id),
+             updated_at = VALUES(updated_at)'
+    );
     $inserted = 0;
 
     foreach ($input['events'] as $event) {
@@ -101,6 +143,77 @@ try {
                 ':event_type' => (string)$world['event_type'],
                 ':event_family' => (string)$world['event_family'],
                 ':record' => $recordJson,
+            ]);
+            continue;
+        }
+
+        // Context packets and ambient-world simulation state are private
+        // observability side channels. None may enter the public events table.
+        if ($kind === 'context_inspection') {
+            $record = is_array($event['payload'])
+                ? captive_context_inspection_validate($event['payload'])
+                : throw new InvalidArgumentException('invalid context inspection');
+            $contextInspectionInsert->execute([
+                ':generation_ref' => $record['generation_ref'],
+                ':consumer' => $record['consumer'],
+                ':generated_at' => captive_world_datetime($record['generated_at']),
+                ':packet' => json_encode($record['packet'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                ':rendering' => $record['rendering'],
+                ':metrics' => json_encode($record['metrics'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                ':created_at' => (string)$event['ts'],
+            ]);
+            continue;
+        }
+
+        if ($kind === 'awg_run_record') {
+            $record = is_array($event['payload'])
+                ? captive_awg_run_validate($event['payload'])
+                : throw new InvalidArgumentException('invalid AWG run record');
+            $awgRunInsert->execute([
+                ':run_id' => $record['run_id'], ':ran_at' => captive_world_datetime($record['ran_at']),
+                ':candidate_type' => $record['candidate_type'],
+                ':context_summary' => json_encode($record['context_summary']),
+                ':candidate_output' => $record['candidate_output'] === null ? null : json_encode($record['candidate_output']),
+                ':validation_status' => $record['validation_status'], ':rejection_reason' => $record['rejection_reason'],
+                ':created_event_ids' => json_encode($record['created_event_ids']),
+                ':thread_changes' => json_encode($record['thread_changes']),
+                ':model_latency_ms' => $record['model_latency_ms'],
+                ':validation_latency_ms' => $record['validation_latency_ms'],
+                ':total_latency_ms' => $record['total_latency_ms'],
+                ':provider' => $record['provider'], ':model' => $record['model'],
+                ':created_at' => (string)$event['ts'],
+            ]);
+            continue;
+        }
+
+        if ($kind === 'world_thread_record') {
+            $record = is_array($event['payload'])
+                ? captive_world_thread_validate($event['payload'])
+                : throw new InvalidArgumentException('invalid world thread record');
+            $worldThreadUpsert->execute([
+                ':thread_id' => $record['id'], ':thread_type' => $record['type'], ':state' => $record['state'],
+                ':summary' => $record['summary'], ':participants' => json_encode($record['participants']),
+                ':source_event_ids' => json_encode($record['source_event_ids']),
+                ':next_eligible_at' => captive_world_datetime($record['next_eligible_at']),
+                ':resolution' => $record['resolution'] === null ? null : json_encode($record['resolution']),
+                ':visibility' => json_encode($record['visibility']),
+                ':created_at' => captive_world_datetime($record['created_at']),
+                ':updated_at' => captive_world_datetime($record['updated_at']),
+            ]);
+            continue;
+        }
+
+        if ($kind === 'world_object_record') {
+            $record = is_array($event['payload'])
+                ? captive_world_object_validate($event['payload'])
+                : throw new InvalidArgumentException('invalid world object record');
+            $updated = captive_world_datetime($record['updated_at']);
+            $worldObjectUpsert->execute([
+                ':object_id' => $record['id'], ':object_type' => $record['type'],
+                ':owner_id' => $record['owner_id'], ':holder_id' => $record['holder_id'],
+                ':location' => $record['location'], ':status' => $record['status'],
+                ':visibility' => json_encode($record['visibility']), ':source_event_id' => $record['source_event_id'],
+                ':created_at' => $updated, ':updated_at' => $updated,
             ]);
             continue;
         }

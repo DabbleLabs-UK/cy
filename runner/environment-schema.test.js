@@ -7,8 +7,9 @@ import {
   serializeEnvironmentRecord,
 } from './environment-schema.js';
 
-assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 24);
-assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 24);
+assert.equal(REFERENCE_EVENT_ARCHETYPES.length, 25);
+assert.equal(new Set(REFERENCE_EVENT_ARCHETYPES.map((item) => item.id)).size, 25);
+assert.ok(REFERENCE_EVENT_ARCHETYPES.some((item) => item.id === 'ambient_world_event'));
 
 const event = createEnvironmentEvent('meal', {
   id: 'env-test-meal',

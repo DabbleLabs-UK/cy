@@ -23,14 +23,15 @@ function captive_implementation_registry(?string $path = null): array
     $registry = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     if (!is_array($registry)
         || ($registry['schema'] ?? null) !== 'cy.implementation-registry'
-        || !isset($registry['soma_variables'], $registry['soma_subsystems'], $registry['brain_regions'])
+        || !isset($registry['soma_variables'], $registry['soma_subsystems'], $registry['brain_regions'], $registry['world_systems'])
         || !is_array($registry['soma_variables'])
         || !is_array($registry['soma_subsystems'])
-        || !is_array($registry['brain_regions'])) {
+        || !is_array($registry['brain_regions'])
+        || !is_array($registry['world_systems'])) {
         throw new RuntimeException('implementation registry is invalid');
     }
 
-    foreach (['soma_variables', 'soma_subsystems', 'brain_regions'] as $scope) {
+    foreach (['soma_variables', 'soma_subsystems', 'brain_regions', 'world_systems'] as $scope) {
         $seen = [];
         foreach ($registry[$scope] as $entry) {
             $id = is_array($entry) ? (string)($entry['id'] ?? '') : '';

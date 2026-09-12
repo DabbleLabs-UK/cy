@@ -1,0 +1,97 @@
+.world-inspection-panel summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.world-inspection-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.world-inspection-panel > summary::after {
+  content: "+";
+  float: right;
+}
+
+.world-inspection-panel[open] > summary::after {
+  content: "-";
+}
+
+#world-inspection {
+  padding-top: 10px;
+  color: #a9bdc9;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.world-inspection-label {
+  color: #718b9a;
+  letter-spacing: .12em;
+  margin-bottom: 4px;
+}
+
+.world-inspection-select {
+  width: 100%;
+  padding: 6px;
+  color: #cce6f2;
+  background: #0d141a;
+  border: 1px solid #315063;
+}
+
+.world-inspection-context {
+  margin: 9px 0;
+}
+
+.world-inspection-metrics,
+.world-inspection-awg {
+  display: grid;
+  gap: 3px;
+}
+
+.world-inspection-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: 8px;
+  border-bottom: 1px solid #1d2a33;
+  padding: 3px 0;
+}
+
+.world-inspection-metric span {
+  color: #718b9a;
+}
+
+.world-inspection-metric strong {
+  color: #d2dce2;
+  overflow-wrap: anywhere;
+}
+
+.world-inspection-detail {
+  margin-top: 7px;
+  border: 1px solid #273b48;
+  background: #0b1116;
+}
+
+.world-inspection-detail > summary {
+  padding: 6px;
+  color: #88bdd5;
+  letter-spacing: .08em;
+}
+
+.world-inspection-json,
+.world-inspection-rendering {
+  max-height: 280px;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #b9cbd4;
+  border-top: 1px solid #273b48;
+}
+
+.world-inspection-empty {
+  color: #708897;
+}
+
+.world-inspection-error {
+  color: #e67b61;
+}

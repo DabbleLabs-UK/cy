@@ -112,6 +112,7 @@ import {
   isOfficer,
   BY_KEY,
   CAST,
+  OFFICERS,
 } from './cast.js';
 import { PowerMeter, costInjection } from './power.js';
 import { SpendMeter } from './spend.js';
@@ -144,6 +145,19 @@ import {
   sourceFromReply,
 } from './autobiographical-memory.js';
 import { AutobiographicalMemoryRuntime } from './memory-runtime.js';
+import {
+  CONTEXT_CONSUMERS,
+  createContextItem,
+  inspectContextPacket,
+  safeBuildContext,
+} from './context-broker.js';
+import {
+  AWG_TIMEOUT_MS,
+  awgEventToEnvironment,
+  reconcileWorldSimulationState,
+  runAmbientWorldCycle,
+  shouldRunAwg,
+} from './ambient-world-generator.js';
 import {
   reconcileInstrumentalAgencyState,
   openInstrumentalOpportunity,
@@ -370,6 +384,10 @@ async function main() {
   // prose. A restart therefore cannot silently turn an intended action into a
   // resolved trial or lose the concrete continuation still owed by the world.
   vitals.instrumentalAgency = reconcileInstrumentalAgencyState(vitals.instrumentalAgency);
+  // Ambient world state is authoritative runner-persistent state. The public
+  // database receives private inspection mirrors, but a restart resumes from
+  // this state rather than reconstructing canon from prose.
+  vitals.worldSimulation = reconcileWorldSimulationState(vitals.worldSimulation);
   // the incident ledger, last-openers ring and last-incident clock ride on the
   // vitals object too, so they persist with state.
   vitals.ledger = reconcileLedger(vitals.ledger);
@@ -405,6 +423,7 @@ async function main() {
   let pendingMemoryQuery = null;
   let memoryFormationTurns = 0;
   let memoryExpressionBuffer = [];
+  const recentWorldHistory = [];
   try {
     const observedSleepHistory = await client.fetchObservedSleepHistory();
     soma.replayObservedSleepRecords(observedSleepHistory, { now: Date.now() });
@@ -619,6 +638,7 @@ async function main() {
     observation = {},
     durationMs = null,
     provisionalConsumer = true,
+    cyObserved = true,
   } = {}) {
     const eventId = `env-${randomUUID()}`;
     const eventTimestamp = tsNow();
@@ -677,7 +697,7 @@ async function main() {
       || somaticFacts.tissue.injury_status !== 'UNKNOWN';
     const record = createEnvironmentRecord(event, {
       consumedBy: [
-        'soma-input-staging-v1',
+        ...(cyObserved ? ['soma-input-staging-v1'] : ['ambient-world-state-v1']),
         ...(['meal', 'meal_expected'].includes(archetypeId)
           ? ['feeding-event-model-v1', 'ingestion-ledger-v1']
           : []),
@@ -687,8 +707,7 @@ async function main() {
         ...(worldWithDescription.instrumental && worldWithDescription.instrumental.archetype_id
           ? ['prison-instrumental-opportunities-v1']
           : []),
-        'current-defensive-context-v1',
-        'probabilistic-threat-learning-v1',
+        ...(cyObserved ? ['current-defensive-context-v1', 'probabilistic-threat-learning-v1'] : []),
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
           ? ['process-s-normalized-v1', 'tpm-predicted-kss-v1']
           : []),
@@ -702,17 +721,28 @@ async function main() {
           'social-episode-model-v1',
           'social-contact-detector-ledger-v1',
         ] : []),
-        ...(provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
+        ...(cyObserved && provisionalConsumer ? ['legacy-experienced-state-v2'] : []),
       ],
     });
-    record.feeding = soma.observeFeedingRecord(record);
-    record.somatic_nociceptive = soma.observeSomaticRecord(record);
-    record.social_contact = soma.observeSocialContactRecord(record);
-    record.action_outcome_contingency = soma.observeControllabilityRecord(record);
-    record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
-    record.threat_learning = soma.observeThreatLearningRecord(record);
+    if (cyObserved) {
+      record.feeding = soma.observeFeedingRecord(record);
+      record.somatic_nociceptive = soma.observeSomaticRecord(record);
+      record.social_contact = soma.observeSocialContactRecord(record);
+      record.action_outcome_contingency = soma.observeControllabilityRecord(record);
+      record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
+      record.threat_learning = soma.observeThreatLearningRecord(record);
+    }
     emit({ kind: 'world_event_record', payload: record });
-    if (autobiographicalMemory) {
+    recentWorldHistory.push({
+      id: event.id,
+      timestamp: event.timestamp,
+      summary: summary || worldWithDescription.context.description || eventType,
+      location: event.world.context.location || null,
+      participants: event.world.context.associated_entities || [],
+      cyObserved,
+    });
+    while (recentWorldHistory.length > 24) recentWorldHistory.shift();
+    if (cyObserved && autobiographicalMemory) {
       const source = sourceFromEnvironmentRecord(record);
       if (source) {
         autobiographicalMemory.queueSource(source);
@@ -1879,8 +1909,10 @@ async function main() {
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
   // chunk (used for the drawing DSL, which must never reach the pen as prose).
   // Wired to currentAbort so an inbound postcard/notice can cut it short.
-  async function rawGenerate({ system, prompt, opts, purpose = 'drawing', accountingMode = purpose }) {
+  async function rawGenerate({ system, prompt, opts, purpose = 'drawing', accountingMode = purpose, timeoutMs = null }) {
     const ac = new AbortController();
+    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => ac.abort(), timeoutMs) : null;
     currentAbort = ac;
     // a non-streamed generation is opaque to the viewer (nothing reaches the page),
     // but the model IS working the whole time - light the LED so the pinned CPU is
@@ -1897,9 +1929,176 @@ async function main() {
     } catch {
       return ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
+      if (timeout) clearTimeout(timeout);
       if (currentAbort === ac) currentAbort = null;
       setInfer('idle');
     }
+  }
+
+  function brokerItems(consumer, {
+    cognition = null,
+    incidentContext = '',
+    currentSenderId = null,
+    visitorContext = '',
+    currentPostcard = '',
+    groundedContext = '',
+    recentExpression = '',
+    provenanceSource = null,
+    memoryCandidates = [],
+    actionOptions = [],
+    mins = londonParts().mins,
+  } = {}) {
+    const forAwg = consumer === CONTEXT_CONSUMERS.AWG;
+    const items = [];
+    const add = (value) => {
+      try { items.push(createContextItem(value)); } catch { /* invalid source is inspectably absent */ }
+    };
+    add({
+      id: `current-time:${Math.floor(Date.now() / 60000)}`,
+      sourceId: `current-time:${Math.floor(Date.now() / 60000)}`,
+      section: 'mandatory_current_state', provenanceClass: 'WORLD FACT',
+      knowledgeScope: forAwg ? 'WORLD_KNOWS' : 'CY_OBSERVED',
+      privacyScope: forAwg ? 'WORLD_SIMULATION' : 'INTERNAL_ONLY',
+      content: `Current HMP ThinkPad regime and clock: ${regimeDirective(mins) || 'No active regime note.'}`,
+      priority: 100, mandatory: true,
+    });
+    if (forAwg) {
+      add({
+        id: 'world-canon:hmp-thinkpad', sourceId: 'world-canon:hmp-thinkpad',
+        section: 'world_canon', provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS',
+        privacyScope: 'WORLD_SIMULATION', mandatory: true, priority: 100,
+        content: 'HMP ThinkPad is a British digital prison. Cy is inmate 7734. Prison-world history is immutable. Real visitors can enter only through the external postcard system.',
+      });
+      for (const entry of [...CAST, ...OFFICERS]) {
+        add({
+          id: `world-canon:cast:${entry.key}`, sourceId: `world-canon:cast:${entry.key}`,
+          section: 'cast_context', provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS',
+          privacyScope: 'WORLD_SIMULATION', priority: 90,
+          content: `${entry.key}: ${entry.name} - ${entry.blurb}`,
+        });
+      }
+      for (const thread of vitals.worldSimulation.threads.filter((entry) => entry.state === 'OPEN')) {
+        add({
+          id: `thread:${thread.id}`, sourceId: `thread:${thread.id}`, section: 'unresolved_threads',
+          provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS', privacyScope: 'WORLD_SIMULATION',
+          priority: 85,
+          content: `Open thread ${thread.id}: ${thread.type}. ${thread.summary}. Source events: ${(thread.sourceEventIds || []).join(', ') || 'none recorded'}. Next eligible: ${thread.nextEligibleAt || 'unscheduled'}.`,
+        });
+      }
+      for (const object of vitals.worldSimulation.objects.slice(-20)) {
+        add({
+          id: `object:${object.id}`, sourceId: `object:${object.id}`, section: 'persistent_objects',
+          provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS', privacyScope: 'WORLD_SIMULATION',
+          priority: 70,
+          content: `Object ${object.id}: ${object.type}; owner ${object.ownerId || 'unknown'}; holder ${object.holderId || 'none known'}; location ${object.location}; status ${object.status}.`,
+        });
+      }
+    }
+    const recentEvents = [
+      ...(forAwg ? vitals.worldSimulation.recentAccepted || [] : []),
+      ...recentWorldHistory,
+    ];
+    for (const event of recentEvents) {
+      const visible = forAwg || event.cyObserved;
+      if (!visible) continue;
+      add({
+        id: `event:${event.id}`, sourceId: event.id, section: 'recent_events',
+        provenanceClass: event.cyObserved ? 'OBSERVED BY CY' : 'WORLD FACT',
+        knowledgeScope: forAwg ? 'WORLD_KNOWS' : 'CY_OBSERVED',
+        privacyScope: forAwg ? 'WORLD_SIMULATION' : 'INTERNAL_ONLY',
+        priority: 60,
+        content: `${event.timestamp || event.occurredAt}: ${event.summary}${event.location ? ` at ${event.location}` : ''}.`,
+      });
+    }
+    const groundedDirective = cognition && cognition.groundedDirective || groundedContext;
+    if (!forAwg && groundedDirective) {
+      add({
+        id: 'grounded-soma:current', sourceId: 'grounded-soma:current', section: 'grounded_soma',
+        provenanceClass: 'MODEL ESTIMATE', knowledgeScope: 'CY_OBSERVED', privacyScope: 'INTERNAL_ONLY',
+        priority: 95, content: groundedDirective,
+      });
+    }
+    if (!forAwg && recentExpression) {
+      add({
+        id: 'recent-expression:tail', sourceId: 'recent-expression:tail', section: 'recent_expression',
+        provenanceClass: 'OBSERVED BY CY', knowledgeScope: 'CY_OBSERVED', privacyScope: 'INTERNAL_ONLY',
+        priority: 50, content: recentExpression,
+      });
+    }
+    if (!forAwg && incidentContext) {
+      add({
+        id: 'incident:current', sourceId: 'incident:current', section: 'recent_events',
+        provenanceClass: 'OBSERVED BY CY', knowledgeScope: 'CY_OBSERVED', privacyScope: 'INTERNAL_ONLY',
+        priority: 90, content: incidentContext,
+      });
+    }
+    if (!forAwg && visitorContext) {
+      add({
+        id: 'visitor:current', sourceId: 'visitor:current', section: 'visitor_context',
+        provenanceClass: 'PUBLIC VISITOR MATERIAL', knowledgeScope: 'CY_OBSERVED',
+        privacyScope: currentSenderId ? 'SENDER_RECALLABLE' : 'INTERNAL_ONLY', senderId: currentSenderId,
+        priority: 100, content: visitorContext,
+      });
+    }
+    if (!forAwg && currentPostcard) {
+      add({
+        id: 'postcard:current', sourceId: 'postcard:current', section: 'current_situation',
+        provenanceClass: 'PUBLIC VISITOR MATERIAL', knowledgeScope: 'CY_OBSERVED',
+        privacyScope: currentSenderId ? 'SENDER_RECALLABLE' : 'INTERNAL_ONLY', senderId: currentSenderId,
+        priority: 100, mandatory: true, content: currentPostcard,
+      });
+    }
+    if (!forAwg && provenanceSource && provenanceSource.text) {
+      add({
+        id: 'memory-source:current', sourceId: provenanceSource.sourceId || 'memory-source:current',
+        section: 'provenance_source', provenanceClass: provenanceSource.sourceType === 'environment_event'
+          ? 'OBSERVED BY CY' : 'PUBLIC VISITOR MATERIAL', knowledgeScope: 'CY_OBSERVED',
+        privacyScope: provenanceSource.sourceVisibility || 'INTERNAL_ONLY',
+        senderId: provenanceSource.subjectVisitorId || currentSenderId, mandatory: true, priority: 100,
+        content: provenanceSource.text,
+      });
+    }
+    const memories = memoryCandidates.length ? memoryCandidates
+      : (autobiographicalMemory && autobiographicalMemory.working.selected || []);
+    for (const memory of memories) {
+      add({
+        id: `memory:${memory.id}`, sourceId: `memory:${memory.id}`, section: 'autobiographical_memory',
+        provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
+        privacyScope: memory.privacyScope || 'INTERNAL_ONLY', senderId: memory.subjectVisitorId || null,
+        priority: 70, content: memory.content || memory.publicSummary,
+      });
+    }
+    if (!forAwg && actionOptions.length) {
+      add({
+        id: 'expressive-actions:available', sourceId: 'expressive-actions:available', section: 'action_options',
+        provenanceClass: 'WORLD FACT', knowledgeScope: 'CY_OBSERVED', privacyScope: 'INTERNAL_ONLY',
+        priority: 100, mandatory: true, content: `Available outward forms: ${actionOptions.join(', ')}.`,
+      });
+    }
+    return items;
+  }
+
+  function buildBrokerContext(consumer, options = {}) {
+    const generationRef = options.generationRef || `${consumer.toLowerCase()}:${Date.now()}`;
+    const result = safeBuildContext({
+      consumer,
+      generationRef,
+      currentSenderId: options.currentSenderId || null,
+      items: brokerItems(consumer, options),
+      availableSourceStores: [
+        'world_canon', 'current_world_state', 'recent_world_history', 'grounded_soma',
+        'autobiographical_memory', 'recent_cy_expression', 'visitor_context', 'cast_context',
+        'open_world_threads', 'persistent_objects',
+      ],
+      databaseQueries: Number(options.databaseQueries) || 0,
+    }, options.fallback || '');
+    if (result.ok) {
+      const inspection = inspectContextPacket(result.packet);
+      emit({ kind: 'context_inspection', payload: { generation_ref: generationRef, ...inspection } });
+      return { ...result, inspection };
+    }
+    console.error(`[cy] shared context broker failed for ${consumer}: ${result.error}`);
+    return result;
   }
 
   autobiographicalMemory = new AutobiographicalMemoryRuntime({
@@ -1912,6 +2111,7 @@ async function main() {
       purpose: call.purpose,
       accountingMode: call.purpose,
     }),
+    contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
   });
 
   async function refreshPendingMemory(generationRef = null, groundedContext = null) {
@@ -1933,7 +2133,7 @@ async function main() {
   // Legacy relationship, monotony-amplification, attention and heuristic memory
   // state do not enter. The autobiography block has already passed the server
   // privacy filter and a separate model-mediated surfacing decision.
-  function buildCtx(cognition = null) {
+  function buildCtx(cognition = null, brokerOptions = {}) {
     genCount++;
     const grounded = cognition && cognition.groundedDirective != null
       ? { context: cognition.groundedContext, directive: cognition.groundedDirective }
@@ -1944,6 +2144,13 @@ async function main() {
       autobiographicalMemory: autobiographicalMemory.working.directive,
       autobiographicalMemoryInspection: autobiographicalMemory.working.inspection,
     };
+    const brokered = buildBrokerContext(CONTEXT_CONSUMERS.CY_PROSE, {
+      cognition: { groundedDirective: grounded.directive, groundedContext: grounded.context },
+      recentExpression: contextText().slice(-640),
+      ...brokerOptions,
+      fallback: '',
+    });
+    if (brokered.ok) ctx.sharedContext = brokered.rendering;
     if (officerCue && Date.now() < officerCue.until) {
       ctx.officer = officerDirective(officerCue.key, officerCue.ev);
       officerCue = null; // fire once
@@ -2084,9 +2291,13 @@ async function main() {
     // Recognition supplies factual visitor identity/count/timing only. Legacy
     // relation values are retained for private visitor diagnostics, not prose.
     const visitor = pc.visitor ? { ...pc.visitor, from_name: pc.from_name } : null;
-    const ctx = buildCtx(cognition);
+    const ctx = buildCtx(cognition, {
+      generationRef: `postcard-reply:${pc.id}`,
+      currentSenderId: pc.visitor_id || null,
+      visitorContext: visitorForPrompt(visitor, { now: Date.now() }),
+    });
     const recog = visitorForPrompt(visitor, { now: Date.now() });
-    if (recog) ctx.visitor = recog;
+    if (recog && !ctx.sharedContext) ctx.visitor = recog;
 
     const targetPredict = letterPredict(pc.body);
     ctx.length = completionDirective(targetPredict);
@@ -3242,11 +3453,98 @@ async function main() {
     }
   }, POWER_SAMPLE_MS);
 
+  async function runAwgDuringIdle(idleBudgetMs) {
+    const eligibility = shouldRunAwg(vitals.worldSimulation, {
+      nowMs: Date.now(),
+      idleBudgetMs,
+      pendingHigherPriority: pendingPostcards.length > 0 || pendingWarden.length > 0 || client.paused,
+      memoryFormationBacklog: autobiographicalMemory ? autobiographicalMemory.pending.length : 0,
+      inferenceBusy: inferPhase !== 'idle',
+    });
+    if (!eligibility.run) return { status: 'SKIPPED', reason: eligibility.reason };
+    const context = buildBrokerContext(CONTEXT_CONSUMERS.AWG, {
+      generationRef: `awg-context:${Date.now()}`,
+      fallback: '',
+    });
+    if (!context.ok) return { status: 'SKIPPED', reason: 'CONTEXT_BROKER_FAILURE' };
+    const result = await runAmbientWorldCycle({
+      state: vitals.worldSimulation,
+      contextRendering: context.rendering,
+      nowMs: Date.now(),
+      idleBudgetMs,
+      pendingHigherPriority: pendingPostcards.length > 0 || pendingWarden.length > 0 || client.paused,
+      memoryFormationBacklog: autobiographicalMemory ? autobiographicalMemory.pending.length : 0,
+      inferenceBusy: inferPhase !== 'idle',
+      makeId: (prefix) => `${prefix}-${randomUUID()}`,
+      generate: (call) => rawGenerate({
+        system: call.system,
+        prompt: call.prompt,
+        opts: options(vitals, config.threads, 'journal', call.options),
+        purpose: call.purpose,
+        accountingMode: 'ambient_world_generation',
+        timeoutMs: Math.min(AWG_TIMEOUT_MS, idleBudgetMs),
+      }),
+    });
+    vitals.worldSimulation = result.state;
+    if (result.run) {
+      emit({
+        kind: 'awg_run_record',
+        payload: {
+          ...result.run,
+          contextPacketSummary: context.inspection.summary,
+          provider: activeProvider().id,
+          model: activeProvider().model,
+          totalLatencyMs: result.latencyMs,
+        },
+      });
+    }
+    if (result.status !== 'ACCEPTED') return result;
+
+    const environment = awgEventToEnvironment(result.applied);
+    const record = captureEnvironmentEvent(environment.archetypeId, {
+      eventType: environment.eventType,
+      summary: environment.summary,
+      world: environment.world,
+      observation: environment.observation,
+      provisionalConsumer: false,
+      cyObserved: !!result.applied.cyObserved,
+    });
+    result.applied.event.environmentEventId = record.world_event.id;
+    for (const change of result.applied.changes) {
+      const thread = vitals.worldSimulation.threads.find((item) => item.id === change.threadId);
+      if (thread) emit({ kind: 'world_thread_record', payload: thread });
+    }
+    for (const object of vitals.worldSimulation.objects.filter((item) => item.updatedAt === result.run.ranAt)) {
+      emit({ kind: 'world_object_record', payload: object });
+    }
+    if (result.applied.cyObserved && environment.publicTimeline) {
+      emit({
+        kind: 'event',
+        payload: {
+          name: 'ambient_world',
+          text: environment.publicTimeline,
+          environment_event_id: record.world_event.id,
+        },
+      });
+    }
+    return result;
+  }
+
   // Interruptible idle: sit still for `ms`, but break early if a postcard or
   // notice lands (so a silence never swallows an interrupt) or on shutdown.
-  async function idleSilently(ms, { breakOnTempo = false } = {}) {
+  // AWG is permitted only when the caller explicitly marks a normal waking
+  // throttle interval as spare capacity. Dream, failure-backoff and chosen
+  // silence intervals never start background world inference.
+  async function idleSilently(ms, { breakOnTempo = false, allowAwg = false } = {}) {
     const end = Date.now() + ms;
     const startingTempoEpoch = tempoEpoch;
+    if (allowAwg) {
+      try {
+        await runAwgDuringIdle(Math.max(0, end - Date.now()));
+      } catch (error) {
+        console.error(`[cy] AWG failed safely: ${error && error.message || error}`);
+      }
+    }
     while (running && Date.now() < end) {
       const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;
       if (pendingPostcards.length || pendingWarden.length || tempoChanged) break;
@@ -3510,10 +3808,17 @@ async function main() {
       if (!lastSilenceAtMs || nowMs - lastSilenceAtMs >= EXPRESSIVE_SILENCE_COOLDOWN_MS) {
         availableActions.push('silence');
       }
+      const choiceContext = buildBrokerContext(CONTEXT_CONSUMERS.EXPRESSIVE_CHOICE, {
+        generationRef: `expressive-choice:${nowMs}`,
+        cognition,
+        incidentContext,
+        actionOptions: availableActions,
+        fallback: cognition.groundedDirective,
+      });
       const choiceRequest = buildExpressiveChoiceRequest({
-        groundedContext: cognition.groundedContext,
-        groundedDirective: cognition.groundedDirective,
-        currentIncidentContext: incidentContext,
+        groundedContext: choiceContext.packet || cognition.groundedContext,
+        groundedDirective: choiceContext.rendering || cognition.groundedDirective,
+        currentIncidentContext: choiceContext.ok ? '' : incidentContext,
         provisionalMemoryCandidate: null,
         availableActions,
       });
@@ -3580,13 +3885,16 @@ async function main() {
       let burstGroundedDirective = '';
       let burstMemoryQuery = null;
       {
-        const ctx = buildCtx(cognition);
+        const ctx = buildCtx(cognition, {
+          generationRef: `journal-prose:${nowMs}`,
+          incidentContext,
+        });
         burstGroundedContext = ctx.groundedSomaContext;
         burstGroundedDirective = ctx.groundedSoma;
         burstMemoryQuery = ctx.autobiographicalMemoryInspection;
         ctx.bans = bans;
         ctx.length = completionDirective(targetOpts.num_predict);
-        ctx.regime = regimeDirective(mins);
+        if (!ctx.sharedContext) ctx.regime = regimeDirective(mins);
         burstForm = selectedAction;
         ctx.incidents = incidentContext;
         directives = buildDirectives(vitals, 'journal', ctx);
@@ -3829,7 +4137,7 @@ async function main() {
           await recordOutcome('throttled'); // duty-cycle quiet, a distinct machine-imposed gap
           // a throttle idle is machine-imposed quiet, not a wedge: the stall counter
           // is untouched by 'throttled', so the watchdog never mistakes it for one.
-          await idleSilently(idleMs, { breakOnTempo: true });
+          await idleSilently(idleMs, { breakOnTempo: true, allowAwg: true });
         }
       } else {
         // NON-PRODUCED cycle. On a METERED provider, a genuine non-emitting FAILURE

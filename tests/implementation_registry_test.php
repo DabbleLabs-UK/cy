@@ -46,6 +46,10 @@ check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'grounded_instrumental_action_selection')['implementation_status'] === 'NOT_IMPLEMENTED', 'grounded instrumental action selection must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'anxiety')['implementation_status'] === 'PROVISIONAL', 'Anxiety must remain provisional');
 check_registry(captive_implementation_registry_entry($registry, 'brain_regions', 'vmpfcControl')['implementation_status'] === 'NOT_IMPLEMENTED', 'vmPFC activation must remain not modelled');
+check_registry(captive_implementation_registry_entry($registry, 'world_systems', 'shared_context_broker')['implementation_status'] === 'IMPLEMENTED', 'shared context broker must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'world_systems', 'ambient_world_generator')['implementation_status'] === 'IMPLEMENTED', 'ambient world generator must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'world_systems', 'biological_global_workspace')['implementation_status'] === 'NOT_IMPLEMENTED', 'biological global workspace must remain not modelled');
+check_registry(captive_implementation_registry_entry($registry, 'world_systems', 'new_cast_generation')['implementation_status'] === 'NOT_IMPLEMENTED', 'new cast generation must remain disabled');
 
 if ($failures !== []) {
     fwrite(STDERR, implode("\n", $failures) . "\n");

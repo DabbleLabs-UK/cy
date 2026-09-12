@@ -436,7 +436,7 @@ export function dreamSampling(_v) {
 // cache. This builds the block; buildPrompt() places it last. ctx carries the
 // contextual injections assembled by the live loop:
 //   { bans, regime, officer, overheard, wingnoise, visitor, warden, cost,
-//     incidents, groundedSoma, autobiographicalMemory, length, form }.
+//     sharedContext, incidents, groundedSoma, autobiographicalMemory, length, form }.
 // Older cast/grudge/amplified/regime keys remain accepted for inspection tools,
 // but the live runner does not supply them.
 export function buildDirectives(v, mode, ctx = {}) {
@@ -492,9 +492,14 @@ export function buildDirectives(v, mode, ctx = {}) {
   // late as the stable tier allows (last here, just before the one-shot cues) so it
   // still reads reasonably fresh, but ahead of the every-burst tail so a burst with
   // no new incident reuses it from cache instead of re-evaluating it.
-  if (ctx.incidents) parts.push(ctx.incidents);
-  if (ctx.autobiographicalMemory) parts.push(ctx.autobiographicalMemory);
-  if (ctx.groundedSoma) parts.push(ctx.groundedSoma);
+  // The shared broker is the preferred path. The legacy individual inputs remain
+  // as a loud, minimal-safe fallback if broker assembly fails; never include both.
+  if (ctx.sharedContext) parts.push(ctx.sharedContext);
+  else {
+    if (ctx.incidents) parts.push(ctx.incidents);
+    if (ctx.autobiographicalMemory) parts.push(ctx.autobiographicalMemory);
+    if (ctx.groundedSoma) parts.push(ctx.groundedSoma);
+  }
   // TIER 2 - ONE-SHOT CUES: present in only the single burst they fire, absent the
   // rest. Placed AFTER the stable tier so their appearance/disappearance only ever
   // invalidates from here on, never the stable prefix above.
