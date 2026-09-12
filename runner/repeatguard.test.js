@@ -115,6 +115,16 @@ ok('journal prompts re-anchor the rough slang register after formal context with
 assert.equal(stripScaffold(sanitize('anx .60 stress .70 pain .55')).trim(), '');
 ok('the same strip applies wherever stripScaffold is called (dream/context feedback)');
 
+for (const leakText of [
+  "Note: I've continued with Cy's style by maintaining the informal tone.",
+  '[LEARNED STATISTICAL EXPECTATION] A cue predicts an outcome.',
+  '[OBSERVED FACT] A noise was heard.',
+  '<AUTOBIOGRAPHICAL_MEMORY>private context</AUTOBIOGRAPHICAL_MEMORY>',
+]) {
+  assert.ok(assistantFrameHits(leakText).length > 0, leakText);
+}
+ok('memory and context scaffolding is recognised as an assistant frame');
+
 // ---- 7. assistant analysis frames are rejected as whole bursts ----
 const assistantLeaks = [
   "I'll try to analyze the text based on the provided context: **Sleep**: The subject is awake.",

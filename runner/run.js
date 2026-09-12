@@ -745,7 +745,9 @@ async function main() {
     if (cyObserved && autobiographicalMemory) {
       const source = sourceFromEnvironmentRecord(record);
       if (source) {
-        autobiographicalMemory.queueSource(source);
+        void autobiographicalMemory.queueSource(source).catch((error) => {
+          console.warn(`[cy] memory source enqueue deferred: ${error.message}`);
+        });
         pendingMemoryQuery = {
           text: source.text,
           tags: source.tags,
@@ -1279,7 +1281,8 @@ async function main() {
   // ---- shared loop state ----
   let running = true;
   let currentMode = 'journal';
-  let currentAbort = null; // AbortController for the in-flight generation
+  let currentAbort = null; // AbortController for the in-flight foreground generation
+  let currentMemoryAbort = null; // separate, preemptible background memory call
   let tokenCount = 0; // tokens this vitals-tick window (broca)
   let brocaLevel = 0; // decaying live-output level driving the Broca readout
   // WATCHDOG bookkeeping. lastTextMs stamps every real text event. The stall
@@ -1909,29 +1912,54 @@ async function main() {
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
   // chunk (used for the drawing DSL, which must never reach the pen as prose).
   // Wired to currentAbort so an inbound postcard/notice can cut it short.
-  async function rawGenerate({ system, prompt, opts, purpose = 'drawing', accountingMode = purpose, timeoutMs = null }) {
+  async function rawGenerate({
+    system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
+    timeoutMs = null, signal = null, background = false,
+  }) {
+    if (!background && autobiographicalMemory) {
+      autobiographicalMemory.interruptBackground('foreground');
+      currentMemoryAbort = null;
+    }
     const ac = new AbortController();
+    const relayAbort = () => ac.abort();
+    if (signal) {
+      if (signal.aborted) ac.abort();
+      else signal.addEventListener('abort', relayAbort, { once: true });
+    }
     const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
       ? setTimeout(() => ac.abort(), timeoutMs) : null;
-    currentAbort = ac;
+    if (background) currentMemoryAbort = ac;
+    else currentAbort = ac;
     // a non-streamed generation is opaque to the viewer (nothing reaches the page),
     // but the model IS working the whole time - light the LED so the pinned CPU is
     // accounted for rather than looking like idle time.
     setInfer('gen');
     try {
       const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
-      if (!out.ok) return '';
+      if (!out.ok) {
+        if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
+        return '';
+      }
       // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
       // DSL pass that returned text is productive (it will attempt to render); an empty
       // return paid for nothing, so it lands in the non-emitting series.
       await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
       return out.text || '';
-    } catch {
+    } catch (error) {
+      if (background) throw error;
       return ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
       if (timeout) clearTimeout(timeout);
-      if (currentAbort === ac) currentAbort = null;
-      setInfer('idle');
+      if (signal) signal.removeEventListener('abort', relayAbort);
+      if (background) {
+        if (currentMemoryAbort === ac) {
+          currentMemoryAbort = null;
+          setInfer('idle');
+        }
+      } else if (currentAbort === ac) {
+        currentAbort = null;
+        setInfer('idle');
+      }
     }
   }
 
@@ -2110,23 +2138,32 @@ async function main() {
       opts: options(vitals, config.threads, 'journal', call.options),
       purpose: call.purpose,
       accountingMode: call.purpose,
+      signal: call.signal || null,
+      background: !!call.background,
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
+    canRunBackground: (kind) => inferPhase === 'idle'
+      && (kind === 'surfacing' || (currentMode !== 'letter' && pendingPostcards.length === 0))
+      && pendingWarden.length === 0
+      && !client.paused,
+    providerInfo: () => ({ id: activeProvider().id, model: activeProvider().model }),
   });
+  autobiographicalMemory.start();
 
-  async function refreshPendingMemory(generationRef = null, groundedContext = null) {
+  function refreshPendingMemory(generationRef = null, groundedContext = null) {
     if (!pendingMemoryQuery) return autobiographicalMemory.working;
     const query = pendingMemoryQuery;
     pendingMemoryQuery = null;
-    return autobiographicalMemory.refreshWorkingContext({
+    void autobiographicalMemory.requestWorkingContext({
       ...query, groundedContext, generationRef,
-    });
+    }).catch((error) => console.warn(`[cy] memory surfacing deferred: ${error.message}`));
+    return autobiographicalMemory.working;
   }
 
   async function formMemoryAfterVisibleOutput(groundedContext = null, force = false) {
     memoryFormationTurns++;
-    if (!force && memoryFormationTurns % 4 !== 0) return { status: 'DEFERRED' };
-    return autobiographicalMemory.formNext({ groundedContext });
+    autobiographicalMemory.schedule(force ? 0 : 25);
+    return { status: 'DEFERRED_TO_BACKGROUND' };
   }
 
   // Assemble factual/grounded prompt injections plus explicit engineering cues.
@@ -2138,11 +2175,15 @@ async function main() {
     const grounded = cognition && cognition.groundedDirective != null
       ? { context: cognition.groundedContext, directive: cognition.groundedDirective }
       : soma.groundedDirective({ now: Date.now() });
+    const memory = autobiographicalMemory.consumeWorking(
+      brokerOptions.generationRef || `generation:${Date.now()}`,
+      brokerOptions.currentSenderId || null,
+    );
     const ctx = {
       groundedSoma: grounded.directive,
       groundedSomaContext: grounded.context,
-      autobiographicalMemory: autobiographicalMemory.working.directive,
-      autobiographicalMemoryInspection: autobiographicalMemory.working.inspection,
+      autobiographicalMemory: memory.directive,
+      autobiographicalMemoryInspection: memory.inspection,
     };
     const brokered = buildBrokerContext(CONTEXT_CONSUMERS.CY_PROSE, {
       cognition: { groundedDirective: grounded.directive, groundedContext: grounded.context },
@@ -2276,8 +2317,12 @@ async function main() {
       ...pc,
       posted_at: pc.posted_at || postcardRecord.world_event.timestamp,
     }, postcardRecord.world_event.id);
-    if (postcardMemorySource) autobiographicalMemory.queueSource(postcardMemorySource);
-    await autobiographicalMemory.refreshWorkingContext({
+    if (postcardMemorySource) {
+      void autobiographicalMemory.queueSource(postcardMemorySource).catch((error) => {
+        console.warn(`[cy] postcard memory enqueue deferred: ${error.message}`);
+      });
+    }
+    await autobiographicalMemory.requestWorkingContext({
       text: postcardText,
       tags: postcardMemorySource ? postcardMemorySource.tags : ['postcard'],
       location: 'cell',
@@ -2286,7 +2331,7 @@ async function main() {
       publicSituation: `A postcard has arrived: ${postcardText.slice(0, 600)}`,
       groundedContext: cognition.groundedDirective,
       generationRef: `postcard:${pc.id}`,
-    });
+    }, { deadlineMs: 750, priority: 100 });
 
     // Recognition supplies factual visitor identity/count/timing only. Legacy
     // relation values are retained for private visitor diagnostics, not prose.
@@ -2346,16 +2391,16 @@ async function main() {
         id: pc.id, reply_to: pc.id, to: pc.from_name || null, body: reply,
         environment_event_id: replyRecord.world_event.id,
       } });
-      autobiographicalMemory.queueSource(sourceFromReply(
+      void autobiographicalMemory.queueSource(sourceFromReply(
         reply, pc, replyRecord.world_event.id, replyAt,
-      ));
+      )).catch((error) => console.warn(`[cy] reply memory enqueue deferred: ${error.message}`));
     } else {
       // Do not let a failed/empty generation silently occupy the server's bounded
       // reply tray forever. The server reclasses it as retained fan mail, and the
       // next inbox poll creates the public archive receipt.
       emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
     }
-    await formMemoryAfterVisibleOutput(cognition.groundedDirective, true);
+    formMemoryAfterVisibleOutput(cognition.groundedDirective, true);
     // remember them: a cheap compressed note + a standing nudge, written back to
     // the DB via a private visitor_seen event (never enters the public stream).
     if (visitor && visitor.visitor_id) {
@@ -4114,9 +4159,11 @@ async function main() {
             `expression-batch:${batch[0].id}:${batch[batch.length - 1].id}`,
             batch[batch.length - 1].at,
           );
-          if (source) autobiographicalMemory.queueSource(source);
+          if (source) void autobiographicalMemory.queueSource(source).catch((error) => {
+            console.warn(`[cy] expression memory enqueue deferred: ${error.message}`);
+          });
         }
-        await formMemoryAfterVisibleOutput(burstGroundedDirective);
+        formMemoryAfterVisibleOutput(burstGroundedDirective);
         // Language remains expression rather than evidence. No grounded state or
         // provisional drive is updated as a consequence of this selected form.
       }
@@ -4167,6 +4214,7 @@ async function main() {
     running = false;
     console.log('\n[cy] shutting down - flushing...');
     if (currentAbort) currentAbort.abort();
+    if (autobiographicalMemory) autobiographicalMemory.stop();
     clearInterval(tickTimer);
     clearInterval(hostTimer);
     clearInterval(powerTimer);

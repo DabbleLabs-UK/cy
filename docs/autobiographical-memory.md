@@ -23,6 +23,10 @@ MariaDB is authoritative. Migration `sql/015_autobiographical_memory.sql` adds:
 - `autobiographical_memory_queries`: owner-only recall access traces for every
   working-context refresh.
 
+Migration `sql/017_memory_runtime_queue.sql` adds durable formation and surfacing
+queues, expiring prepared working sets, and owner-only attempt records containing
+provider/model, prompt size, latency, result category, queue depth and errors.
+
 Memory types are EPISODIC, PERSON, MOTIF, UNRESOLVED_THREAD and SEMANTIC.
 Lifecycle states are ACTIVE, ARCHIVED and DELETED. Consistency is CONSISTENT,
 CONFLICTED or UNCERTAIN.
@@ -45,10 +49,12 @@ inspection endpoint is `public/api/memory-inspection.php`.
 
 ## Formation and revision
 
-The runner queues provenance-bearing sources from structured environment events,
+The runner writes provenance-bearing sources to a restart-safe Dell disk spool,
+then transfers them idempotently to the durable server queue. Sources include structured environment events,
 current-sender postcards and groups of four screened outward expressions. A
 current-sender reply is linked to that same sender and cannot be considered for
-another sender's private memory. One source is considered at a time. The server returns at most five privacy-eligible
+another sender's private memory. One source is considered at a time by a low-priority
+background worker. The server returns at most five privacy-eligible
 existing memories. The active model must return one structured decision:
 
 - CREATE a new memory;
@@ -86,12 +92,19 @@ has no reliable configured local embedding facility.
 
 ## Working context and prompt assembly
 
-A separate small model call sees at most ten already privacy-filtered candidates
+A separate background model call sees at most ten already privacy-filtered candidates
 and may select zero to three temporary references. Only valid selected references
 are converted back to records. The resulting dedicated
 `<AUTOBIOGRAPHICAL_MEMORY>` block appears in volatile Zone C after the grounded
 Soma context. It labels every inserted item as subjective autobiographical memory
 and preserves its consistency status.
+
+Prepared sets are keyed by a SHA-256 context fingerprint and exact sender scope,
+expire after 15 minutes, and are marked with the generation that consumed them.
+A stale or differently scoped set is never reused. Journalling does not wait for
+surfacing. A postcard waits at most 750 ms for a compatible prepared set and then
+continues without memory. Any foreground model call preempts background memory
+work; interrupted jobs remain retryable.
 
 The bounded recent-expression Zone B remains separate. It supplies immediate
 continuity; autobiography supplies selective longer-term continuity. If retrieval
@@ -120,10 +133,10 @@ These are engineering context and resource limits, not claims about cognition:
 - ten retrieval candidates;
 - three prompt memories;
 - five formation-match candidates;
-- 32 queued formation sources in runner memory;
+- no fixed formation backlog cap; every unique source is retained durably;
 - four outward expressions per CY_EXPRESSION formation source;
-- one queued formation source attempted per four ordinary outward generations,
-  with a current-sender postcard exchange forcing an immediate attempt;
+- one background memory model call at a time, with surfacing before formation and
+  postcard/reply sources before structured events and routine expressions;
 - eight server operations per request;
 - 20 public memory summaries per page;
 - 100 exact-person, 200 tag and 200 full-text pre-filter rows, with at most 500

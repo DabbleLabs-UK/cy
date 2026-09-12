@@ -103,6 +103,32 @@ $checks['privacy delete does not retain a content hash'] = is_string($library)
     && !str_contains($library, 'previous_content_sha256');
 $checks['privacy delete clears content-bearing revisions'] = is_string($library)
     && str_contains($library, 'DELETE FROM autobiographical_memory_revisions WHERE memory_id = ?');
+$runtimeMigration = file_get_contents(__DIR__ . '/../sql/017_memory_runtime_queue.sql');
+$checks['formation queue is durable and source-idempotent'] = is_string($runtimeMigration)
+    && str_contains($runtimeMigration, 'autobiographical_memory_formation_queue')
+    && str_contains($runtimeMigration, 'uniq_memory_formation_source');
+$checks['prepared sets are fingerprinted and sender scoped'] = is_string($runtimeMigration)
+    && str_contains($runtimeMigration, 'context_fingerprint')
+    && str_contains($runtimeMigration, 'sender_scope_key');
+$checks['formation and surfacing attempts have persistent observability'] = is_string($runtimeMigration)
+    && str_contains($runtimeMigration, 'autobiographical_memory_formation_attempts')
+    && str_contains($runtimeMigration, 'autobiographical_memory_surfacing_attempts');
+$checks['visitor work has deterministic queue priority'] =
+    captive_memory_source_priority(['sourceType' => 'POSTCARD'])
+        > captive_memory_source_priority(['sourceType' => 'ENVIRONMENT_EVENT'])
+    && captive_memory_source_priority(['sourceType' => 'ENVIRONMENT_EVENT'])
+        > captive_memory_source_priority(['sourceType' => 'CY_EXPRESSION']);
+$checks['sender recallable source requires a real visitor scope'] = (function (): bool {
+    try {
+        captive_memory_validate_source([
+            'sourceType' => 'POSTCARD', 'sourceId' => 'postcard:private',
+            'sourceVisibility' => 'SENDER_RECALLABLE',
+        ]);
+        return false;
+    } catch (InvalidArgumentException) {
+        return true;
+    }
+})();
 
 $failed = 0;
 foreach ($checks as $label => $ok) {

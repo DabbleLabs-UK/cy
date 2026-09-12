@@ -46,6 +46,7 @@ export class Client {
     this.stateDir = stateDir;
     this.eventsPath = join(stateDir, 'events.jsonl');
     this.queuePath = join(stateDir, 'queue.jsonl');
+    this.memorySourcesPath = join(stateDir, 'memory-sources.jsonl');
     this.inboxPath = join(stateDir, 'inbox.json');
     this.tempoPath = join(stateDir, 'tempo.json');
     this.batch = [];
@@ -91,6 +92,7 @@ export class Client {
     this._inboxTimer = null;
     this._tempoTimer = null;
     this._flushing = false;
+    this._memorySourceWork = Promise.resolve();
     this._stopped = false;
   }
 
@@ -126,6 +128,7 @@ export class Client {
     clearInterval(this._inboxTimer);
     clearInterval(this._tempoTimer);
     await this.flush().catch(() => {});
+    await this.drainMemorySourceQueue().catch(() => {});
   }
 
   async flush() {
@@ -324,6 +327,86 @@ export class Client {
       public_text: value.publicText || null,
       privacy_scope: value.privacyScope || 'INTERNAL_ONLY',
       reason_codes: value.reasonCodes || [],
+    });
+  }
+
+  async enqueueMemorySource(source) {
+    const work = async () => {
+      await mkdir(dirname(this.memorySourcesPath), { recursive: true });
+      await appendFile(this.memorySourcesPath, `${JSON.stringify(source)}\n`, 'utf8');
+      return this._drainMemorySourceQueue();
+    };
+    const result = this._memorySourceWork.then(work, work);
+    this._memorySourceWork = result.catch(() => {});
+    return result;
+  }
+
+  async drainMemorySourceQueue() {
+    const work = () => this._drainMemorySourceQueue();
+    const result = this._memorySourceWork.then(work, work);
+    this._memorySourceWork = result.catch(() => {});
+    return result;
+  }
+
+  async _drainMemorySourceQueue() {
+    let raw;
+    try {
+      raw = await readFile(this.memorySourcesPath, 'utf8');
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return { queued: false, pending: 0 };
+      throw error;
+    }
+    const sources = raw.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    let last = { queued: false };
+    for (let index = 0; index < sources.length; index += 1) {
+      try {
+        last = await this._memoryRequest('enqueue_source', { source: sources[index] });
+      } catch (error) {
+        const pending = sources.slice(index);
+        const tempPath = `${this.memorySourcesPath}.tmp`;
+        await writeFile(tempPath, pending.map((source) => JSON.stringify(source)).join('\n') + '\n', 'utf8');
+        await rename(tempPath, this.memorySourcesPath);
+        throw error;
+      }
+    }
+    const tempPath = `${this.memorySourcesPath}.tmp`;
+    await writeFile(tempPath, '', 'utf8');
+    await rename(tempPath, this.memorySourcesPath);
+    return { ...last, pending: 0 };
+  }
+
+  async claimMemorySource() {
+    return this._memoryRequest('claim_source');
+  }
+
+  async completeMemorySource(value) {
+    return this._memoryRequest('complete_source', value || {});
+  }
+
+  async enqueueMemorySurfacing(value) {
+    return this._memoryRequest('enqueue_surfacing', value || {});
+  }
+
+  async claimMemorySurfacing() {
+    return this._memoryRequest('claim_surfacing');
+  }
+
+  async completeMemorySurfacing(value) {
+    return this._memoryRequest('complete_surfacing', value || {});
+  }
+
+  async getPreparedMemorySet({ contextFingerprint, visitorId = null } = {}) {
+    return this._memoryRequest('prepared_get', {
+      context_fingerprint: contextFingerprint,
+      visitor_id: visitorId,
+    });
+  }
+
+  async consumePreparedMemorySet({ preparedSetId, generationRef, visitorId = null } = {}) {
+    return this._memoryRequest('consume_prepared', {
+      prepared_set_id: preparedSetId,
+      generation_ref: generationRef,
+      visitor_id: visitorId,
     });
   }
 

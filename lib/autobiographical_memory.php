@@ -17,6 +17,129 @@ function captive_memory_tokens(string $text): array
     return array_slice(array_values(array_unique($matches[0] ?? [])), 0, 48);
 }
 
+function captive_memory_source_priority(array $source): int
+{
+    $type = strtoupper((string)($source['sourceType'] ?? ''));
+    $tags = array_map('strtolower', captive_memory_tags($source['tags'] ?? []));
+    if ($type === 'POSTCARD') {
+        return 100;
+    }
+    if ($type === 'CY_REPLY') {
+        return 95;
+    }
+    if (in_array('unresolved', $tags, true) || in_array('unresolved-thread', $tags, true)) {
+        return 85;
+    }
+    if ($type === 'ENVIRONMENT_EVENT') {
+        return 70;
+    }
+    if ($type === 'CY_EXPRESSION') {
+        return 40;
+    }
+    if ($type === 'AMBIENT_EVENT') {
+        return 20;
+    }
+    return 50;
+}
+
+function captive_memory_validate_source(array $source): array
+{
+    $sourceType = strtoupper(mb_substr(trim((string)($source['sourceType'] ?? '')), 0, 32));
+    $sourceId = mb_substr(trim((string)($source['sourceId'] ?? '')), 0, 128);
+    if ($sourceType === '' || $sourceId === '') {
+        throw new InvalidArgumentException('memory source type and id required');
+    }
+    $visitorId = isset($source['subjectVisitorId'])
+        && preg_match('/^[a-f0-9]{32}$/', (string)$source['subjectVisitorId'])
+        ? (string)$source['subjectVisitorId'] : null;
+    $scope = in_array($source['sourceVisibility'] ?? '', CY_MEMORY_SCOPES, true)
+        ? (string)$source['sourceVisibility'] : 'INTERNAL_ONLY';
+    if ($scope === 'SENDER_RECALLABLE' && $visitorId === null) {
+        throw new InvalidArgumentException('sender-recallable source requires visitor');
+    }
+    $source['sourceType'] = $sourceType;
+    $source['sourceId'] = $sourceId;
+    $source['subjectVisitorId'] = $visitorId;
+    $source['sourceVisibility'] = $scope;
+    $source['text'] = mb_substr(trim((string)($source['text'] ?? '')), 0, 2000);
+    $source['tags'] = captive_memory_tags($source['tags'] ?? []);
+    return $source;
+}
+
+function captive_memory_queue_depth(PDO $db): int
+{
+    return (int)$db->query(
+        "SELECT COUNT(*) FROM autobiographical_memory_formation_queue
+         WHERE status IN ('PENDING', 'PROCESSING', 'RETRYABLE')"
+    )->fetchColumn();
+}
+
+function captive_memory_enqueue_source(PDO $db, array $source): array
+{
+    $source = captive_memory_validate_source($source);
+    $priority = captive_memory_source_priority($source);
+    $stmt = $db->prepare(
+        "INSERT INTO autobiographical_memory_formation_queue
+            (source_type, source_id, source_payload, subject_visitor_id, privacy_scope,
+             priority, status, attempts, available_at, queued_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 0, NOW(3), NOW(3), NOW(3))
+         ON DUPLICATE KEY UPDATE source_id = VALUES(source_id)"
+    );
+    $stmt->execute([
+        $source['sourceType'], $source['sourceId'],
+        json_encode($source, JSON_UNESCAPED_SLASHES), $source['subjectVisitorId'],
+        $source['sourceVisibility'], $priority,
+    ]);
+    return [
+        'queued' => $stmt->rowCount() === 1,
+        'duplicate' => $stmt->rowCount() !== 1,
+        'priority' => $priority,
+        'depth' => captive_memory_queue_depth($db),
+    ];
+}
+
+function captive_memory_claim_source(PDO $db): ?array
+{
+    $db->beginTransaction();
+    try {
+        $db->exec(
+            "UPDATE autobiographical_memory_formation_queue
+             SET status = 'RETRYABLE', available_at = NOW(3),
+                 last_error = 'recovered after interrupted processing', updated_at = NOW(3)
+             WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)"
+        );
+        $row = $db->query(
+            "SELECT * FROM autobiographical_memory_formation_queue
+             WHERE status IN ('PENDING', 'RETRYABLE') AND available_at <= NOW(3)
+             ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE"
+        )->fetch();
+        if (!$row) {
+            $db->commit();
+            return null;
+        }
+        $stmt = $db->prepare(
+            "UPDATE autobiographical_memory_formation_queue
+             SET status = 'PROCESSING', attempts = attempts + 1,
+                 started_at = NOW(3), updated_at = NOW(3) WHERE id = ?"
+        );
+        $stmt->execute([(int)$row['id']]);
+        $db->commit();
+        $row['source'] = json_decode((string)$row['source_payload'], true) ?: [];
+        $row['attempts'] = (int)$row['attempts'] + 1;
+        return $row;
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
+    }
+}
+
+function captive_memory_sender_scope_key(?string $visitorId): string
+{
+    return $visitorId ?? '';
+}
+
 function captive_memory_tags(mixed $value): array
 {
     $out = [];

@@ -117,6 +117,28 @@ export class MemoryPanel {
 
     const queries = Array.isArray(this.inspection && this.inspection.queries)
       ? this.inspection.queries : [];
+    const runtime = this.inspection && this.inspection.runtime;
+    if (runtime) {
+      const ownerRuntime = el('details', 'memory-inspection memory-runtime-status');
+      ownerRuntime.append(el('summary', '', 'OWNER: MEMORY RUNTIME STATUS'));
+      const grid = el('div', 'memory-runtime-grid');
+      for (const [label, values] of Object.entries({
+        formation: runtime.formation || {}, surfacing: runtime.surfacing || {},
+      })) {
+        const card = el('div', 'memory-runtime-card');
+        card.append(el('strong', '', label.toUpperCase()));
+        for (const field of ['queue_depth', 'max_queue_depth', 'attempts', 'processed', 'prepared', 'consumed', 'nothing', 'changed', 'retryable', 'average_latency_ms', 'max_latency_ms']) {
+          if (values[field] == null) continue;
+          const row = el('span', '');
+          row.append(el('small', '', field.replaceAll('_', ' ')), document.createTextNode(String(values[field])));
+          card.append(row);
+        }
+        if (values.last_error) card.append(el('p', 'memory-runtime-error', String(values.last_error)));
+        grid.append(card);
+      }
+      ownerRuntime.append(grid);
+      fragment.append(ownerRuntime);
+    }
     if (queries.length) {
       const owner = el('details', 'memory-inspection');
       owner.append(el('summary', '', 'OWNER: LATEST ACCESS TRACE'));

@@ -87,9 +87,235 @@ try {
     }
     $action = (string)($input['action'] ?? '');
 
+    $json = static fn(mixed $value): string => json_encode($value ?? [], JSON_UNESCAPED_SLASHES) ?: '[]';
+    $parseVisitorId = static function (mixed $value): ?string {
+        return is_string($value) && preg_match('/^[a-f0-9]{32}$/', $value) ? $value : null;
+    };
+
+    if ($action === 'enqueue_source') {
+        $source = is_array($input['source'] ?? null) ? $input['source'] : [];
+        captive_json_response(['ok' => true] + captive_memory_enqueue_source($db, $source));
+    }
+
+    if ($action === 'claim_source') {
+        captive_json_response([
+            'ok' => true,
+            'job' => captive_memory_claim_source($db),
+            'depth' => captive_memory_queue_depth($db),
+        ]);
+    }
+
+    if ($action === 'complete_source') {
+        $jobId = max(0, (int)($input['job_id'] ?? 0));
+        $category = strtoupper((string)($input['result_category'] ?? 'ERROR'));
+        $allowed = ['CREATE', 'UPDATE', 'NOTHING', 'INVALID', 'ERROR', 'TIMEOUT', 'PREEMPTED', 'CONFLICT'];
+        if ($jobId < 1 || !in_array($category, $allowed, true)) {
+            captive_error_response('invalid formation completion', 422);
+        }
+        $db->beginTransaction();
+        $select = $db->prepare('SELECT * FROM autobiographical_memory_formation_queue WHERE id = ? FOR UPDATE');
+        $select->execute([$jobId]);
+        $job = $select->fetch();
+        if (!$job) {
+            $db->rollBack();
+            captive_error_response('formation job not found', 404);
+        }
+        $finished = in_array($category, ['CREATE', 'UPDATE', 'NOTHING'], true);
+        $delay = max(5, min(900, (int)($input['retry_delay_seconds'] ?? 30)));
+        $update = $db->prepare(
+            "UPDATE autobiographical_memory_formation_queue
+             SET status = ?, completed_at = IF(?, NOW(3), completed_at),
+                 available_at = IF(?, available_at, DATE_ADD(NOW(3), INTERVAL ? SECOND)),
+                 last_error = ?, updated_at = NOW(3) WHERE id = ?"
+        );
+        $errorText = isset($input['error']) ? mb_substr((string)$input['error'], 0, 1000) : null;
+        $update->execute([$finished ? 'PROCESSED' : 'RETRYABLE', $finished ? 1 : 0, $finished ? 1 : 0, $delay, $errorText, $jobId]);
+        $depth = (int)$db->query(
+            "SELECT COUNT(*) FROM autobiographical_memory_formation_queue
+             WHERE status IN ('PENDING', 'PROCESSING', 'RETRYABLE')"
+        )->fetchColumn();
+        $attempt = $db->prepare(
+            'INSERT INTO autobiographical_memory_formation_attempts
+                (queue_id, source_type, source_id, started_at, completed_at, provider, model,
+                 prompt_chars, latency_ms, result_category, resulting_memory_id,
+                 queue_depth_before, queue_depth_after, error_text, created_at)
+             VALUES (?, ?, ?, COALESCE(?, NOW(3)), NOW(3), ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))'
+        );
+        $attempt->execute([
+            $jobId, $job['source_type'], $job['source_id'], $job['started_at'],
+            mb_substr((string)($input['provider'] ?? ''), 0, 32) ?: null,
+            mb_substr((string)($input['model'] ?? ''), 0, 160) ?: null,
+            max(0, (int)($input['prompt_chars'] ?? 0)), max(0, (int)($input['latency_ms'] ?? 0)),
+            $category, $input['memory_id'] ?? null,
+            max(0, (int)($input['queue_depth_before'] ?? 0)), $depth, $errorText,
+        ]);
+        $db->commit();
+        captive_json_response(['ok' => true, 'status' => $finished ? 'PROCESSED' : 'RETRYABLE', 'depth' => $depth]);
+    }
+
+    if ($action === 'enqueue_surfacing') {
+        $fingerprint = strtolower((string)($input['context_fingerprint'] ?? ''));
+        if (!preg_match('/^[a-f0-9]{64}$/', $fingerprint)) {
+            captive_error_response('invalid context fingerprint', 422);
+        }
+        $subject = $parseVisitorId($input['visitor_id'] ?? null);
+        $context = is_array($input['context'] ?? null) ? $input['context'] : [];
+        $priority = max(1, min(100, (int)($input['priority'] ?? 80)));
+        $stmt = $db->prepare(
+            "INSERT INTO autobiographical_memory_surfacing_queue
+                (context_fingerprint, context_payload, subject_visitor_id, sender_scope_key,
+                 priority, status, attempts, available_at, queued_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 'PENDING', 0, NOW(3), NOW(3), NOW(3))
+             ON DUPLICATE KEY UPDATE
+                context_payload = VALUES(context_payload), priority = GREATEST(priority, VALUES(priority)),
+                status = 'PENDING', available_at = NOW(3), updated_at = NOW(3)"
+        );
+        $stmt->execute([$fingerprint, $json($context), $subject, captive_memory_sender_scope_key($subject), $priority]);
+        captive_json_response(['ok' => true, 'queued' => $stmt->rowCount() === 1]);
+    }
+
+    if ($action === 'claim_surfacing') {
+        $db->beginTransaction();
+        $db->exec(
+            "UPDATE autobiographical_memory_surfacing_queue
+             SET status = 'RETRYABLE', available_at = NOW(3),
+                 last_error = 'recovered after interrupted processing', updated_at = NOW(3)
+             WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)"
+        );
+        $job = $db->query(
+            "SELECT * FROM autobiographical_memory_surfacing_queue
+             WHERE status IN ('PENDING', 'RETRYABLE') AND available_at <= NOW(3)
+             ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE"
+        )->fetch();
+        if ($job) {
+            $db->prepare(
+                "UPDATE autobiographical_memory_surfacing_queue
+                 SET status = 'PROCESSING', attempts = attempts + 1,
+                     started_at = NOW(3), updated_at = NOW(3) WHERE id = ?"
+            )->execute([(int)$job['id']]);
+            $job['context'] = json_decode((string)$job['context_payload'], true) ?: [];
+            unset($job['context_payload']);
+        }
+        $db->commit();
+        captive_json_response(['ok' => true, 'job' => $job ?: null]);
+    }
+
+    if ($action === 'complete_surfacing') {
+        $jobId = max(0, (int)($input['job_id'] ?? 0));
+        $category = strtoupper((string)($input['result_category'] ?? 'ERROR'));
+        $allowed = ['PREPARED', 'NO_CANDIDATES', 'INVALID', 'ERROR', 'TIMEOUT', 'PREEMPTED'];
+        if ($jobId < 1 || !in_array($category, $allowed, true)) {
+            captive_error_response('invalid surfacing completion', 422);
+        }
+        $db->beginTransaction();
+        $select = $db->prepare('SELECT * FROM autobiographical_memory_surfacing_queue WHERE id = ? FOR UPDATE');
+        $select->execute([$jobId]);
+        $job = $select->fetch();
+        if (!$job) {
+            $db->rollBack();
+            captive_error_response('surfacing job not found', 404);
+        }
+        $selected = is_array($input['selected_memories'] ?? null) ? array_slice($input['selected_memories'], 0, 3) : [];
+        $selectedIds = array_values(array_filter(array_map(
+            static fn(mixed $memory): string => is_array($memory) ? (string)($memory['id'] ?? '') : '',
+            $selected
+        )));
+        $candidateIds = array_slice(array_values(array_filter($input['candidate_ids'] ?? [], 'is_string')), 0, 10);
+        $setId = null;
+        $finished = in_array($category, ['PREPARED', 'NO_CANDIDATES'], true);
+        if ($finished) {
+            $setId = (string)($input['prepared_set_id'] ?? '');
+            if (!preg_match('/^[a-f0-9-]{36}$/', $setId)) {
+                $db->rollBack();
+                captive_error_response('valid prepared set id required', 422);
+            }
+            $scope = $job['subject_visitor_id'] ? 'SENDER_RECALLABLE' : 'INTERNAL_ONLY';
+            $insert = $db->prepare(
+                'INSERT INTO autobiographical_memory_prepared_sets
+                    (id, context_fingerprint, subject_visitor_id, sender_scope_key,
+                     candidate_ids, selected_ids, selected_memories, privacy_scope,
+                     provider, model, prepared_at, expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3), DATE_ADD(NOW(3), INTERVAL 15 MINUTE))'
+            );
+            $insert->execute([
+                $setId, $job['context_fingerprint'], $job['subject_visitor_id'], $job['sender_scope_key'],
+                $json($candidateIds), $json($selectedIds), $json($selected), $scope,
+                mb_substr((string)($input['provider'] ?? ''), 0, 32) ?: null,
+                mb_substr((string)($input['model'] ?? ''), 0, 160) ?: null,
+            ]);
+        }
+        $delay = max(5, min(900, (int)($input['retry_delay_seconds'] ?? 30)));
+        $errorText = isset($input['error']) ? mb_substr((string)$input['error'], 0, 1000) : null;
+        $db->prepare(
+            "UPDATE autobiographical_memory_surfacing_queue
+             SET status = ?, completed_at = IF(?, NOW(3), completed_at),
+                 available_at = IF(?, available_at, DATE_ADD(NOW(3), INTERVAL ? SECOND)),
+                 last_error = ?, updated_at = NOW(3) WHERE id = ?"
+        )->execute([$finished ? 'PREPARED' : 'RETRYABLE', $finished ? 1 : 0, $finished ? 1 : 0, $delay, $errorText, $jobId]);
+        $attempt = $db->prepare(
+            'INSERT INTO autobiographical_memory_surfacing_attempts
+                (queue_id, prepared_set_id, context_fingerprint, subject_visitor_id,
+                 generation_ref, started_at, completed_at, provider, model, prompt_chars,
+                 latency_ms, candidate_count, candidate_ids, privacy_removed_count,
+                 selected_ids, result_category, error_text, created_at)
+             VALUES (?, ?, ?, ?, ?, COALESCE(?, NOW(3)), NOW(3), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))'
+        );
+        $attempt->execute([
+            $jobId, $setId, $job['context_fingerprint'], $job['subject_visitor_id'],
+            mb_substr((string)($input['generation_ref'] ?? ''), 0, 96) ?: null, $job['started_at'],
+            mb_substr((string)($input['provider'] ?? ''), 0, 32) ?: null,
+            mb_substr((string)($input['model'] ?? ''), 0, 160) ?: null,
+            max(0, (int)($input['prompt_chars'] ?? 0)), max(0, (int)($input['latency_ms'] ?? 0)),
+            count($candidateIds), $json($candidateIds), max(0, (int)($input['privacy_removed_count'] ?? 0)),
+            $json($selectedIds), $category, $errorText,
+        ]);
+        $db->commit();
+        captive_json_response(['ok' => true, 'status' => $finished ? 'PREPARED' : 'RETRYABLE', 'prepared_set_id' => $setId]);
+    }
+
+    if ($action === 'prepared_get') {
+        $fingerprint = strtolower((string)($input['context_fingerprint'] ?? ''));
+        $subject = $parseVisitorId($input['visitor_id'] ?? null);
+        if (!preg_match('/^[a-f0-9]{64}$/', $fingerprint)) {
+            captive_error_response('invalid context fingerprint', 422);
+        }
+        $stmt = $db->prepare(
+            'SELECT id, context_fingerprint, subject_visitor_id, selected_memories,
+                    provider, model, prepared_at, expires_at
+             FROM autobiographical_memory_prepared_sets
+             WHERE context_fingerprint = ? AND sender_scope_key = ? AND expires_at > NOW(3)
+             ORDER BY prepared_at DESC LIMIT 1'
+        );
+        $stmt->execute([$fingerprint, captive_memory_sender_scope_key($subject)]);
+        $set = $stmt->fetch();
+        if ($set) {
+            $set['selected_memories'] = json_decode((string)$set['selected_memories'], true) ?: [];
+        }
+        captive_json_response(['ok' => true, 'prepared_set' => $set ?: null]);
+    }
+
+    if ($action === 'consume_prepared') {
+        $setId = (string)($input['prepared_set_id'] ?? '');
+        $generationRef = mb_substr((string)($input['generation_ref'] ?? ''), 0, 96);
+        $subject = $parseVisitorId($input['visitor_id'] ?? null);
+        $stmt = $db->prepare(
+            'UPDATE autobiographical_memory_prepared_sets
+             SET consumed_at = NOW(3), consumed_by = ?
+             WHERE id = ? AND sender_scope_key = ? AND expires_at > NOW(3)'
+        );
+        $stmt->execute([$generationRef ?: null, $setId, captive_memory_sender_scope_key($subject)]);
+        if ($stmt->rowCount() !== 1) {
+            captive_error_response('prepared set unavailable for sender', 409);
+        }
+        $db->prepare(
+            'UPDATE autobiographical_memory_surfacing_attempts
+             SET consumed_at = NOW(3), consumed_by = ? WHERE prepared_set_id = ?'
+        )->execute([$generationRef ?: null, $setId]);
+        captive_json_response(['ok' => true]);
+    }
+
     if ($action === 'query') {
-        $visitorId = isset($input['visitor_id']) && preg_match('/^[a-f0-9]{32}$/', (string)$input['visitor_id'])
-            ? (string)$input['visitor_id'] : null;
+        $visitorId = $parseVisitorId($input['visitor_id'] ?? null);
         $query = is_array($input['query'] ?? null) ? $input['query'] : [];
         $limit = max(1, min(CY_MEMORY_CANDIDATE_LIMIT, (int)($input['limit'] ?? CY_MEMORY_CANDIDATE_LIMIT)));
         $candidates = captive_memory_query($db, $query, $visitorId, $limit);
@@ -121,7 +347,6 @@ try {
     }
 
     if ($action === 'record_query') {
-        $json = static fn(mixed $value): string => json_encode($value ?? [], JSON_UNESCAPED_SLASHES) ?: '[]';
         $stmt = $db->prepare(
             'INSERT INTO autobiographical_memory_queries
                 (generation_ref, current_context, sender_known, candidate_memory_ids,

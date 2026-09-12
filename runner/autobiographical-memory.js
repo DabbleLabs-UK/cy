@@ -231,13 +231,18 @@ export function buildSurfacingRequest(candidates, currentContext = {}) {
 }
 
 export function parseSurfacingResponse(raw, candidates) {
+  return parseSurfacingDecision(raw, candidates).ids;
+}
+
+export function parseSurfacingDecision(raw, candidates) {
   const parsed = extractJson(raw);
+  if (!parsed || !Array.isArray(parsed.memoryRefs)) return { valid: false, ids: [] };
   const byRef = new Map((candidates || []).map((memory) => [memory.memoryRef, memory.id]));
   const ids = list(parsed && parsed.memoryRefs, null, MEMORY_CANDIDATE_LIMIT)
     .map((ref) => byRef.get(ref))
     .filter(Boolean)
     .slice(0, MEMORY_SURFACE_LIMIT);
-  return [...new Set(ids)].slice(0, MEMORY_SURFACE_LIMIT);
+  return { valid: true, ids: [...new Set(ids)].slice(0, MEMORY_SURFACE_LIMIT) };
 }
 
 export function formatAutobiographicalMemory(memories) {

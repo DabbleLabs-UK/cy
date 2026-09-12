@@ -165,7 +165,7 @@ test('Q old retriever does not select live memory', async () => {
   const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
   assert.doesNotMatch(run, /provisionalMemoryCandidate:\s*(?:cognition|soma|ctx)/);
   assert.match(run, /provisionalMemoryCandidate:\s*null/);
-  assert.match(run, /autobiographicalMemory\.refreshWorkingContext/);
+  assert.match(run, /autobiographicalMemory\.requestWorkingContext/);
 });
 
 test('R hippocampal brain status remains provisional', async () => {
@@ -176,9 +176,11 @@ test('R hippocampal brain status remains provisional', async () => {
 
 test('S restart uses server-persistent schema and API retrieval', async () => {
   const migration = await readFile(new URL('../sql/015_autobiographical_memory.sql', import.meta.url), 'utf8');
+  const runtimeMigration = await readFile(new URL('../sql/017_memory_runtime_queue.sql', import.meta.url), 'utf8');
   const runtime = await readFile(new URL('./memory-runtime.js', import.meta.url), 'utf8');
   assert.match(migration, /CREATE TABLE autobiographical_memories/);
   assert.match(migration, /CREATE TABLE autobiographical_memory_sources/);
+  assert.match(runtimeMigration, /CREATE TABLE autobiographical_memory_formation_queue/);
   assert.match(runtime, /client\.queryMemories/);
 });
 
