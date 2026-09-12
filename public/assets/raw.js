@@ -29,6 +29,8 @@ import { loadEnvironmentInspection, renderEnvironmentInspection } from './event-
 const CFG = window.CY || {};
 const STREAM = CFG.stream || 'api/stream.php';
 const RANGE = CFG.range || 'api/range.php';
+const ADMIN_FALLBACK = new URLSearchParams((window.location && window.location.search) || '').has('111');
+const DREAM_DEBUG_QUERY = '&dream_debug=1' + (ADMIN_FALLBACK ? '&111=1' : '');
 const POLL_MS = 1000;
 const INITIAL_ROWS = 100;
 const OLDER_PAGE_ROWS = 100;
@@ -36,7 +38,7 @@ const MAX_ROWS = 300;
 
 // Every event kind the feed can carry. Order defines the filter-chip order.
 const KINDS = [
-  'text', 'gen', 'expressive_choice', 'silence', 'mode', 'abort', 'draw', 'vitals', 'host',
+  'text', 'dream', 'dream_inspection', 'gen', 'expressive_choice', 'silence', 'mode', 'abort', 'draw', 'vitals', 'host',
   'power', 'tempo', 'postcard_in', 'postcard_out', 'fan_mail_in', 'news_in', 'warden',
   'event', 'day',
 ];
@@ -219,7 +221,7 @@ function stopRaw() {
 // ---- polling ------------------------------------------------------------
 
 async function fetchStream(since, limit = INITIAL_ROWS) {
-  const url = `${STREAM}?since=${since}&limit=${limit}`;
+  const url = `${STREAM}?since=${since}&limit=${limit}${DREAM_DEBUG_QUERY}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error('stream ' + res.status);
   return res.json();
@@ -273,7 +275,7 @@ async function loadOlder() {
   syncOlderButton();
   try {
     const limit = Math.min(OLDER_PAGE_ROWS, capacity);
-    const res = await fetch(`${RANGE}?before=${firstSeq}&limit=${limit}`, { cache: 'no-store' });
+    const res = await fetch(`${RANGE}?before=${firstSeq}&limit=${limit}${DREAM_DEBUG_QUERY}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('range ' + res.status);
     const data = await res.json();
     if (!active) return;
@@ -434,6 +436,12 @@ function summaryFor(ev) {
   switch (ev.kind) {
     case 'text':
       return JSON.stringify(p.s ?? '') + (p.mode && p.mode !== 'journal' ? '  [' + p.mode + (p.lucid ? '/lucid' : '') + ']' : '');
+    case 'dream':
+      return `${p.state || 'DREAM'}  fragments=${Array.isArray(p.fragments) ? p.fragments.length : 0}` +
+        `  sleep=${p.sleep_period_id || '?'}  validation=${p.output_validation || '?'}  (click to expand)`;
+    case 'dream_inspection':
+      return `${p.output_validation || 'DREAM INSPECTION'}  sleep=${p.sleep_period_id || '?'}` +
+        `  ${p.provider || '?'}/${p.model || '?'}  ${p.latency_ms ?? '?'}ms  (click to expand)`;
     case 'gen':
       return `${p.mode || '?'}  in=${p.tokens_in} out=${p.tokens_out}  ${p.gen_tok_s}tok/s  ttft=${p.ttft_ms}ms  total=${p.total_ms}ms${idleBadge(p)}${stripBadge(p)}  (click to expand)`;
     case 'expressive_choice':

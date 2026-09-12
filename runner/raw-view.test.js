@@ -150,7 +150,7 @@ assert.equal(requests.length, 0, 'closed diagnostics performs no feed request');
 
 window.__cyRaw.start();
 await new Promise((resolve) => setImmediate(resolve));
-assert.equal(requests[0], '/stream?since=-100&limit=100', 'opening diagnostics requests only a small recent window');
+assert.equal(requests[0], '/stream?since=-100&limit=100&dream_debug=1', 'opening diagnostics requests only a small recent owner window');
 assert.equal(raw.rowCount(), 4, 'only the bounded recent response is rendered');
 assert.ok(raw.log().children[0]._classes.has('filtered'), 'high-volume text tokens are hidden by default');
 assert.equal(raw.olderBtn().disabled, false, 'older diagnostics are available explicitly');
@@ -179,7 +179,7 @@ assert.match(allText(choiceRow), /FALLBACK USED/);
 
 raw.olderBtn().dispatchEvent({ type: 'click' });
 await new Promise((resolve) => setImmediate(resolve));
-assert.equal(requests[1], '/range?before=998&limit=100', 'older diagnostics load only after the operator asks');
+assert.equal(requests[1], '/range?before=998&limit=100&dream_debug=1', 'older diagnostics load only after the operator asks');
 assert.deepEqual(raw.kinds().slice(0, 2), ['event', 'silence'], 'older records prepend in chronological order');
 assert.match(raw.cap(), /older records load only when requested/);
 

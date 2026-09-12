@@ -25,6 +25,7 @@
 // exposes window.__cyPlain (event sink + font handoff + reveal) for app.js.
 
 import { sketchToPaths, sketchBounds } from './pen.js';
+import { makeDreamSvg, renderDreamSketch } from './dream-view.js';
 import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 import { createJumpToLatest } from './jump-to-latest.js';
 
@@ -51,6 +52,7 @@ let goLive = null;
 let scrollSettleToken = 0;
 let suppressPaging = false;
 const draws = new Map();          // drawing id -> { svg, strokes[] }
+const dreams = new Map();         // sleep period id -> one fragmentary dream field
 
 // ---- boot ---------------------------------------------------------------
 
@@ -115,6 +117,11 @@ function handle(ev, bootstrap) {
     case 'text':
       if (p.mode === 'letter') appendReply(p.s);
       else appendText(p.s, p.mode, ev.ts);
+      break;
+
+    case 'dream':
+      finalizeText(ev.ts);
+      addDream(p, ev.ts, !bootstrap);
       break;
 
     case 'mode': {
@@ -193,13 +200,59 @@ function appendText(s, mode, ts) {
 }
 
 function makeTextBlock(mode, ts) {
-  const b = makeBlock('text');
+  const dream = mode === 'dream';
+  const b = makeBlock(dream ? 'dream' : 'text');
   const label = textModeLabel(mode);
   addEndpoint(b.el, ts, label + ' starts', 'start');
   const t = document.createElement('div');
-  t.className = 'pl-text';
+  t.className = dream ? 'pl-dream-fragment' : 'pl-text';
   b.el.appendChild(t);
   return { el: b.el, textEl: t, cut: false, label, startMs: timestampMs(ts) };
+}
+
+function ensureDream(payload, ts) {
+  const p = payload || {};
+  const key = String(p.sleep_period_id || p.dream_id || p.id || ('dream-' + colEl.childElementCount));
+  let dream = dreams.get(key);
+  if (dream) return dream;
+  const b = makeBlock('dream');
+  const meta = document.createElement('div');
+  meta.className = 'pl-meta pl-dream-meta';
+  const time = document.createElement('time');
+  time.className = 'pl-time';
+  bindEndpointTime(time, ts);
+  const state = document.createElement('span');
+  state.className = 'pl-mode';
+  state.textContent = 'DREAM';
+  meta.appendChild(time);
+  meta.appendChild(state);
+  const canvas = document.createElement('div');
+  canvas.className = 'pl-dream-canvas';
+  const sketch = document.createElement('div');
+  sketch.className = 'pl-dream-sketch';
+  const fragments = document.createElement('div');
+  fragments.className = 'pl-dream-fragments';
+  canvas.appendChild(sketch);
+  canvas.appendChild(fragments);
+  b.el.appendChild(meta);
+  b.el.appendChild(canvas);
+  dream = { key, el: b.el, state, sketch, fragments };
+  dreams.set(key, dream);
+  return dream;
+}
+
+function addDream(payload, ts, live) {
+  const p = payload || {};
+  const dream = ensureDream(p, ts);
+  dream.state.textContent = live ? 'DREAMING' : 'DREAM';
+  for (const value of Array.isArray(p.fragments) ? p.fragments : []) {
+    const text = String(value || '').trim();
+    if (!text) continue;
+    const fragment = document.createElement('div');
+    fragment.className = 'pl-dream-fragment';
+    fragment.textContent = text;
+    dream.fragments.appendChild(fragment);
+  }
 }
 
 function finalizeText(endTs = '') {
@@ -413,6 +466,20 @@ function beginDay(date, today = '') {
 
 function addDraw(p, ts) {
   if (!p || !Array.isArray(p.strokes) || !p.strokes.length) return;
+  if (p.dream) {
+    const dream = ensureDream(p, ts);
+    const id = String(p.id || dream.key);
+    let record = draws.get(id);
+    if (!record) {
+      const svg = makeDreamSvg('abstract dream drawing');
+      dream.sketch.appendChild(svg);
+      record = { svg, strokes: [], dream: true };
+      draws.set(id, record);
+    }
+    record.strokes.push(...p.strokes);
+    renderDreamSketch(record.svg, record.strokes, font);
+    return;
+  }
   const id = p.id != null ? String(p.id) : ('anon-' + colEl.childElementCount);
   let d = draws.get(id);
   if (!d) {
@@ -591,6 +658,7 @@ function reset() {
   replyMode = false;
   pendingReplyTs = null;
   draws.clear();
+  dreams.clear();
   setScrollTop(0, true);
   if (jumpControl) jumpControl.hide();
 }

@@ -19,8 +19,31 @@ function captive_client_ip(): string
     return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
 
-function captive_public_event_payload(string $kind, mixed $payload): mixed
+function captive_public_event_payload(string $kind, mixed $payload, bool $includeDreamDiagnostics = false): mixed
 {
+    if (($kind === 'dream' || $kind === 'dream_inspection') && is_array($payload)) {
+        if ($includeDreamDiagnostics) {
+            return $payload;
+        }
+        // Dream generation keeps a compact inspection packet beside the public
+        // expression. Ordinary visitors receive only presentation fields. The
+        // owner-only Raw request may opt into the diagnostic packet explicitly.
+        $publicKeys = $kind === 'dream'
+            ? [
+                'id',
+                'sleep_period_id',
+                'state',
+                'classification',
+                'fragments',
+                'lucid',
+                'drawing_id',
+                'drawing_version',
+                'output_validation',
+                'output_schema',
+            ]
+            : ['id', 'sleep_period_id', 'output_validation'];
+        return array_intersect_key($payload, array_flip($publicKeys));
+    }
     if ($kind === 'gen' && is_array($payload)) {
         // A generation row also stores the full prompt/debug inspection used by
         // the runner's private diagnostics. Repeating those hundreds of KB on

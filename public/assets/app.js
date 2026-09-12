@@ -592,6 +592,13 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
 
   const p = ev.payload || {};
   switch (ev.kind) {
+    case 'dream':
+      postcards.finishAnimations();
+      penEntryOpen = false;
+      if (live) led.activity();
+      pen.dream(p, ev.ts, live);
+      break;
+
     case 'text':
       // A 'letter'-mode token is a REPLY: it is written live on the postcard, not
       // on the journal sheet. Everything else (journal, warden, dream murmurs -
@@ -624,7 +631,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       // arrived lays down complete instead of re-animating from scratch.
       postcards.finishAnimations();
       penEntryOpen = false; // a drawing is its own thing; text after it is a new entry
-      pen.draw(p, ev.ts);
+      pen.draw(p, ev.ts, live);
       if (!bootstrap && p.dream) {
         // the night's slow dream drawing: mention it once, quietly, at its start
         if (p.seq === 0) pushTicker('drawing something in his sleep');

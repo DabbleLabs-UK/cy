@@ -197,6 +197,9 @@ const ASSISTANT_FRAME = [
   /you\s+trail\s+off\s+as\b/i,
   /\bthis\s+(?:response|passage|text)\s+(?:aims|has|contains|appears)\b/i,
   /\bhere\s+are\s+my\s+thoughts\s*:/i,
+  /\bhere\s+is\s+(?:a|the)\s+dream\s+(?:for|from)\s+cy\b/i,
+  /\bdream\s+analysis\s*:/i,
+  /\bbased\s+on\s+the\s+instructions\b/i,
 ];
 
 function assistantFrameMatches(s) {

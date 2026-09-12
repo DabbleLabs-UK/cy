@@ -446,6 +446,7 @@ export function buildDirectives(v, mode, ctx = {}) {
   // in here - so dream incoherence never contaminates the waking coherence rules
   // and vice versa. Either it is a night-waking lucid line, or it is a murmur.
   if (mode === 'dream') {
+    if (ctx.dreamDirective) return String(ctx.dreamDirective);
     if (ctx.wake) return dreamWakeDirective(ctx.wakeLine);
     const dp = [DREAM_MURMUR];
     if (ctx.material) dp.push(ctx.material);

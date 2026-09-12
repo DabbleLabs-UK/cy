@@ -5,6 +5,7 @@
 // preserved during live viewing and historical replay.
 
 import { Pen } from './pen.js';
+import { applyDreamLayout, makeDreamSvg, renderDreamSketch } from './dream-view.js';
 import { bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 import { createJumpToLatest } from './jump-to-latest.js';
 
@@ -48,6 +49,9 @@ export class ComposedFeed {
     this.current = null;
     this.pens = [];
     this.penEntries = new Map();
+    this.dreamFields = new Map();
+    this.dreamDrawings = new Map();
+    this.legacyDreamSeq = 0;
     this.lane = new HandwritingLane();
     this.vitals = null;
     this.following = true;
@@ -168,6 +172,17 @@ export class ComposedFeed {
     this.finishAnimations();
     this.closeEntry(ts);
     const entryMode = mode || 'journal';
+    if (entryMode === 'dream') {
+      const id = 'legacy-dream-' + (timestampMs(ts) ?? 'unknown') + '-' + (++this.legacyDreamSeq);
+      const field = this._dreamField({ id, sleep_period_id: id, state: 'DREAMING' }, ts);
+      if (!this.instant) field.block.classList.add('is-live');
+      this.current = {
+        block: field.block, dream: field, text: '', mode: entryMode, label: 'dream',
+        startMs: timestampMs(ts), static: true,
+      };
+      this._follow();
+      return;
+    }
     const block = document.createElement('article');
     block.className = 'cy-writing-segment ' + (entryMode === 'journal' ? 'cy-journal-entry' : 'cy-writing-note');
     block.dataset.kind = entryMode;
@@ -215,6 +230,20 @@ export class ComposedFeed {
     // able to recreate the physical card from the token's own timestamp. Never
     // manufacture an undated "--:--:--" endpoint when the event supplied one.
     if (!this.current) this.beginEntry(ts, mode);
+    if (this.current && this.current.dream) {
+      this.current.text += String(text);
+      let fragment = this.current.dream.legacyFragment;
+      if (!fragment) {
+        fragment = document.createElement('div');
+        fragment.className = 'cy-dream-fragment' + (!this.instant ? ' is-new' : '');
+        applyDreamLayout(fragment, this.current.dream.key, 0);
+        this.current.dream.fragments.appendChild(fragment);
+        this.current.dream.legacyFragment = fragment;
+      }
+      fragment.textContent = this.current.text;
+      this._follow();
+      return;
+    }
     this.current.text += String(text);
     if (this.current.static) {
       this.current.surface.textContent = this.current.text;
@@ -226,6 +255,10 @@ export class ComposedFeed {
 
   closeEntry(endTs = '') {
     const entry = this.current;
+    if (entry && entry.dream) {
+      this.current = null;
+      return;
+    }
     const endMs = timestampMs(endTs);
     if (entry && endMs != null && (entry.startMs == null || endMs >= entry.startMs)) {
       this._appendEndpoint(entry.block, endTs, entry.label + ' ends', 'end');
@@ -280,6 +313,61 @@ export class ComposedFeed {
     return this.event('fan mail bag - kept from ' + from, p.body || '', ts, 'fan-mail', p.image || '');
   }
 
+  dream(payload, ts, live = !this.instant) {
+    const p = payload || {};
+    this.finishAnimations();
+    this.closeEntry(ts);
+    const field = this._dreamField(p, ts);
+    const fragments = Array.isArray(p.fragments) ? p.fragments : [];
+    fragments.forEach((value, index) => {
+      const text = String(value || '').trim();
+      if (!text) return;
+      const fragment = document.createElement('div');
+      fragment.className = 'cy-dream-fragment' + (live ? ' is-new' : '');
+      fragment.dataset.eventId = String(p.id || '');
+      applyDreamLayout(fragment, p.id || field.key, index);
+      fragment.textContent = text;
+      field.fragments.appendChild(fragment);
+    });
+    if (live) field.block.classList.add('is-live');
+    field.state.textContent = live ? 'DREAMING' : 'DREAM';
+    this._follow();
+    return field.block;
+  }
+
+  _dreamField(payload, ts) {
+    const p = payload || {};
+    const key = String(p.sleep_period_id || p.dream_id || p.id || ('dream-' + (timestampMs(ts) ?? this.dreamFields.size)));
+    let field = this.dreamFields.get(key);
+    if (field) return field;
+    const block = document.createElement('article');
+    block.className = 'cy-dream-field';
+    block.dataset.kind = 'dream';
+    block.dataset.dreamId = key;
+    const meta = document.createElement('div');
+    meta.className = 'cy-dream-meta';
+    const time = document.createElement('time');
+    bindEndpointTime(time, ts);
+    const state = document.createElement('span');
+    state.textContent = p.state === 'DREAMING' && !this.instant ? 'DREAMING' : 'DREAM';
+    meta.appendChild(time);
+    meta.appendChild(state);
+    const canvas = document.createElement('div');
+    canvas.className = 'cy-dream-canvas';
+    const sketch = document.createElement('div');
+    sketch.className = 'cy-dream-sketch';
+    const fragments = document.createElement('div');
+    fragments.className = 'cy-dream-fragments';
+    canvas.appendChild(sketch);
+    canvas.appendChild(fragments);
+    block.appendChild(meta);
+    block.appendChild(canvas);
+    this.flow.appendChild(block);
+    field = { key, block, state, canvas, sketch, fragments, strokes: [], svg: null, legacyFragment: null };
+    this.dreamFields.set(key, field);
+    return field;
+  }
+
   silence(seconds, ts) {
     const secs = Math.max(0, Number(seconds) || 0);
     if (!secs) return;
@@ -298,7 +386,26 @@ export class ComposedFeed {
     this._follow();
   }
 
-  draw(drawing, ts) {
+  draw(drawing, ts, live = !this.instant) {
+    if (drawing && drawing.dream) {
+      this.finishAnimations();
+      this.closeEntry(ts);
+      const field = this._dreamField(drawing, ts);
+      const drawingId = String(drawing.id || field.key);
+      let record = this.dreamDrawings.get(drawingId);
+      if (!record) {
+        const svg = makeDreamSvg('abstract dream drawing');
+        field.sketch.appendChild(svg);
+        record = { field, svg, strokes: [] };
+        this.dreamDrawings.set(drawingId, record);
+      }
+      record.strokes.push(...(Array.isArray(drawing.strokes) ? drawing.strokes : []));
+      renderDreamSketch(record.svg, record.strokes, this.font);
+      if (live) field.block.classList.add('is-live');
+      field.state.textContent = live ? 'DREAMING' : 'DREAM';
+      this._follow();
+      return;
+    }
     this.finishAnimations();
     this.closeEntry(ts);
     const block = document.createElement('section');
@@ -333,6 +440,7 @@ export class ComposedFeed {
     // A mode boundary ends the current object. The next token creates a fresh
     // surface in the new mode; mutating the previous segment would rewrite history.
     this.closeEntry(ts);
+    if (mode !== 'dream') this.finishAnimations();
     this.mode = mode;
   }
 
@@ -348,6 +456,11 @@ export class ComposedFeed {
   // A later visible object has taken the bottom of the chronology. Preserve all
   // earlier ink, but stop those older surfaces owning a moving pen.
   finishAnimations() {
+    for (const field of this.dreamFields.values()) {
+      field.block.classList.remove('is-live');
+      field.state.textContent = 'DREAM';
+      for (const child of field.fragments.children) child.classList.remove('is-new');
+    }
     for (const pen of [...this.pens]) {
       const entry = this.penEntries.get(pen);
       if (entry) {
@@ -387,6 +500,9 @@ export class ComposedFeed {
     }
     this.pens = [];
     this.penEntries.clear();
+    this.dreamFields.clear();
+    this.dreamDrawings.clear();
+    this.legacyDreamSeq = 0;
     this.current = null;
     this.lane.reset();
     this.flow.textContent = '';

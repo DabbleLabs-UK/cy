@@ -23,6 +23,8 @@ function makeEl(tag) {
     },
     get className() { return el._className || ''; },
     appendChild(child) { child.parentNode = el; el.children.push(child); return child; },
+    removeChild(child) { const i = el.children.indexOf(child); if (i >= 0) el.children.splice(i, 1); return child; },
+    get firstChild() { return el.children[0] || null; },
     addEventListener() {},
     setAttribute(name, value) { el[name] = String(value); },
     set textContent(value) {
@@ -69,5 +71,25 @@ assert.match(silence.children[2].children[0].textContent, /^20:25:48 \(/);
 plain.handle({ kind: 'event', ts: '2026-09-08 20:30:00', payload: { name: 'cell_search' } }, true);
 const point = col.children[3];
 assert.ok(point.children[0]._classes.has('pl-meta-point'), 'a point event has one timestamp endpoint');
+
+plain.handle({
+  kind: 'dream', ts: '2026-09-08 23:17:00', payload: {
+    id: 'dream-event-1', sleep_period_id: 'sleep-1', state: 'DREAMING',
+    fragments: ['door will not fit the frame', 'proctor with no face'],
+  },
+}, true);
+const dream = col.children[4];
+assert.ok(dream._classes.has('pl-block-dream'), 'plain view uses a distinct dream block');
+assert.equal(dream.children[1].children[1].children.length, 2, 'plain view preserves fragment boundaries');
+assert.equal(dream.children[1].children[1].children[0].textContent, 'door will not fit the frame');
+
+plain.handle({
+  kind: 'draw', ts: '2026-09-08 23:18:00', payload: {
+    id: 'dream-drawing-1', dream: true, dream_id: 'sleep-1', sleep_period_id: 'sleep-1',
+    strokes: [{ t: 'C', x: 50, y: 50, r: 12 }], seq: 0, total: 1,
+  },
+}, true);
+assert.equal(col.children.length, 5, 'plain dream drawing integrates into the same block');
+assert.equal(dream.children[1].children[0].children.length, 1, 'plain dream field owns the drawing SVG');
 
 console.log('plain-feed.test.js: all checks passed');

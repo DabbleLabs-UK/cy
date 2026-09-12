@@ -49,11 +49,21 @@ import {
   wingnoiseDirective,
   applyBurstSeparator,
   NUM_CTX,
+  LIGHTS_OUT_MIN,
   isSleepWindow,
-  shapeMurmur,
   dreamMaterial,
   dreamMurmurGapMs,
 } from './prompt.js';
+import {
+  DREAM_MEMORY_DEADLINE_MS,
+  DREAM_RETRY_LIMIT,
+  DREAM_TOKEN_LIMIT,
+  buildDreamContextPacket,
+  dreamGenerationDirective,
+  dreamMemoryQuery,
+  selectDreamMemoryTraces,
+  validateDreamOutput,
+} from './dream.js';
 import { createSomaRuntime } from './soma-runtime.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import {
@@ -140,6 +150,7 @@ import {
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
   sourceFromEnvironmentRecord,
+  sourceFromDreamExpression,
   sourceFromExpression,
   sourceFromPostcard,
   sourceFromReply,
@@ -639,6 +650,7 @@ async function main() {
     durationMs = null,
     provisionalConsumer = true,
     cyObserved = true,
+    dreamEligible = true,
   } = {}) {
     const eventId = `env-${randomUUID()}`;
     const eventTimestamp = tsNow();
@@ -740,6 +752,7 @@ async function main() {
       location: event.world.context.location || null,
       participants: event.world.context.associated_entities || [],
       cyObserved,
+      dreamEligible,
     });
     while (recentWorldHistory.length > 24) recentWorldHistory.shift();
     if (cyObserved && autobiographicalMemory) {
@@ -1914,7 +1927,7 @@ async function main() {
   // Wired to currentAbort so an inbound postcard/notice can cut it short.
   async function rawGenerate({
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
-    timeoutMs = null, signal = null, background = false,
+    timeoutMs = null, signal = null, background = false, returnMeta = false,
   }) {
     if (!background && autobiographicalMemory) {
       autobiographicalMemory.interruptBackground('foreground');
@@ -1938,16 +1951,20 @@ async function main() {
       const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
       if (!out.ok) {
         if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
-        return '';
+        return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
       }
       // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
       // DSL pass that returned text is productive (it will attempt to render); an empty
       // return paid for nothing, so it lands in the non-emitting series.
       await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
-      return out.text || '';
+      return returnMeta
+        ? { ok: true, text: out.text || '', stats: out.stats || null, model: out.model || activeProvider().model }
+        : out.text || '';
     } catch (error) {
       if (background) throw error;
-      return ''; // aborted, unreachable, or bad body - caller treats as no drawing
+      return returnMeta
+        ? { ok: false, text: '', stats: null, model: activeProvider().model, error: String(error && error.message || error) }
+        : ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
       if (timeout) clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', relayAbort);
@@ -2253,6 +2270,7 @@ async function main() {
           modality: pc.image_path && !pc.body ? 'seen' : 'read',
           observed_facts: { has_text: !!pc.body, has_image: !!pc.image_path },
         },
+        dreamEligible: false,
       },
     );
     fireEvent(
@@ -2293,7 +2311,6 @@ async function main() {
     });
     if (pc.image_path) {
       vitals.lastImageMs = Date.now(); // a picture just came - he may draw off it
-      pushDreamMemory('image', pc.caption || pc.image_attrib || 'a picture through the door');
     }
     // a reply arriving clears the mail-wait / awaiting-reply threads in the ledger
     resolveThreads(vitals.ledger, ['reply', 'message', 'mail']);
@@ -2386,6 +2403,7 @@ async function main() {
         },
         observation: { modality: 'system', certainty: 'certain', observed_facts: { reply_sent: true } },
         provisionalConsumer: false,
+        dreamEligible: false,
       });
       emit({ kind: 'postcard_out', payload: {
         id: pc.id, reply_to: pc.id, to: pc.from_name || null, body: reply,
@@ -3605,38 +3623,92 @@ async function main() {
   const dreamState = {
     nextMurmurAt: 0,
     draw: null, // { id, strokes, next, nextStrokeAt, n, mood }
-    frag: null, // last dream fragment, for the rare morning carry
-    fragSig: 0, // best significance seen this night
+    sleepPeriodId: null,
   };
 
-  // Emit a dream text event (a murmur, or a lucid night-waking line). Screened
-  // like any output, but DELIBERATELY NOT appended to contextBuf: dream content
-  // must never enter the waking Zone B context window.
-  async function emitDreamText(s, { lucid = false } = {}) {
-    const chunk = stripScaffold(sanitize(s));
-    if (!chunk.trim()) return;
-    const res = warden.screenOut(chunk);
-    if (!res.ok) {
-      await warden.logBlock(res.reason, chunk, tsNow());
-      return;
-    }
-    const payload = { s: chunk + ' ', mode: 'dream' };
-    if (lucid) payload.lucid = true;
-    emit({ kind: 'text', payload });
-    soma.observeOutput(chunk, { mode: lucid ? 'dream-lucid' : 'dream', now: Date.now() });
-    lastTextMs = Date.now(); // a murmur/night-line is real output too
-    watchdogStep = 0; // dream output counts as text flowing: de-escalate the watchdog
-    failedCyclesSinceEmit = 0; // real output: not a stall
-    nonEmittingStreak = 0; // real output: clear the metered-backoff streak
+  function sleepPeriodId(now, mins) {
+    let date = new Date(now);
+    if (mins < LIGHTS_OUT_MIN) date = new Date(now - 24 * 60 * 60 * 1000);
+    return 'sleep-' + londonParts(date).date;
   }
 
-  // Keep one properly punctuated sentence from a night-waking generation.
-  function firstSentence(raw) {
-    let t = String(raw || '').replace(/\s+/g, ' ').trim();
-    if (!t) return '';
-    const m = t.match(/^(.*?[.!?])(?:\s|$)/);
-    t = m ? m[1] : t.slice(0, 120).replace(/[,;:\s]+$/, '') + '.';
-    return t.charAt(0).toUpperCase() + t.slice(1);
+  async function dreamMemoryTraces(packet, generationRef) {
+    if (!autobiographicalMemory) return { candidates: [], selected: [], status: 'UNAVAILABLE' };
+    const query = dreamMemoryQuery(packet);
+    if (!query.text && !query.tags.length) return { candidates: [], selected: [], status: 'NO_QUERY' };
+    const request = client.queryMemories({ query, visitorId: null, limit: 10 })
+      .catch((error) => ({ candidates: [], error: String(error && error.message || error) }));
+    const response = await Promise.race([
+      request,
+      sleep(DREAM_MEMORY_DEADLINE_MS).then(() => ({ candidates: [], deadline: true })),
+    ]);
+    const candidates = Array.isArray(response && response.candidates) ? response.candidates : [];
+    const selected = selectDreamMemoryTraces(candidates);
+    const inspection = {
+      status: response && response.deadline ? 'DEADLINE_EXPIRED' : response && response.error ? 'ERROR' : 'LIVE',
+      query, senderKnown: false, mechanisms: response && response.mechanisms || [],
+      privacyFilter: 'DREAM PUBLIC_RECALLABLE ONLY',
+      candidateIds: candidates.map((memory) => memory.id),
+      offeredIds: selected.map((memory) => memory.id),
+      selectedIds: selected.map((memory) => memory.id),
+      insertedIds: selected.map((memory) => memory.id),
+      selectedReasons: Object.fromEntries(selected.map((memory) => [memory.id, memory.reasons || []])),
+    };
+    void client.recordMemoryQuery({ generationRef, inspection }).catch(() => {});
+    return { candidates, selected, status: inspection.status, query };
+  }
+
+  // Emit one structured subjective dream event. Each fragment passes the same
+  // sanitation and warden screen as waking prose, but dream content never enters
+  // Zone B, the incident ledger, or any grounded Soma observation path.
+  async function emitDreamFragments(fragments, detail = {}) {
+    const screened = [];
+    for (const fragment of fragments) {
+      const chunk = stripScaffold(sanitize(fragment));
+      if (!chunk.trim()) continue;
+      const res = warden.screenOut(chunk);
+      if (!res.ok) {
+        await warden.logBlock(res.reason, chunk, tsNow());
+        continue;
+      }
+      screened.push(chunk.trim());
+    }
+    if (!screened.length) return false;
+    const id = detail.id || randomUUID();
+    emit({
+      kind: 'dream',
+      payload: {
+        id,
+        sleep_period_id: dreamState.sleepPeriodId,
+        state: 'DREAMING',
+        classification: 'DREAM / SUBJECTIVE EXPRESSION',
+        fragments: screened,
+        lucid: !!detail.lucid,
+        context_packet: detail.contextPacket || null,
+        autobiographical_memory_ids: detail.memoryIds || [],
+        privacy_filter: 'PUBLIC_RECALLABLE ONLY; sender-private excluded',
+        drawing_id: dreamState.draw && dreamState.draw.id || null,
+        drawing_version: 'dream-drawing-v1',
+        provider: detail.provider || activeProviderId,
+        model: detail.model || activeProvider().model,
+        latency_ms: Math.max(0, Math.round(detail.latencyMs || 0)),
+        output_validation: 'PASSED',
+        output_schema: 'cy.dream-fragments.v1',
+        token_limit: DREAM_TOKEN_LIMIT,
+        retry_limit: DREAM_RETRY_LIMIT,
+      },
+    });
+    const source = sourceFromDreamExpression(screened, `dream:${id}`, tsNow());
+    if (source && autobiographicalMemory) {
+      void autobiographicalMemory.queueSource(source).catch((error) => {
+        console.warn(`[cy] dream memory enqueue deferred: ${error.message}`);
+      });
+    }
+    lastTextMs = Date.now();
+    watchdogStep = 0;
+    failedCyclesSinceEmit = 0;
+    nonEmittingStreak = 0;
+    return true;
   }
 
   // Arm the night's ONE slow drawing: pick a random start minute in the small
@@ -3667,32 +3739,24 @@ async function main() {
       return false;
     }
     const stroke = d.strokes[d.next];
-    emit({ kind: 'draw', payload: { id: d.id, dream: true, strokes: [stroke], seq: d.next, total: d.n, mood: d.mood } });
+    emit({ kind: 'draw', payload: {
+      id: d.id, dream: true, dream_id: dreamState.sleepPeriodId,
+      sleep_period_id: dreamState.sleepPeriodId, drawing_version: 'dream-drawing-v1',
+      strokes: [stroke], seq: d.next, total: d.n, mood: d.mood,
+    } });
     d.next++;
     d.nextStrokeAt = now + dreamStrokeGapMs();
     if (d.next >= d.strokes.length) dreamState.draw = null;
     return true;
   }
 
-  // He just woke: he does NOT remember the dream at unlock, UNLESS the material
-  // scored highly, in which case a fragment may surface as an incident this
-  // morning. Then reset the night's transient dream state.
+  // Waking closes only transient presentation state. Dream expression may enter
+  // autobiographical formation through DREAM_EXPRESSION, but it is never promoted
+  // into the prison incident ledger or treated as an observed world fact.
   function leaveDream() {
-    if (dreamState.frag && dreamState.fragSig >= 0.6 && Math.random() < 0.5) {
-      pushIncident(vitals.ledger, {
-        actor: '',
-        verb: '',
-        object: '',
-        detail: 'something left over from a dream, ' + dreamState.frag,
-        resolved: false,
-        ts: tsNow(),
-      });
-      vitals.lastIncidentMs = Date.now();
-    }
-    dreamState.frag = null;
-    dreamState.fragSig = 0;
     dreamState.draw = null;
     dreamState.nextMurmurAt = 0;
+    dreamState.sleepPeriodId = null;
   }
 
   // One night iteration: a night-waking lucid line if a wing noise surfaced him,
@@ -3700,19 +3764,42 @@ async function main() {
   // short slice so the next stroke lands within its 1-2 min window.
   async function dreamStep(mins) {
     const now = Date.now();
-    const date = londonParts(new Date(now)).date;
+    const clock = londonParts(new Date(now));
+    const date = clock.date;
+    const localTime = String(clock.hour).padStart(2, '0') + ':' + String(clock.minute).padStart(2, '0');
+    if (!dreamState.sleepPeriodId) dreamState.sleepPeriodId = sleepPeriodId(now, mins);
 
     // NIGHT WAKING: a wing noise drags him up for ONE lucid line, then back under.
     if (wingNoiseCue && wingNoiseCue.wake && now < wingNoiseCue.until) {
       const line = wingNoiseCue.line;
       wingNoiseCue = null; // fire once
-      const directives = buildDirectives(vitals, 'dream', { wake: true, wakeLine: line });
+      const eventId = randomUUID();
+      const packet = buildDreamContextPacket({
+        sleepState: { state: 'ASLEEP', periodId: dreamState.sleepPeriodId, localTime },
+        recentWorld: recentWorldHistory,
+      });
+      const directives = buildDirectives(vitals, 'dream', {
+        dreamDirective: dreamGenerationDirective(packet, { lucid: true, wakeLine: line }),
+      });
       const prompt = buildPrompt('', 'dream', { wake: true }, directives);
-      const opts = options(vitals, config.threads, 'dream', { num_predict: 48 });
+      const opts = options(vitals, config.threads, 'dream', { num_predict: DREAM_TOKEN_LIMIT });
       await logPrompt('dream-wake', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-      const raw = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream' });
-      const one = firstSentence(raw);
-      if (one) await emitDreamText(one, { lucid: true });
+      const started = Date.now();
+      const result = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true });
+      const raw = result.text || '';
+      const validation = validateDreamOutput(raw);
+      if (validation.valid) {
+        await emitDreamFragments(validation.fragments.slice(0, 1), {
+          id: eventId, lucid: true, contextPacket: packet,
+          provider: activeProviderId, model: result.model, latencyMs: Date.now() - started,
+        });
+      } else if (raw.trim()) {
+        emit({ kind: 'dream_inspection', payload: {
+          id: eventId, sleep_period_id: dreamState.sleepPeriodId,
+          output_validation: validation.result, provider: activeProviderId,
+          model: result.model || activeProvider().model, latency_ms: Date.now() - started,
+        } });
+      }
       dreamState.nextMurmurAt = now + dreamMurmurGapMs(); // settle back under
       await idleSilently(4000);
       return;
@@ -3728,17 +3815,49 @@ async function main() {
     // a murmur, spaced far apart (5-20 min)
     if (now >= dreamState.nextMurmurAt) {
       const mat = dreamMaterial(buildDreamPool(), {});
-      if (mat.items.length) {
-        dreamState.frag = mat.items[0].text;
-        dreamState.fragSig = Math.max(dreamState.fragSig || 0, mat.significance || 0);
-      }
-      const directives = buildDirectives(vitals, 'dream', { material: mat.directive });
+      const eventId = randomUUID();
+      const basePacket = buildDreamContextPacket({
+        sleepState: { state: 'ASLEEP', periodId: dreamState.sleepPeriodId, localTime },
+        recentWorld: recentWorldHistory,
+        material: mat.items,
+      });
+      const memory = await dreamMemoryTraces(basePacket, `dream-surfacing:${eventId}`);
+      const packet = buildDreamContextPacket({
+        sleepState: {
+          state: basePacket.sleep.state,
+          periodId: basePacket.sleep.period_id,
+          localTime: basePacket.sleep.local_time,
+        },
+        recentWorld: recentWorldHistory,
+        material: mat.items,
+        memoryTraces: memory.selected,
+      });
+      const directives = buildDirectives(vitals, 'dream', {
+        dreamDirective: dreamGenerationDirective(packet),
+      });
       const prompt = buildPrompt('', 'dream', null, directives);
-      const opts = options(vitals, config.threads, 'dream');
+      const opts = options(vitals, config.threads, 'dream', { num_predict: DREAM_TOKEN_LIMIT });
       await logPrompt('dream', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-      const raw = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream' });
-      const murmur = shapeMurmur(raw);
-      if (murmur) await emitDreamText(murmur);
+      const started = Date.now();
+      const result = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true });
+      const raw = result.text || '';
+      const validation = validateDreamOutput(raw);
+      if (validation.valid) {
+        await emitDreamFragments(validation.fragments, {
+          id: eventId, contextPacket: packet,
+          memoryIds: memory.selected.map((item) => item.id),
+          provider: activeProviderId, model: result.model, latencyMs: Date.now() - started,
+        });
+      } else if (raw.trim()) {
+        emit({ kind: 'dream_inspection', payload: {
+          id: eventId, sleep_period_id: dreamState.sleepPeriodId,
+          context_packet: packet,
+          autobiographical_memory_ids: memory.selected.map((item) => item.id),
+          privacy_filter: 'PUBLIC_RECALLABLE ONLY; sender-private excluded',
+          output_validation: validation.result, provider: activeProviderId,
+          model: result.model || activeProvider().model, latency_ms: Date.now() - started,
+        } });
+      }
       dreamState.nextMurmurAt = now + dreamMurmurGapMs();
       await idleSilently(2000);
       return;

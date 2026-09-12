@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/presence.php';
+require __DIR__ . '/../../lib/admin.php';
 
 header('Cache-Control: no-store');
 
@@ -11,6 +12,9 @@ const STREAM_MAX_LIMIT = 100;
 
 try {
     $db = captive_db();
+    $includeDreamDiagnostics = isset($_GET['dream_debug'])
+        && $_GET['dream_debug'] === '1'
+        && captive_is_admin($db);
 
     // Freeze every page at one head before selecting rows. The caller may then
     // safely use `now` as a catch-up baseline: anything inserted while this
@@ -51,12 +55,16 @@ try {
         $rows = $stmt->fetchAll();
     }
 
-    $events = array_map(static function (array $row): array {
+    $events = array_map(static function (array $row) use ($includeDreamDiagnostics): array {
         return [
             'seq' => (int)$row['seq'],
             'ts' => $row['ts'],
             'kind' => $row['kind'],
-            'payload' => captive_public_event_payload((string)$row['kind'], json_decode($row['payload'], true)),
+            'payload' => captive_public_event_payload(
+                (string)$row['kind'],
+                json_decode($row['payload'], true),
+                $includeDreamDiagnostics
+            ),
         ];
     }, $rows);
 

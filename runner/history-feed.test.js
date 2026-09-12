@@ -9,6 +9,7 @@ import {
 } from '../public/assets/history-feed.js';
 
 assert.ok(NARRATIVE_KINDS.includes('fan_mail_in'), 'fan mail remains part of historical replay');
+assert.ok(NARRATIVE_KINDS.includes('dream'), 'structured dreams remain part of historical replay');
 assert.deepEqual(
   narrativeEventsForDate([
     { seq: 1, ts: '2026-08-19 13:00:00', kind: 'text' },

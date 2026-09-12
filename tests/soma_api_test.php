@@ -72,6 +72,25 @@ check_soma($publicGen['form'] === 'write', 'public generation form is preserved'
 check_soma(!isset($publicGen['zone_a']), 'full prompt zones are stripped from public event streams');
 check_soma(!isset($publicGen['grounded_soma_context']), 'large grounded prompt context is stripped from public event streams');
 check_soma(!isset($publicGen['output']), 'duplicated full generation output is stripped from public event streams');
+$dreamPayload = [
+    'id' => 'dream-1',
+    'sleep_period_id' => 'sleep-1',
+    'state' => 'DREAMING',
+    'classification' => 'DREAM / SUBJECTIVE EXPRESSION',
+    'fragments' => ['grey corridor', 'eight marks, four across'],
+    'lucid' => false,
+    'context_packet' => ['memory_traces' => [['id' => 'memory-secret']]],
+    'autobiographical_memory_ids' => ['memory-secret'],
+    'provider' => 'provider-a',
+    'latency_ms' => 123,
+    'output_validation' => 'PASSED',
+];
+$publicDream = captive_public_event_payload('dream', $dreamPayload);
+check_soma($publicDream['fragments'] === $dreamPayload['fragments'], 'public dream presentation preserves separate fragments');
+check_soma(!isset($publicDream['context_packet']), 'dream context packet is stripped from public event streams');
+check_soma(!isset($publicDream['autobiographical_memory_ids']), 'dream memory identifiers are stripped from public event streams');
+$privateDream = captive_public_event_payload('dream', $dreamPayload, true);
+check_soma(isset($privateDream['context_packet']) && isset($privateDream['autobiographical_memory_ids']), 'owner dream diagnostics preserve context and memory identifiers');
 check_soma($implemented['soma']['learnedControllability'] === $state['learnedControllability'], 'action-outcome evidence is returned without recomputation');
 check_soma($implemented['implementation_registry']['schema'] === 'cy.implementation-registry', 'registry accompanies the state');
 

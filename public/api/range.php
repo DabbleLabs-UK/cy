@@ -24,14 +24,17 @@ declare(strict_types=1);
 
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
+require __DIR__ . '/../../lib/admin.php';
 
 const RANGE_DEFAULT_LIMIT = 100;
 const RANGE_MAX_LIMIT = 100;
 
-header('Cache-Control: public, max-age=15');
-
 try {
     $db = captive_db();
+    $includeDreamDiagnostics = isset($_GET['dream_debug'])
+        && $_GET['dream_debug'] === '1'
+        && captive_is_admin($db);
+    header($includeDreamDiagnostics ? 'Cache-Control: no-store' : 'Cache-Control: public, max-age=15');
     // Freeze this response at one high-water mark before selecting page rows.
     // Events inserted while the query runs remain beyond `now` and are picked up
     // by the next live poll instead of being skipped by an advanced cursor.
@@ -146,12 +149,16 @@ try {
         $rows = array_reverse($rows); // back to ascending
     }
 
-    $events = array_map(static function (array $row): array {
+    $events = array_map(static function (array $row) use ($includeDreamDiagnostics): array {
         return [
             'seq' => (int)$row['seq'],
             'ts' => $row['ts'],
             'kind' => $row['kind'],
-            'payload' => captive_public_event_payload((string)$row['kind'], json_decode($row['payload'], true)),
+            'payload' => captive_public_event_payload(
+                (string)$row['kind'],
+                json_decode($row['payload'], true),
+                $includeDreamDiagnostics
+            ),
         ];
     }, $rows);
 

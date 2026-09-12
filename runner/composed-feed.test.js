@@ -9,7 +9,7 @@ function makeEl(tag) {
     children: [],
     parentNode: null,
     dataset: {},
-    style: {},
+    style: { setProperty(name, value) { this[name] = String(value); } },
     _text: '',
     _classes: new Set(),
     _listeners: {},
@@ -25,6 +25,8 @@ function makeEl(tag) {
     set className(v) { el._className = String(v); el._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
     get className() { return el._className || ''; },
     appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
+    removeChild(c) { const i = el.children.indexOf(c); if (i >= 0) el.children.splice(i, 1); return c; },
+    get firstChild() { return el.children[0] || null; },
     addEventListener(type, fn) { (el._listeners[type] ||= []).push(fn); },
     dispatchEvent(event) { for (const fn of el._listeners[event.type] || []) fn(event); },
     setAttribute(name, value) { el[name] = String(value); },
@@ -36,6 +38,7 @@ function makeEl(tag) {
 
 globalThis.document = {
   createElement: (tag) => makeEl(tag),
+  createElementNS: (_ns, tag) => makeEl(tag),
 };
 
 const { ComposedFeed, HandwritingLane } = await import('../public/assets/composed-feed.js');
@@ -119,8 +122,43 @@ assert.equal(chronology.flow.children[1].children[1].textContent, '[the cell is 
 assert.equal(chronology.flow.children[1]._classes.has('cy-journal-entry'), false, 'event records never receive journal paper');
 
 chronology.beginEntry('2026-09-09 10:25:00', 'dream');
-assert.ok(chronology.current.block._classes.has('cy-writing-note'), 'dream writing uses unruled note stock');
+assert.ok(chronology.current.block._classes.has('cy-dream-field'), 'legacy dream text uses the distinct dream field');
 assert.equal(chronology.current.block._classes.has('cy-journal-entry'), false, 'dream writing is not presented as a journal entry');
+
+const dreamRoot = makeEl('div');
+const dreamFeed = new ComposedFeed(dreamRoot, { chars: [] });
+dreamFeed.dream({
+  id: 'dream-event-1', sleep_period_id: 'sleep-1', state: 'DREAMING',
+  fragments: ['door will not fit the frame', 'proctor with no face'],
+}, '2026-09-09 03:17:00', true);
+const dreamBlock = dreamFeed.flow.children[0];
+assert.ok(dreamBlock._classes.has('cy-dream-field'), 'structured dreams use a dark dream field');
+assert.equal(dreamBlock._classes.has('cy-writing-segment'), false, 'structured dreams never use notebook-card presentation');
+assert.ok(dreamBlock._classes.has('is-live'), 'the newest live dream alone has the animation hook');
+const dreamFragments = dreamBlock.children[1].children[1];
+assert.equal(dreamFragments.children.length, 2, 'dream fragments remain separate DOM nodes');
+assert.notEqual(dreamFragments.children[0].style['--dream-offset'], undefined, 'fragment layout is deterministic CSS data');
+
+dreamFeed.draw({
+  id: 'dream-drawing-1', dream: true, dream_id: 'sleep-1', sleep_period_id: 'sleep-1',
+  strokes: [{ t: 'C', x: 50, y: 50, r: 12 }], seq: 0, total: 2,
+}, '2026-09-09 03:18:00', true);
+assert.equal(dreamFeed.flow.children.length, 1, 'dream drawing joins the existing dream field instead of creating another card');
+assert.equal(dreamBlock.children[1].children[0].children.length, 1, 'dream field owns one integrated SVG drawing');
+assert.equal(dreamBlock.children[0].children[1].textContent, 'DREAMING', 'a live drawing keeps the shared field visibly active');
+dreamFeed.event('lights on', '', '2026-09-09 06:30:00', 'prison');
+assert.equal(dreamBlock._classes.has('is-live'), false, 'a completed dream has no live animation class');
+assert.ok([...dreamFragments.children].every((fragment) => !fragment._classes.has('is-new')), 'completed fragments are static');
+assert.equal(dreamFeed.pens.length, 0, 'dream text and drawings create no Pen renderer resources');
+
+const manyDreams = new ComposedFeed(makeEl('div'), { chars: [] });
+manyDreams.setInstant(true);
+for (let i = 0; i < 1000; i++) {
+  manyDreams.dream({ id: 'event-' + i, sleep_period_id: 'sleep-' + i, fragments: ['small fragment'] }, '2026-09-09 03:17:00', false);
+}
+assert.equal(manyDreams.dreamFields.size, 1000, 'large dream history retains every stable field');
+assert.equal(manyDreams.pens.length, 0, 'large dream history accumulates no live pen resources');
+assert.ok(manyDreams.flow.children.every((block) => !block._classes.has('is-live')), 'historical dream fields are all static');
 
 const movingRoot = makeEl('div');
 const moving = new ComposedFeed(movingRoot, { chars: [] });

@@ -326,6 +326,18 @@ export function sourceFromExpression(text, sourceId, occurredAt = null) {
   };
 }
 
+export function sourceFromDreamExpression(fragments, sourceId, occurredAt = null) {
+  const content = (Array.isArray(fragments) ? fragments : [])
+    .map((fragment) => String(fragment || '').trim()).filter(Boolean).join(' / ');
+  if (!content || !sourceId) return null;
+  return {
+    sourceType: 'DREAM_EXPRESSION', sourceId, occurredAt,
+    text: content.slice(0, 1200), sourceVisibility: 'INTERNAL_ONLY',
+    participantLabel: 'Cy', subjectVisitorId: null,
+    tags: ['dream', 'subjective-expression'],
+  };
+}
+
 export function sourceFromReply(text, postcard, environmentEventId, occurredAt = null) {
   const content = String(text || '').trim();
   if (!content || !postcard || !postcard.id || !postcard.visitor_id) return null;
