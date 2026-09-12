@@ -3700,7 +3700,7 @@ async function main() {
     });
     const source = sourceFromDreamExpression(screened, `dream:${id}`, tsNow());
     if (source && autobiographicalMemory) {
-      void autobiographicalMemory.queueSource(source).catch((error) => {
+      void Promise.resolve(autobiographicalMemory.queueSource(source)).catch((error) => {
         console.warn(`[cy] dream memory enqueue deferred: ${error.message}`);
       });
     }

@@ -15,6 +15,8 @@ assert.doesNotMatch(dreamRuntime, /pushIncident\s*\(/,
   'dream output cannot become a prison incident or world residue');
 assert.match(dreamRuntime, /sourceFromDreamExpression\s*\(/,
   'dream output may enter the existing autobiographical formation path');
+assert.match(dreamRuntime, /Promise\.resolve\(autobiographicalMemory\.queueSource\(source\)\)\.catch/,
+  'dream formation accepts both synchronous and asynchronous queue implementations');
 assert.match(dreamRuntime, /kind:\s*'dream'/,
   'dream output is stored as an explicit subjective dream event');
 
