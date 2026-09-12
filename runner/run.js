@@ -135,6 +135,16 @@ import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import {
+  MEMORY_EXPRESSION_BATCH_LIMIT,
+  publicMemoryQueryTelemetry,
+  redactAutobiographicalMemoryFromTelemetry,
+  sourceFromEnvironmentRecord,
+  sourceFromExpression,
+  sourceFromPostcard,
+  sourceFromReply,
+} from './autobiographical-memory.js';
+import { AutobiographicalMemoryRuntime } from './memory-runtime.js';
+import {
   reconcileInstrumentalAgencyState,
   openInstrumentalOpportunity,
   queueInstrumentalOpportunity,
@@ -391,6 +401,10 @@ async function main() {
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
+  let autobiographicalMemory = null;
+  let pendingMemoryQuery = null;
+  let memoryFormationTurns = 0;
+  let memoryExpressionBuffer = [];
   try {
     const observedSleepHistory = await client.fetchObservedSleepHistory();
     soma.replayObservedSleepRecords(observedSleepHistory, { now: Date.now() });
@@ -688,6 +702,18 @@ async function main() {
     record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
     record.threat_learning = soma.observeThreatLearningRecord(record);
     emit({ kind: 'world_event_record', payload: record });
+    if (autobiographicalMemory) {
+      const source = sourceFromEnvironmentRecord(record);
+      if (source) {
+        autobiographicalMemory.queueSource(source);
+        pendingMemoryQuery = {
+          text: source.text,
+          tags: source.tags,
+          location: event.world.context.location || null,
+          publicSituation: source.text,
+        };
+      }
+    }
     return record;
   }
 
@@ -1107,8 +1133,8 @@ async function main() {
   // renders: the three prompt zones (A fixed voice, B fed-back context, C volatile
   // directives), the sampling options actually sent to ollama, the full post-warden
   // output as one block, and the mode/form/style directives that shaped it. It is
-  // POST-WARDEN and prompt text is fine to publish (the repo is public). Absent for
-  // paths that do not assemble it - the RAW view simply shows less for those bursts.
+  // POST-WARDEN. The autobiographical block and exact recall trace are redacted
+  // before this public event is emitted; the full access trace is owner-only.
   function emitGen(r, mode, detail = {}) {
     const s = r && r.stats;
     if (!s) return;
@@ -1156,17 +1182,16 @@ async function main() {
         // ---- RAW debugging view: the prompt that produced this burst ----
         zone_a: detail.zoneA != null ? String(detail.zoneA) : null,
         zone_b: detail.zoneB != null ? String(detail.zoneB) : null,
-        zone_c: detail.zoneC != null ? String(detail.zoneC) : null,
+        zone_c: redactAutobiographicalMemoryFromTelemetry(detail.zoneC),
         grounded_soma_context: detail.groundedSomaContext || null,
         grounded_soma_directive: detail.groundedSomaDirective != null
           ? String(detail.groundedSomaDirective) : null,
-        provisional_cognitive_directive: detail.provisionalCognitiveDirective != null
-          ? String(detail.provisionalCognitiveDirective) : null,
+        autobiographical_memory_query: publicMemoryQueryTelemetry(detail.autobiographicalMemoryQuery),
         prompt_context_classes: {
           fixed_character_fiction: 'zone_a',
           real_recent_cy_expression: 'zone_b',
           grounded_world_and_soma: ['grounded_soma_context', 'grounded_soma_directive'],
-          provisional_traceable_retrieval: 'provisional_cognitive_directive',
+          subjective_autobiographical_memory: 'autobiographical_memory_query',
           mixed_current_facts_and_engineering_directives: 'zone_c',
         },
         engineering_world_mechanics: {
@@ -1848,19 +1873,47 @@ async function main() {
     }
   }
 
+  autobiographicalMemory = new AutobiographicalMemoryRuntime({
+    client,
+    makeId: randomUUID,
+    generate: (call) => rawGenerate({
+      system: call.system,
+      prompt: call.prompt,
+      opts: options(vitals, config.threads, 'journal', call.options),
+      purpose: call.purpose,
+      accountingMode: call.purpose,
+    }),
+  });
+
+  async function refreshPendingMemory(generationRef = null, groundedContext = null) {
+    if (!pendingMemoryQuery) return autobiographicalMemory.working;
+    const query = pendingMemoryQuery;
+    pendingMemoryQuery = null;
+    return autobiographicalMemory.refreshWorkingContext({
+      ...query, groundedContext, generationRef,
+    });
+  }
+
+  async function formMemoryAfterVisibleOutput(groundedContext = null, force = false) {
+    memoryFormationTurns++;
+    if (!force && memoryFormationTurns % 4 !== 0) return { status: 'DEFERRED' };
+    return autobiographicalMemory.formNext({ groundedContext });
+  }
+
   // Assemble factual/grounded prompt injections plus explicit engineering cues.
-  // Legacy relationship, monotony-amplification and attention state do not enter.
+  // Legacy relationship, monotony-amplification, attention and heuristic memory
+  // state do not enter. The autobiography block has already passed the server
+  // privacy filter and a separate model-mediated surfacing decision.
   function buildCtx(cognition = null) {
     genCount++;
     const grounded = cognition && cognition.groundedDirective != null
       ? { context: cognition.groundedContext, directive: cognition.groundedDirective }
       : soma.groundedDirective({ now: Date.now() });
-    const provisional = cognition && cognition.provisionalDirective != null
-      ? cognition.provisionalDirective : soma.provisionalDirective();
     const ctx = {
       groundedSoma: grounded.directive,
       groundedSomaContext: grounded.context,
-      provisionalCognition: provisional,
+      autobiographicalMemory: autobiographicalMemory.working.directive,
+      autobiographicalMemoryInspection: autobiographicalMemory.working.inspection,
     };
     if (officerCue && Date.now() < officerCue.until) {
       ctx.officer = officerDirective(officerCue.key, officerCue.ev);
@@ -1977,11 +2030,26 @@ async function main() {
         body: pc.body || null,
         image: pc.image_path || null,
         attrib: pc.image_attrib || null,
-        visitor_id: pc.visitor_id || null,
         visit_count: pc.visitor ? pc.visitor.visit_count : null,
         promoted: !!pc.promoted,
         environment_event_id: postcardRecord.world_event.id,
       },
+    });
+
+    const postcardMemorySource = sourceFromPostcard({
+      ...pc,
+      posted_at: pc.posted_at || postcardRecord.world_event.timestamp,
+    }, postcardRecord.world_event.id);
+    if (postcardMemorySource) autobiographicalMemory.queueSource(postcardMemorySource);
+    await autobiographicalMemory.refreshWorkingContext({
+      text: postcardText,
+      tags: postcardMemorySource ? postcardMemorySource.tags : ['postcard'],
+      location: 'cell',
+      currentVisitorId: pc.visitor_id || null,
+      senderLabel: pc.from_name || 'the sender',
+      publicSituation: `A postcard has arrived: ${postcardText.slice(0, 600)}`,
+      groundedContext: cognition.groundedContext,
+      generationRef: `postcard:${pc.id}`,
     });
 
     // Recognition supplies factual visitor identity/count/timing only. Legacy
@@ -2005,7 +2073,7 @@ async function main() {
       zoneC: directives,
       groundedSomaContext: ctx.groundedSomaContext,
       groundedSomaDirective: ctx.groundedSoma,
-      provisionalCognitiveDirective: ctx.provisionalCognition,
+      autobiographicalMemoryQuery: ctx.autobiographicalMemoryInspection,
       form: ctx.form || null,
       styles: '',
       opts,
@@ -2038,12 +2106,16 @@ async function main() {
         id: pc.id, reply_to: pc.id, to: pc.from_name || null, body: reply,
         environment_event_id: replyRecord.world_event.id,
       } });
+      autobiographicalMemory.queueSource(sourceFromReply(
+        reply, pc, replyRecord.world_event.id, replyAt,
+      ));
     } else {
       // Do not let a failed/empty generation silently occupy the server's bounded
       // reply tray forever. The server reclasses it as retained fan mail, and the
       // next inbox poll creates the public archive receipt.
       emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
     }
+    await formMemoryAfterVisibleOutput(cognition.groundedContext, true);
     // remember them: a cheap compressed note + a standing nudge, written back to
     // the DB via a private visitor_seen event (never enters the public stream).
     if (visitor && visitor.visitor_id) {
@@ -2100,6 +2172,7 @@ async function main() {
         now: Date.now(),
       },
     });
+
     const targetPredict = letterPredict(notice.text);
     const ctx = buildCtx(cognition);
     ctx.length = completionDirective(targetPredict);
@@ -2115,7 +2188,7 @@ async function main() {
       zoneC: directives,
       groundedSomaContext: ctx.groundedSomaContext,
       groundedSomaDirective: ctx.groundedSoma,
-      provisionalCognitiveDirective: ctx.provisionalCognition,
+      autobiographicalMemoryQuery: ctx.autobiographicalMemoryInspection,
       form: ctx.form || null,
       styles: '',
       opts,
@@ -3389,6 +3462,10 @@ async function main() {
         mailWaitMs: nowMs - (vitals.lastMailMs || nowMs),
         rnd: () => 0,
       });
+      if (pendingMemoryQuery) {
+        pendingMemoryQuery.publicSituation = pendingMemoryQuery.publicSituation || incidentContext;
+        await refreshPendingMemory(`journal:${nowMs}`, cognition.groundedContext);
+      }
 
       if (hasDrawRequest) {
         await recordOutcome((await doDraw({ cognition, incidentContext })) || 'empty');
@@ -3408,7 +3485,7 @@ async function main() {
         groundedContext: cognition.groundedContext,
         groundedDirective: cognition.groundedDirective,
         currentIncidentContext: incidentContext,
-        provisionalMemoryCandidate: cognition.provisionalMemoryCandidate,
+        provisionalMemoryCandidate: null,
         availableActions,
       });
       const expressiveChoice = await chooseExpressiveAction(choiceRequest, {
@@ -3472,12 +3549,12 @@ async function main() {
       let burstForm = null; // the selected form directive, surfaced to the RAW view
       let burstGroundedContext = null;
       let burstGroundedDirective = '';
-      let burstProvisionalDirective = '';
+      let burstMemoryQuery = null;
       {
         const ctx = buildCtx(cognition);
         burstGroundedContext = ctx.groundedSomaContext;
         burstGroundedDirective = ctx.groundedSoma;
-        burstProvisionalDirective = ctx.provisionalCognition;
+        burstMemoryQuery = ctx.autobiographicalMemoryInspection;
         ctx.bans = bans;
         ctx.length = completionDirective(targetOpts.num_predict);
         ctx.regime = regimeDirective(mins);
@@ -3661,7 +3738,7 @@ async function main() {
           zoneC: directives,
           groundedSomaContext: burstGroundedContext,
           groundedSomaDirective: burstGroundedDirective,
-          provisionalCognitiveDirective: burstProvisionalDirective,
+          autobiographicalMemoryQuery: burstMemoryQuery,
           form: burstForm,
           styles: '',
           opts: lastOpts,
@@ -3681,6 +3758,17 @@ async function main() {
           vitals.recentOpeners.push(w);
           while (vitals.recentOpeners.length > 5) vitals.recentOpeners.shift();
         }
+        memoryExpressionBuffer.push({ id: randomUUID(), text: lastFull, at: tsNow() });
+        if (memoryExpressionBuffer.length >= MEMORY_EXPRESSION_BATCH_LIMIT) {
+          const batch = memoryExpressionBuffer.splice(0, MEMORY_EXPRESSION_BATCH_LIMIT);
+          const source = sourceFromExpression(
+            batch.map((item) => item.text).join('\n\n'),
+            `expression-batch:${batch[0].id}:${batch[batch.length - 1].id}`,
+            batch[batch.length - 1].at,
+          );
+          if (source) autobiographicalMemory.queueSource(source);
+        }
+        await formMemoryAfterVisibleOutput(burstGroundedContext);
         // Language remains expression rather than evidence. No grounded state or
         // provisional drive is updated as a consequence of this selected form.
       }
@@ -3767,7 +3855,7 @@ async function main() {
     bans: bansDirective(vitals.recentOpeners),
     regime: regimeDirective(londonParts().mins),
     groundedSoma: sampleGrounded.directive,
-    provisionalCognition: soma.provisionalDirective(),
+    autobiographicalMemory: autobiographicalMemory.working.directive,
     incidents: incidentsDirective(vitals.ledger, { mailWaitMs: 0, rnd: () => 0 }),
   };
   const sampleC = buildDirectives(vitals, 'journal', sampleCtx);

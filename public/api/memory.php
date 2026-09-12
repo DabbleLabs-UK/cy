@@ -97,7 +97,7 @@ try {
             'ok' => true,
             'candidates' => $candidates,
             'retrieval' => [
-                'mechanisms' => ['EXACT_PERSON', 'STRUCTURED_TAG', 'LEXICAL_TOKEN'],
+                'mechanisms' => captive_memory_retrieval_mechanisms($query, $visitorId),
                 'semantic_vector' => 'NOT IMPLEMENTED',
                 'ranking' => 'LEXICOGRAPHIC ENGINEERING ORDER; NO PSYCHOLOGICAL SCORE',
                 'privacy_filter' => 'APPLIED BEFORE RESPONSE',
@@ -142,6 +142,39 @@ try {
             $db->prepare("UPDATE autobiographical_memories
                 SET last_retrieved_at = NOW(3), retrieval_count = retrieval_count + 1
                 WHERE id IN ($placeholders)")->execute($selected);
+
+            // Public activity is derived server-side only from records explicitly
+            // marked public. The runner can supply traceable reason codes but
+            // cannot turn private memory text into a public activity item.
+            $reasonMap = is_array($input['selected_memory_reasons'] ?? null)
+                ? $input['selected_memory_reasons'] : [];
+            $stmt = $db->prepare("SELECT id, memory_type, public_summary
+                FROM autobiographical_memories
+                WHERE id IN ($placeholders) AND status = 'ACTIVE'
+                  AND privacy_scope = 'PUBLIC_RECALLABLE'");
+            $stmt->execute($selected);
+            $insertActivity = $db->prepare(
+                "INSERT INTO autobiographical_memory_activity
+                    (memory_id, activity_type, public_text, reason_codes, privacy_scope, created_at)
+                 VALUES (?, ?, ?, ?, 'PUBLIC_RECALLABLE', NOW(3))"
+            );
+            foreach ($stmt->fetchAll() as $publicMemory) {
+                $summary = trim((string)($publicMemory['public_summary'] ?? ''));
+                if ($summary === '') {
+                    continue;
+                }
+                $rawReasons = $reasonMap[(string)$publicMemory['id']] ?? [];
+                $reasons = array_values(array_intersect(
+                    is_array($rawReasons) ? $rawReasons : [],
+                    CY_MEMORY_REASONS
+                ));
+                $type = $publicMemory['memory_type'] === 'UNRESOLVED_THREAD'
+                    ? 'THREAD_RETURNED' : 'MEMORY_RESURFACED';
+                $insertActivity->execute([
+                    $publicMemory['id'], $type, mb_substr($summary, 0, 600),
+                    json_encode($reasons, JSON_UNESCAPED_SLASHES),
+                ]);
+            }
         }
         captive_json_response(['ok' => true]);
     }

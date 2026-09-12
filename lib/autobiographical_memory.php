@@ -37,6 +37,12 @@ function captive_memory_visible_to_prompt(array $memory, ?string $visitorId): bo
     if (($memory['status'] ?? '') !== 'ACTIVE') {
         return false;
     }
+    if (($memory['privacy_scope'] ?? '') === 'INTERNAL_ONLY') {
+        $subjectVisitorId = $memory['subject_visitor_id'] ?? null;
+        return $subjectVisitorId === null
+            || $visitorId === null
+            || hash_equals((string)$subjectVisitorId, $visitorId);
+    }
     if (($memory['privacy_scope'] ?? '') === 'PUBLIC_RECALLABLE') {
         return true;
     }
@@ -70,7 +76,7 @@ function captive_memory_rank_candidates(array $rows, array $query, ?string $visi
     $queryTags = captive_memory_tags($query['tags'] ?? []);
     $queryTerms = captive_memory_tokens((string)($query['text'] ?? ''));
     $location = trim((string)($query['location'] ?? ''));
-    if ($location !== '') {
+    if ($location !== '' && !in_array($location, $queryTags, true)) {
         $queryTags[] = $location;
     }
     $ranked = [];
@@ -125,6 +131,22 @@ function captive_memory_rank_candidates(array $rows, array $query, ?string $visi
         return strcmp((string)$a['id'], (string)$b['id']);
     });
     return array_slice($ranked, 0, max(0, min(CY_MEMORY_CANDIDATE_LIMIT, $limit)));
+}
+
+function captive_memory_retrieval_mechanisms(array $query, ?string $visitorId): array
+{
+    $mechanisms = [];
+    if ($visitorId !== null) {
+        $mechanisms[] = 'EXACT_PERSON';
+    }
+    if (captive_memory_tags($query['tags'] ?? [])
+        || trim((string)($query['location'] ?? '')) !== '') {
+        $mechanisms[] = 'STRUCTURED_TAG';
+    }
+    if (captive_memory_tokens((string)($query['text'] ?? ''))) {
+        $mechanisms[] = 'FULLTEXT_LEXICAL';
+    }
+    return $mechanisms;
 }
 
 function captive_memory_snapshot(array $memory): array
@@ -183,28 +205,96 @@ function captive_memory_validate_operation(array $operation): array
     return $operation;
 }
 
-function captive_memory_fetch_rows(PDO $db): array
+function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): array
 {
-    return $db->query(
+    // Indexed engineering pre-filter. Each path contributes IDs from the whole
+    // active store, so age alone never makes a retained memory unreachable.
+    $candidateIds = [];
+    $addIds = static function (array $rows) use (&$candidateIds): void {
+        foreach ($rows as $row) {
+            $id = (string)($row['id'] ?? '');
+            if ($id !== '') {
+                $candidateIds[$id] = true;
+            }
+        }
+    };
+
+    if ($visitorId !== null) {
+        $stmt = $db->prepare(
+            "SELECT id FROM autobiographical_memories
+             WHERE status = 'ACTIVE' AND subject_visitor_id = ?
+             ORDER BY updated_at DESC LIMIT 100"
+        );
+        $stmt->execute([$visitorId]);
+        $addIds($stmt->fetchAll());
+    }
+
+    $tags = captive_memory_tags($query['tags'] ?? []);
+    $location = mb_substr(trim((string)($query['location'] ?? '')), 0, 64);
+    if ($location !== '' && !in_array($location, $tags, true)) {
+        $tags[] = $location;
+    }
+    if ($tags) {
+        $placeholders = implode(',', array_fill(0, count($tags), '?'));
+        $stmt = $db->prepare(
+            "SELECT m.id
+             FROM autobiographical_memories m
+             JOIN autobiographical_memory_tags t ON t.memory_id = m.id
+             WHERE m.status = 'ACTIVE' AND t.tag IN ($placeholders)
+             GROUP BY m.id
+             ORDER BY COUNT(DISTINCT t.tag) DESC, m.updated_at DESC
+             LIMIT 200"
+        );
+        $stmt->execute($tags);
+        $addIds($stmt->fetchAll());
+    }
+
+    $terms = captive_memory_tokens((string)($query['text'] ?? ''));
+    if ($terms) {
+        $booleanQuery = implode(' ', array_map(
+            static fn(string $term): string => $term . '*',
+            $terms
+        ));
+        $stmt = $db->prepare(
+            "SELECT id,
+                    MATCH(content, public_summary) AGAINST (? IN BOOLEAN MODE) AS fts_rank
+             FROM autobiographical_memories
+             WHERE status = 'ACTIVE'
+             HAVING fts_rank > 0
+             ORDER BY fts_rank DESC, updated_at DESC
+             LIMIT 200"
+        );
+        $stmt->execute([$booleanQuery]);
+        $addIds($stmt->fetchAll());
+    }
+
+    $ids = array_slice(array_keys($candidateIds), 0, 500);
+    if (!$ids) {
+        return [];
+    }
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = $db->prepare(
         "SELECT m.*, GROUP_CONCAT(DISTINCT t.tag ORDER BY t.tag SEPARATOR ',') AS tags,
                 COUNT(DISTINCT CONCAT(s.source_type, ':', s.source_id)) AS source_count
          FROM autobiographical_memories m
          LEFT JOIN autobiographical_memory_tags t ON t.memory_id = m.id
          LEFT JOIN autobiographical_memory_sources s ON s.memory_id = m.id
-         WHERE m.status = 'ACTIVE'
-         GROUP BY m.id
-         ORDER BY m.updated_at DESC
-         LIMIT 250"
-    )->fetchAll();
+         WHERE m.id IN ($placeholders)
+         GROUP BY m.id"
+    );
+    $stmt->execute($ids);
+    return $stmt->fetchAll();
 }
 
 function captive_memory_query(PDO $db, array $query, ?string $visitorId, int $limit = CY_MEMORY_CANDIDATE_LIMIT): array
 {
-    $rows = captive_memory_fetch_rows($db);
+    $rows = captive_memory_fetch_rows($db, $query, $visitorId);
     $ranked = captive_memory_rank_candidates($rows, $query, $visitorId, $limit);
     return array_map(static function (array $row) use ($visitorId): array {
-        $crossVisitor = ($row['subject_visitor_id'] ?? null) !== null
-            && ($visitorId === null || !hash_equals((string)$row['subject_visitor_id'], $visitorId));
+        $crossVisitor = $visitorId !== null
+            && (string)$row['privacy_scope'] === 'PUBLIC_RECALLABLE'
+            && (($row['subject_visitor_id'] ?? null) === null
+                || !hash_equals((string)$row['subject_visitor_id'], $visitorId));
         return [
             'id' => (string)$row['id'],
             'type' => (string)$row['memory_type'],
@@ -327,19 +417,26 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
                 $db->prepare("UPDATE autobiographical_memories SET status = 'ARCHIVED', version = ?, updated_at = NOW(3) WHERE id = ?")
                     ->execute([$version, $id]);
             } else {
-                // Privacy deletion leaves a content-free tombstone and a revision
-                // containing only the previous content hash, not the removed data.
+                // Privacy deletion leaves only a content-free, unlinked tombstone.
+                // Previous content-bearing revisions and public activity are also
+                // removed; ordinary forgetting uses ARCHIVE instead.
                 $version = (int)$current['version'] + 1;
                 $memory = array_replace($current, [
                     'status' => 'DELETED', 'content' => '', 'public_summary' => null,
-                    'classification' => 'deleted for privacy',
+                    'classification' => 'deleted for privacy', 'privacy_scope' => 'INTERNAL_ONLY',
+                    'subject_visitor_id' => null, 'name_recallable' => 0,
                 ]);
                 $db->prepare("UPDATE autobiographical_memories
                     SET status = 'DELETED', content = '', public_summary = NULL,
-                        classification = 'deleted for privacy', version = ?, updated_at = NOW(3)
+                        classification = 'deleted for privacy', privacy_scope = 'INTERNAL_ONLY',
+                        subject_visitor_id = NULL, name_recallable = 0,
+                        last_retrieved_at = NULL, retrieval_count = 0,
+                        version = ?, updated_at = NOW(3)
                     WHERE id = ?")->execute([$version, $id]);
                 $db->prepare('DELETE FROM autobiographical_memory_sources WHERE memory_id = ?')->execute([$id]);
                 $db->prepare('DELETE FROM autobiographical_memory_tags WHERE memory_id = ?')->execute([$id]);
+                $db->prepare('DELETE FROM autobiographical_memory_revisions WHERE memory_id = ?')->execute([$id]);
+                $db->prepare('DELETE FROM autobiographical_memory_activity WHERE memory_id = ?')->execute([$id]);
             }
         }
         if (in_array($decision, ['CREATE', 'UPDATE'], true)) {
@@ -347,7 +444,7 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
             captive_memory_replace_tags($db, $id, $op['tags'] ?? []);
         }
         $snapshot = $decision === 'DELETE'
-            ? ['status' => 'DELETED', 'previous_content_sha256' => hash('sha256', (string)$current['content'])]
+            ? ['status' => 'DELETED']
             : captive_memory_snapshot($memory);
         $rev = $db->prepare(
             'INSERT INTO autobiographical_memory_revisions

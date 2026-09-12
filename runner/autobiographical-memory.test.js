@@ -10,7 +10,10 @@ import {
   memoryVisibleTo,
   parseFormationResponse,
   parseSurfacingResponse,
+  publicMemoryQueryTelemetry,
+  redactAutobiographicalMemoryFromTelemetry,
   sourceFromExpression,
+  sourceFromReply,
 } from './autobiographical-memory.js';
 
 const sender = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -25,10 +28,13 @@ const base = {
 // Privacy is deterministic and occurs before prompt assembly.
 const privateMemory = { ...base, id: 'private', privacyScope: 'INTERNAL_ONLY' };
 const senderMemory = { ...base, id: 'sender', privacyScope: 'SENDER_RECALLABLE', subjectVisitorId: sender };
-assert.equal(memoryVisibleTo(privateMemory, sender), false);
+assert.equal(memoryVisibleTo(privateMemory, sender), true);
 assert.equal(memoryVisibleTo(senderMemory, sender), true);
 assert.equal(memoryVisibleTo(senderMemory, other), false);
-assert.deepEqual(filterMemoriesBeforePrompt([privateMemory, senderMemory], { currentVisitorId: other }), []);
+assert.deepEqual(
+  filterMemoriesBeforePrompt([privateMemory, senderMemory], { currentVisitorId: other }).map((memory) => memory.id),
+  ['private'],
+);
 
 // Hidden technical identity can never enter a model-facing block.
 assert.throws(() => assertPromptSafe('visitor_id aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));
@@ -42,6 +48,8 @@ const source = {
 const formation = buildFormationRequest(source, [senderMemory]);
 assert.doesNotMatch(formation.prompt, new RegExp(sender));
 assert.doesNotMatch(formation.prompt, /visitor_id|cookie|ip address/i);
+assert.doesNotMatch(formation.prompt, /\"private\"|\"sender\"|memory-public/);
+assert.match(formation.prompt, /\"memoryRef\":\"C1\"/);
 
 const created = parseFormationResponse(JSON.stringify({
   decision: 'CREATE', type: 'UNRESOLVED_THREAD', privacyScope: 'SENDER_RECALLABLE',
@@ -52,8 +60,28 @@ assert.equal(created.decision, 'CREATE');
 assert.equal(created.memoryId, 'memory-new');
 assert.equal(created.source.sourceId, 'postcard:7');
 
+const senderScoped = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'PERSON', privacyScope: 'PUBLIC_RECALLABLE',
+  content: 'Jody asked before about a television.', publicSummary: 'Someone asked a question.',
+  classification: 'returning sender', consistencyStatus: 'CONSISTENT', tags: ['postcard'],
+}), { source, existing: [], makeId: () => 'memory-sender' });
+assert.equal(senderScoped.privacyScope, 'SENDER_RECALLABLE');
+assert.equal(senderScoped.publicSummary, null);
+
+const replySource = sourceFromReply('aye i remember that', {
+  id: 7, visitor_id: sender, from_name: 'Jody',
+}, 'env-reply-7', '2026-09-12T12:01:00Z');
+assert.equal(replySource.sourceVisibility, 'SENDER_RECALLABLE');
+assert.equal(replySource.subjectVisitorId, sender);
+const replyFormation = buildFormationRequest(replySource, [
+  senderMemory,
+  { ...base, id: 'internal-general', privacyScope: 'INTERNAL_ONLY' },
+  { ...base, id: 'public-general', privacyScope: 'PUBLIC_RECALLABLE' },
+]);
+assert.deepEqual(replyFormation.candidates.map((memory) => memory.id), ['sender']);
+
 const updated = parseFormationResponse(JSON.stringify({
-  decision: 'UPDATE', memoryRef: 'sender', content: 'The shared cell question returned.',
+  decision: 'UPDATE', memoryRef: 'C1', content: 'The shared cell question returned.',
   consistencyStatus: 'CONSISTENT', tags: ['cell'],
 }), { source, existing: [senderMemory], makeId: () => 'unused' });
 assert.equal(updated.decision, 'UPDATE');
@@ -79,5 +107,20 @@ assert.doesNotMatch(block, /retrievalReasons|score|memoryRef/);
 
 // The 8 by 4 motif is not permanent instruction: absent candidates means absent text.
 assert.equal(formatAutobiographicalMemory([]), '');
+
+const privateTelemetry = {
+  status: 'LIVE', senderKnown: true,
+  candidateIds: ['memory-private-a'], offeredIds: ['memory-private-a'],
+  selectedIds: ['memory-private-a'], insertedIds: ['memory-private-a'],
+  mechanisms: ['EXACT_PERSON'], privacyFilter: 'APPLIED BEFORE RESPONSE',
+};
+const publicTelemetry = publicMemoryQueryTelemetry(privateTelemetry);
+assert.equal(publicTelemetry.candidate_count, 1);
+assert.doesNotMatch(JSON.stringify(publicTelemetry), /memory-private-a/);
+const publicZone = redactAutobiographicalMemoryFromTelemetry(
+  `before\n${formatAutobiographicalMemory([privateMemory])}\nafter`,
+);
+assert.match(publicZone, /private memory context omitted/);
+assert.doesNotMatch(publicZone, /cell and machine seem to rhyme/);
 
 console.log('autobiographical-memory.test.js: all checks passed');

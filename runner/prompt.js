@@ -436,7 +436,7 @@ export function dreamSampling(_v) {
 // cache. This builds the block; buildPrompt() places it last. ctx carries the
 // contextual injections assembled by the live loop:
 //   { bans, regime, officer, overheard, wingnoise, visitor, warden, cost,
-//     incidents, groundedSoma, provisionalCognition, length, form }.
+//     incidents, groundedSoma, autobiographicalMemory, length, form }.
 // Older cast/grudge/amplified/regime keys remain accepted for inspection tools,
 // but the live runner does not supply them.
 export function buildDirectives(v, mode, ctx = {}) {
@@ -464,7 +464,8 @@ export function buildDirectives(v, mode, ctx = {}) {
   // ordered right, an event-free burst re-evaluates only the small volatile tail.
   // Legacy mood-to-wording, attention and action-score directives are excluded
   // from the live prompt. Grounded Soma facts and an optional traceable archived
-  // event are the only cognitive/state material supplied here.
+  // event and the bounded autobiographical working-context block are the only
+  // cognitive/state material supplied here.
   const style = '';
   if (mode === 'sleep') {
     const parts = [];
@@ -492,10 +493,8 @@ export function buildDirectives(v, mode, ctx = {}) {
   // still reads reasonably fresh, but ahead of the every-burst tail so a burst with
   // no new incident reuses it from cache instead of re-evaluating it.
   if (ctx.incidents) parts.push(ctx.incidents);
+  if (ctx.autobiographicalMemory) parts.push(ctx.autobiographicalMemory);
   if (ctx.groundedSoma) parts.push(ctx.groundedSoma);
-  if (ctx.provisionalCognition) parts.push(ctx.provisionalCognition);
-  // Compatibility only. New runner paths use the explicitly named sections.
-  if (ctx.soma && !ctx.provisionalCognition) parts.push(ctx.soma);
   // TIER 2 - ONE-SHOT CUES: present in only the single burst they fire, absent the
   // rest. Placed AFTER the stable tier so their appearance/disappearance only ever
   // invalidates from here on, never the stable prefix above.

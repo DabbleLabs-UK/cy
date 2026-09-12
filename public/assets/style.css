@@ -1101,6 +1101,44 @@ body.cy-paused::after {
 .soma-diagnostic-row span { color: var(--tel); font-size: 8.5px; }
 .soma-diagnostic-row strong { color: #c8d4de; font-size: 8.5px; }
 .soma-diagnostic-row small { grid-column: 1 / -1; color: #5f7080; font-size: 8px; }
+
+/* ================= AUTOBIOGRAPHICAL MEMORY ================= */
+.memory-panel { margin-top: 10px; }
+#memory { display: grid; gap: 8px; }
+.memory-status { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: baseline; }
+.memory-status strong { color: #d7e3eb; font-size: 9px; font-weight: 500; }
+.memory-status span { color: #7e95a5; font-size: 7.5px; text-align: right; }
+.memory-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.memory-tabs button {
+  cursor: pointer; min-width: 0; padding: 4px 2px; border: 1px solid var(--line);
+  background: #0b1015; color: #7990a0; font: 7px var(--mono); text-transform: uppercase;
+}
+.memory-tabs button:hover,
+.memory-tabs button:focus-visible,
+.memory-tabs button.active { color: #e7eef3; border-color: #53748b; background: #14212a; }
+.memory-list { display: grid; gap: 4px; }
+.memory-entry { border: 1px solid #2f3e49; background: rgba(10, 15, 20, 0.72); }
+.memory-entry[open] { border-color: #4c6679; }
+.memory-entry-head { cursor: pointer; display: grid; gap: 3px; padding: 6px 7px; list-style: none; }
+.memory-entry-head::-webkit-details-marker { display: none; }
+.memory-entry-head::before { content: '+'; float: left; margin-right: 5px; color: #7590a2; }
+.memory-entry[open] > .memory-entry-head::before { content: '-'; }
+.memory-entry-head:hover { background: rgba(75, 106, 127, 0.14); }
+.memory-kind { color: #79a8c6; font-size: 7px; letter-spacing: 0.1em; text-transform: uppercase; }
+.memory-entry-head strong { color: #d0dae1; font-size: 8px; font-weight: 500; line-height: 1.35; }
+.memory-summary { margin: 0; padding: 1px 8px 7px; color: #aab9c3; font-size: 8px; line-height: 1.45; }
+.memory-meta { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; border-top: 1px solid #27343d; color: #728796; font-size: 7px; }
+.memory-empty { margin: 0; color: #778b99; font-size: 8px; line-height: 1.4; }
+.memory-activity { border-top: 1px solid var(--line); padding-top: 6px; }
+.memory-activity > summary { cursor: pointer; color: #8299a9; font-size: 7.5px; letter-spacing: 0.1em; }
+.memory-activity-list { display: grid; gap: 5px; margin-top: 6px; }
+.memory-activity-list p { margin: 0; color: #9dabb5; font-size: 7.5px; line-height: 1.4; }
+.memory-activity-list strong { color: #76a3be; font-weight: 500; }
+.memory-reasons { display: block; margin-top: 2px; color: #718594; font-size: 7px; }
+.memory-caveat { margin: 0; color: #667986; font-size: 7px; line-height: 1.4; }
+.memory-inspection { margin-top: 9px; border: 1px solid var(--line); padding: 7px; color: var(--muted); }
+.memory-inspection > summary { cursor: pointer; color: var(--blue); }
+.memory-inspection-json { max-height: 240px; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
 .legacy-box { border: 1px solid rgba(190,138,67,0.35); background: rgba(72,48,23,0.12); padding: 7px 8px; }
 .legacy-box summary { cursor: pointer; color: #c28d4b; font-size: 9px; letter-spacing: 0.13em; }
 .legacy-box p { color: #8d795f; font-size: 9px; line-height: 1.4; }

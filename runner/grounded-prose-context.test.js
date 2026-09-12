@@ -200,19 +200,19 @@ assert.equal(JSON.stringify({
   social: state.socialContact,
 }), groundedBeforeOutput);
 
-// J. Prompt and owner inspection preserve the grounded/provisional boundary.
+// J. The live prompt excludes legacy retrieval and RAW names the replacement.
 const provisional = 'PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL';
 const zoneC = buildDirectives({ cognition: state }, 'journal', {
   groundedSoma: projection.directive,
   provisionalCognition: provisional,
 });
 assert.match(zoneC, /<PRIVATE_CURRENT_FACTS>/);
-assert.match(zoneC, /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
-assert.ok(zoneC.indexOf('<PRIVATE_CURRENT_FACTS>') < zoneC.indexOf(provisional));
+assert.doesNotMatch(zoneC, /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
 const rawSource = readFileSync(new URL('../public/assets/raw.js', import.meta.url), 'utf8');
 assert.match(rawSource, /GROUNDED SOMA CONTEXT SENT TO MODEL/);
 assert.match(rawSource, /GROUNDED SOMA INFORMATION OMITTED/);
-assert.match(rawSource, /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
+assert.match(rawSource, /AUTOBIOGRAPHICAL MEMORY QUERY/);
+assert.doesNotMatch(rawSource, /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
 
 // K/L. The legacy selector remains inspectable but is no longer called by the
 // live runner. Scientific/grounded action selection remains not implemented.

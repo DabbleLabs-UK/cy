@@ -140,7 +140,7 @@
       "model_spec_id": null,
       "classification": ["SUBJECTIVE_CHARACTER_LAYER", "NOT_SCIENTIFIC_PSYCHOLOGICAL_MODEL"],
       "status_note": "A small structured model call chooses only among currently available journal, draw and silence capabilities. The result is character behaviour, not a grounded measurement, reward policy, utility model or psychological action-selection model.",
-      "data_dependencies": ["grounded_soma_to_expressive_context", "current_incident_context", "provisional_memory_candidate"],
+      "data_dependencies": ["grounded_soma_to_expressive_context", "current_incident_context"],
       "version": "model-mediated-expressive-choice-v1",
       "provenance": "runner/expressive-choice.js"
     },
@@ -202,12 +202,99 @@
     {
       "id": "heuristic_memory_retrieval",
       "display_name": "HEURISTIC MEMORY RETRIEVAL",
-      "implementation_status": "PROVISIONAL",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "lifecycle_status": "DISABLED_LEGACY",
       "model_spec_id": null,
-      "status_note": "A heuristic retriever may surface optional continuity material only when it resolves to a real structured environment-event ID, timestamp, kind and exact archived event text. Generated prose and heuristic reinterpretations are excluded.",
-      "data_dependencies": ["structured_environment_event_archive"],
+      "status_note": "The older weighted event-text matcher remains in runner/soma.js for compatibility diagnostics only. The live prompt, expressive chooser and timing paths do not call it.",
+      "data_dependencies": [],
       "version": "provisional-traceable-retrieval-v1",
       "provenance": "runner/soma.js"
+    },
+    {
+      "id": "autobiographical_memory_system",
+      "display_name": "PROVENANCED AUTOBIOGRAPHICAL MEMORY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "classification": ["ENGINEERING_INFORMATION_RETRIEVAL", "SUBJECTIVE_CHARACTER_LAYER", "NOT_A_BIOLOGICAL_MEMORY_MODEL"],
+      "status_note": "Versioned subjective memories are formed and updated by the active language model from explicit provenance-bearing sources. Deterministic privacy-filtered candidate retrieval runs first; a separate model call may insert zero to three candidates into a dedicated prompt block. Authoritative world history is never rewritten by memory operations.",
+      "data_dependencies": ["structured_environment_event_archive", "postcards", "cy_generated_expression"],
+      "version": "provenanced-autobiographical-memory-v1",
+      "provenance": "runner/autobiographical-memory.js; runner/memory-runtime.js; lib/autobiographical_memory.php; sql/015_autobiographical_memory.sql"
+    },
+    {
+      "id": "autobiographical_memory_candidate_retrieval",
+      "display_name": "AUTOBIOGRAPHICAL MEMORY CANDIDATE RETRIEVAL",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "classification": ["DETERMINISTIC_ENGINEERING_RETRIEVAL", "NO_PSYCHOLOGICAL_SCORE"],
+      "status_note": "Indexed exact-person, structured-tag and MariaDB full-text paths discover candidates across the active store. At most ten are returned using a lexicographic engineering order over current sender, tag overlap, lexical overlap, unresolved-thread type and recency. Privacy scope is enforced before candidates leave the server.",
+      "data_dependencies": ["autobiographical_memory_system", "current_sender_identity", "current_context_tags", "current_context_text"],
+      "version": "autobiographical-memory-retrieval-v1",
+      "provenance": "lib/autobiographical_memory.php"
+    },
+    {
+      "id": "autobiographical_memory_vector_retrieval",
+      "display_name": "SEMANTIC VECTOR MEMORY RETRIEVAL",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No reliable local embedding facility is configured. No vector similarity or embedding-derived score is used or claimed.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "autobiographical_memory_public_browser",
+      "display_name": "PUBLIC AUTOBIOGRAPHICAL MEMORY BROWSER",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Visitors can browse explicitly public summaries and see only a count of sender-recallable memories belonging to their signed pseudonymous visitor identity. Exact IDs, source excerpts and access traces are owner-only.",
+      "data_dependencies": ["autobiographical_memory_system", "pseudonymous_visitor_cookie"],
+      "version": "autobiographical-memory-public-ui-v1",
+      "provenance": "public/api/memory.php; public/api/memory-inspection.php; public/assets/memory.js"
+    },
+    {
+      "id": "biological_cognitive_forgetting_model",
+      "display_name": "BIOLOGICAL / COGNITIVE FORGETTING MODEL",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No memory decay, age-based deletion or biological forgetting equation is implemented. Explicit ARCHIVE and privacy DELETE are administrative lifecycle operations.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "periodic_memory_consolidation",
+      "display_name": "PERIODIC AUTOBIOGRAPHICAL MEMORY CONSOLIDATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No nightly or periodic consolidation process is implemented. A formation call may update one supplied higher-level memory while preserving revisions and source links.",
+      "data_dependencies": ["autobiographical_memory_system"],
+      "version": null
+    },
+    {
+      "id": "soma_modulated_memory_access",
+      "display_name": "SOMA-MODULATED MEMORY ACCESS",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Grounded Soma and world facts may be query context, but no Soma value changes retrieval ranking, candidate breadth or memory-selection probability.",
+      "data_dependencies": ["autobiographical_memory_system"],
+      "version": null
+    },
+    {
+      "id": "stress_induced_working_context_narrowing",
+      "display_name": "STRESS-INDUCED WORKING-CONTEXT NARROWING",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No stress or threat value changes the fixed engineering candidate and surfaced-memory limits.",
+      "data_dependencies": ["autobiographical_memory_system"],
+      "version": null
+    },
+    {
+      "id": "cognitive_breakdown_memory_access",
+      "display_name": "COGNITIVE BREAKDOWN",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No fatigue, stress or other state causes memory loss, perseveration, switching failure or degraded working context.",
+      "data_dependencies": ["autobiographical_memory_system"],
+      "version": null
     },
     {
       "id": "grounded_memory_model",
@@ -891,8 +978,9 @@
       "display_name": "HIPPOCAMPAL / CONTEXT MEMORY ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent active contextual and episodic-memory computation. The displayed runner mapping is an unapproved linear heuristic and is not shown as live activation.",
+      "status_note": "A provenanced autobiographical information-retrieval system is LIVE separately, but no approved mapping converts its storage, retrieval or surfacing into hippocampal firing or activation. The displayed runner mapping remains an unapproved legacy heuristic and is not shown as live activation.",
       "data_dependencies": ["rumination", "anxiety", "loneliness", "learned_context"],
+      "available_future_dependencies": ["autobiographical_memory_system"],
       "version": "legacy-brain-map-v1"
     },
     {

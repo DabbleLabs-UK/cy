@@ -142,6 +142,8 @@ window.CY = {
   feeding: <?= $isAdmin ? "'api/feeding.php'" : 'null' ?>,
   somatic: <?= $isAdmin ? "'api/somatic.php'" : 'null' ?>,
   socialContact: 'api/social-contact.php',
+  memory: 'api/memory.php',
+  memoryInspection: <?= $isAdmin ? json_encode('api/memory-inspection.php' . (array_key_exists('111', $_GET) ? '?111' : ''), JSON_UNESCAPED_SLASHES) : 'null' ?>,
   environmentEvent: <?= $rawEnabled ? "'api/environment-event.php'" : 'null' ?>,
   implementationRegistry: <?= json_encode($implementationRegistry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>,
   // Hershey glyph data app.js fetches (not a JS import, so the import map below
@@ -211,6 +213,10 @@ window.CY = {
     <div class="panel">
       <div class="panel-title">SOMA / FUNCTIONAL ANALOGY</div>
       <div id="brain"></div>
+    </div>
+    <div class="panel memory-panel">
+      <div class="panel-title">AUTOBIOGRAPHICAL MEMORY</div>
+      <div id="memory"></div>
     </div>
   </aside>
 

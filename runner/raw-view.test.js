@@ -118,7 +118,10 @@ globalThis.fetch = async (url) => {
             mode: 'journal',
             grounded_soma_directive: '<GROUNDED_CURRENT_STATE>fact</GROUNDED_CURRENT_STATE>',
             grounded_soma_context: { omitted: [{ subsystem: 'somatic', reason: 'NO_ACTIVE' }] },
-            provisional_cognitive_directive: '<PROVISIONAL_RETRIEVAL_CANDIDATE>selection</PROVISIONAL_RETRIEVAL_CANDIDATE>',
+            autobiographical_memory_query: {
+              status: 'LIVE', mechanisms: ['LEXICAL_TOKEN'], candidate_count: 2,
+              offered_count: 2, selected_count: 1, inserted_count: 1,
+            },
             engineering_world_mechanics: { classification: 'ENGINEERING / FICTIONAL WORLD MECHANICS' },
           },
         },
@@ -127,10 +130,7 @@ globalThis.fetch = async (url) => {
             available_actions: [{ id: 'journal' }, { id: 'silence' }],
             grounded_directive_supplied: '<GROUNDED_CURRENT_STATE>fact</GROUNDED_CURRENT_STATE>',
             current_incident_context_supplied: 'cell search',
-            provisional_cognitive_context_supplied: {
-              classification: 'PROVISIONAL MEMORY CANDIDATE', sourceEventId: 'env-17',
-              archivedEventText: 'blue postcard moved',
-            },
+            provisional_cognitive_context_supplied: null,
             selected_action: 'silence',
             selection_mechanism: 'MODEL-MEDIATED SUBJECTIVE CHARACTER CHOICE',
             fallback_used: false,
@@ -163,7 +163,9 @@ const allText = (node) => [node.textContent, ...(node.children || []).flatMap((c
 })].join('\n');
 assert.match(allText(genRow), /GROUNDED SOMA CONTEXT SENT TO MODEL/);
 assert.match(allText(genRow), /GROUNDED SOMA INFORMATION OMITTED/);
-assert.match(allText(genRow), /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
+assert.match(allText(genRow), /AUTOBIOGRAPHICAL MEMORY QUERY/);
+assert.match(allText(genRow), /candidate_count/);
+assert.doesNotMatch(allText(genRow), /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
 assert.match(allText(genRow), /ENGINEERING \/ FICTIONAL WORLD MECHANICS/);
 
 const choiceRow = raw.log().children.find((row) => row.dataset.kind === 'expressive_choice');
@@ -171,7 +173,7 @@ choiceRow.children[0].dispatchEvent({ type: 'click', target: null });
 assert.match(allText(choiceRow), /EXPRESSIVE CHOICE/);
 assert.match(allText(choiceRow), /AVAILABLE ACTIONS/);
 assert.match(allText(choiceRow), /GROUNDED CONTEXT SUPPLIED/);
-assert.match(allText(choiceRow), /PROVISIONAL MEMORY CANDIDATE/);
+assert.doesNotMatch(allText(choiceRow), /PROVISIONAL MEMORY CANDIDATE/);
 assert.match(allText(choiceRow), /SELECTED ACTION/);
 assert.match(allText(choiceRow), /FALLBACK USED/);
 

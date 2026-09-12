@@ -28,6 +28,14 @@ $checks['same sender memory is eligible'] = captive_memory_visible_to_prompt($ro
 $checks['different sender memory is filtered'] = !captive_memory_visible_to_prompt($row, $other);
 $checks['public memory is cross-visitor eligible'] = captive_memory_visible_to_prompt($public, $sender);
 $checks['archived memory is filtered'] = !captive_memory_visible_to_prompt($archived, $sender);
+$checks['internal memory is available to Cy'] = captive_memory_visible_to_prompt(
+    array_replace($row, ['privacy_scope' => 'INTERNAL_ONLY', 'subject_visitor_id' => null]),
+    $other
+);
+$checks['visitor-linked internal memory does not leak to another sender'] = !captive_memory_visible_to_prompt(
+    array_replace($row, ['privacy_scope' => 'INTERNAL_ONLY']),
+    $other
+);
 
 $same = captive_memory_rank_candidates([$public, $row], ['text' => 'cell', 'tags' => ['postcard']], $sender);
 $checks['same sender receives direct history first'] = ($same[0]['id'] ?? '') === $row['id'];
@@ -73,11 +81,28 @@ $checks['public query hard-codes public recall scope'] = is_string($source)
     && str_contains($source, "m.privacy_scope = 'PUBLIC_RECALLABLE'");
 $checks['technical candidate response requires ingest key'] = is_string($source)
     && strpos($source, 'captive_require_ingest_key()') < strpos($source, "if (\$action === 'query')");
+$checks['public resurfacing activity is derived from public records server-side'] = is_string($source)
+    && str_contains($source, "privacy_scope = 'PUBLIC_RECALLABLE'")
+    && str_contains($source, "'MEMORY_RESURFACED'");
+$checks['candidate response reports attempted retrieval mechanisms'] = is_string($source)
+    && str_contains($source, 'captive_memory_retrieval_mechanisms($query, $visitorId)');
 
 $migration = file_get_contents(__DIR__ . '/../sql/015_autobiographical_memory.sql');
 $checks['canonical motif is data not prompt text'] = is_string($migration)
     && str_contains($migration, 'handoff-17:8-by-4')
     && str_contains($migration, "'MOTIF'");
+$library = file_get_contents(__DIR__ . '/../lib/autobiographical_memory.php');
+$checks['candidate discovery is not restricted to newest 250 memories'] = is_string($library)
+    && !str_contains($library, 'LIMIT 250')
+    && str_contains($library, 'MATCH(content, public_summary) AGAINST (? IN BOOLEAN MODE)');
+$checks['retrieval mechanism list reflects the actual query features'] = captive_memory_retrieval_mechanisms(
+    ['text' => 'cell machine', 'tags' => ['confinement']],
+    $sender
+) === ['EXACT_PERSON', 'STRUCTURED_TAG', 'FULLTEXT_LEXICAL'];
+$checks['privacy delete does not retain a content hash'] = is_string($library)
+    && !str_contains($library, 'previous_content_sha256');
+$checks['privacy delete clears content-bearing revisions'] = is_string($library)
+    && str_contains($library, 'DELETE FROM autobiographical_memory_revisions WHERE memory_id = ?');
 
 $failed = 0;
 foreach ($checks as $label => $ok) {

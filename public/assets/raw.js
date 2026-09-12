@@ -543,9 +543,10 @@ function burstDetail(ev, drops) {
       ? JSON.stringify(p.grounded_soma_context.omitted, null, 2) : null,
   ));
   promptSec.appendChild(zoneBlock(
-    'PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL',
-    'heuristically selected real archived event with exact source identity; not measured memory or attention',
-    p.provisional_cognitive_directive,
+    'AUTOBIOGRAPHICAL MEMORY QUERY',
+    'privacy filter, deterministic candidates, model selection and inserted working-context records',
+    p.autobiographical_memory_query
+      ? JSON.stringify(p.autobiographical_memory_query, null, 2) : null,
   ));
   promptSec.appendChild(zoneBlock('FIXED CHARACTER FICTION (ZONE A)', 'fixed cached persona and world premise', p.zone_a));
   promptSec.appendChild(zoneBlock('REAL RECENT CY EXPRESSION (ZONE B)', 'post-warden prose continuity; not evidence that its claims happened', p.zone_b));
@@ -682,12 +683,6 @@ function expressiveChoiceDetail(ev) {
     p.current_incident_context_supplied,
   ));
   choice.appendChild(zoneBlock(
-    'PROVISIONAL TRACEABLE RETRIEVAL SUPPLIED',
-    'optional PROVISIONAL MEMORY CANDIDATE only',
-    p.provisional_cognitive_context_supplied
-      ? JSON.stringify(p.provisional_cognitive_context_supplied, null, 2) : null,
-  ));
-  choice.appendChild(zoneBlock(
     'SELECTED ACTION',
     'subjective character behaviour; not psychological evidence',
     p.selected_action || '(unknown)',
@@ -790,9 +785,9 @@ function burstPlain(ev, drops) {
   L.push(p.grounded_soma_context && p.grounded_soma_context.omitted
     ? JSON.stringify(p.grounded_soma_context.omitted, null, 2) : '(not emitted)');
   L.push('');
-  L.push('PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL');
-  L.push(p.provisional_cognitive_directive != null
-    ? String(p.provisional_cognitive_directive) : '(not emitted)');
+  L.push('AUTOBIOGRAPHICAL MEMORY QUERY');
+  L.push(p.autobiographical_memory_query
+    ? JSON.stringify(p.autobiographical_memory_query, null, 2) : '(not emitted)');
   L.push('');
   L.push(`FIXED CHARACTER FICTION / ZONE A [${len(p.zone_a)} chars]`);
   L.push(p.zone_a != null ? String(p.zone_a) : '(not emitted)');

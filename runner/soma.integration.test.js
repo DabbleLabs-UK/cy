@@ -166,10 +166,10 @@ const zoneC = buildDirectives(vitals, 'journal', {
 });
 const prompt = buildPrompt('', 'journal', null, zoneC);
 assert.match(prompt, /<PRIVATE_CURRENT_FACTS>/);
-assert.match(prompt, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
+assert.doesNotMatch(prompt, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
 assert.doesNotMatch(prompt, /output action selected:/);
-assert.match(prompt, /source event: env-search-/);
-assert.match(prompt, /archived event material:/);
+assert.doesNotMatch(prompt, /source event: env-search-/);
+assert.doesNotMatch(prompt, /archived event material:/);
 assert.doesNotMatch(prompt, /was expected next/i);
 assert.ok(prompt.indexOf('<PRIVATE_CURRENT_FACTS>') > prompt.indexOf('ONE THING'));
 

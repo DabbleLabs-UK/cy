@@ -271,6 +271,62 @@ export class Client {
     return Array.isArray(data.records) ? data.records : [];
   }
 
+  async _memoryRequest(action, payload = {}) {
+    if (this.config.dryRun) {
+      if (action === 'query') {
+        return { candidates: [], mechanisms: [], privacy_filter: { applied: true, dry_run: true } };
+      }
+      return { ok: true, dry_run: true, applied: 0 };
+    }
+    const res = await fetch(`${this.config.apiBase}/api/memory.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cy-Key': this.config.ingestKey,
+      },
+      body: JSON.stringify({ action, ...payload }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`memory ${action} HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async queryMemories({ query, visitorId = null, limit = 10 } = {}) {
+    return this._memoryRequest('query', {
+      query: query || {}, visitor_id: visitorId, limit,
+    });
+  }
+
+  async applyMemoryOperations(operations) {
+    return this._memoryRequest('apply', { operations });
+  }
+
+  async recordMemoryQuery({ generationRef = null, inspection } = {}) {
+    return this._memoryRequest('record_query', {
+      generation_ref: generationRef,
+      current_context: inspection && inspection.query || {},
+      sender_known: !!(inspection && inspection.senderKnown),
+      candidate_memory_ids: inspection && inspection.candidateIds || [],
+      retrieval_mechanisms: inspection && inspection.mechanisms || [],
+      privacy_filter: inspection && inspection.privacyFilter || {},
+      offered_memory_ids: inspection && inspection.offeredIds || [],
+      selected_memory_ids: inspection && inspection.selectedIds || [],
+      inserted_memory_ids: inspection && inspection.insertedIds || [],
+      selected_memory_reasons: inspection && inspection.selectedReasons || {},
+    });
+  }
+
+  async recordMemoryActivity(activity) {
+    const value = activity || {};
+    return this._memoryRequest('activity', {
+      memory_id: value.memoryId || null,
+      activity_type: value.activityType || '',
+      public_text: value.publicText || null,
+      privacy_scope: value.privacyScope || 'INTERNAL_ONLY',
+      reason_codes: value.reasonCodes || [],
+    });
+  }
+
   // Poll the viewer-driven tempo. Degrades safely: on ANY failure (network,
   // non-200, bad body) it returns without touching this.tempo, so the last known
   // value keeps driving the duty cycle rather than stalling or running flat out.

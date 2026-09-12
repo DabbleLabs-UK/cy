@@ -169,7 +169,7 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `abort`  | `{ cause }` - a thought cut off (letter/notice interrupt or warden block) |
 | `mode`   | `{ from, to, cause }` - a mode transition                          |
 | `event`  | `{ name, amp, ... }` - an ambient event (meal, cold_tea, social, officer, overheard, warden, ...) |
-| `postcard_in`  | `{ id, from, body, image, attrib, visitor_id, visit_count, promoted }` - a delivered postcard; `promoted` means it was selected from the fan-mail bag |
+| `postcard_in`  | `{ id, from, body, image, attrib, visit_count, promoted }` - a delivered postcard; `promoted` means it was selected from the fan-mail bag. The private visitor ID is never published. |
 | `fan_mail_in`  | `{ id, from, body, image, attrib, posted_at, state, may_reply }` - screened mail kept in the public fan-mail bag; `may_reply` says whether it remains promotion-eligible |
 | `postcard_blocked` | private side-channel `{ id, reason }`; records runner-side inbound moderation and never enters the public stream |
 | `postcard_deferred` | private side-channel `{ id }`; an empty/failed reply is reclassified as retained fan mail instead of wedging the reply tray |

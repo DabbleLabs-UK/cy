@@ -19,7 +19,7 @@ export const MEMORY_SURFACE_LIMIT = 3;
 export const MEMORY_FORMATION_MATCH_LIMIT = 5;
 export const MEMORY_FORMATION_QUEUE_LIMIT = 32;
 export const MEMORY_PUBLIC_PAGE_LIMIT = 20;
-export const MEMORY_CONSOLIDATION_BATCH_LIMIT = 8;
+export const MEMORY_EXPRESSION_BATCH_LIMIT = 4;
 
 const HIDDEN_IDENTIFIER = /(?:visitor[_ -]?id|cookie|ip address|account[_ -]?id|moderation|rate[_ -]?limit)/i;
 const INTERNAL_ID_TEST = /\b(?:[a-f0-9]{32}|env-[0-9a-f-]{32,}|memory:[0-9a-f-]{32,})\b/i;
@@ -52,6 +52,10 @@ export function assertPromptSafe(value) {
 
 export function memoryVisibleTo(memory, currentVisitorId = null) {
   if (!memory || memory.status !== 'ACTIVE') return false;
+  if (memory.privacyScope === 'INTERNAL_ONLY') {
+    return !memory.subjectVisitorId || !currentVisitorId
+      || memory.subjectVisitorId === currentVisitorId;
+  }
   if (memory.privacyScope === 'PUBLIC_RECALLABLE') return true;
   if (memory.privacyScope !== 'SENDER_RECALLABLE') return false;
   return !!currentVisitorId && memory.subjectVisitorId === currentVisitorId;
@@ -61,12 +65,16 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
   return (Array.isArray(memories) ? memories : [])
     .filter((memory) => memoryVisibleTo(memory, currentVisitorId))
     .map((memory) => {
-      const crossVisitor = !!memory.subjectVisitorId && memory.subjectVisitorId !== currentVisitorId;
+      const crossVisitor = currentVisitorId !== null
+        && memory.privacyScope === 'PUBLIC_RECALLABLE'
+        && memory.subjectVisitorId !== currentVisitorId;
       const content = crossVisitor ? memory.publicSummary : memory.content;
       if (!content) return null;
       return {
         id: memory.id,
         type: memory.type,
+        privacyScope: memory.privacyScope,
+        subjectVisitorId: memory.subjectVisitorId || null,
         epistemicStatus: 'SUBJECTIVE_AUTOBIOGRAPHICAL_MEMORY',
         consistencyStatus: memory.consistencyStatus || 'UNCERTAIN',
         content: assertPromptSafe(String(content).replace(INTERNAL_ID_REPLACE, '[private reference]')),
@@ -93,12 +101,17 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
   assertPromptSafe(safeSource);
   const candidates = filterMemoriesBeforePrompt(existing, {
     currentVisitorId: source.subjectVisitorId || null,
-  }).slice(0, MEMORY_FORMATION_MATCH_LIMIT).map((memory) => ({
-    memoryRef: memory.id,
+  }).filter((memory) => source.sourceVisibility !== 'SENDER_RECALLABLE'
+    || (memory.privacyScope === 'SENDER_RECALLABLE'
+      && memory.subjectVisitorId === source.subjectVisitorId))
+    .slice(0, MEMORY_FORMATION_MATCH_LIMIT).map((memory, index) => ({
+    id: memory.id,
+    memoryRef: `C${index + 1}`,
     type: memory.type,
     content: memory.content,
     consistencyStatus: memory.consistencyStatus,
   }));
+  if (groundedContext) assertPromptSafe(groundedContext);
   return {
     system: [
       'You perform MODEL-MEDIATED AUTOBIOGRAPHICAL MEMORY FORMATION for a fictional character.',
@@ -113,7 +126,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
     prompt: JSON.stringify({
       source: safeSource,
       groundedContext: groundedContext || null,
-      existingMemoryCandidates: candidates,
+      existingMemoryCandidates: candidates.map(({ id, ...candidate }) => candidate),
       outputSchema: {
         decision: 'CREATE | UPDATE | NOTHING',
         memoryRef: 'required for UPDATE',
@@ -128,6 +141,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
     }),
     options: { temperature: 0.1, num_predict: 260 },
     purpose: 'memory_formation',
+    candidates,
   };
 }
 
@@ -152,7 +166,8 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
     ? parsed.consistencyStatus : 'UNCERTAIN';
   const tags = list(parsed.tags, null, 12);
   if (parsed.decision === 'UPDATE') {
-    const target = existing.find((memory) => memory.id === parsed.memoryRef);
+    const refMatch = /^C([1-5])$/.exec(String(parsed.memoryRef || ''));
+    const target = refMatch ? existing[Number(refMatch[1]) - 1] : null;
     if (!target) return { decision: 'NOTHING', valid: false };
     return {
       decision: 'UPDATE', valid: true, memoryId: target.id, expectedVersion: target.version,
@@ -165,9 +180,11 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
   if (!MEMORY_TYPES.includes(parsed.type) || !MEMORY_SCOPES.includes(parsed.privacyScope)) {
     return { decision: 'NOTHING', valid: false };
   }
-  const publicSummary = parsed.privacyScope === 'PUBLIC_RECALLABLE'
+  const privacyScope = source && source.sourceVisibility === 'SENDER_RECALLABLE'
+    ? 'SENDER_RECALLABLE' : parsed.privacyScope;
+  const publicSummary = privacyScope === 'PUBLIC_RECALLABLE'
     ? String(parsed.publicSummary || '').trim().slice(0, 600) : null;
-  if (parsed.privacyScope === 'PUBLIC_RECALLABLE' && !publicSummary) {
+  if (privacyScope === 'PUBLIC_RECALLABLE' && !publicSummary) {
     return { decision: 'NOTHING', valid: false };
   }
   try { if (publicSummary) assertPromptSafe(publicSummary); } catch {
@@ -175,13 +192,14 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
   }
   return {
     decision: 'CREATE', valid: true, memoryId: makeId(), type: parsed.type,
-    privacyScope: parsed.privacyScope, content, publicSummary,
+    privacyScope, content, publicSummary,
     classification: String(parsed.classification || '').trim().slice(0, 80),
     consistencyStatus, tags, source,
   };
 }
 
 export function buildSurfacingRequest(candidates, currentContext = {}) {
+  if (currentContext.groundedContext) assertPromptSafe(currentContext.groundedContext);
   const safe = filterMemoriesBeforePrompt(candidates, {
     currentVisitorId: currentContext.currentVisitorId || null,
   }).slice(0, MEMORY_CANDIDATE_LIMIT).map((memory, index) => ({
@@ -202,6 +220,7 @@ export function buildSurfacingRequest(candidates, currentContext = {}) {
       ].join('\n'),
       prompt: JSON.stringify({
         currentSituation: currentContext.publicSituation || null,
+        groundedContext: currentContext.groundedContext || null,
         currentSender: currentContext.senderLabel || null,
         candidates: safe.map(({ id, ...candidate }) => candidate),
       }),
@@ -240,6 +259,31 @@ export function formatAutobiographicalMemory(memories) {
   return lines.join('\n');
 }
 
+// Generation events are public diagnostics. Private memory text and exact IDs
+// belong only in the owner-gated query ledger, never in that event stream.
+export function redactAutobiographicalMemoryFromTelemetry(value) {
+  if (value == null) return null;
+  return String(value).replace(
+    /<AUTOBIOGRAPHICAL_MEMORY>[\s\S]*?<\/AUTOBIOGRAPHICAL_MEMORY>/g,
+    '<AUTOBIOGRAPHICAL_MEMORY>\n[private memory context omitted from public telemetry]\n</AUTOBIOGRAPHICAL_MEMORY>',
+  );
+}
+
+export function publicMemoryQueryTelemetry(inspection) {
+  if (!inspection || typeof inspection !== 'object') return null;
+  return {
+    status: inspection.status || 'UNKNOWN',
+    sender_known: !!inspection.senderKnown,
+    mechanisms: Array.isArray(inspection.mechanisms) ? inspection.mechanisms : [],
+    privacy_filter: inspection.privacyFilter || null,
+    candidate_count: Array.isArray(inspection.candidateIds) ? inspection.candidateIds.length : 0,
+    offered_count: Array.isArray(inspection.offeredIds) ? inspection.offeredIds.length : 0,
+    selected_count: Array.isArray(inspection.selectedIds) ? inspection.selectedIds.length : 0,
+    inserted_count: Array.isArray(inspection.insertedIds) ? inspection.insertedIds.length : 0,
+    boundaries: inspection.boundaries || null,
+  };
+}
+
 export function sourceFromEnvironmentRecord(record) {
   const world = record && record.world_event;
   if (!world || !world.id) return null;
@@ -274,6 +318,19 @@ export function sourceFromExpression(text, sourceId, occurredAt = null) {
     sourceType: 'CY_EXPRESSION', sourceId, occurredAt,
     text: content.slice(0, 1600), sourceVisibility: 'INTERNAL_ONLY',
     participantLabel: 'Cy', subjectVisitorId: null, tags: ['cy-expression'],
+  };
+}
+
+export function sourceFromReply(text, postcard, environmentEventId, occurredAt = null) {
+  const content = String(text || '').trim();
+  if (!content || !postcard || !postcard.id || !postcard.visitor_id) return null;
+  return {
+    sourceType: 'CY_REPLY', sourceId: `postcard-reply:${postcard.id}`, occurredAt,
+    text: content.slice(0, 1600), sourceVisibility: 'SENDER_RECALLABLE',
+    participantLabel: postcard.from_name || 'the sender',
+    subjectVisitorId: postcard.visitor_id,
+    linkedSourceIds: environmentEventId ? [environmentEventId] : [],
+    tags: ['cy-expression', 'postcard', 'reply'],
   };
 }
 

@@ -14,15 +14,20 @@ feed: `kind` + a JSON `payload` column is enough to describe anything the
 model does, and a single ordered log makes "what happened, in what order"
 trivial to reconstruct and replay.
 
-Cy's implemented inner-state layer is Soma v1 (`runner/soma.js`). Environment
-and body observations are structurally appraised, competed for attention, and
-used to select an action before a prompt is built. Only observations above a
-salience threshold become durable episodes. Those episodes retain time,
-entities, compact content, appraisal, salience and any known outcome. Retrieval
-scores shared entities/content, salience and recency rather than returning the
-last N records. Repeated observed event transitions form modest next-event
-expectations; a material mismatch creates prediction error and raises attention
-and loss-of-control appraisal.
+The current inner-state architecture separates LIVE grounded substrates,
+PROVISIONAL visitor-facing metrics, disabled legacy heuristics and subjective
+character behaviour through `config/implementation-registry.json`. The older
+weighted event-memory matcher in `runner/soma.js` remains compatibility and
+diagnostic code only and is not part of live prompt or action selection.
+
+Longer-term continuity uses the provenanced autobiographical-memory system
+documented in `docs/autobiographical-memory.md`. MariaDB stores versioned
+subjective EPISODIC, PERSON, MOTIF, UNRESOLVED_THREAD and SEMANTIC records with
+explicit provenance and privacy scope. Deterministic privacy-filtered retrieval
+offers at most ten candidates to a small model-mediated surfacing call, which may
+insert zero to three memories into a dedicated prompt block. World events remain
+authoritative; autobiography cannot rewrite them. No biological memory or
+hippocampal activation model is claimed.
 
 The live pre-language boundary is `runner/soma-cycle.js`. Autonomous journal,
 postcard and warden generation all cross it after their new lived input has been
@@ -45,17 +50,16 @@ competing simulation. Other legacy composites remain labelled placeholders.
 Breakfast, lunch and tea can be eaten, partly eaten, missed or refused. Shower,
 association, yard and phone periods can provide relief, ordinary company,
 supportive contact, rejection, cancellation or discomfort. Night noise records a
-sleep interruption. These structured facts feed attention and action selection as
-well as the prompt: strong hunger or discomfort can select `attend_body`, fatigue
-can select silence, social need can select connection, and stored related events
-compete for recall.
+sleep interruption. These structured facts feed grounded prompt context and the
+approved expressive chooser. Structured current context is also used as a search
+query for the separate autobiographical-memory retriever; the older weighted
+event matcher does not compete for live recall.
 
-Generated prose returns only as bounded evidence of Cy's own action - repetition,
-intensity, commitment, recurring themes, and activation of associations learned
-from repeated lived input. It can sustain or release an existing focus and select
-a related lived episode, but it cannot directly create threat, affiliation,
-deprivation or control-loss appraisal. Any stored self-output episode is explicitly
-typed as self-output and records that its content is not evidence of an event.
+Generated prose remains isolated from grounded Soma evidence. Bounded batches may
+be offered to autobiographical memory formation as CY_EXPRESSION sources, where
+they are explicitly subjective and provenance-bearing. They can support character
+continuity but cannot create world facts, threat-learning trials, bodily events,
+social episodes or other grounded state.
 
 `runner/soma-runtime.js` is the failure boundary. A load or computation failure
 is logged once, emits a public `soma_unavailable` event, removes Soma context and
@@ -120,14 +124,15 @@ marked `YOUR POSTCARD`, without exposing the private visitor id. Promoted mail
 retains a `CHOSEN FROM FAN MAIL` marker, and terminal fan mail is explicitly not
 described as remaining in the active reply queue.
 
-People who write are remembered. On the first postcard a visitor is issued a
-random id in a signed, httpOnly cookie; a `visitors` row holds a chosen
-handle, counts, a compact rolling memory of what they have said, and CY's
-standing toward them (the same warmth/suspicion/grudge triple the runner's
-inmate cast uses). `api/inbox.php` hands that memory to DELL with each due
-postcard so a returning writer is recognised in CY's voice. Nothing
-identifying is stored beyond the handle and what they voluntarily wrote; IPs
-live only on `postcards`/`rate_limits` for rate limiting.
+People who write can be remembered. On the first postcard a visitor is issued a
+random ID in a signed HttpOnly cookie. Current-sender postcard memories use
+SENDER_RECALLABLE scope and can be retrieved only when that exact pseudonymous
+visitor is writing again. Model-facing candidates use temporary references and
+never include the visitor ID. Public viewers see only explicitly public memory
+summaries and the current browser's count of its own sender memories. The older
+visitor compact notes and synthetic standing values remain legacy compatibility
+data, not the new autobiographical source of truth. IPs live only on
+`postcards`/`rate_limits` for rate limiting.
 
 A picture on a postcard can be an uploaded file OR one chosen from Openverse
 (https://api.openverse.org). The client only ever sends a chosen image URL;
@@ -179,9 +184,11 @@ terminal-flavoured live log of every event, newest at the bottom, polled faster
 (~400ms) and rendered token-by-token with no pen pacing, so the stream reads at
 the model's real output rate. Each event is one colour-coded line
 (timestamp/seq/kind/payload) that expands to its raw JSON; each generation burst
-expands to the full prompt (Zone A/B/C with character counts), the full
+expands to the prompt diagnostics (Zone A/B/C with character counts), the full
 post-warden output, the sampling params, the timings/counters, and the
-selected Soma action and any legacy form/style fields. A filter bar and free-text search scope
+selected Soma action and any legacy form/style fields. Private autobiographical
+prompt text and exact recalled-memory IDs are redacted from the public event
+record; an owner-only server endpoint exposes the exact access trace. A filter bar and free-text search scope
 the stream, with per-burst and copy-visible copy buttons; the rendered window is
 capped to the most recent 1500 rows (older rows dropped, count shown) to stay
 fast over long runs. It is POST-WARDEN ONLY: text the warden blocked is never
@@ -197,6 +204,8 @@ public/            webroot
   api/stream.php    public event feed (polling; also records viewer presence)
   api/soma.php      public latest persisted runner Soma snapshot
   api/soma-history.php  public downsampled 1H/24H/7D experienced-state history
+  api/memory.php     public summaries + DELL-only memory query/CRUD operations
+  api/memory-inspection.php owner-only exact candidate/selection access traces
   api/post-postcard.php  public: send a postcard (text and/or image)
   api/postcard-archive.php public: paged postcard/reply history with status filter
   api/openverse-search.php  public: proxy Openverse image search for the composer
@@ -214,8 +223,10 @@ lib/visitor.php     signed visitor cookie + visitors upsert
 lib/presence.php    cheap, throttled live-viewer presence (viewers table)
 lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting
 lib/soma-history.php  validates and downsamples stored Soma history without interpolation
+lib/autobiographical_memory.php privacy, ranking, versioning and provenance persistence
 config/config.sample.php   template; copy to config/config.php (gitignored)
 sql/schema.sql       MariaDB schema (events, postcards, queue state, visitors, news, rate limits, viewers, tempo, drawings)
+docs/autobiographical-memory.md memory architecture, limits and privacy boundaries
 tests/postcard_queue_test.php  pure reply-tray admission checks
 tests/tempo_test.php  pure-logic tests for the tempo/presence rules (php tests/tempo_test.php)
 tests/soma_api_test.php  proves the browser API returns the runner snapshot unchanged

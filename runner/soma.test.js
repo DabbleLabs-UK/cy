@@ -139,7 +139,7 @@ const legacyHot = {
   derived: { confusion: 1, overwhelm: 1, numbness: 1, paranoia: 1, fixation: 1, resignation: 1, brittleness: 1 },
 };
 const liveDirectives = buildDirectives(legacyHot, 'journal', { soma: directive });
-assert.match(liveDirectives, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
+assert.doesNotMatch(liveDirectives, /<PROVISIONAL_RETRIEVAL_CANDIDATE>/);
 assert.doesNotMatch(liveDirectives, /STATE:|RIGHT NOW:/);
 assert.deepEqual(
   Object.fromEntries(Object.entries(options(legacyHot, 2, 'journal')).filter(([key]) => key !== 'stop' && key !== 'num_ctx' && key !== 'num_thread')),

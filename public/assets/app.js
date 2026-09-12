@@ -15,6 +15,7 @@ import { Hud } from './hud.js';
 import { Power } from './power.js';
 import { Tempo } from './tempo.js';
 import { PostcardArchive } from './postcard-archive.js';
+import { MemoryPanel } from './memory.js';
 import {
   advanceStreamCursor,
   fetchDayPage,
@@ -42,6 +43,7 @@ const $ = (sel) => document.querySelector(sel);
 
 let pen, postcards, brain, hud, power, tempo;
 let postcardArchive;
+let memoryPanel;
 let postcardWait = null;
 let lastSeq = 0;
 let polling = false;
@@ -181,6 +183,7 @@ async function boot() {
     registry: CFG.implementationRegistry,
     admin: !!CFG.admin,
   });
+  memoryPanel = new MemoryPanel($('#memory'), CFG.memory, CFG.memoryInspection);
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
   if (powerEl) power = new Power(powerEl);
