@@ -52,7 +52,8 @@ for (const region of BRAIN_REGIONS) {
 const source = await readFile(join(here, '..', 'public', 'assets', 'brain.js'), 'utf8');
 assert.match(source, /PLANNED STATS/);
 assert.match(source, /SOMA DIAGNOSTICS/);
-assert.match(source, /Brain regions are functional analogies, not measured physiology/);
+assert.match(source, /Some displayed values come from an older heuristic model/);
+assert.doesNotMatch(source, /Brain regions are functional analogies, not measured physiology/);
 assert.match(source, /class="soma-scaffold"/);
 assert.match(source, /SOMA MODEL STATUS/);
 assert.match(source, /LEGACY SOMA DIAGNOSTICS - PROVISIONAL/);
@@ -110,11 +111,12 @@ assert.equal(
   implementationEntry('soma_subsystems', 'feeding_event_model').display_name,
   'FEEDING / INTAKE EVENTS',
 );
-assert.match(source, /SUBJECTIVE HUNGER/);
+assert.doesNotMatch(source, /SUBJECTIVE HUNGER/);
 assert.match(source, /feeding-input-inspector/);
 assert.match(source, /PHYSIOLOGICAL SATIETY/);
 assert.match(source, /<span>10<\/span><strong>MODELLED PHYSIOLOGICAL SATIETY<\/strong><span>1<\/span>/);
-assert.match(source, /MODEL ESTIMATE - NOT A REPORTED FEELING/);
+assert.match(source, /PHYSIOLOGICAL MODEL ESTIMATE/);
+assert.doesNotMatch(source, /NOT A REPORTED FEELING/);
 assert.match(source, /scope === 'satiety'/);
 assert.match(source, /class="satiety-history-band"/);
 assert.doesNotMatch(source, /HUNGER HISTORY/,
@@ -123,7 +125,9 @@ assert.equal(elapsedFeedingLabel(0), '0m');
 assert.equal(elapsedFeedingLabel((2 * 60 + 17) * 60000), '2h 17m');
 assert.equal(elapsedFeedingLabel((25 * 60 + 3) * 60000), '1d 1h 3m');
 assert.equal(elapsedFeedingLabel(null), 'UNKNOWN');
-assert.match(source, /Somatic Harm records noxious events and injuries/);
+assert.match(source, /Somatic Harm tracks noxious events and injuries/);
+assert.doesNotMatch(source, /It does not claim how painful Cy experiences them/);
+assert.doesNotMatch(source, /subjective Pain is not modelled/);
 assert.match(source, /SOMATIC \/ NOXIOUS INPUT TRACE/);
 assert.match(source, /subjectivePainStatus/);
 assert.match(source, /somatic_harm_headline/);

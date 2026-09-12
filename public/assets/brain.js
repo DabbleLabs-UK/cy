@@ -345,7 +345,7 @@ function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, an
   return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
     <div class="feeding-input-head"><span>${gutStatus.displayName}</span><strong class="feeding-input-status">CALIBRATING</strong></div>
     <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>PHYSIOLOGICAL MODEL</span></div>
-    <p class="feeding-input-explanation">MODEL ESTIMATE - NOT A REPORTED FEELING. Statistical intervals come from the paper's published input distributions. Unknown meal composition is kept as a separate scenario range.</p>
+    <p class="feeding-input-explanation">PHYSIOLOGICAL MODEL ESTIMATE. Statistical intervals come from the paper's published input distributions. Unknown meal composition is kept as a separate scenario range.</p>
     <dl class="feeding-input-facts">
       <div><dt>GASTRIC CONTENTS</dt><dd data-satiety="gastric">UNKNOWN</dd></div>
       <div><dt>CCK</dt><dd data-satiety="cck">UNKNOWN</dd></div>
@@ -360,7 +360,7 @@ function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, an
       <p class="satiety-uncertainty">Waiting for a clean breakfast anchor.</p>
       <div class="satiety-scenarios"></div>
       <div class="feeding-timeline"><p class="feeding-timeline-empty">No structured feeding records have reached this view.</p></div>
-      <div class="feeding-model-limits"><span>${feedingStatus.displayName}</span><strong>${feedingStatus.publicLabel}</strong><span>SUBJECTIVE HUNGER</span><strong>NOT MODELLED</strong><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>HYPOTHALAMIC NEURAL ACTIVITY</span><strong>NOT MODELLED</strong></div>
+      <div class="feeding-model-limits"><span>${feedingStatus.displayName}</span><strong>${feedingStatus.publicLabel}</strong><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>HYPOTHALAMIC NEURAL ACTIVITY</span><strong>NOT MODELLED</strong></div>
     </details>
     ${admin ? '<details class="feeding-input-inspector"><summary>PHYSIOLOGICAL SATIETY CALCULATION</summary><pre>Waiting for the current calculation and complete feeding ledger.</pre></details>' : ''}
   </section>`;
@@ -369,7 +369,7 @@ function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, an
 function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatus, peripheralStatus, centralStatus, actionStatus, admin) {
   return `<section class="somatic-input-card status-${somaticStatus.status.toLowerCase().replace('_', '-')}">
     <div class="somatic-input-head"><span>CURRENT STRUCTURED STATE</span><strong class="somatic-input-status">LIVE</strong></div>
-    <p class="somatic-input-explanation">Somatic Harm records noxious events and injuries in Cy's simulated body. It does not claim how painful Cy experiences them.</p>
+    <p class="somatic-input-explanation">Somatic Harm tracks noxious events and injuries.</p>
     <dl class="somatic-input-facts">
       <div><dt>CURRENT STATE</dt><dd data-somatic="category">UNKNOWN</dd></div>
       <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">UNKNOWN</dd></div>
@@ -389,7 +389,7 @@ function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatu
       </div>
     </details>
     <details class="soma-substrate-more"><summary>MODEL / LIMITATIONS</summary>
-      <div class="somatic-model-limits"><span>${painStatus.displayName}</span><strong>${painStatus.publicLabel}</strong><span>GENERAL DISCOMFORT</span><strong>NOT MODELLED</strong><span>INJURY SEVERITY</span><strong>NOT MODELLED / UNKNOWN</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
+      <div class="somatic-model-limits"><span>INJURY SEVERITY</span><strong>NOT MODELLED / UNKNOWN</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
     </details>
     ${admin ? '<details class="somatic-input-inspector"><summary>SOMATIC / NOXIOUS INPUT TRACE</summary><pre>Waiting for the complete somatic ledger.</pre></details>' : ''}
   </section>`;
@@ -398,7 +398,7 @@ function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatu
 function socialContactMarkup(status, setPointStatus, errorStatus, adaptationStatus, toleranceStatus, aversiveStatus, admin) {
   return `<section class="social-contact-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="social-contact-head"><span>${status.displayName}</span><strong class="social-contact-status">${status.publicLabel}</strong></div>
-    <p class="social-contact-explanation">Factual contact and opportunity history. Contact form, reciprocity and structured character stay separate; none is converted into Loneliness.</p>
+    <p class="social-contact-explanation">Contact and opportunity history, including form, reciprocity and the people involved.</p>
     <dl class="social-contact-facts">
       <div><dt>CURRENT SITUATION</dt><dd data-social="current">UNKNOWN</dd></div>
       <div><dt>LAST RECIPROCAL CONTACT</dt><dd data-social="reciprocal">NONE OBSERVED</dd></div>
@@ -537,7 +537,7 @@ export class BrainHud {
       </div>
       <div class="soma-scaffold">
         <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
-        <p class="soma-caveat">The displayed values come from an older heuristic model and are marked accordingly. Brain regions are functional analogies, not measured physiology; unfinished mappings do not display activation.</p>
+        <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
         <div class="soma-public-readout"></div>
         <div class="brain-figure">
           <svg class="brain-svg" viewBox="0 0 340 230" role="group" aria-label="Soma functional brain analogy">
@@ -924,7 +924,7 @@ export class BrainHud {
         row.querySelector('.soma-state-bar i').style.left = `${left}%`;
         row.querySelector('.soma-state-bar i').style.width = estimated ? `${Math.max(3, right - left)}%` : '0';
         row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(estimated ? headline.estimate / 10 : 0);
-        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means greater modelled physiological satiety. Subjective hunger is not modelled.`;
+        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means greater modelled physiological satiety.`;
         continue;
       }
       if (definition.key === 'sleepiness') {
@@ -1305,7 +1305,7 @@ export class BrainHud {
     entry.querySelector('.soma-state-status').textContent = live
       ? 'LIVE - structured bodily state' : 'UNAVAILABLE';
     entry.querySelector('summary').title = live
-      ? `SOMATIC HARM. ${headline.display}. Structured noxious events and injuries; subjective Pain is not modelled.`
+      ? `SOMATIC HARM. ${headline.display}. Structured noxious events and injuries.`
       : 'SOMATIC HARM. Grounded state unavailable.';
     const latest = live && snapshot.latestSomaticEvent ? snapshot.latestSomaticEvent : null;
     const latestStimulus = latest && latest.stimulus || {};
@@ -1363,8 +1363,8 @@ export class BrainHud {
     }
     const uncertainty = card.querySelector('.satiety-uncertainty');
     if (uncertainty) uncertainty.textContent = modelLive
-      ? `${physiology.compositionUncertainty.classification}: ${physiology.compositionUncertainty.status.replaceAll('_', ' ')}. Each scenario uses a central 95% interval from published input distributions. Subjective hunger is not modelled.`
-      : `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}. Subjective hunger is not modelled.`;
+      ? `${physiology.compositionUncertainty.classification}: ${physiology.compositionUncertainty.status.replaceAll('_', ' ')}. Each scenario uses a central 95% interval from published input distributions.`
+      : `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}.`;
     const scenarios = card.querySelector('.satiety-scenarios');
     if (scenarios) {
       scenarios.textContent = '';
