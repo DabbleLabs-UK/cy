@@ -1559,6 +1559,7 @@ async function main() {
   let burstEmitted = '';
   let burstAllowRepeat = false;
   let burstStopped = false; // set once the within-burst repeat guard cuts the burst
+  let burstAssistantFrameDetected = false; // streamed chunk switched into helper commentary
   // ---- PER-BURST STRIP ACCOUNTING (instrumentation) --------------------------
   // The prose-discard path was invisible: a full billed completion could arrive
   // and the cycle still record 'empty' because stripScaffold's banks annihilated
@@ -1595,6 +1596,18 @@ async function main() {
   async function onChunk(rawChunk, mode) {
     if (burstStopped) return; // the repeat guard already ended this burst
     const cleaned = sanitize(rawChunk);
+    // The held-opening guard catches generations that START in assistant voice.
+    // A model can also begin as Cy, then append a helper-style explanation after
+    // the opening has already streamed. Stop at the first such complete chunk:
+    // keep the valid Cy prefix, publish none of the commentary, and abort the
+    // remainder before it can leak into either the feed or Zone B context.
+    if (cleaned.trim() && looksLikeAssistantFrame(cleaned)) {
+      burstAssistantFrameDetected = true;
+      burstStopped = true;
+      await logAssistantFrameDiscard(cleaned, mode);
+      if (currentAbort) currentAbort.abort();
+      return;
+    }
     const nHits = narrationHits(cleaned); // log narration/assistant-frame drops
     const sHits = stateNotationHits(cleaned); // log vitals-notation drops
     const { out: strippedChunk, removed } = stripScaffoldAccounted(cleaned);
@@ -1683,6 +1696,7 @@ async function main() {
     burstEmitted = ''; // fresh generation: nothing emitted yet this burst
     burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
     burstStopped = false;
+    burstAssistantFrameDetected = false;
     burstStripRemoved = { scaffold: 0, narration: 0, stateNotation: 0 }; // fresh strip accounting
     burstAnnihilated = { scaffold: 0, narration: 0, stateNotation: 0 };
     burstTrimmed = 0;
@@ -1701,6 +1715,9 @@ async function main() {
     let repeat = false;
     let refused = false;
     let assistantFrame = false;
+    const streamedAssistantFrameResult = () => burstEmitted.trim()
+      ? { full: burstEmitted, assistantFrameTail: true, aborted: false }
+      : { full: '', assistantFrame: true, aborted: false };
     // generation telemetry: wall-clock to the first token (ttft), and the final
     // `done` line which carries prompt_eval_count/eval_count/durations (+ usage/cost
     // for a paid provider).
@@ -1809,6 +1826,7 @@ async function main() {
       if (refused) return refusedResult();
       if (assistantFrame) return { full: '', assistantFrame: true, aborted: false };
       if (repeat) return { full: cleanedFull(), repeat: true };
+      if (burstAssistantFrameDetected) return streamedAssistantFrameResult();
       if (ac.signal.aborted) return { full: cleanedFull(), aborted: true };
       console.warn('[cy] stream error:', err.message);
       return { full, error: true };
@@ -1821,6 +1839,7 @@ async function main() {
       if (refused) return refusedResult();
       if (assistantFrame) return { full: '', assistantFrame: true, aborted: false };
       if (repeat) return { full: cleanedFull(), repeat: true };
+      if (burstAssistantFrameDetected) return streamedAssistantFrameResult();
       return { full: cleanedFull(), aborted: true };
     }
     if (refused) return refusedResult();
@@ -3615,6 +3634,17 @@ async function main() {
         });
         if (r.error) { errored = true; break; } // provider already backed off; move on
         if (r.refused) { refusedGen = true; break; } // DeepSeek refusal: discard, no retry
+        if (r.assistantFrameTail) {
+          // Cy's prefix already reached the page. The explanatory tail did not.
+          // Treat this as the successful short burst it visibly was; retrying here
+          // would append an unrelated second answer to the same journal entry.
+          produced = !!(r.full && r.full.trim());
+          lastFull = r.full || '';
+          lastResult = r;
+          lastTail = tail;
+          lastOpts = opts;
+          break;
+        }
         if (r.assistantFrame) {
           assistantFrameDiscards++;
           await recordOutcome('discarded-assistant-frame');

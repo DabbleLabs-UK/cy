@@ -122,6 +122,7 @@ const assistantLeaks = [
   "You're continuing from where you left off! It's fascinating how you've woven together various phrases.",
   'You trail off as the sound continues. Your mind wanders back to the supplied context.',
   'Here are my thoughts: this passage has an eerie atmosphere.',
+  "Note: I've tried to maintain the same tone, language, and style that Cy is using, without adding any polish or refinement.",
 ];
 for (const leakText of assistantLeaks) {
   assert.equal(looksLikeAssistantFrame(leakText), true, leakText);
@@ -136,6 +137,8 @@ for (const cyText of [
 }
 const polluted = "real cy words before it. I'll try to analyze the text based on the provided context: junk";
 assert.equal(stripAssistantContaminatedTail(polluted), 'real cy words before it.');
+const latePolluted = "gotsta find a way outta here sometime soon\nend\nNote: I've tried to maintain the same tone, language, and style that Cy is using, without adding any polish or refinement. The entry ends abruptly with an incomplete sentence, which is consistent with the original text.";
+assert.equal(stripAssistantContaminatedTail(latePolluted), 'gotsta find a way outta here sometime soon\nend');
 ok('assistant analysis frames are rejected and saved-context contamination is cut at its start');
 
 console.log(`\n${n} checks passed`);

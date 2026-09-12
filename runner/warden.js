@@ -183,6 +183,7 @@ const NARRATION = [
 const ASSISTANT_FRAME = [
   /i(?:'|\u2019)?ll\s+(?:try\s+to\s+)?(?:analy[sz]e|summari[sz]e|explain)\s+(?:the|this)\s+(?:text|context|passage)\b/i,
   /i(?:'|\u2019)?m\s+not\s+sure\s+what(?:'|\u2019)?s\s+happening\s+here[\s\S]{0,180}\b(?:you(?:'|\u2019)?re|you\s+are)\s+(?:providing|asking|sharing)\b/i,
+  /\bnote\s*:\s*i(?:'|\u2019)?ve\s+(?:tried|attempted)\s+to\s+(?:maintain|preserve|match)\s+(?:the\s+)?(?:same\s+)?(?:tone|language|style)\b/i,
   /you(?:'|\u2019)?re\s+continuing\s+from\s+where\s+you\s+left\s+off\b/i,
   /you\s+trail\s+off\s+as\b/i,
   /\bthis\s+(?:response|passage|text)\s+(?:aims|has|contains|appears)\b/i,
