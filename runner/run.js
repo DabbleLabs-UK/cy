@@ -130,7 +130,7 @@ import {
   stripScaffoldAccounted,
 } from './warden.js';
 import { Client, tsNow } from './client.js';
-import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC, MAX_TEMPO_IDLE_MS } from './tempo.js';
+import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
@@ -518,7 +518,9 @@ async function main() {
   // side does not know the watts model): with the duty cycle, average draw is
   // idle + (speed/100)*(load-idle), so pence/hour is linear in speed between
   // pph_idle (speed->0) and pph_load (speed=100). The viewer interpolates.
+  let tempoEpoch = 0;
   client.onTempo = (t) => {
+    tempoEpoch++;
     const pph = (w) => (w / 1000) * powerMeter.tariff * 100;
     // Turn the speed into a legible CADENCE for the viewer: the deliberate idle
     // after a representative burst, and the effective gap between bursts. The
@@ -3140,10 +3142,12 @@ async function main() {
 
   // Interruptible idle: sit still for `ms`, but break early if a postcard or
   // notice lands (so a silence never swallows an interrupt) or on shutdown.
-  async function idleSilently(ms) {
+  async function idleSilently(ms, { breakOnTempo = false } = {}) {
     const end = Date.now() + ms;
+    const startingTempoEpoch = tempoEpoch;
     while (running && Date.now() < end) {
-      if (pendingPostcards.length || pendingWarden.length) break;
+      const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;
+      if (pendingPostcards.length || pendingWarden.length || tempoChanged) break;
       await sleep(Math.min(500, Math.max(0, end - Date.now())));
     }
   }
@@ -3639,11 +3643,10 @@ async function main() {
       // silently inherit the bypass. DO NOT widen this to `>= 100` alone again.
       const fullTilt = clampSpeed(client.tempo.speed) >= 100 && activeProvider().local;
       const effReadIdle = fullTilt ? 0 : readIdle;
-      // COMPOSE, do not replace: sit for the GREATER of the tempo idle and the (at 100,
-      // bypassed) reading backpressure, still clamped by the absolute cap. So a fast
-      // overrun is throttled below 100, a low speed's long tempo gap is never shortened
-      // by it, and at 100 both terms are 0 so the runner runs flat out.
-      const idleMs = produced ? Math.min(MAX_TEMPO_IDLE_MS, Math.max(tempoIdle, effReadIdle)) : 0;
+      // COMPOSE, do not replace: sit for the GREATER of the exact duty-cycle idle
+      // and the (at 100, bypassed) reading backpressure. A low target's required
+      // gap must not be shortened or the displayed percentage ceases to be true.
+      const idleMs = produced ? Math.max(tempoIdle, effReadIdle) : 0;
       // why the runner is about to idle, for the RAW debug view: reading-cap vs tempo.
       // At 100 both terms are 0, so idleMs is 0 and this is null - honest: neither the
       // reading cap nor the tempo is inserting any idle.
@@ -3698,7 +3701,7 @@ async function main() {
           await recordOutcome('throttled'); // duty-cycle quiet, a distinct machine-imposed gap
           // a throttle idle is machine-imposed quiet, not a wedge: the stall counter
           // is untouched by 'throttled', so the watchdog never mistakes it for one.
-          await idleSilently(idleMs);
+          await idleSilently(idleMs, { breakOnTempo: true });
         }
       } else {
         // NON-PRODUCED cycle. On a METERED provider, a genuine non-emitting FAILURE

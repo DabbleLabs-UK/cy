@@ -43,44 +43,22 @@ export function watchingCostPph(speed, pphIdle, pphLoad) {
 // viewer; the effective GAP between bursts does, so the panel renders that.
 const DEFAULT_BURST_MS = 75000;
 
-// ---- tempo cadence maths, MIRRORED from runner/tempo.js --------------------
-// The runner decides the real idle; this is the same maths client-side so the
-// panel can preview the cadence live while the slider is dragged. Keep in step
-// with runner/tempo.js if the anchors change.
-const MAX_IDLE_ANCHORS = [
-  { speed: 100, ms: 0 },
-  { speed: 30, ms: 12000 },
-  { speed: 5, ms: 300000 },
-  { speed: 1, ms: 780000 },
-];
+// ---- duty-cycle maths, MIRRORED from runner/tempo.js -----------------------
+// The runner decides the real idle; this is the same exact equation client-side
+// so the panel can preview the resulting cadence while the slider is dragged.
 function clampSpeedPct(speed) {
   const n = Math.round(Number(speed));
   if (!Number.isFinite(n)) return 100;
   return Math.max(1, Math.min(100, n));
 }
-function maxIdleForSpeed(speed) {
-  const s = clampSpeedPct(speed);
-  const a = MAX_IDLE_ANCHORS;
-  if (s >= a[0].speed) return a[0].ms;
-  for (let i = 0; i < a.length - 1; i++) {
-    const hi = a[i];
-    const lo = a[i + 1];
-    if (s <= hi.speed && s >= lo.speed) {
-      const frac = (s - lo.speed) / (hi.speed - lo.speed);
-      return Math.round(lo.ms + (hi.ms - lo.ms) * frac);
-    }
-  }
-  return a[a.length - 1].ms;
-}
-function tempoIdleMs(burstMs, speed) {
+export function tempoIdleMs(burstMs, speed) {
   const s = clampSpeedPct(speed);
   if (s >= 100) return 0;
   const b = Math.max(0, Number(burstMs) || 0);
-  const duty = b * (100 / s - 1);
-  return Math.max(0, Math.min(maxIdleForSpeed(s), Math.round(duty)));
+  return Math.max(0, Math.round(b * (100 / s - 1)));
 }
 // A short human phrase for the effective gap between bursts at `speed`.
-function cadencePhrase(burstMs, speed) {
+export function cadencePhrase(burstMs, speed) {
   const b = Math.max(0, Number(burstMs) || 0) || DEFAULT_BURST_MS;
   const s = Math.round((b + tempoIdleMs(b, speed)) / 1000);
   if (s < 90) return 'about every ' + s + 's';
