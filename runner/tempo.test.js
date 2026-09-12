@@ -29,6 +29,10 @@ assert.equal(clampSpeed(101), 100);
 const runSource = await readFile(new URL('./run.js', import.meta.url), 'utf8');
 assert.match(runSource, /idleSilently\(idleMs, \{ breakOnTempo: true \}\)/,
   'a tempo change interrupts a long duty-cycle wait');
+assert.match(runSource, /if \(nextIdleTempoSpeed !== idleTempoSpeed\) \{[\s\S]*?tempoEpoch\+\+;/,
+  'only a real speed change interrupts the current duty-cycle wait');
+assert.doesNotMatch(runSource, /client\.onTempo = \(t\) => \{\s*tempoEpoch\+\+;/,
+  'viewer-count-only tempo events cannot interrupt the duty-cycle wait');
 assert.doesNotMatch(runSource, /Math\.min\(MAX_TEMPO_IDLE_MS/,
   'the runtime does not reintroduce an absolute cap around the exact duty idle');
 

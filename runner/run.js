@@ -533,8 +533,18 @@ async function main() {
   // idle + (speed/100)*(load-idle), so pence/hour is linear in speed between
   // pph_idle (speed->0) and pph_load (speed=100). The viewer interpolates.
   let tempoEpoch = 0;
+  // The client callback also fires when only the live viewer count changes. That
+  // must refresh the public tempo readout, but it must NOT cancel the current
+  // duty-cycle idle: presence heartbeats can briefly move the count between 0
+  // and 1 while the effective custom speed remains unchanged. Track the speed
+  // separately so only a real duty-cycle change wakes this loop.
+  let idleTempoSpeed = clampSpeed(client.tempo.speed);
   client.onTempo = (t) => {
-    tempoEpoch++;
+    const nextIdleTempoSpeed = clampSpeed(t.speed);
+    if (nextIdleTempoSpeed !== idleTempoSpeed) {
+      idleTempoSpeed = nextIdleTempoSpeed;
+      tempoEpoch++;
+    }
     const pph = (w) => (w / 1000) * powerMeter.tariff * 100;
     // Turn the speed into a legible CADENCE for the viewer: the deliberate idle
     // after a representative burst, and the effective gap between bursts. The
