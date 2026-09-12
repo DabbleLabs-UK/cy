@@ -306,14 +306,17 @@ function feedingSection(state, now) {
       observationGapCount: (snapshot.unknownIntervals || []).length,
     },
   ));
-  if (satiety && satiety.status === 'LIVE' && satiety.current) {
+  if (satiety && satiety.status === 'LIVE' && satiety.headline
+    && satiety.headline.status === 'ESTIMATE_AVAILABLE') {
     entries.push(entry(
       EPISTEMIC_STATUS.MODEL_ESTIMATE,
       'physiological_satiety',
       'physiological_satiety',
       {
-        range: [satiety.current.minimum, satiety.current.maximum],
-        scale: 'published physiological satiety model nominal 1-10 scale',
+        median: satiety.headline.estimate,
+        central95: satiety.headline.central95,
+        scale: 'display-only nominal 1-10 scale',
+        uncertaintyClass: 'PUBLISHED INPUT-DISTRIBUTION UNCERTAINTY',
         inputUncertainty: satiety.inputUncertainty,
         latestIntake: satiety.latestKnownIntake && {
           mealType: satiety.latestKnownIntake.mealType,
@@ -321,6 +324,16 @@ function feedingSection(state, now) {
           portionBasis: satiety.latestKnownIntake.portionBasis,
           nutritionBasis: satiety.latestKnownIntake.nutritionBasis,
         },
+      },
+    ));
+  } else if (satiety && satiety.status === 'LIVE') {
+    entries.push(entry(
+      EPISTEMIC_STATUS.UNKNOWN,
+      'physiological_satiety',
+      'physiological_satiety_input_uncertain',
+      {
+        reason: 'Meal composition is scenario-bounded but has no probability distribution.',
+        scenarioEnvelope: satiety.scenarioEnvelope,
       },
     ));
   } else {

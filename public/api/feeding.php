@@ -31,6 +31,7 @@ try {
 
     $latest = null;
     $satiety = null;
+    $satietyInspection = null;
     $vitals = $db->query("SELECT payload FROM events WHERE kind = 'vitals' ORDER BY seq DESC LIMIT 1")->fetchColumn();
     if ($vitals !== false) {
         $payload = json_decode((string)$vitals, true);
@@ -42,6 +43,10 @@ try {
         if (is_array($satietyCandidate)) {
             $satiety = $satietyCandidate;
         }
+        $satietyInspectionCandidate = is_array($payload) ? ($payload['soma']['physiologicalSatietyInspection'] ?? null) : null;
+        if (is_array($satietyInspectionCandidate)) {
+            $satietyInspection = $satietyInspectionCandidate;
+        }
     }
 
     $latestScheduled = $latest['latestScheduledMeal'] ?? null;
@@ -50,8 +55,8 @@ try {
         'ok' => true,
         'inspection' => [
             'heading' => 'PHYSIOLOGICAL SATIETY',
-            'status' => 'IMPLEMENTED',
-            'publicLabel' => 'LIVE',
+            'status' => $satiety['status'] ?? 'CALIBRATING',
+            'publicLabel' => $satiety['publicLabel'] ?? 'CALIBRATING',
             'model' => [
                 'modelId' => $latest['modelId'] ?? 'feeding-homeostasis-uninstantiated-framework',
                 'modelVersion' => $latest['modelVersion'] ?? 'feeding-intake-ledger-v1',
@@ -80,9 +85,10 @@ try {
             )),
             'records' => $records,
             'physiologicalSatiety' => $satiety,
+            'physiologicalSatietyInspection' => $satietyInspection,
             'homeostaticPhysiologicalState' => 'NOT_MODELLED',
             'subjectiveHunger' => 'NOT_MODELLED',
-            'note' => 'All intake facts come from structured food events. The satiety range is a Martinez, Dibbs et al. 2025 model estimate; schedule alone is not ingestion, and unknown intervals remain unknown.',
+            'note' => 'All intake facts come from structured food events. Statistical intervals use published input distributions; meal-composition scenarios are separate and non-probabilistic. Schedule alone is not ingestion.',
         ],
     ]);
 } catch (Throwable $e) {

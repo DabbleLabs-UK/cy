@@ -326,8 +326,8 @@ function controllabilityMarkup(status, causalStatus, perceivedStatus, comparison
 function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, anticipationStatus, actionStatus, admin) {
   return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
     <div class="feeding-input-head"><span>${gutStatus.displayName}</span><strong class="feeding-input-status">CALIBRATING</strong></div>
-    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>PUBLISHED MODEL RANGE / 10</span></div>
-    <p class="feeding-input-explanation">MODEL ESTIMATE - NOT A REPORTED FEELING. A deterministic range from the published GI and gut-hormone model. Higher means greater modelled physiological satiety.</p>
+    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>PHYSIOLOGICAL MODEL</span></div>
+    <p class="feeding-input-explanation">MODEL ESTIMATE - NOT A REPORTED FEELING. Statistical intervals come from the paper's published input distributions. Unknown meal composition is kept as a separate scenario range.</p>
     <dl class="feeding-input-facts">
       <div><dt>GASTRIC CONTENTS</dt><dd data-satiety="gastric">UNKNOWN</dd></div>
       <div><dt>CCK</dt><dd data-satiety="cck">UNKNOWN</dd></div>
@@ -340,6 +340,7 @@ function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, an
     ${satietyHistoryMarkup()}
     <details class="soma-substrate-more"><summary>MODEL, LIMITATIONS AND FEEDING HISTORY</summary>
       <p class="satiety-uncertainty">Waiting for a clean breakfast anchor.</p>
+      <div class="satiety-scenarios"></div>
       <div class="feeding-timeline"><p class="feeding-timeline-empty">No structured feeding records have reached this view.</p></div>
       <div class="feeding-model-limits"><span>${feedingStatus.displayName}</span><strong>${feedingStatus.publicLabel}</strong><span>SUBJECTIVE HUNGER</span><strong>NOT MODELLED</strong><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>HYPOTHALAMIC NEURAL ACTIVITY</span><strong>NOT MODELLED</strong></div>
     </details>
@@ -872,19 +873,21 @@ export class BrainHud {
       const row = this.rows[definition.key];
       if (!row) continue;
       if (definition.key === 'satiety') {
-        const current = this.physiologicalSatiety && this.physiologicalSatiety.current;
+        const headline = this.physiologicalSatiety && this.physiologicalSatiety.headline;
         const live = this.physiologicalSatiety && this.physiologicalSatiety.status === 'LIVE'
-          && current && Number.isFinite(current.minimum) && Number.isFinite(current.maximum);
+          && headline;
+        const estimated = live && headline.status === 'ESTIMATE_AVAILABLE'
+          && Number.isFinite(headline.estimate);
         row.querySelector('.soma-state-value').textContent = live
-          ? `${current.minimum.toFixed(1)}-${current.maximum.toFixed(1)} / 10` : '--';
+          ? (estimated ? `${headline.estimate.toFixed(1)} / 10` : 'INPUT UNCERTAIN') : '--';
         row.querySelector('.soma-state-status').textContent = live
           ? 'LIVE' : String(this.physiologicalSatiety && this.physiologicalSatiety.status || 'CALIBRATING').replaceAll('_', ' ');
-        row.querySelector('.soma-state-trend').textContent = live ? 'physiological model' : 'awaiting valid input';
-        const left = live ? Math.max(0, Math.min(100, current.minimum * 10)) : 0;
-        const right = live ? Math.max(left, Math.min(100, current.maximum * 10)) : 0;
+        row.querySelector('.soma-state-trend').textContent = estimated ? 'published input distribution' : live ? 'meal composition unknown' : 'awaiting valid input';
+        const left = estimated ? Math.max(0, Math.min(100, headline.central95.lower * 10)) : 0;
+        const right = estimated ? Math.max(left, Math.min(100, headline.central95.upper * 10)) : 0;
         row.querySelector('.soma-state-bar i').style.left = `${left}%`;
-        row.querySelector('.soma-state-bar i').style.width = live ? `${Math.max(3, right - left)}%` : '0';
-        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(live ? ((current.minimum + current.maximum) / 20) : 0);
+        row.querySelector('.soma-state-bar i').style.width = estimated ? `${Math.max(3, right - left)}%` : '0';
+        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(estimated ? headline.estimate / 10 : 0);
         row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means greater modelled physiological satiety. Subjective hunger is not modelled.`;
         continue;
       }
@@ -1313,19 +1316,24 @@ export class BrainHud {
     const physiology = this.physiologicalSatiety;
     const ledgerLive = this.feedingStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
       && snapshot && snapshot.status === 'implemented';
-    const modelLive = physiology && physiology.status === 'LIVE' && physiology.current;
+    const modelLive = physiology && physiology.status === 'LIVE' && physiology.headline;
+    const estimated = modelLive && physiology.headline.status === 'ESTIMATE_AVAILABLE';
     card.querySelector('.feeding-input-status').textContent = modelLive
       ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
     const range = (value, unit = '') => value && Number.isFinite(value.minimum) && Number.isFinite(value.maximum)
       ? `${value.minimum.toFixed(2)}-${value.maximum.toFixed(2)}${unit}` : 'UNKNOWN';
     const intake = physiology && physiology.latestKnownIntake;
     const facts = {
-      score: modelLive ? `${physiology.current.minimum.toFixed(1)}-${physiology.current.maximum.toFixed(1)} / 10` : '--',
-      gastric: modelLive ? range(physiology.gastricContentsMl, ' mL') : 'UNKNOWN',
-      cck: modelLive ? range(physiology.cckPM, ' pM') : 'UNKNOWN',
-      glp1: modelLive ? range(physiology.glp1PM, ' pM') : 'UNKNOWN',
-      pyy: modelLive ? range(physiology.pyyPM, ' pM') : 'UNKNOWN',
-      ghrelin: modelLive ? range(physiology.ghrelinPM, ' pM') : 'UNKNOWN',
+      score: modelLive ? (estimated ? `${physiology.headline.estimate.toFixed(1)} / 10` : 'SATIETY - INPUT UNCERTAIN') : '--',
+      gastric: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
+      cck: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
+      glp1: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
+      pyy: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
+      ghrelin: modelLive && physiology.ghrelin
+        ? (physiology.ghrelin.status === 'WITHIN_CALIBRATED_PHYSICAL_DOMAIN'
+          ? `${physiology.ghrelin.median.toFixed(2)} pM (central 95% ${physiology.ghrelin.central95.lower.toFixed(2)}-${physiology.ghrelin.central95.upper.toFixed(2)})`
+          : physiology.ghrelin.display)
+        : 'UNKNOWN',
       intake: intake ? `${String(intake.mealType || 'meal').toUpperCase()}, ${Number(intake.consumedEnergyKcal).toFixed(0)} kcal, ${String(intake.portionBasis || 'UNKNOWN').replaceAll('_', ' ')}` : 'NONE RECORDED',
       nutrition: intake ? `${String(intake.nutritionBasis || 'UNKNOWN').replaceAll('_', ' ')}; ${String(intake.nutritionalComposition || 'UNKNOWN').replaceAll('_', ' ')}` : 'UNKNOWN',
     };
@@ -1335,8 +1343,20 @@ export class BrainHud {
     }
     const uncertainty = card.querySelector('.satiety-uncertainty');
     if (uncertainty) uncertainty.textContent = modelLive
-      ? `Input uncertainty: ${(physiology.inputUncertainty || []).join('; ') || 'none recorded'}. Model: Martinez, Dibbs et al. 2025. Subjective hunger is not modelled.`
+      ? `${physiology.compositionUncertainty.classification}: ${physiology.compositionUncertainty.status.replaceAll('_', ' ')}. Each scenario uses a central 95% interval from published input distributions. Subjective hunger is not modelled.`
       : `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}. Subjective hunger is not modelled.`;
+    const scenarios = card.querySelector('.satiety-scenarios');
+    if (scenarios) {
+      scenarios.textContent = '';
+      for (const scenario of (physiology && physiology.scenarios || [])) {
+        const item = document.createElement('p');
+        const estimateText = scenario.displaySatiety
+          ? `${scenario.displaySatiety.median.toFixed(2)} / 10; central 95% ${scenario.displaySatiety.central95.lower.toFixed(2)}-${scenario.displaySatiety.central95.upper.toFixed(2)}`
+          : 'unavailable';
+        item.textContent = `${scenario.label}: ${estimateText}.`;
+        scenarios.appendChild(item);
+      }
+    }
     const timeline = card.querySelector('.feeding-timeline');
     timeline.textContent = '';
     const records = ledgerLive && Array.isArray(snapshot.recentMealOutcomes) ? snapshot.recentMealOutcomes : [];

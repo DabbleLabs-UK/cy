@@ -14,6 +14,17 @@ const pick = (items, rnd) => items[Math.min(items.length - 1, Math.floor(rnd() *
 
 export const PRISON_SCHEDULE_TIME_ZONE = 'Europe/London';
 
+export const PRISON_REGIME_CONFIGURATION = Object.freeze({
+  supperSnackMinutes: 21 * 60,
+  supperSnackClassification: 'FICTIONAL PRISON REGIME CONFIGURATION',
+  hmppsMealWindows: Object.freeze({
+    breakfast: Object.freeze([7 * 60, 8 * 60 + 30]),
+    lunch: Object.freeze([11 * 60 + 30, 13 * 60 + 30]),
+    eveningMeal: Object.freeze([17 * 60, 19 * 60]),
+  }),
+  eveningMealDiscrepancy: 'HMP ThinkPad tea is configured at 16:45, 15 minutes before the HMPPS guidance window.',
+});
+
 export const PRISON_SCHEDULE = [
   { kind: 'wake', mins: 6 * 60 + 30 },
   { kind: 'meal', meal: 'breakfast', mins: 7 * 60 + 30 },
@@ -23,6 +34,7 @@ export const PRISON_SCHEDULE = [
   { kind: 'routine', routine: 'exercise', mins: 14 * 60 + 15 },
   { kind: 'meal', meal: 'tea', mins: 16 * 60 + 45 },
   { kind: 'routine', routine: 'phone', mins: 19 * 60 },
+  { kind: 'meal', meal: 'supper_snack', mins: PRISON_REGIME_CONFIGURATION.supperSnackMinutes },
   { kind: 'sleep', mins: 22 * 60 + 30 },
 ];
 
@@ -36,6 +48,7 @@ const MEAL_LABELS = {
   breakfast: 'breakfast',
   lunch: 'lunch',
   tea: 'tea',
+  supper_snack: 'supper snack',
 };
 
 export const MEAL_ACTIONS = Object.freeze(['action:accept_meal', 'action:refuse_meal']);

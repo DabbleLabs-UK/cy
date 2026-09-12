@@ -96,9 +96,9 @@ if ($sleepinessConfig['jsonPath'] !== '$.soma.predictedSleepiness.predictedKss'
     exit(1);
 }
 $satietyConfig = captive_soma_history_config('24h', 'satiety', 'satiety');
-if ($satietyConfig['jsonPath'] !== '$.soma.physiologicalSatiety.current.midpoint'
-    || $satietyConfig['jsonPathMin'] !== '$.soma.physiologicalSatiety.current.minimum'
-    || $satietyConfig['jsonPathMax'] !== '$.soma.physiologicalSatiety.current.maximum'
+if ($satietyConfig['jsonPath'] !== '$.soma.physiologicalSatiety.headline.estimate'
+    || $satietyConfig['jsonPathMin'] !== '$.soma.physiologicalSatiety.headline.central95.lower'
+    || $satietyConfig['jsonPathMax'] !== '$.soma.physiologicalSatiety.headline.central95.upper'
     || $satietyConfig['scale'] !== 1.0) {
     fwrite(STDERR, "FAIL: physiological Satiety history config is incorrect\n");
     exit(1);
@@ -117,10 +117,10 @@ if (count($satietyPoints) !== 1
     exit(1);
 }
 $satietyPayload = json_encode([
-    'soma' => ['physiologicalSatiety' => ['current' => [
-        'midpoint' => 4.7,
-        'minimum' => 4.3,
-        'maximum' => 5.1,
+    'soma' => ['physiologicalSatiety' => ['headline' => [
+        'status' => 'ESTIMATE_AVAILABLE',
+        'estimate' => 4.7,
+        'central95' => ['lower' => 4.3, 'upper' => 5.1],
     ]]],
 ], JSON_THROW_ON_ERROR);
 $satietyPayloadPoints = captive_soma_history_points(
@@ -162,10 +162,10 @@ if (!str_contains($historyQuery, 'FORCE INDEX (idx_kind_ts)')
     exit(1);
 }
 $satietyQuery = captive_soma_history_query(
-    '$.soma.physiologicalSatiety.current.midpoint',
+    '$.soma.physiologicalSatiety.headline.estimate',
     600,
-    '$.soma.physiologicalSatiety.current.minimum',
-    '$.soma.physiologicalSatiety.current.maximum'
+    '$.soma.physiologicalSatiety.headline.central95.lower',
+    '$.soma.physiologicalSatiety.headline.central95.upper'
 );
 if (!str_contains($satietyQuery, ' AS minimum') || !str_contains($satietyQuery, ' AS maximum')) {
     fwrite(STDERR, "FAIL: physiological Satiety query omits its uncertainty bounds\n");

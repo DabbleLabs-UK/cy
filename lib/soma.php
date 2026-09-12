@@ -49,6 +49,7 @@ function captive_soma_api_payload(?array $row, ?array $implementationRegistry = 
     // authoritative: public implementation status comes only from the registry.
     $publicStatus = captive_implementation_overall_status($registry);
     $soma['status'] = $publicStatus;
+    unset($soma['physiologicalSatietyInspection']);
 
     return [
         'ok' => true,

@@ -19,6 +19,14 @@ function captive_client_ip(): string
     return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
 }
 
+function captive_public_event_payload(string $kind, mixed $payload): mixed
+{
+    if ($kind === 'vitals' && is_array($payload) && isset($payload['soma']) && is_array($payload['soma'])) {
+        unset($payload['soma']['physiologicalSatietyInspection']);
+    }
+    return $payload;
+}
+
 function captive_require_ingest_key(): void
 {
     $key = $_SERVER['HTTP_X_CY_KEY'] ?? '';

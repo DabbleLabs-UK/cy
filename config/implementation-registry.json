@@ -50,9 +50,9 @@
       "display_name": "PHYSIOLOGICAL SATIETY",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "martinez-dibbs-integrated-physiological-satiety",
-      "status_note": "A deterministic ensemble implements the published stomach, intestinal, CCK, GLP-1, PYY, ghrelin and physiological satiety equations. It reports an input-uncertainty range and does not model subjective hunger.",
+      "status_note": "A deterministic quasi-Monte-Carlo ensemble implements the published stomach, intestinal, CCK, GLP-1, PYY, ghrelin and physiological satiety equations. It keeps published input-distribution intervals separate from non-probabilistic meal-composition scenarios and does not model subjective hunger.",
       "data_dependencies": ["feeding", "intake_outcome", "portion_fraction"],
-      "version": "physiological-satiety-v1",
+      "version": "physiological-satiety-v2",
       "provenance": "config/model-specs/physiological-satiety.json"
     },
     {
@@ -568,9 +568,9 @@
       "display_name": "MODELLED GI / SATIETY PHYSIOLOGY",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "martinez-dibbs-integrated-physiological-satiety",
-      "status_note": "Implements the published GI compartments, nutrient transit, CCK, GLP-1, PYY, ghrelin and physiological satiety equation as a deterministic uncertainty ensemble for a metabolically healthy adult reference.",
+      "status_note": "Implements the published GI compartments, nutrient transit, CCK, GLP-1, PYY, ghrelin and physiological satiety equation with deterministic quasi-Monte-Carlo sampling of published input distributions and separate meal-composition scenarios.",
       "data_dependencies": ["ingestion_ledger", "resolved_consumed_energy", "HMPPS_reference_ration"],
-      "version": "physiological-satiety-v1",
+      "version": "physiological-satiety-v2",
       "provenance": "config/model-specs/physiological-satiety.json"
     },
     {

@@ -63,9 +63,9 @@ function captive_soma_history_config(string $range, string $key, string $scope =
         return CAPTIVE_SOMA_RANGES[$range] + [
             'scope' => $scope,
             'key' => $key,
-            'jsonPath' => '$.soma.physiologicalSatiety.current.midpoint',
-            'jsonPathMin' => '$.soma.physiologicalSatiety.current.minimum',
-            'jsonPathMax' => '$.soma.physiologicalSatiety.current.maximum',
+            'jsonPath' => '$.soma.physiologicalSatiety.headline.estimate',
+            'jsonPathMin' => '$.soma.physiologicalSatiety.headline.central95.lower',
+            'jsonPathMax' => '$.soma.physiologicalSatiety.headline.central95.upper',
             'scale' => 1.0,
         ];
     }
@@ -255,11 +255,11 @@ function captive_soma_history_points(
             } elseif ($scope === 'circadian') {
                 $value = $payload['soma']['circadianProcessC']['processCEstimate'] ?? null;
             } elseif ($scope === 'satiety') {
-                $current = $payload['soma']['physiologicalSatiety']['current'] ?? null;
-                if (is_array($current)) {
-                    $value = $current['midpoint'] ?? null;
-                    $row['minimum'] = $current['minimum'] ?? null;
-                    $row['maximum'] = $current['maximum'] ?? null;
+                $headline = $payload['soma']['physiologicalSatiety']['headline'] ?? null;
+                if (is_array($headline) && ($headline['status'] ?? null) === 'ESTIMATE_AVAILABLE') {
+                    $value = $headline['estimate'] ?? null;
+                    $row['minimum'] = $headline['central95']['lower'] ?? null;
+                    $row['maximum'] = $headline['central95']['upper'] ?? null;
                 }
             } else {
                 $group = $scope === 'brain' ? 'brain' : 'metrics';

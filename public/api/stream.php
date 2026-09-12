@@ -44,7 +44,7 @@ try {
             'seq' => (int)$row['seq'],
             'ts' => $row['ts'],
             'kind' => $row['kind'],
-            'payload' => json_decode($row['payload'], true),
+            'payload' => captive_public_event_payload((string)$row['kind'], json_decode($row['payload'], true)),
         ];
     }, $rows);
 

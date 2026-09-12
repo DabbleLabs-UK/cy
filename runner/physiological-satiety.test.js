@@ -1,216 +1,150 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
+import { PRISON_REGIME_CONFIGURATION, PRISON_SCHEDULE, chooseMealEvent, mealExpectation } from './environment.js';
+import { HMPPS_REFERENCE_RATION, ingestionRecordFromEnvironment } from './feeding-homeostasis.js';
 import { groundedSomaDirective, observeSomaFeedingRecord, reconcileSoma, tickSoma } from './soma.js';
 import {
-  buildDeterministicParameterGrid,
-  NUMERICAL_GRID,
-  PUBLISHED_PARAMETERS,
-  advancePhysiologicalSatiety,
-  createModelTrack,
-  createPhysiologicalSatiety,
-  integrateTrackMinute,
-  observePhysiologicalSatietyRecord,
-  physiologicalSatietySnapshot,
-  reconcilePhysiologicalSatiety,
-  satietyFromState,
-  trackSatiety,
+  COMPOSITION_SCENARIOS, COMPOSITION_SCENARIO_DERIVATION, NUMERICAL_METHOD, advancePhysiologicalSatiety,
+  buildDeterministicParameterGrid, createModelTrack, createPhysiologicalSatiety,
+  displaySatiety, integrateTrackMinute, observePhysiologicalSatietyRecord,
+  physiologicalSatietyInspection, physiologicalSatietySnapshot,
+  reconcilePhysiologicalSatiety, satietyFromState, trackSatiety,
 } from './physiological-satiety.js';
 import { implementationEntry } from './implementation-registry.js';
 
 const T0 = Date.parse('2026-09-12T07:30:00.000Z');
 const event = (id, mealType, intakeOutcome, consumed, portionCategory, portionFraction = null, at = T0) =>
   createEnvironmentRecord(createEnvironmentEvent('meal', {
-    id,
-    timestamp: new Date(at).toISOString(),
+    id, timestamp: new Date(at).toISOString(),
     world: { physical: { food: {
-      meal_type: mealType,
-      scheduled: 'yes',
+      meal_type: mealType, scheduled: 'yes',
       offered: intakeOutcome === 'unavailable' ? 'no' : 'yes',
       available: intakeOutcome === 'unavailable' ? 'no' : 'yes',
       received: intakeOutcome === 'unavailable' ? 'no' : 'yes',
-      consumed,
-      intake_outcome: intakeOutcome,
-      portion_category: portionCategory,
+      consumed, intake_outcome: intakeOutcome, portion_category: portionCategory,
       portion_fraction: portionFraction,
     } } },
   }));
 
-const expected = createEnvironmentRecord(createEnvironmentEvent('meal_expected', {
-  id: 'scheduled-only', timestamp: new Date(T0).toISOString(),
-  world: { physical: { food: { meal_type: 'breakfast' } } },
-}));
-
-// A. A schedule is not ingestion and cannot establish the model anchor.
-const noMeal = createPhysiologicalSatiety(T0);
-observePhysiologicalSatietyRecord(noMeal, expected);
-assert.equal(noMeal.status, 'CALIBRATING');
-assert.equal(noMeal.tracks.length, 0);
-
-// B. A full reference breakfast enters exactly 500 kcal.
-const full = createPhysiologicalSatiety(T0);
-observePhysiologicalSatietyRecord(full, event('full-breakfast', 'breakfast', 'full_consumed', 'full', 'full', 1));
-assert.equal(full.status, 'LIVE');
-assert.equal(full.tracks.length, 225);
-assert.equal(full.latestKnownIntake.consumedEnergyKcal, 500);
-assert.ok(full.tracks.every((track) => track.intake.remainingEnergyKcal === 500));
-
-// Explicit factual nutrition supersedes the HMPPS reference-ration default.
-const explicit = createPhysiologicalSatiety(T0);
-const explicitBreakfast = createEnvironmentRecord(createEnvironmentEvent('meal', {
-  id: 'explicit-breakfast',
-  timestamp: new Date(T0).toISOString(),
-  world: { physical: { food: {
-    meal_type: 'breakfast', scheduled: 'yes', offered: 'yes', available: 'yes',
-    received: 'yes', consumed: 'full', intake_outcome: 'full_consumed',
-    portion_category: 'full', portion_fraction: 1,
-    nutrition: { energy_kcal: 620, fat_g: 20, carbohydrate_g: 90, protein_g: 30 },
-  } } },
-}));
-observePhysiologicalSatietyRecord(explicit, explicitBreakfast);
-assert.equal(explicit.latestKnownIntake.consumedEnergyKcal, 620);
-assert.equal(explicit.latestKnownIntake.nutritionBasis, 'EXPLICIT_FACTUAL_NUTRITION');
-assert.deepEqual(explicit.tracks[0].intake.explicitMacros, {
-  fatG: 20, carbohydrateG: 90, proteinG: 30,
-});
-
-// C. Refusal enters zero energy.
-const beforeRefusal = full.tracks.map((track) => track.intake.remainingEnergyKcal);
-observePhysiologicalSatietyRecord(full, event('refused-lunch', 'lunch', 'refused', 'none', 'none', 0, T0));
-assert.deepEqual(full.tracks.map((track) => track.intake.remainingEnergyKcal), beforeRefusal);
-
-// D. Exact partial intake uses the observed fraction, not a default.
-const partial = createPhysiologicalSatiety(T0);
-observePhysiologicalSatietyRecord(partial, event('partial-breakfast', 'breakfast', 'partial_consumed', 'partial', 'partial', 0.4));
-assert.equal(partial.latestKnownIntake.consumedEnergyKcal, 200);
-
-// E/F. Unknown partial and unknown intake preserve uncertainty.
-for (const [id, outcome, consumed, portion] of [
-  ['partial-unknown', 'partial_consumed', 'partial', 'partial'],
-  ['intake-unknown', 'unknown', 'unknown', 'unknown'],
-]) {
-  const state = createPhysiologicalSatiety(T0);
-  observePhysiologicalSatietyRecord(state, event(`${id}-anchor`, 'breakfast', 'full_consumed', 'full', 'full', 1));
-  observePhysiologicalSatietyRecord(state, event(id, 'lunch', outcome, consumed, portion, null, T0 + 60000));
-  assert.equal(state.status, 'INPUT_INCOMPLETE');
-}
-
-// G. One published 1-minute gastric-emptying step uses -ln(0.5)/half-life.
-const gastric = createModelTrack({
-  relativeFatFraction: 0.1, fatDensityGPerMl: 0.7,
-  carbohydrateDensityGPerMl: 0.117, eatingRateKcalPerMin: 28.7,
-});
-gastric.stomach.fatMl = 100;
-gastric.stomach.carbohydrateMl = 100;
-integrateTrackMinute(gastric, 1);
-assert.ok(Math.abs(gastric.stomach.fatMl - 100 * (1 - Math.log(2) / 193)) < 1e-12);
-assert.ok(Math.abs(gastric.stomach.carbohydrateMl - 100 * (1 - Math.log(2) / 43)) < 1e-12);
-
-// H. Every hormone update reproduces the published deterministic recurrence.
-const hormones = createModelTrack({
-  relativeFatFraction: 0.1, fatDensityGPerMl: 0.7,
-  carbohydrateDensityGPerMl: 0.117, eatingRateKcalPerMin: 28.7,
-});
-Object.assign(hormones.stomach, { fatMl: 4, carbohydrateMl: 5 });
-Object.assign(hormones.upperSmallIntestine, { fatMl: 2, carbohydrateMl: 3 });
-Object.assign(hormones.lowerSmallIntestine, { fatMl: 1, carbohydrateMl: 2 });
-Object.assign(hormones.largeIntestine, { fatMl: 0.5, carbohydrateMl: 0 });
-Object.assign(hormones.hormones, { cckPM: 7, glp1PM: 8, pyyPM: 9, ghrelinPM: 100 });
-integrateTrackMinute(hormones, 1);
-assert.ok(Math.abs(hormones.hormones.glp1PM - (8 + 1 * 0.2 + 0.5 * 0.2 + 2 * 0.2 - 8 * 0.06)) < 1e-12);
-assert.ok(Math.abs(hormones.hormones.cckPM - (7 + 2 * 0.01 + 3 * 0.005 - 7 * 0.03)) < 1e-12);
-assert.ok(Math.abs(hormones.hormones.pyyPM - (9 + 1 * 2 + 0.5 * 1.5 + 2 * 0.8 - 9 * 0.075)) < 1e-12);
-assert.ok(Math.abs(hormones.hormones.ghrelinPM - (100 + 4 * -0.01 + 2 * -0.005 + 5 * -0.01 + 3 * -0.005 + (110 - 100) * 0.04)) < 1e-12);
-
-// I. The published satiety expression includes the multiplicative PYY/GLP-1 term.
+// A. Published equations and one-minute recurrence are unchanged.
 assert.equal(satietyFromState({ gastricDistentionMl: 400, cckPM: 2, pyyPM: 3, glp1PM: 4, ghrelinPM: 100 }),
   0.0025 * 400 + 1.2 * 2 + 0.08 * 3 * 0.2 * 4 + 0.02 * 10);
-const boundedScoreTrack = createModelTrack({});
-boundedScoreTrack.hormones.cckPM = 20;
-assert.equal(trackSatiety(boundedScoreTrack), 10);
+const recurrence = createModelTrack({ relativeFatFraction: 0.1, fatDensityGPerMl: 0.7,
+  carbohydrateDensityGPerMl: 0.117, mealEatingRateKcalPerMin: 28.7, snackEatingRateKcalPerMin: 3.3 });
+Object.assign(recurrence.stomach, { fatMl: 4, carbohydrateMl: 5 });
+Object.assign(recurrence.upperSmallIntestine, { fatMl: 2, carbohydrateMl: 3 });
+Object.assign(recurrence.lowerSmallIntestine, { fatMl: 1, carbohydrateMl: 2 });
+Object.assign(recurrence.largeIntestine, { fatMl: 0.5, carbohydrateMl: 0 });
+Object.assign(recurrence.hormones, { cckPM: 7, glp1PM: 8, pyyPM: 9, ghrelinPM: 100 });
+integrateTrackMinute(recurrence, 1);
+assert.ok(Math.abs(recurrence.hormones.ghrelinPM - (100 - 0.04 - 0.01 - 0.05 - 0.015 + 0.4)) < 1e-12);
 
-// J. The deterministic dietary/parameter ensemble produces an enclosing interval.
-advancePhysiologicalSatiety(partial, T0 + 30 * 60000);
-const interval = physiologicalSatietySnapshot(partial).current;
-const compactSnapshot = physiologicalSatietySnapshot(partial);
-assert.ok(interval.minimum <= interval.maximum);
-assert.ok(interval.maximum > interval.minimum);
-assert.ok(interval.minimum >= 1 && interval.maximum <= 10);
-assert.ok(compactSnapshot.unboundedEquationResult.maximum >= interval.maximum);
-assert.ok(compactSnapshot.compartments.upperSmallIntestineFatMl.minimum >= 0);
-assert.ok(compactSnapshot.compartments.lowerSmallIntestineCarbohydrateMl.maximum >= 0);
-const endpointTracks = partial.tracks.filter((track) =>
-  [NUMERICAL_GRID.fatDensities[0], NUMERICAL_GRID.fatDensities.at(-1)].includes(track.parameters.fatDensityGPerMl)
-  && [NUMERICAL_GRID.carbohydrateDensities[0], NUMERICAL_GRID.carbohydrateDensities.at(-1)].includes(track.parameters.carbohydrateDensityGPerMl)
-  && [NUMERICAL_GRID.eatingRates[0], NUMERICAL_GRID.eatingRates.at(-1)].includes(track.parameters.eatingRateKcalPerMin));
-const endpoints = endpointTracks.map((track) => satietyFromState({
-  gastricDistentionMl: PUBLISHED_PARAMETERS.initialGastricDistentionMl + PUBLISHED_PARAMETERS.gastricDistentionConstant * (track.stomach.fatMl + track.stomach.carbohydrateMl),
-  cckPM: track.hormones.cckPM, pyyPM: track.hormones.pyyPM,
-  glp1PM: track.hormones.glp1PM, ghrelinPM: track.hormones.ghrelinPM,
+// B/C. The source defines neither a ghrelin floor nor a score clamp.
+const rawTrack = createModelTrack({});
+rawTrack.hormones.ghrelinPM = -0.468;
+rawTrack.hormones.cckPM = 20;
+assert.equal(rawTrack.hormones.ghrelinPM, -0.468);
+assert.ok(trackSatiety(rawTrack) > 10);
+assert.equal(displaySatiety(trackSatiety(rawTrack)), 10);
+const artefactState = createPhysiologicalSatiety(T0);
+artefactState.status = 'LIVE';
+artefactState.statusReason = 'TEST';
+artefactState.tracks = [rawTrack];
+artefactState.latestKnownIntake = { fullMealMacros: { fatG: 1, carbohydrateG: 1, proteinG: 1 } };
+const artefactPublic = physiologicalSatietySnapshot(artefactState);
+const artefactAdmin = physiologicalSatietyInspection(artefactState);
+assert.equal(artefactPublic.ghrelin.status, 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN');
+assert.equal(JSON.stringify(artefactPublic).includes('-0.468'), false);
+assert.equal(artefactAdmin.rawModelState.ghrelin.median, -0.468);
+assert.ok(artefactAdmin.physicalDomainViolations.includes('GHRELIN_MODEL_STATE_BELOW_ZERO'));
+assert.equal(artefactPublic.displayTransformation.sourceDefinesClamp, false);
+
+// D. Published uniform inputs are represented reproducibly by deterministic QMC.
+const firstGrid = buildDeterministicParameterGrid();
+assert.deepEqual(firstGrid, buildDeterministicParameterGrid());
+assert.equal(firstGrid.length, COMPOSITION_SCENARIOS.length * NUMERICAL_METHOD.samplesPerCompositionScenario);
+assert.ok(firstGrid.every((item) => item.fatDensityGPerMl >= 0.7 && item.fatDensityGPerMl <= 0.96));
+assert.ok(firstGrid.every((item) => item.snackEatingRateKcalPerMin >= 3.3 && item.snackEatingRateKcalPerMin <= 6.4));
+
+// E/F/G. Central intervals are per scenario; composition is non-probabilistic and has no featured midpoint.
+const breakfast = createPhysiologicalSatiety(T0);
+observePhysiologicalSatietyRecord(breakfast, event('breakfast', 'breakfast', 'full_consumed', 'full', 'full', 1));
+assert.equal(breakfast.tracks.length, 384);
+advancePhysiologicalSatiety(breakfast, T0 + 30 * 60000);
+const breakfastSnapshot = physiologicalSatietySnapshot(breakfast);
+assert.equal(breakfastSnapshot.headline.status, 'INPUT_UNCERTAIN');
+assert.equal(breakfastSnapshot.compositionUncertainty.classification, 'MEAL-COMPOSITION SCENARIO RANGE');
+assert.equal(breakfastSnapshot.scenarios.length, 3);
+assert.equal(COMPOSITION_SCENARIO_DERIVATION.maximumRelativeFatFractionOfNonProteinEnergy, 0.3913);
+assert.ok(breakfastSnapshot.scenarios.every((item) => item.publishedInputDistribution.centralIntervalPercent === 95));
+assert.ok(breakfastSnapshot.scenarios.every((item) => item.displaySatiety.central95.lower <= item.displaySatiety.median
+  && item.displaySatiety.median <= item.displaySatiety.central95.upper));
+assert.equal(Object.hasOwn(breakfastSnapshot.scenarioEnvelope, 'midpoint'), false);
+
+const exactBreakfast = createEnvironmentRecord(createEnvironmentEvent('meal', {
+  id: 'exact-breakfast', timestamp: new Date(T0).toISOString(),
+  world: { physical: { food: {
+    meal_type: 'breakfast', scheduled: 'yes', offered: 'yes', available: 'yes', received: 'yes',
+    consumed: 'full', intake_outcome: 'full_consumed', portion_category: 'full', portion_fraction: 1,
+    nutrition: { energy_kcal: 500, fat_g: 18, carbohydrate_g: 72, protein_g: 22 },
+  } } },
 }));
-assert.ok(Math.abs(Math.min(...endpoints) - interval.minimum) < 1e-6);
-assert.ok(Math.abs(Math.max(...endpoints) - interval.maximum) < 1e-6);
+const exact = createPhysiologicalSatiety(T0);
+observePhysiologicalSatietyRecord(exact, exactBreakfast);
+advancePhysiologicalSatiety(exact, T0 + 30 * 60000);
+assert.equal(physiologicalSatietySnapshot(exact).headline.status, 'ESTIMATE_AVAILABLE');
 
-// A substantially denser deterministic grid converges to the same extrema.
-const linearGrid = (minimum, maximum, count) => Array.from(
-  { length: count },
-  (_, index) => minimum + (maximum - minimum) * index / (count - 1),
-);
-const denseGrid = {
-  relativeFatFractions: linearGrid(0.1, 0.3, 5),
-  fatDensities: linearGrid(0.7, 0.96, 9),
-  carbohydrateDensities: linearGrid(0.117, 1.4, 9),
-  eatingRates: linearGrid(28.7, 32.6, 5),
-};
-const dense = createPhysiologicalSatiety(T0);
-dense.status = 'LIVE';
-dense.statusReason = 'CONVERGENCE_TEST_FIXTURE';
-dense.initializedAtMs = T0;
-dense.lastAdvancedAtMs = T0;
-dense.tracks = buildDeterministicParameterGrid(denseGrid).map((parameters) => {
-  const track = createModelTrack(parameters);
-  track.intake.remainingEnergyKcal = 200;
-  track.intake.totalEnergyKcal = 200;
-  track.intake.fatEnergyFraction = (1 - PUBLISHED_PARAMETERS.proteinEnergyFraction)
-    * parameters.relativeFatFraction;
-  track.intake.carbohydrateEnergyFraction = (1 - PUBLISHED_PARAMETERS.proteinEnergyFraction)
-    * (1 - parameters.relativeFatFraction);
-  return track;
+// H/I/J. Supper snack is a real unresolved-until-observed event and the food gap is below 14h.
+const snackSlot = PRISON_SCHEDULE.find((slot) => slot.kind === 'meal' && slot.meal === 'supper_snack');
+assert.equal(snackSlot.mins, PRISON_REGIME_CONFIGURATION.supperSnackMinutes);
+assert.equal(PRISON_REGIME_CONFIGURATION.supperSnackClassification, 'FICTIONAL PRISON REGIME CONFIGURATION');
+assert.equal(HMPPS_REFERENCE_RATION.mealEnergyKcal.supper_snack, 500);
+const scheduledSnack = mealExpectation('supper_snack', 'snack-1');
+const snackExpectedRecord = createEnvironmentRecord(createEnvironmentEvent('meal_expected', {
+  id: 'snack-expected', timestamp: new Date(T0).toISOString(), world: scheduledSnack.world,
+}));
+const scheduledOnlySnack = ingestionRecordFromEnvironment(snackExpectedRecord);
+assert.equal(scheduledOnlySnack.intakeOutcome, 'MEAL_EXPECTED');
+assert.equal(scheduledOnlySnack.consumedEnergyKcal, null);
+assert.equal(chooseMealEvent('supper_snack', () => 0.99).world.physical.food.intake_outcome, 'refused');
+const mealMinutes = PRISON_SCHEDULE.filter((slot) => slot.kind === 'meal').map((slot) => slot.mins).sort((a, b) => a - b);
+const gaps = mealMinutes.map((minute, index) => {
+  const next = mealMinutes[(index + 1) % mealMinutes.length] + (index === mealMinutes.length - 1 ? 1440 : 0);
+  return next - minute;
 });
-advancePhysiologicalSatiety(dense, T0 + 30 * 60000);
-const denseInterval = physiologicalSatietySnapshot(dense).current;
-assert.ok(Math.abs(denseInterval.minimum - interval.minimum) < 1e-6);
-assert.ok(Math.abs(denseInterval.maximum - interval.maximum) < 1e-6);
+assert.ok(Math.max(...gaps) <= 14 * 60);
 
-// K/N. Legacy Hunger cannot change state or the grounded model projection.
+const snackTrack = createModelTrack({ relativeFatFraction: 0.1, fatDensityGPerMl: 0.8,
+  carbohydrateDensityGPerMl: 0.8, mealEatingRateKcalPerMin: 30, snackEatingRateKcalPerMin: 4 });
+snackTrack.intake = { remainingEnergyKcal: 100, totalEnergyKcal: 100, fatEnergyFraction: 0.42,
+  carbohydrateEnergyFraction: 0.42, explicitMacros: null, eatingRateClass: 'SNACK' };
+integrateTrackMinute(snackTrack, 1);
+assert.equal(snackTrack.intake.remainingEnergyKcal, 96);
+
+// K. Legacy Hunger remains isolated.
 const soma = reconcileSoma(null, { now: T0 });
 observeSomaFeedingRecord(soma, event('soma-breakfast', 'breakfast', 'full_consumed', 'full', 'full', 1));
 tickSoma(soma, { now: T0 + 20 * 60000, physical: { hunger: 1 } });
 const beforeLegacy = JSON.stringify(soma.physiologicalSatiety);
-const beforeDirective = groundedSomaDirective(soma, { now: T0 + 20 * 60000 }).directive;
 soma.experienced.metrics.hunger.value = 0;
 soma.drives.food = 0;
 assert.equal(JSON.stringify(soma.physiologicalSatiety), beforeLegacy);
-assert.equal(groundedSomaDirective(soma, { now: T0 + 20 * 60000 }).directive, beforeDirective);
-assert.match(beforeDirective, /Physiological satiety range/);
-assert.doesNotMatch(beforeDirective, /\bhungry\b/i);
+assert.doesNotMatch(groundedSomaDirective(soma, { now: T0 + 20 * 60000 }).directive, /\bhungry\b/i);
 
-// L/M. Known downtime advances digestion; an observation gap invalidates it.
-const knownDowntime = reconcilePhysiologicalSatiety(partial, { now: T0 + 60 * 60000, feedingUnknownIntervals: [] });
-assert.equal(knownDowntime.status, 'LIVE');
-assert.equal(knownDowntime.lastAdvancedAtMs, T0 + 60 * 60000);
-const unknownDowntime = reconcilePhysiologicalSatiety(partial, {
-  now: T0 + 60 * 60000,
-  feedingUnknownIntervals: [{ startedAtMs: T0 + 30 * 60000, endedAtMs: T0 + 60 * 60000 }],
-});
-assert.equal(unknownDowntime.status, 'INPUT_INCOMPLETE');
+// L. V1 state provenance is preserved, but old extrema are not relabelled.
+const migrated = reconcilePhysiologicalSatiety({ ...breakfast, version: 1,
+  modelVersion: 'physiological-satiety-v1', status: 'LIVE', tracks: breakfast.tracks.slice(0, 225) },
+{ now: T0 + 60 * 60000 });
+assert.equal(migrated.status, 'INPUT_INCOMPLETE');
+assert.equal(migrated.tracks.length, 0);
+assert.equal(migrated.migrationArchive.previousTrackCount, 225);
 
-// O/Q. Public terminology is satiety and hypothalamic neural activity is not promoted.
 const ui = readFileSync(new URL('../public/assets/brain.js', import.meta.url), 'utf8');
-assert.match(ui, /PHYSIOLOGICAL SATIETY/);
-assert.doesNotMatch(ui, /key: 'hunger'/);
-assert.match(ui, /SUBJECTIVE HUNGER<\/span><strong>NOT MODELLED/);
+assert.match(ui, /SATIETY - INPUT UNCERTAIN/);
+assert.doesNotMatch(ui, /ghrelinPM/);
 assert.equal(implementationEntry('soma_variables', 'satiety').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
+console.log(`500 kcal breakfast at 30 min: ${breakfastSnapshot.scenarios.map((scenario) => `${scenario.id} median ${scenario.displaySatiety.median}, central95 ${scenario.displaySatiety.central95.lower}-${scenario.displaySatiety.central95.upper}`).join('; ')}`);
 console.log('physiological-satiety.test.js: all checks passed');

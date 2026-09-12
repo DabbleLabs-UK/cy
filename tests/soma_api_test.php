@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../lib/soma.php';
+require __DIR__ . '/../lib/http.php';
 
 $failed = 0;
 function check_soma(bool $condition, string $message): void
@@ -29,9 +30,10 @@ $state = [
     ],
     'physiologicalSatiety' => [
         'status' => 'LIVE',
-        'current' => ['minimum' => 4.3, 'midpoint' => 4.7, 'maximum' => 5.1],
+        'headline' => ['status' => 'ESTIMATE_AVAILABLE', 'estimate' => 4.7, 'central95' => ['lower' => 4.3, 'upper' => 5.1]],
         'subjectiveHunger' => 'NOT_MODELLED',
     ],
+    'physiologicalSatietyInspection' => ['rawModelState' => ['ghrelin' => ['median' => -0.468]]],
     'learnedControllability' => [
         'status' => 'implemented',
         'contingencies' => [[
@@ -54,6 +56,9 @@ check_soma($implemented['soma']['status'] === 'provisional', 'registry truth ove
 check_soma($implemented['soma']['circuits'] === $state['circuits'], 'runner values are returned without recomputation');
 check_soma($implemented['soma']['feeding'] === $state['feeding'], 'grounded feeding state is returned without recomputation');
 check_soma($implemented['soma']['physiologicalSatiety'] === $state['physiologicalSatiety'], 'physiological Satiety range is returned without recomputation');
+check_soma(!isset($implemented['soma']['physiologicalSatietyInspection']), 'admin-only raw physiological state is stripped from the public Soma response');
+$publicVitals = captive_public_event_payload('vitals', ['soma' => $state]);
+check_soma(!isset($publicVitals['soma']['physiologicalSatietyInspection']), 'admin-only raw physiological state is stripped from public event streams');
 check_soma($implemented['soma']['learnedControllability'] === $state['learnedControllability'], 'action-outcome evidence is returned without recomputation');
 check_soma($implemented['implementation_registry']['schema'] === 'cy.implementation-registry', 'registry accompanies the state');
 

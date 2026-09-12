@@ -2,7 +2,7 @@
   "schema": "cy.model-specification",
   "version": 1,
   "id": "martinez-dibbs-integrated-physiological-satiety",
-  "modelVersion": "physiological-satiety-v1",
+  "modelVersion": "physiological-satiety-v2",
   "locked": true,
   "publication": {
     "citation": "Martinez MF, Dibbs A, et al. Computationally Modeling the Physiologic Impact of the Ratio of Fats to Carbohydrates in the Diet on Intake Among Metabolically Healthy Adults. Current Developments in Nutrition. 2025;9(7):107487.",
@@ -21,13 +21,14 @@
     "pyy": "delta_per_min = lower_si_fat_ml * 2.0 + large_intestine_fat_ml * 1.5 + lower_si_carbohydrate_ml * 0.8 - pyy_pM * 0.075",
     "ghrelin": "delta_per_min = stomach_fat_ml * -0.01 + upper_si_fat_ml * -0.005 + stomach_carbohydrate_ml * -0.01 + upper_si_carbohydrate_ml * -0.005 + (110 - ghrelin_pM) * 0.04",
     "satiety": "gastric_coefficient * gastric_distention_ml + 1.2 * CCK + 0.08 * PYY * 0.2 * GLP1 + 0.02 * (110 - ghrelin)",
-    "reportedSatietyScore": "bound the raw equation result to the publication's stated 1-to-10 satiety-score domain; retain the unbounded equation result in the inspection trace",
+    "reportedSatietyScore": "The published equation is retained without a mathematical clamp. Public display may clamp to the stated nominal 1-to-10 scale, explicitly classified DISPLAY ONLY.",
     "gastricCoefficient": "0 when distention <= 296 mL; 0.0025 when 296 < distention < 500 mL; 0.0035 when distention >= 500 mL"
   },
   "parameters": [
     { "name": "fat_density_g_per_ml", "value": [0.7, 0.96], "provenanceClass": "PUBLISHED LITERATURE PARAMETER" },
     { "name": "carbohydrate_density_g_per_ml", "value": [0.117, 1.4], "provenanceClass": "PUBLISHED LITERATURE PARAMETER" },
     { "name": "male_meal_eating_rate_kcal_per_min", "value": [28.7, 32.6], "provenanceClass": "PUBLISHED LITERATURE PARAMETER" },
+    { "name": "male_snack_eating_rate_kcal_per_min", "value": [3.3, 6.4], "provenanceClass": "PUBLISHED LITERATURE PARAMETER" },
     { "name": "male_protein_energy_fraction", "value": 0.16, "standardDeviation": 0.003, "provenanceClass": "PUBLISHED LITERATURE PARAMETER" },
     { "name": "fat_energy_density_kcal_per_g", "value": 9, "provenanceClass": "DERIVED", "derivation": "Conventional metabolizable-energy conversion needed to turn the publication's energy fractions into grams before applying its published g/mL density range; it is not a fitted satiety parameter." },
     { "name": "carbohydrate_energy_density_kcal_per_g", "value": 4, "provenanceClass": "DERIVED", "derivation": "Conventional metabolizable-energy conversion needed to turn the publication's energy fractions into grams before applying its published g/mL density range; it is not a fitted satiety parameter." },
@@ -76,15 +77,47 @@
     "editionLastUpdated": "2026-02-09",
     "classification": "OFFICIAL HMPPS WORLD INPUT",
     "adultMaleReference": { "dailyEnergyKcal": 2605, "fatMaximumG": 97, "carbohydrateMinimumG": 333, "proteinMinimumG": 55.5 },
-    "mealEnergyDefaultsKcal": { "breakfast": 500, "lunch": 750, "dinner": 750, "tea": 750 },
-    "snackPolicy": "No snack is generated or assumed unless a snack event exists in Cy's world."
+    "mealEnergyDefaultsKcal": { "breakfast": 500, "lunch": 750, "dinner": 750, "tea": 750, "supper_snack": 500 },
+    "mealAllocationPercent": { "breakfast": 20, "lunch": 30, "dinner": 30, "snacks": 20 },
+    "snackPolicy": "A structured supper-snack opportunity is generated at the configured fictional regime time. Scheduling does not imply consumption.",
+    "configuredMealTimes": {
+      "breakfast": "07:30 within HMPPS 07:00-08:30 guidance",
+      "lunch": "11:45 within HMPPS 11:30-13:30 guidance",
+      "tea": "16:45, 15 minutes before HMPPS 17:00-19:00 evening-meal guidance",
+      "supper_snack": "21:00 - FICTIONAL PRISON REGIME CONFIGURATION; HMPPS does not specify an exact supper-snack time"
+    }
   },
   "uncertainty": {
     "maleProteinEnergyFraction": 0.16,
     "publishedTestedRelativeFatFractionsOfNonProteinEnergy": [0.1, 0.2, 0.3],
     "constraintDerivation": "The tested 10%, 20%, and 30% relative-fat cases satisfy both the HMPPS adult-male daily fat maximum and carbohydrate minimum when protein is 16% of 2605 kcal.",
-    "deterministicGrid": { "fatDensityPoints": 5, "carbohydrateDensityPoints": 5, "eatingRatePoints": 3, "dietRatioPoints": 3, "tracks": 225, "classification": "NUMERICAL ENGINEERING" },
-    "reportedValue": "minimum and maximum satiety score across every deterministic track"
+    "publishedInputDistributions": {
+      "fatDensityGPerMl": { "distribution": "uniform", "range": [0.7, 0.96] },
+      "carbohydrateDensityGPerMl": { "distribution": "uniform", "range": [0.117, 1.4] },
+      "maleMealEatingRateKcalPerMin": { "distribution": "uniform", "range": [28.7, 32.6] },
+      "maleSnackEatingRateKcalPerMin": { "distribution": "uniform", "range": [3.3, 6.4] }
+    },
+    "deterministicSampler": { "method": "Halton quasi-Monte-Carlo", "bases": [2, 3, 5, 7], "samplesPerCompositionScenario": 128, "classification": "NUMERICAL ENGINEERING", "sourceDoesNotSpecifySeedOrSampler": true },
+    "reportedValue": "Per-composition-scenario median and central 95% interval from published input distributions. Composition scenarios remain a separate non-probabilistic scenario range."
+  },
+  "sourceAudit": {
+    "ghrelinLowerBound": {
+      "finding": "No lower bound or zero clamp is stated in the article equations or Supplemental Methods. The published recurrence contains negative nutrient-volume coefficients and can therefore produce a negative mathematical state outside the calibrated operating range.",
+      "supplementCalibrationRange": "The Supplemental Methods describe approximately 70-110 pM model output during calibration, not a state constraint.",
+      "implementation": "Preserve raw state internally as MODEL STATE / MODEL ARTEFACT; never publish a negative value as a physical concentration."
+    },
+    "satietyScoreClamp": {
+      "finding": "The article describes a score from 1 to 10, while its sensitivity analysis also maps eating probability over scores 0-10. Neither the article nor Supplemental Methods specifies a mathematical clamp on the score equation.",
+      "implementation": "Retain raw equation output internally. Clamp only the visitor display to 1-10 and label the transformation DISPLAY ONLY."
+    },
+    "uniformSampling": {
+      "finding": "The article specifies uniform fat-density, carbohydrate-density, meal-eating-rate and snack-eating-rate inputs and reports 1000 trials per scenario. It does not publish a random seed, PRNG, exact sampler, or reference implementation.",
+      "implementation": "Use deterministic Halton quasi-Monte-Carlo as a reproducible numerical approximation, classified NUMERICAL ENGINEERING."
+    },
+    "stateResetAndBaseline": {
+      "finding": "Initial gastric distention is 296 mL and fasting ghrelin is 110 pM. The remaining GI compartments and above-baseline hormone deltas start at zero. No additional reset rule was found in the article or supplement.",
+      "implementation": "Use those published initial conditions and no invented per-meal state reset."
+    }
   },
   "initialConditions": {
     "stomachFatMl": 0,

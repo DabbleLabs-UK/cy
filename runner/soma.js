@@ -61,6 +61,7 @@ import {
   advancePhysiologicalSatiety,
   createPhysiologicalSatiety,
   observePhysiologicalSatietyRecord,
+  physiologicalSatietyInspection,
   physiologicalSatietySnapshot,
   reconcilePhysiologicalSatiety,
 } from './physiological-satiety.js';
@@ -959,6 +960,7 @@ export function somaSnapshot(state) {
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),
     physiologicalSatiety: physiologicalSatietySnapshot(state.physiologicalSatiety),
+    physiologicalSatietyInspection: physiologicalSatietyInspection(state.physiologicalSatiety),
     learnedControllability: controllabilitySnapshot(state.learnedControllability),
     somaticNociceptive: somaticSnapshot(state.somaticNociceptive),
     social: socialContactSnapshot(state.socialContact, state.lastTickMs),

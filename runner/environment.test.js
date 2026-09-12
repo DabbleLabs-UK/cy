@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   PRISON_SCHEDULE,
+  PRISON_REGIME_CONFIGURATION,
   chooseMealEvent,
   chooseRoutineEvent,
   mealExpectation,
@@ -9,6 +10,8 @@ import {
 
 assert.ok(PRISON_SCHEDULE.some((slot) => slot.kind === 'meal' && slot.meal === 'breakfast'));
 assert.ok(PRISON_SCHEDULE.some((slot) => slot.kind === 'routine' && slot.routine === 'phone'));
+assert.ok(PRISON_SCHEDULE.some((slot) => slot.kind === 'meal' && slot.meal === 'supper_snack'));
+assert.equal(PRISON_REGIME_CONFIGURATION.supperSnackClassification, 'FICTIONAL PRISON REGIME CONFIGURATION');
 
 const eaten = chooseMealEvent('breakfast', () => 0.1);
 assert.equal(eaten.provisional.body.meal.outcome, 'eaten');
@@ -68,6 +71,11 @@ assert.equal(refused.world.physical.food.received, 'yes');
 assert.equal(refused.world.physical.food.intake_outcome, 'refused');
 assert.equal(refused.world.action_opportunity.chosen_action, 'action:refuse_meal');
 assert.equal(refused.world.action_opportunity.execution_status, 'EXECUTED');
+
+const snackExpected = mealExpectation('supper_snack', '2026-09-11:supper_snack');
+assert.equal(snackExpected.world.physical.food.meal_type, 'supper snack');
+const snackRefused = chooseMealEvent('supper_snack', () => 0.99);
+assert.equal(snackRefused.world.physical.food.intake_outcome, 'refused');
 
 const supportive = chooseRoutineEvent('association', () => 0.5);
 assert.equal(supportive.provisional.social.quality, 'supportive');

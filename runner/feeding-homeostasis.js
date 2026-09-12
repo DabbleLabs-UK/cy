@@ -16,7 +16,14 @@ export const HMPPS_REFERENCE_RATION = Object.freeze({
   adultMaleFatMaximumG: 97,
   adultMaleCarbohydrateMinimumG: 333,
   adultMaleProteinMinimumG: 55.5,
-  mealEnergyKcal: Object.freeze({ breakfast: 500, lunch: 750, dinner: 750, tea: 750 }),
+  mealEnergyKcal: Object.freeze({
+    breakfast: 500,
+    lunch: 750,
+    dinner: 750,
+    tea: 750,
+    supper_snack: 500,
+  }),
+  allocationPercent: Object.freeze({ breakfast: 20, lunch: 30, dinner: 30, snacks: 20 }),
 });
 
 export const OFFERED_STATUSES = Object.freeze(['OFFERED', 'NOT_OFFERED', 'UNKNOWN']);
