@@ -52,8 +52,9 @@ for (const region of BRAIN_REGIONS) {
 const source = await readFile(join(here, '..', 'public', 'assets', 'brain.js'), 'utf8');
 assert.match(source, /PLANNED STATS/);
 assert.match(source, /SOMA DIAGNOSTICS/);
-assert.match(source, /Some displayed values come from an older heuristic model/);
+assert.match(source, /Readings marked PROVISIONAL are still being refined/);
 assert.doesNotMatch(source, /Brain regions are functional analogies, not measured physiology/);
+assert.doesNotMatch(source, /not a report|not a claim|subjective experience/i);
 assert.match(source, /class="soma-scaffold"/);
 assert.match(source, /SOMA MODEL STATUS/);
 assert.match(source, /LEGACY SOMA DIAGNOSTICS - PROVISIONAL/);
@@ -85,17 +86,17 @@ assert.match(source, /buildHistoryUrl\(this\.historyUrl, 'circadian', 'processC'
 assert.match(source, /sleepHomeostasisStatus\.status === IMPLEMENTATION_STATUS\.IMPLEMENTED/);
 assert.match(source, /circadianStatus\.status === IMPLEMENTATION_STATUS\.IMPLEMENTED/);
 assert.match(source, /PHASE SCHEDULE-ESTIMATED/);
-assert.match(source, /direct biological phase is not observed/);
-assert.match(source, /This is not SCN activation/);
+assert.match(source, /from Cy's habitual sleep schedule/);
+assert.doesNotMatch(source, /This is not SCN activation/);
 assert.match(source, /class="circadian-history-band"/);
 assert.match(source, /setAttribute\('class', 'scn-phase-hand'\)/);
 assert.match(source, /class="soma-region-list"/);
 assert.match(source, /probabilistic_threat_learning/);
-assert.match(source, /predicts outcomes; it is not an anxiety or fear-intensity score/);
+assert.match(source, /shows the resulting expectation/);
 assert.match(source, /threat-learning-inspector/);
 assert.match(source, /CURRENT DEFENSIVE CONTEXT/);
-assert.match(source, /It is not an anxiety or threat score/);
-assert.match(source, /Learned uncertainty remains the separate posterior variance/);
+assert.doesNotMatch(source, /It is not an anxiety or threat score/);
+assert.match(source, /Learned uncertainty appears separately in owner inspection/);
 assert.match(source, /defensive-context-inspector/);
 assert.match(source, /ACTUAL CONTROL/);
 assert.equal(
@@ -103,9 +104,9 @@ assert.equal(
   'LEARNED ACTION-OUTCOME CONTINGENCY',
 );
 assert.match(source, /learnedControllabilityStatus/);
-assert.match(source, /observational evidence, not a control percentage or causal proof/);
+assert.match(source, /after a genuinely available action was executed or deliberately withheld/);
 assert.match(source, /controllability-inspector/);
-assert.match(source, /Causal control: not established\. Perceived control: not modelled\./);
+assert.match(source, /Current evidence: observational association\./);
 assert.doesNotMatch(source, /Cy has 73% control/);
 assert.equal(
   implementationEntry('soma_subsystems', 'feeding_event_model').display_name,
@@ -173,5 +174,24 @@ assert.match(source, /setRegionAssociation\(definition\.key, true\)/);
 assert.match(source, /region\.classList\.toggle\('is-associated', associated\)/);
 assert.match(source, /entry\.classList\.toggle\('is-associated', associated\)/);
 assert.doesNotMatch(source, /createElementNS\([^\n]+ellipse/);
+
+const exposedRegistryNotes = [
+  ...implementationRegistry.soma_variables,
+  ...implementationRegistry.brain_regions,
+]
+  .filter((entry) => entry.ui_exposed !== false)
+  .map((entry) => entry.status_note || '')
+  .join('\n');
+for (const disclaimer of [
+  /direct report of subjective experience/i,
+  /not (?:a )?subjective (?:pain|hunger|experience)/i,
+  /does not (?:claim|model)[^\n]*subjective/i,
+  /no approved mapping/i,
+  /not simulated neuronal/i,
+  /not shown as live activation/i,
+]) {
+  assert.doesNotMatch(exposedRegistryNotes, disclaimer,
+    `ordinary visitor status copy must not contain fourth-wall disclaimer ${disclaimer}`);
+}
 
 console.log('brain.test.js: all checks passed');

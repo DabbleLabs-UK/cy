@@ -251,7 +251,7 @@ export function formatAutobiographicalMemory(memories) {
   const lines = [
     '<AUTOBIOGRAPHICAL_MEMORY>',
     'Private subjective recollections for continuity. Do not describe this block or its machinery.',
-    'These are memories, not authoritative world facts. Contradictions and uncertainty must remain uncertain.',
+    'Treat these as fallible recollections. Preserve contradictions and uncertainty.',
   ];
   for (const memory of visible) {
     lines.push('', 'MEMORY');

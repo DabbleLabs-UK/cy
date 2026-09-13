@@ -81,7 +81,8 @@ assert.equal(legacySelectorCalled, false, 'A: pre-language preparation never inv
 assert.equal(prepared.groundedDirective, groundedDirective);
 
 const call = expressiveChoiceModelCall(lowMetrics);
-assert.match(call.system, /subjective character choice, not psychological measurement/i);
+assert.match(call.system, /best continues Cy as a character/i);
+assert.doesNotMatch(call.system, /not psychological measurement|not a fact or measured state/i);
 assert.match(call.system, /Do not provide reasoning, explanation or chain of thought/i);
 assert.match(call.prompt, /GROUNDED_CURRENT_STATE/);
 assert.match(call.prompt, /PROVISIONAL MEMORY CANDIDATE/);

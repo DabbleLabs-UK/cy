@@ -21,7 +21,7 @@
       "display_name": "ANXIETY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The displayed anxiety value is still produced by the older heuristic experienced-state model. A separate grounded probabilistic threat-prediction dependency is LIVE, but no approved mapping converts it into anxiety.",
+      "status_note": "The displayed anxiety value comes from the older provisional experienced-state model. Cy's grounded threat-prediction and current defensive-context histories appear below it.",
       "data_dependencies": ["possible_harm", "uncertainty", "control", "learned_context"],
       "available_future_dependencies": ["probabilistic_threat_learning", "current_defensive_context"],
       "version": "legacy-experienced-state-v2"
@@ -31,7 +31,7 @@
       "display_name": "AROUSAL / STRESS LOAD",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Currently produced by the older heuristic experienced-state model. No grounded stress-load specification has been approved.",
+      "status_note": "The displayed arousal and stress value comes from the older provisional experienced-state model.",
       "data_dependencies": ["possible_harm", "nociceptive_impact", "sleep_interruption", "physical_discomfort"],
       "version": "legacy-experienced-state-v2"
     },
@@ -40,7 +40,7 @@
       "display_name": "SOMATIC HARM",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "structured-somatic-harm-ledger",
-      "status_note": "A factual categorical headline reports active noxious stimuli and unresolved injuries from the structured somatic ledger. It is not a subjective Pain or general-discomfort score.",
+      "status_note": "Shows active noxious stimuli and unresolved injuries from Cy's structured somatic history.",
       "data_dependencies": ["somatic"],
       "version": "somatic-nociceptive-substrate-v2",
       "provenance": "config/model-specs/somatic-nociceptive-substrate.json"
@@ -68,7 +68,7 @@
       "display_name": "PHYSIOLOGICAL SATIETY",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "martinez-dibbs-integrated-physiological-satiety",
-      "status_note": "A deterministic quasi-Monte-Carlo ensemble implements the published stomach, intestinal, CCK, GLP-1, PYY, ghrelin and physiological satiety equations. It keeps published input-distribution intervals separate from non-probabilistic meal-composition scenarios and does not model subjective hunger.",
+      "status_note": "A deterministic quasi-Monte-Carlo ensemble estimates Cy's physiological satiety from published stomach, intestinal, CCK, GLP-1, PYY and ghrelin equations. Published input intervals and meal-composition scenarios remain separately visible.",
       "data_dependencies": ["feeding", "intake_outcome", "portion_fraction"],
       "version": "physiological-satiety-v2",
       "provenance": "config/model-specs/physiological-satiety.json"
@@ -78,7 +78,7 @@
       "display_name": "SLEEPINESS",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "ingre-akerstedt-three-process-sb-c-u",
-      "status_note": "Predicts Karolinska Sleepiness Scale ratings with the validated TPM S_B + C + U equations from observed sleep-wake history. Runtime status remains CALIBRATING until two complete observed sleep episodes exist. This is not general fatigue or a direct report of subjective experience.",
+      "status_note": "Predicts Cy's Karolinska Sleepiness Scale rating from observed sleep-wake history using the validated TPM S_B + C + U equations. It calibrates after two complete observed sleep episodes.",
       "data_dependencies": ["sleep_period", "sleep_interruption", "duration_ms"],
       "version": "tpm-predicted-kss-v1",
       "provenance": "config/model-specs/three-process-sleepiness.json"
@@ -88,7 +88,7 @@
       "display_name": "SOCIAL NEED / LONELINESS",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "A factual social contact detector and ledger are LIVE separately. The displayed Loneliness value remains the older arbitrary baseline, contact/rejection impulses and elapsed-time clock; no approved model converts social history into subjective loneliness.",
+      "status_note": "The displayed loneliness value comes from the older provisional experienced-state model. Cy's factual contact and opportunity history appears below it.",
       "data_dependencies": ["social_contact", "social_contact_quality", "rejection_support", "persistence"],
       "available_future_dependencies": ["social_episode_model", "social_contact_ledger", "social_contact_detector", "social_set_point"],
       "version": "legacy-experienced-state-v2"
@@ -98,7 +98,7 @@
       "display_name": "ANGER / HOSTILITY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Currently produced by older event and relationship heuristics. No grounded anger/appraisal specification has been approved.",
+      "status_note": "The displayed anger and hostility value comes from the older provisional event and relationship model.",
       "data_dependencies": ["goal_obstruction", "agency", "responsibility_evidence", "intent", "learned_context"],
       "version": "legacy-experienced-state-v2"
     },
@@ -107,7 +107,7 @@
       "display_name": "RUMINATION / FIXATION",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The current unresolved-event and repeated-output mechanism is an unapproved heuristic retained for labelled UI diagnostics only. Generated wording no longer changes live attention, memory selection, action, timing, prompt focus or drawing.",
+      "status_note": "The displayed rumination and fixation value follows unresolved events and repeated themes in the older provisional model.",
       "data_dependencies": ["resolution_status", "goal_obstruction", "novelty", "learned_context"],
       "version": "legacy-experienced-state-v2"
     }
@@ -139,7 +139,7 @@
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": null,
       "classification": ["SUBJECTIVE_CHARACTER_LAYER", "NOT_SCIENTIFIC_PSYCHOLOGICAL_MODEL"],
-      "status_note": "A small structured model call chooses only among currently available journal, draw and silence capabilities. The result is character behaviour, not a grounded measurement, reward policy, utility model or psychological action-selection model.",
+      "status_note": "A small structured model call chooses among currently available journal, draw and silence capabilities to continue Cy's outward behaviour.",
       "data_dependencies": ["grounded_soma_to_expressive_context", "current_incident_context"],
       "version": "model-mediated-expressive-choice-v1",
       "provenance": "runner/expressive-choice.js"
@@ -991,7 +991,7 @@
       "display_name": "SCN / CIRCADIAN PACEMAKER ANALOGY",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "borbely-achermann-process-c-five-harmonic",
-      "status_note": "The mammalian SCN is the principal circadian pacemaker. This specific display represents Cy's modelled Process C phase and output; it is not simulated neuronal firing, activation, or biological measurement.",
+      "status_note": "The mammalian SCN is the principal circadian pacemaker. This display follows Cy's modelled Process C phase and output.",
       "data_dependencies": ["circadian_process_c"],
       "version": "process-c-schedule-estimated-v1"
     },
@@ -1000,7 +1000,7 @@
       "display_name": "AMYGDALA-CENTRED THREAT / SALIENCE ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Grounded threat prediction and current external defensive-context subsystems are LIVE, but no approved mapping turns them into amygdala firing or activation. The older displayed mapping remains an unapproved linear heuristic and is not shown as live activation.",
+      "status_note": "Cy's grounded threat-prediction and current defensive-context histories sit alongside this provisional amygdala analogy.",
       "data_dependencies": ["probabilistic_threat_learning", "current_defensive_context", "expected_outcome", "uncertainty", "outcome_surprisal", "anxiety", "anger"],
       "version": "legacy-brain-map-v1"
     },
@@ -1040,7 +1040,7 @@
       "display_name": "INSULAR / INTEROCEPTIVE ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The structured somatic-input substrate is LIVE separately, but neural integration and activation are not modelled. No percentage or injury-derived lighting is shown.",
+      "status_note": "Cy's structured somatic-input history sits alongside this provisional insula analogy.",
       "data_dependencies": [],
       "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety", "computational_nociceptive_input_analogue", "subjective_pain"],
       "version": "legacy-brain-map-v1"
@@ -1050,7 +1050,7 @@
       "display_name": "HYPOTHALAMIC / FEEDING-HOMEOSTASIS ANALOGY",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "GI and hormonal physiological satiety modelling is LIVE separately, but AgRP/NPY, POMC and hypothalamic neuronal activity remain NOT MODELLED. The satiety score does not illuminate this region.",
+      "status_note": "Cy's GI and hormonal physiological-satiety history sits alongside this hypothalamic analogy.",
       "data_dependencies": ["subjective_hunger", "homeostatic_state"],
       "available_future_dependencies": ["feeding_event_model", "ingestion_ledger", "energy_homeostatic_state", "gut_satiety", "sleep_homeostasis"],
       "version": null
@@ -1060,7 +1060,7 @@
       "display_name": "ANTERIOR-CINGULATE CONFLICT / CONTROL ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "No approved mapping exists from injury count, subjective Pain, conflict, aversive valuation or control into anterior-cingulate activation. No percentage is shown.",
+      "status_note": "Cy's somatic, conflict and control histories sit alongside this provisional anterior-cingulate analogy.",
       "data_dependencies": [],
       "available_future_dependencies": ["computational_nociceptive_input_analogue", "subjective_pain"],
       "version": "legacy-brain-map-v1"
@@ -1070,7 +1070,7 @@
       "display_name": "HIPPOCAMPAL / CONTEXT MEMORY ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "A provenanced autobiographical information-retrieval system is LIVE separately, but no approved mapping converts its storage, retrieval or surfacing into hippocampal firing or activation. The displayed runner mapping remains an unapproved legacy heuristic and is not shown as live activation.",
+      "status_note": "Cy's autobiographical memories and retrieval history sit alongside this provisional hippocampal analogy.",
       "data_dependencies": ["rumination", "anxiety", "loneliness", "learned_context"],
       "available_future_dependencies": ["autobiographical_memory_system"],
       "version": "legacy-brain-map-v1"
@@ -1080,7 +1080,7 @@
       "display_name": "PREFRONTAL REGULATION / ACTION-CONTROL ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Intended to represent regulation and action-control processes. Objective control and observational action-outcome contingency are represented separately, but perceived control and neural regulation remain unmodelled. No legacy-Pain mapping is retained.",
+      "status_note": "Cy's objective-control and action-outcome histories sit alongside this provisional regulation and action-control analogy.",
       "data_dependencies": [],
       "available_future_dependencies": ["sleep_homeostasis", "objective_controllability", "perceived_controllability", "learned_controllability"],
       "version": "legacy-brain-map-v1"
@@ -1090,7 +1090,7 @@
       "display_name": "SOCIAL-PROCESSING NETWORK ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The factual social contact ledger is available as a future dependency, but no approved distributed neural activation mapping exists. The older runner mapping simply mirrors provisional Loneliness and is not shown as live activation.",
+      "status_note": "Cy's factual social-contact history sits alongside this provisional social-processing analogy.",
       "data_dependencies": ["loneliness", "social_contact_quality", "rejection_support"],
       "available_future_dependencies": ["social_episode_model", "social_contact_ledger", "social_contact_detector"],
       "version": "legacy-brain-map-v1"

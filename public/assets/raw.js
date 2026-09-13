@@ -556,12 +556,12 @@ function burstDetail(ev, drops) {
     p.autobiographical_memory_query
       ? JSON.stringify(p.autobiographical_memory_query, null, 2) : null,
   ));
-  promptSec.appendChild(zoneBlock('FIXED CHARACTER FICTION (ZONE A)', 'fixed cached persona and world premise', p.zone_a));
-  promptSec.appendChild(zoneBlock('REAL RECENT CY EXPRESSION (ZONE B)', 'post-warden prose continuity; not evidence that its claims happened', p.zone_b));
+  promptSec.appendChild(zoneBlock('STABLE CHARACTER CONTEXT (ZONE A)', 'cached identity and setting', p.zone_a));
+  promptSec.appendChild(zoneBlock('REAL RECENT CY EXPRESSION (ZONE B)', 'recent Cy expression used for continuity', p.zone_b));
   promptSec.appendChild(zoneBlock('CURRENT FACTS + ENGINEERING DIRECTIVES (ZONE C)', 'volatile event facts, regime cues and output controls', p.zone_c));
   promptSec.appendChild(zoneBlock(
-    'ENGINEERING / FICTIONAL WORLD MECHANICS',
-    'generation, retry, form and timing controls; not psychological state',
+    'ENGINEERING / WORLD MECHANICS',
+    'generation, retry, form and timing controls',
     p.engineering_world_mechanics ? JSON.stringify(p.engineering_world_mechanics, null, 2) : null,
   ));
   box.appendChild(promptSec);
@@ -687,17 +687,17 @@ function expressiveChoiceDetail(ev) {
   ));
   choice.appendChild(zoneBlock(
     'CURRENT OR RECENT INCIDENT CONTEXT SUPPLIED',
-    'bounded existing incident context; not a grounded emotion',
+    'bounded existing incident context',
     p.current_incident_context_supplied,
   ));
   choice.appendChild(zoneBlock(
     'SELECTED ACTION',
-    'subjective character behaviour; not psychological evidence',
+    'chosen outward behaviour',
     p.selected_action || '(unknown)',
   ));
   choice.appendChild(zoneBlock(
     'SELECTION MECHANISM',
-    'subjective character layer; not scientific action selection',
+    'action choice mechanism',
     p.selection_mechanism || '(unknown)',
   ));
   choice.appendChild(zoneBlock(

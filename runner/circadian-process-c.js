@@ -361,7 +361,7 @@ export function circadianProcessCSnapshot(state) {
       processCEstimate: state.processCEstimate,
       circadianPhasePositionHours: state.circadianPhasePositionHours,
       phaseBasis: state.phaseBasis,
-      statement: 'Functional analogy of modelled circadian phase/output; not SCN firing or biological measurement.',
+      statement: "Cy's modelled circadian phase and Process C output.",
     },
   };
 }

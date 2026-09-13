@@ -165,9 +165,10 @@ assert.equal(implementationEntry('soma_variables', 'sleepiness').implementation_
 assert.equal(implementationEntry('brain_regions', 'scnCircadian').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(snapshot.scnAnalogy.displayMode, 'circadian_phase');
-assert.match(snapshot.scnAnalogy.statement, /not SCN firing or biological measurement/i);
+assert.equal(snapshot.scnAnalogy.statement, "Cy's modelled circadian phase and Process C output.");
 const brainSource = await readFile(join(here, '..', 'public', 'assets', 'brain.js'), 'utf8');
-assert.match(brainSource, /This is not SCN activation/);
+assert.doesNotMatch(brainSource, /This is not SCN activation/);
+assert.match(brainSource, /Current model output C/);
 assert.doesNotMatch(brainSource, /SCN activation =|SCN firing =/);
 
 console.log('circadian-process-c.test.js: all checks passed');

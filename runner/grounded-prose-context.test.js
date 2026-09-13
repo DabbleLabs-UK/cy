@@ -34,6 +34,7 @@ assert.match(emptyProjection.directive, /\[MODEL ESTIMATE\].*sleep-pressure esti
 assert.match(emptyProjection.directive, /\[SCHEDULE ESTIMATE\].*Circadian schedule estimate/);
 assert.match(emptyProjection.directive, /\[UNKNOWN\].*No definite intake has been recorded/);
 assert.doesNotMatch(emptyProjection.directive, /Cy (?:is|feels) (?:anxious|afraid|hungry|lonely|tired)/i);
+assert.doesNotMatch(emptyProjection.directive, /subjective experience|subjective emotion|not an observed feeling|biological phase not directly observed/i);
 
 const state = reconcileSoma(null, { now: NOW });
 

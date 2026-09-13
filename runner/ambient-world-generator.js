@@ -180,7 +180,7 @@ export function buildAwgCall(contextRendering) {
     'Use only known cast IDs and known locations supplied below. New cast generation is disabled.',
     'Use NOTE or MESSAGE as the canonical concept; do not force American prison slang.',
     'Do not assign emotions, Soma values, appraisal magnitudes or brain activation.',
-    'A rumour claim is message content and must carry a truthStatus; it is not world truth.',
+    'Every rumour claim is message content with a truthStatus; only resolved observations establish world truth.',
     'Return one JSON object only. Do not include reasoning or prose outside the object.',
   ].join('\n');
   const schema = {

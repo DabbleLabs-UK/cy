@@ -85,7 +85,7 @@ function sleepSection(state, now) {
         phaseBasis: predictedSleepiness.phaseBasis,
         residualSdKss: predictedSleepiness.residualSdKss,
         betweenSubjectInterceptSdKss: predictedSleepiness.betweenSubjectInterceptSdKss,
-        caution: 'This is a published population-model estimate, not an observation of what Cy feels.',
+        basis: 'Published population-model estimate from Cy\'s observed sleep-wake timing.',
       },
     ));
   } else {
@@ -100,7 +100,7 @@ function sleepSection(state, now) {
     EPISTEMIC_STATUS.NOT_MODELLED,
     'predicted_sleepiness_tpm',
     'general_fatigue',
-    'General fatigue and sleep inertia are not modelled.',
+    'This model currently covers predicted sleepiness; general fatigue and sleep inertia remain unavailable.',
   ));
   return section('sleep', 'SLEEP', entries);
 }
@@ -529,10 +529,10 @@ function modelFacingLine(item) {
     case 'process_s':
       return `[${item.epistemicStatus}] Recorded ${words(value.currentObservedSleepState)}; sleep-pressure estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}, ${value.calibrating ? 'still calibrating' : 'calibrated'}).`;
     case 'process_c':
-      return `[${item.epistemicStatus}] Circadian schedule estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}; biological phase not directly observed).`;
+      return `[${item.epistemicStatus}] Circadian schedule estimate ${finite(value.estimate)} (interval ${finite(value.interval?.[0])}-${finite(value.interval?.[1])}; phase inferred from Cy's habitual sleep schedule).`;
     case 'predicted_kss':
       if (!value || typeof value !== 'object') return null;
-      return `[${item.epistemicStatus}] Predicted KSS ${finite(value.estimate, 2)} on the 1-9 scale (nearest anchor: ${words(value.nearestPublishedAnchor?.description)}; population-default phase; model residual SD ${finite(value.residualSdKss, 2)}). This is a model estimate, not an observed feeling.`;
+      return `[${item.epistemicStatus}] Predicted KSS ${finite(value.estimate, 2)} on the 1-9 scale (nearest anchor: ${words(value.nearestPublishedAnchor?.description)}; population-default phase; model residual SD ${finite(value.residualSdKss, 2)}).`;
     case 'active_external_context': {
       const cues = (value.cues || []).map((cue) => words(String(cue.cueId || '').split(':').pop())).filter(Boolean);
       const outcomes = (value.outcomeContexts || []).map((outcome) => compactFields(outcome, [
@@ -558,7 +558,7 @@ function modelFacingLine(item) {
     case 'record_status':
       return `[${item.epistemicStatus}] Feeding record: ${value.missedScheduledMeals || 0} missed scheduled meals; intake knowledge ${words(value.intakeKnowledgeStatus)}; ${value.observationGapCount || 0} observation gaps.`;
     case 'physiological_satiety':
-      return `[${item.epistemicStatus}] Physiological satiety range ${finite(value.range?.[0], 2)}-${finite(value.range?.[1], 2)} on the published model's nominal 1-10 scale; input uncertainty ${words(value.inputUncertainty)}. This is a model estimate, not an observed feeling.`;
+      return `[${item.epistemicStatus}] Physiological satiety range ${finite(value.range?.[0], 2)}-${finite(value.range?.[1], 2)} on the published model's nominal 1-10 scale; input uncertainty ${words(value.inputUncertainty)}.`;
     case 'physiological_satiety_unavailable':
       return `[${item.epistemicStatus}] Physiological satiety estimate unavailable: ${words(value)}.`;
     case 'current_social_context':
@@ -586,10 +586,9 @@ function modelFacingLine(item) {
 export function formatGroundedProseContext(context) {
   const lines = [
     '<PRIVATE_CURRENT_FACTS>',
-    'Private evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.',
-    'Do not mention records, ledgers, substrates, model names, IDs, estimates, or what is not modelled.',
-    'Use a relevant fact only as something Cy notices or reacts to in his own voice.',
-    '[NOT MODELLED] No subjective emotion or bodily magnitude is supplied by these facts.',
+    'Write only as Cy. Never describe, explain, quote, or name this context block or its technical machinery.',
+    'Use a relevant concrete fact only as something Cy notices or reacts to in his own voice.',
+    'Leave unstated feelings and bodily intensity unstated.',
   ];
   for (const block of context.sections || []) {
     for (const item of block.entries || []) {

@@ -190,6 +190,7 @@ test('T public UI and API enforce public scope and omit IDs', async () => {
   assert.match(api, /privacy_scope = 'PUBLIC_RECALLABLE'/);
   assert.doesNotMatch(publicUi, /subject_visitor_id|candidate_memory_ids/);
   assert.match(publicUi, /current_sender_memory_count/);
+  assert.doesNotMatch(publicUi, /not authoritative world history|functional analogy/i);
 });
 
 test('U live memory calls use compact model-facing grounded text', async () => {

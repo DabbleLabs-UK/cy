@@ -3302,7 +3302,7 @@ async function main() {
         soma: soma.snapshot(),
         legacy: {
           status: 'placeholder',
-          reason: 'legacy dramatic mappings; not implemented Soma or measured physiology',
+          reason: 'legacy compatibility fields retained for private diagnostics',
           fields: ['physical', 'mental', 'derived', 'hr', 'brain', 'monotony', 'amp', 'expressed', 'relations'],
         },
         mode: currentMode,

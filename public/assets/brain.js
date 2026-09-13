@@ -288,7 +288,7 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
   <section class="circadian-process-card status-${circadianStatus.status.toLowerCase().replace('_', '-')}">
     <div class="circadian-process-head"><span>${circadianStatus.displayName}</span><strong class="circadian-process-status">${circadianStatus.publicLabel}</strong></div>
     <div class="circadian-process-reading"><strong class="circadian-process-value">--</strong><span>MODEL OUTPUT C</span></div>
-    <p class="circadian-process-explanation">The circadian component follows a published 24-hour waveform. Cy's exact biological phase cannot be observed, so its phase is estimated from his habitual sleep schedule.</p>
+    <p class="circadian-process-explanation">The circadian component follows a published 24-hour waveform, with Cy's phase estimated from his habitual sleep schedule.</p>
     <p class="circadian-process-phase">Phase basis unavailable.</p>
     <p class="circadian-process-cbtmin">Estimated CBTmin unavailable.</p>
     <p class="circadian-process-range">C uncertainty unavailable.</p>
@@ -305,8 +305,8 @@ function predictedSleepinessMarkup(status, admin) {
     <p class="predicted-sleepiness-anchor">Waiting for observed sleep history.</p>
     <p class="predicted-sleepiness-calibration">Two complete observed sleep episodes are required.</p>
     <dl class="predicted-sleepiness-facts"><div><dt>MODEL</dt><dd>Three-Process Model of Alertness - Ingre et al. 2014</dd></div><div><dt>PHASE</dt><dd>POPULATION DEFAULT</dd></div><div><dt>SLEEP HISTORY</dt><dd>OBSERVED</dd></div></dl>
-    <p class="predicted-sleepiness-separation">The headline KSS prediction uses independently validated TPM equations. The Process S/C displays below are not numerically substituted into it.</p>
-    <p class="predicted-sleepiness-caveat">Population-model estimate; individual sleepiness can differ substantially. General fatigue is not modelled. Sleep inertia is not adequately modelled, so the first hour after waking has additional known bias.</p>
+    <p class="predicted-sleepiness-separation">The headline KSS prediction uses independently validated TPM equations. Process S and Process C remain separately calculated below.</p>
+    <p class="predicted-sleepiness-caveat">Population-model estimate. Accuracy is weakest during the first hour after waking.</p>
     ${admin ? '<details class="predicted-sleepiness-inspector"><summary>TPM CALCULATION INSPECTION</summary><pre>Waiting for a live TPM calculation.</pre></details>' : ''}
   </section>`;
 }
@@ -314,7 +314,7 @@ function predictedSleepinessMarkup(status, admin) {
 function threatLearningMarkup(status, volatilityStatus, generalisationStatus, contextualStatus, admin) {
   return `<section class="threat-learning-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="threat-learning-head"><span>${status.displayName}</span><strong class="threat-learning-status">${status.publicLabel}</strong></div>
-    <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome. This predicts outcomes; it is not an anxiety or fear-intensity score.</p>
+    <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome and shows the resulting expectation.</p>
     <div class="threat-learning-associations"><p class="threat-learning-empty">No resolved post-installation trials have been observed yet.</p></div>
     <div class="threat-learning-limits"><span>STATIONARY CUE-OUTCOME LEARNING</span><strong>${status.publicLabel}</strong><span>${volatilityStatus.displayName}</span><strong>${volatilityStatus.publicLabel}</strong><span>${generalisationStatus.displayName}</span><strong>${generalisationStatus.publicLabel}</strong><span>${contextualStatus.displayName}</span><strong>${contextualStatus.publicLabel}</strong></div>
     ${admin ? '<details class="threat-learning-inspector"><summary>THREAT LEARNING INSPECTION</summary><pre>Waiting for a threat-learning snapshot.</pre></details>' : ''}
@@ -324,7 +324,7 @@ function threatLearningMarkup(status, volatilityStatus, generalisationStatus, co
 function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, perceivedStatus, learnedControlStatus, rememberedStatus, admin) {
   return `<section class="defensive-context-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="defensive-context-head"><span>${status.displayName}</span><strong class="defensive-context-status">${status.publicLabel}</strong></div>
-    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution. Learned uncertainty remains the separate posterior variance shown in owner inspection. It is not an anxiety or threat score.</p>
+    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution. Learned uncertainty appears separately in owner inspection.</p>
     <div class="defensive-contexts"><p class="defensive-context-empty">No current structured defensive context is active.</p></div>
     <div class="defensive-context-limits"><span>${objectiveStatus.displayName}</span><strong>${objectiveStatus.publicLabel}</strong><span>${imminenceStatus.displayName}</span><strong>${imminenceStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${learnedControlStatus.displayName}</span><strong>${learnedControlStatus.publicLabel}</strong><span>${rememberedStatus.displayName}</span><strong>${rememberedStatus.publicLabel}</strong></div>
     ${admin ? '<details class="defensive-context-inspector"><summary>CURRENT DEFENSIVE CONTEXT INSPECTION</summary><pre>Waiting for exact context state and transition history.</pre></details>' : ''}
@@ -334,7 +334,7 @@ function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, percei
 function controllabilityMarkup(status, causalStatus, perceivedStatus, comparisonStatus, actionStatus, admin) {
   return `<section class="controllability-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="controllability-head"><span>${status.displayName}</span><strong class="controllability-status">${status.publicLabel}</strong></div>
-    <p class="controllability-explanation">Compares adverse-outcome evidence after a genuinely available action was executed versus deliberately not executed in the same structured context. It is observational evidence, not a control percentage or causal proof.</p>
+    <p class="controllability-explanation">Compares adverse outcomes after a genuinely available action was executed or deliberately withheld in the same structured context.</p>
     <div class="controllability-evidence"><p class="controllability-empty">No resolved comparable action opportunities have been observed yet.</p></div>
     <div class="controllability-limits"><span>${causalStatus.displayName}</span><strong>${causalStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${comparisonStatus.displayName}</span><strong>${comparisonStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong></div>
     ${admin ? '<details class="controllability-inspector"><summary>ACTION-OUTCOME CONTINGENCY INSPECTION</summary><pre>Waiting for the complete opportunity and posterior history.</pre></details>' : ''}
@@ -537,7 +537,7 @@ export class BrainHud {
       </div>
       <div class="soma-scaffold">
         <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
-        <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
+        <p class="soma-caveat">Readings marked PROVISIONAL are still being refined. Open any row for its history and basis.</p>
         <div class="soma-public-readout"></div>
         <div class="brain-figure">
           <svg class="brain-svg" viewBox="0 0 340 230" role="group" aria-label="Soma functional brain analogy">
@@ -553,7 +553,7 @@ export class BrainHud {
       </div>
       <details class="legacy-box"><summary>PLANNED STATS</summary>
         <p class="soma-pending-note"><strong>Implementation registry:</strong> unavailable systems remain blank rather than displaying fake zeroes.</p>
-        <p>Legacy synthetic values are retained only for compatibility and are not observations or clinical measures.</p>
+        <p>Legacy compatibility values are available here for historical comparison.</p>
         <dl><div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
         <div><dt>legacy mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
         <div><dt>legacy composites</dt><dd class="legacy-derived">unavailable</dd></div>
@@ -988,7 +988,7 @@ export class BrainHud {
         }
         const cValue = signed(reading.processCEstimate);
         const phaseHours = Number(reading.circadianPhasePositionHours);
-        const liveDescription = `${description} Current model output C ${cValue}; phase position ${clockLabel(phaseHours)} after estimated phi. This is not SCN activation.`;
+        const liveDescription = `${description} Current model output C ${cValue}; phase position ${clockLabel(phaseHours)} after estimated phi.`;
         entry.querySelector('.soma-region-state').textContent = `LIVE - C ${cValue}`;
         entry.querySelector('.soma-reading-description').textContent = liveDescription;
         if (region) {
@@ -1285,7 +1285,7 @@ export class BrainHud {
       interpretation.textContent = contingencyEvidenceText(learned.evidenceDescription);
       const limits = document.createElement('p');
       limits.className = 'controllability-causal-limit';
-      limits.textContent = 'Causal control: not established. Perceived control: not modelled.';
+      limits.textContent = 'Current evidence: observational association.';
       item.append(heading, outcome, facts, interpretation, limits);
       root.appendChild(item);
     }
@@ -1548,7 +1548,7 @@ export class BrainHud {
     }
     card.querySelector('.circadian-process-value').textContent = signed(snapshot.processCEstimate);
     card.querySelector('.circadian-process-phase').textContent = `PHASE SCHEDULE-ESTIMATED - habitual wake ${clockLabel(snapshot.schedule && snapshot.schedule.habitualWakeHour)}`;
-    card.querySelector('.circadian-process-cbtmin').textContent = `Estimated CBTmin ${clockLabel(snapshot.estimatedCbtmin && snapshot.estimatedCbtmin.startHour)} to ${clockLabel(snapshot.estimatedCbtmin && snapshot.estimatedCbtmin.endHour)} - direct biological phase is not observed.`;
+    card.querySelector('.circadian-process-cbtmin').textContent = `Estimated CBTmin ${clockLabel(snapshot.estimatedCbtmin && snapshot.estimatedCbtmin.startHour)} to ${clockLabel(snapshot.estimatedCbtmin && snapshot.estimatedCbtmin.endHour)} from Cy's habitual sleep schedule.`;
     card.querySelector('.circadian-process-range').textContent = `Current uncertainty: C ${signed(snapshot.processCMin)} to ${signed(snapshot.processCMax)}`;
     const inspector = card.querySelector('.circadian-process-inspector pre');
     if (inspector) {
@@ -1624,7 +1624,7 @@ export class BrainHud {
           item.append(heading, detail);
           timeline.appendChild(item);
         }
-        note.textContent = `${events.length} factual somatic ${events.length === 1 ? 'event' : 'events'} in ${range}. The step line is the stored ACTIVE INJURIES count, not Pain.`;
+        note.textContent = `${events.length} factual somatic ${events.length === 1 ? 'event' : 'events'} in ${range}. The step line follows the stored ACTIVE INJURIES count.`;
       } else if (scope === 'satiety') {
         const paths = buildCircadianHistoryPaths(data.points, 280, 80, { minimum: 1, maximum: 10 });
         entry.querySelector('.satiety-history-line').setAttribute('d', paths.estimate);
@@ -1686,7 +1686,7 @@ export class BrainHud {
       line.setAttribute('d', paths.estimate);
       band.setAttribute('d', paths.band);
       note.textContent = data.points.length
-        ? `${data.points.length} ${range} waveform points mathematically reconstructed from the latest stored schedule phase basis; the band is phase uncertainty, not observed biology.`
+        ? `${data.points.length} ${range} waveform points mathematically reconstructed from the latest stored schedule phase basis; the band shows phase uncertainty.`
         : 'No valid stored schedule phase basis is available.';
     } catch (error) {
       if (this.circadianHistoryRequests.get(entry) !== request) return;

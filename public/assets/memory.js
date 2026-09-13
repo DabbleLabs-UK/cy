@@ -149,8 +149,6 @@ export class MemoryPanel {
       fragment.append(owner);
     }
 
-    const caveat = el('p', 'memory-caveat', 'Subjective autobiography, not authoritative world history. The brain diagram remains a functional analogy.');
-    fragment.append(caveat);
     this.root.replaceChildren(fragment);
   }
 }

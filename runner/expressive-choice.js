@@ -82,9 +82,9 @@ export const EXPRESSIVE_ACTIONS = Object.freeze({
 
 const SYSTEM = [
   'You select one outward expressive behaviour for Cy, inmate 7734 in HMP ThinkPad.',
-  'This is subjective character choice, not psychological measurement or scientific action selection.',
+  'Choose the outward behaviour that best continues Cy as a character.',
   'Use grounded facts only with their existing epistemic labels. Do not infer an emotion score.',
-  'A provisional memory candidate is optional continuity material, not a fact or measured state.',
+  'Treat a provisional memory candidate only as optional continuity material from an earlier moment.',
   'Select only an available action ID. Do not invent an event to justify journal, drawing or silence.',
   'Return one JSON object only. Do not provide reasoning, explanation or chain of thought.',
 ].join('\n');

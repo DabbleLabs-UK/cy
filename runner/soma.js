@@ -860,12 +860,12 @@ export function provisionalCognitiveDirective(state) {
   if (!candidate) return '';
   return [
     '<PROVISIONAL_RETRIEVAL_CANDIDATE>',
-    'This is heuristic retrieval of a real archived event, not measured memory strength, emotion or attention.',
+    'A real archived event selected by the provisional continuity retriever.',
     `- source event: ${candidate.sourceEventId}`,
     `- archived event time: ${candidate.sourceTimestamp}`,
     `- archived event kind: ${candidate.sourceKind}`,
     `- archived event material: ${candidate.archivedEventText}`,
-    'Use it only as optional continuity material. Do not repeat it as a new event or treat selection as psychological evidence.',
+    'Use it only as optional continuity material. Keep the archived event in its original time and context.',
     '</PROVISIONAL_RETRIEVAL_CANDIDATE>',
   ].join('\n');
 }
@@ -891,7 +891,7 @@ export function recordExpressiveChoice(state, inspection, { now = Date.now() } =
   const previousSilence = finite(state.action && state.action.lastSilenceAtMs, 0);
   state.action = {
     name: inspection.selectedAction,
-    reason: 'subjective character choice; not psychological evidence',
+    reason: 'model-mediated character choice',
     score: null,
     chosenAtMs: now,
     lastSilenceAtMs: inspection.selectedAction === 'silence' ? now : previousSilence,

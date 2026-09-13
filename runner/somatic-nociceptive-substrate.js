@@ -335,7 +335,7 @@ function summary(state, includePrivate = false) {
   const result = {
     status: 'implemented',
     publicLabel: 'LIVE',
-    meaning: 'Structured bodily harm and noxious-input facts. This is not subjective pain or biological nociception.',
+    meaning: "Cy's structured bodily harm and noxious-input history.",
     modelId: SOMATIC_MODEL_ID,
     modelVersion: SOMATIC_MODEL_VERSION,
     provenance: SOMATIC_PROVENANCE,

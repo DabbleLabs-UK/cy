@@ -203,7 +203,7 @@ function context(state, now, includePrivate) {
   const elapsed = (item) => { const ms = timestampMs(at(item)); return ms == null ? null : Math.max(0, now - ms); };
   return {
     status: 'implemented', publicLabel: 'LIVE',
-    meaning: 'Factual social episodes and opportunities; not a Loneliness or affiliation score.',
+    meaning: 'Cy\'s observed social episodes and opportunities.',
     modelId: SOCIAL_MODEL_ID, modelVersion: SOCIAL_MODEL_VERSION, provenance: SOCIAL_PROVENANCE,
     currentContext: {
       currentlyInteracting: !!(current && current.episodeType === 'CONTACT'),

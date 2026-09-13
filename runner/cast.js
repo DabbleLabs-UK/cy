@@ -399,7 +399,7 @@ export function visitorForPrompt(visitor, { now = Date.now() } = {}) {
   const lines = [
     `YOU KNOW THIS ONE. ${handle} - ${times}${since ? ', last ' + since : ''}.`,
   ];
-  lines.push('This is factual visitor continuity only. Do not infer trust, suspicion, warmth, hostility or any other relationship state.');
+  lines.push('Use this as factual visitor continuity. Keep any unstated relationship qualities unspecified.');
   return lines.join('\n');
 }
 

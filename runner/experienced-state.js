@@ -529,16 +529,16 @@ export function experiencedSnapshot(state, now = null) {
     amygdala: brainRegion('amygdala', 'Amygdala analogy', 0.65 * value('anxiety') + 0.35 * value('anger'), ['anxiety', 'anger']),
     insula: {
       key: 'insula', label: 'Insula analogy', value: null, level: 'unavailable', sources: [],
-      explanation: 'Somatic input is recorded, but neural integration and activation are not modelled.',
+      explanation: 'Cy\'s somatic-input history is available; this region is awaiting an activation model.',
     },
     acc: {
       key: 'acc', label: 'Anterior cingulate analogy', value: null, level: 'unavailable', sources: [],
-      explanation: 'No subjective Pain, affective Pain or control-conflict activation mapping is modelled.',
+      explanation: 'This region is awaiting a control-conflict activation model.',
     },
     hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination') + 0.25 * value('anxiety') + 0.2 * value('loneliness'), ['rumination', 'anxiety', 'loneliness']),
     prefrontal: {
       key: 'prefrontal', label: 'Prefrontal analogy', value: null, level: 'unavailable', sources: [],
-      explanation: 'No validated mapping from legacy Pain or current bodily facts to prefrontal activation is modelled.',
+      explanation: 'This region is awaiting a prefrontal activation model.',
     },
     temporalSocial: brainRegion('temporalSocial', 'Temporal / social analogy', value('loneliness'), ['loneliness']),
   };

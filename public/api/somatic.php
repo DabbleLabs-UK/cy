@@ -59,7 +59,7 @@ try {
             'centralSensitisation' => 'NOT_MODELLED',
             'nocifensiveActionModel' => 'NOT_MODELLED',
             'brainActivationMapping' => 'NOT_MODELLED',
-            'note' => 'This is a factual computational analogue of incoming nociceptive information. Cy has no biological nociceptors, and this is not subjective Pain.',
+            'note' => 'Cy\'s structured noxious-input and injury record.',
         ],
     ]);
 } catch (Throwable $e) {

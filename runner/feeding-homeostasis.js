@@ -376,7 +376,7 @@ function summary(state, now = Date.now(), includeAll = false) {
   const result = {
     status: 'implemented',
     publicLabel: 'LIVE',
-    meaning: 'Objective food availability, offering and ingestion history. It is not hunger or internal energy state.',
+    meaning: 'Cy\'s food availability, meal offering and ingestion history.',
     modelId: FEEDING_MODEL_ID,
     modelVersion: FEEDING_MODEL_VERSION,
     provenance: FEEDING_PROVENANCE,

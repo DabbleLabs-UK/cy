@@ -167,6 +167,8 @@ assert.match(allText(genRow), /AUTOBIOGRAPHICAL MEMORY QUERY/);
 assert.match(allText(genRow), /candidate_count/);
 assert.doesNotMatch(allText(genRow), /PROVISIONAL RETRIEVAL CANDIDATE SENT TO MODEL/);
 assert.match(allText(genRow), /ENGINEERING \/ FICTIONAL WORLD MECHANICS/);
+assert.match(allText(genRow), /STABLE CHARACTER CONTEXT \(ZONE A\)/);
+assert.doesNotMatch(allText(genRow), /not evidence that its claims happened|not psychological state/i);
 
 const choiceRow = raw.log().children.find((row) => row.dataset.kind === 'expressive_choice');
 choiceRow.children[0].dispatchEvent({ type: 'click', target: null });
@@ -176,6 +178,7 @@ assert.match(allText(choiceRow), /GROUNDED CONTEXT SUPPLIED/);
 assert.doesNotMatch(allText(choiceRow), /PROVISIONAL MEMORY CANDIDATE/);
 assert.match(allText(choiceRow), /SELECTED ACTION/);
 assert.match(allText(choiceRow), /FALLBACK USED/);
+assert.doesNotMatch(allText(choiceRow), /not psychological evidence|not scientific action selection/i);
 
 raw.olderBtn().dispatchEvent({ type: 'click' });
 await new Promise((resolve) => setImmediate(resolve));

@@ -392,7 +392,7 @@ export function controllabilityInspection(state) {
   return {
     status: 'implemented',
     publicLabel: 'LIVE',
-    meaning: 'Experienced action-outcome contingency from explicit comparable structured opportunities. This is observational association, not causal or perceived control.',
+    meaning: 'Cy\'s observed action-outcome history from explicit comparable opportunities.',
     modelId: CONTROLLABILITY_MODEL_ID,
     modelVersion: CONTROLLABILITY_MODEL_VERSION,
     provenance: CONTROLLABILITY_PROVENANCE,
