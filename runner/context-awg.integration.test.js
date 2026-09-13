@@ -83,7 +83,7 @@ async function accepted(value = candidate()) {
   });
 }
 
-test('A: higher-priority journal or durable-memory work prevents AWG inference from starting', async () => {
+test('A: foreground work blocks AWG while an overdue cycle gets a fairness slot beside queued formation', async () => {
   let calls = 0;
   const generate = async () => { calls += 1; return JSON.stringify(candidate()); };
   const journal = await runAmbientWorldCycle({
@@ -95,8 +95,8 @@ test('A: higher-priority journal or durable-memory work prevents AWG inference f
     memoryFormationBacklog: 1, generate,
   });
   assert.equal(journal.status, 'SKIPPED');
-  assert.equal(memory.status, 'SKIPPED');
-  assert.equal(calls, 0);
+  assert.equal(memory.status, 'ACCEPTED');
+  assert.equal(calls, 1);
 });
 
 test('B: a Cy-observed accepted event becomes a normal durable memory source asynchronously', async () => {

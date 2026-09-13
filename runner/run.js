@@ -148,6 +148,23 @@ import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import {
+  EXERCISE_REGIME,
+  CELL_SEARCH_TICK_CHANCE,
+  LOCATIONS,
+  YARD_OBSERVATION_INTERVAL_MS,
+  advanceCellSearchEpisode,
+  availableExpressiveActions,
+  createYardObservation,
+  eventAllowedAtLocation,
+  locationContextId,
+  markSearchPropertyAction,
+  nextRegimeTransition,
+  reconcileLocationRegimeState,
+  reconcileRegimeLocation,
+  registerEpisodeEvent,
+  startCellSearchEpisode,
+} from './location-regime.js';
+import {
   MEMORY_EXPRESSION_BATCH_LIMIT,
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
@@ -167,6 +184,7 @@ import {
 import {
   AWG_TIMEOUT_MS,
   awgEventToEnvironment,
+  isAwgDue,
   reconcileWorldSimulationState,
   runAmbientWorldCycle,
   shouldRunAwg,
@@ -309,7 +327,8 @@ const REGIME = [
   { mins: 7 * 60 + 30, phase: 'unlock_slop', label: 'unlock and slop. doors off, breakfast such as it is.' },
   { mins: 8 * 60 + 30, phase: 'work_assoc', label: 'work or association. out of the cell, among them.' },
   { mins: 11 * 60 + 45, phase: 'lunch_bangup', label: 'lunch and bang-up. fed and locked back in.' },
-  { mins: 13 * 60 + 30, phase: 'exercise_yard', label: 'unlock again, exercise or the yard.' },
+  { mins: EXERCISE_REGIME.startMinutes, phase: 'exercise_yard', label: 'exercise period. on the yard.' },
+  { mins: EXERCISE_REGIME.endMinutes, phase: 'return_to_cell', label: 'exercise ended. returned to the cell.' },
   { mins: 16 * 60 + 45, phase: 'tea', label: 'tea. the last hot thing of the day.' },
   { mins: 17 * 60 + 30, phase: 'bangup_night', label: 'banged up for the night. that is you til morning.' },
   { mins: 22 * 60 + 30, phase: 'lights_out', label: 'lights out.' },
@@ -445,6 +464,14 @@ async function main() {
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
+  const locationNow = Date.now();
+  const locationClock = londonParts(new Date(locationNow));
+  vitals.locationRegime = reconcileLocationRegimeState(vitals.locationRegime, {
+    nowMs: locationNow,
+    date: locationClock.date,
+    minutes: locationClock.mins,
+    asleep: effectiveAsleep(locationClock.mins),
+  });
   let autobiographicalMemory = null;
   let pendingMemoryQuery = null;
   let memoryFormationTurns = 0;
@@ -787,6 +814,122 @@ async function main() {
     return record;
   }
 
+  function captureEpisodeEvent(event, {
+    archetypeId = 'ambient_world_event', locationSource = false,
+  } = {}) {
+    if (!event) return null;
+    const record = captureEnvironmentEvent(archetypeId, {
+      eventType: event.eventType,
+      summary: event.summary,
+      world: event.world || {},
+      observation: event.observation || {},
+      provisionalConsumer: false,
+      cyObserved: event.cyObserved !== false,
+      dreamEligible: event.cyObserved !== false,
+    });
+    vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, record.world_event.id, { locationSource });
+    return record;
+  }
+
+  function plausibleCastAtLocation(locationId) {
+    if (locationId === LOCATIONS.EXERCISE_YARD) {
+      return [
+        ...CAST.filter((entry) => !['root', 'daemon'].includes(entry.key)),
+        ...OFFICERS,
+      ];
+    }
+    return [...CAST, ...OFFICERS];
+  }
+
+  function publishEpisodeEvent(event, record) {
+    if (!event || event.cyObserved === false) return;
+    emit({
+      kind: 'event',
+      payload: {
+        name: event.eventType,
+        text: event.summary,
+        environment_event_id: record && record.world_event.id,
+      },
+    });
+  }
+
+  function processLocationRegime(now, date, mins, asleep) {
+    const reconciled = reconcileRegimeLocation(vitals.locationRegime, {
+      nowMs: now, date, minutes: mins, asleep,
+    });
+    vitals.locationRegime = reconciled.state;
+    for (const event of reconciled.events) {
+      const record = captureEpisodeEvent(event, { locationSource: true });
+      publishEpisodeEvent(event, record);
+    }
+
+    const exercise = vitals.locationRegime.activeExerciseEpisode;
+    if (!exercise || vitals.locationRegime.current.id !== LOCATIONS.EXERCISE_YARD) return;
+    const last = Date.parse(exercise.last_observation_at || exercise.started_at || 0);
+    if (Number.isFinite(last) && now - last < YARD_OBSERVATION_INTERVAL_MS) return;
+    const available = plausibleCastAtLocation(LOCATIONS.EXERCISE_YARD);
+    const roll = Math.random();
+    const cast = available[Math.floor(Math.random() * available.length)] || null;
+    const variant = roll < 0.35 ? 'quiet' : roll < 0.60 ? 'company'
+      : roll < 0.85 ? 'conversation' : 'avoided';
+    const yard = createYardObservation({ nowMs: now, cast, variant, makeId: (prefix) => `${prefix}-${randomUUID()}` });
+    const record = captureEpisodeEvent({
+      ...yard,
+      cyObserved: true,
+      world: {
+        participants: { actor: yard.social && yard.social.actor_id, target: 'cy', relationship_ref: yard.social && yard.social.actor_id },
+        context: {
+          location: 'exercise_yard', description: yard.summary,
+          associated_entities: yard.social ? [yard.social.actor_id, 'cy:7734'] : ['cy:7734'],
+        },
+        temporal: { onset: 'event', persistence: 'completed', recurrence: 'routine' },
+        situation: { resolution_status: 'resolved' },
+        ...(yard.social ? { social: yard.social } : {}),
+      },
+      observation: { modality: 'direct', certainty: 'certain', observed_facts: { location: 'exercise_yard' } },
+    });
+    vitals.locationRegime.activeExerciseEpisode.last_observation_at = yard.occurredAt;
+    vitals.locationRegime.activeRegimeEpisode.last_observation_at = yard.occurredAt;
+    if (yard.social) {
+      vitals.locationRegime.activeExerciseEpisode.interaction_count += 1;
+      vitals.locationRegime.activeRegimeEpisode.interaction_count += 1;
+    }
+    publishEpisodeEvent(yard, record);
+  }
+
+  function beginCellSearch(now, { actor = null } = {}) {
+    const officer = actor || OFFICERS[Math.floor(Math.random() * OFFICERS.length)] || { key: 'proctor', name: 'Mr Proctor' };
+    const started = startCellSearchEpisode(vitals.locationRegime, {
+      nowMs: now,
+      actorId: officer.key,
+      actorName: officer.name,
+      objects: vitals.worldSimulation.objects,
+      makeId: (prefix) => `${prefix}-${randomUUID()}`,
+    });
+    vitals.locationRegime = started.state;
+    if (!started.started) return false;
+    const record = captureEpisodeEvent(started.event, { archetypeId: 'cell_search' });
+    publishEpisodeEvent(started.event, record);
+    return true;
+  }
+
+  function advanceCellSearch(now) {
+    const advanced = advanceCellSearchEpisode(vitals.locationRegime, {
+      nowMs: now,
+      objects: vitals.worldSimulation.objects,
+    });
+    vitals.locationRegime = advanced.state;
+    if (!advanced.advanced || !advanced.event) return;
+    const record = captureEpisodeEvent(advanced.event, { archetypeId: 'cell_search' });
+    publishEpisodeEvent(advanced.event, record);
+    const episode = vitals.locationRegime.searchEpisode;
+    if (advanced.actionOpportunity === 'COMPLY_OR_REFUSE') {
+      beginInstrumentalIncident('officer', 'order', episode.actor_id, episode.actor_name);
+    } else if (advanced.actionOpportunity === 'HAND_OVER_OR_WITHHOLD') {
+      beginInstrumentalIncident('officer', 'search', episode.actor_id, episode.actor_name);
+    }
+  }
+
   function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName) {
     const prepared = openInstrumentalOpportunity(vitals.instrumentalAgency, {
       sourceKind,
@@ -876,6 +1019,24 @@ async function main() {
         observation: outcome.observation,
         provisionalConsumer: false,
       });
+      if (opportunity.archetypeId === 'cell_search_handover') {
+        const objectId = vitals.locationRegime.searchEpisode
+          && vitals.locationRegime.searchEpisode.object_id;
+        vitals.locationRegime = markSearchPropertyAction(vitals.locationRegime, {
+          action: opportunity.chosenAction,
+          objectId,
+        });
+        if (opportunity.chosenAction === 'action:hand_over_item' && objectId) {
+          const object = vitals.worldSimulation.objects.find((item) => item.id === objectId);
+          if (object) {
+            object.holderId = opportunity.actorKey;
+            object.location = 'officer_desk';
+            object.status = 'CONFISCATED';
+            object.updatedAt = resolutionTimestamp;
+            emit({ kind: 'world_object_record', payload: object });
+          }
+        }
+      }
       emit({
         kind: 'event',
         payload: {
@@ -2022,7 +2183,7 @@ async function main() {
       section: 'mandatory_current_state', provenanceClass: 'WORLD FACT',
       knowledgeScope: forAwg ? 'WORLD_KNOWS' : 'CY_OBSERVED',
       privacyScope: forAwg ? 'WORLD_SIMULATION' : 'INTERNAL_ONLY',
-      content: `Current HMP ThinkPad regime and clock: ${regimeDirective(mins) || 'No active regime note.'}`,
+      content: `Current HMP ThinkPad regime and clock: ${regimeDirective(mins) || 'No active regime note.'} Authoritative location: ${vitals.locationRegime.current.id} (${locationContextId(vitals.locationRegime.current.id)}), entered ${vitals.locationRegime.current.entered_at}; activity ${vitals.locationRegime.current.regime_activity}.`,
       priority: 100, mandatory: true,
     });
     if (forAwg) {
@@ -2033,11 +2194,13 @@ async function main() {
         content: 'HMP ThinkPad is a British digital prison. Cy is inmate 7734. Prison-world history is immutable. Real visitors can enter only through the external postcard system.',
       });
       for (const entry of [...CAST, ...OFFICERS]) {
+        const plausible = plausibleCastAtLocation(vitals.locationRegime.current.id)
+          .some((item) => item.key === entry.key);
         add({
           id: `world-canon:cast:${entry.key}`, sourceId: `world-canon:cast:${entry.key}`,
           section: 'cast_context', provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS',
           privacyScope: 'WORLD_SIMULATION', priority: 90,
-          content: `${entry.key}: ${entry.name} - ${entry.blurb}`,
+          content: `${entry.key}: ${entry.name} - ${entry.blurb} Currently plausible at Cy's location: ${plausible ? 'yes' : 'no'}.`,
         });
       }
       for (const thread of vitals.worldSimulation.threads.filter((entry) => entry.state === 'OPEN')) {
@@ -2180,7 +2343,8 @@ async function main() {
     canRunBackground: (kind) => inferPhase === 'idle'
       && (kind === 'surfacing' || (currentMode !== 'letter' && pendingPostcards.length === 0))
       && pendingWarden.length === 0
-      && !client.paused,
+      && !client.paused
+      && !(kind === 'formation' && isAwgDue(vitals.worldSimulation)),
     providerInfo: () => ({ id: activeProvider().id, model: activeProvider().model }),
   });
   autobiographicalMemory.start();
@@ -3200,7 +3364,12 @@ async function main() {
       emit({ kind: 'day', payload: { n: vitals.day, date } });
     }
 
+    const asleep = effectiveAsleep(mins);
+    processLocationRegime(now, date, mins, asleep);
+    advanceCellSearch(now);
+
     for (const slot of PRISON_SCHEDULE) {
+      if (slot.kind === 'routine' && slot.routine === 'exercise') continue;
       if (crossed(slot.mins, mins, prevMins)) fireScheduled(slot, now);
     }
     // regime boundary crossings that can DEVIATE (late unlock, cancelled
@@ -3215,13 +3384,14 @@ async function main() {
     }
     prevMins = mins;
 
-    const asleep = effectiveAsleep(mins);
     const phase = currentRegime(mins).phase;
+    if (vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD) return;
     // wing noise: sparse texture, rate-limited (awake and asleep both routed here)
     maybeWingNoise(now, asleep, phase, mins);
     // random ambient events, low probability per 5s tick
     if (Math.random() < 0.0006) fireEvent('injury');
-    if (!asleep && Math.random() < 0.0008) fireEvent('cell_search');
+    if (!asleep && vitals.locationRegime.current.id === LOCATIONS.CELL
+      && Math.random() < CELL_SEARCH_TICK_CHANCE) beginCellSearch(now);
     // a rare full lockdown - a real deviation, felt harder than a late unlock
     if (!asleep && Math.random() < 0.0005) {
       recordIncident('regime', { sub: 'lockdown', phase, mins });
@@ -3318,6 +3488,31 @@ async function main() {
         hr,
         brain,
         soma: soma.snapshot(),
+        location_regime: {
+          schema: vitals.locationRegime.schema,
+          version: vitals.locationRegime.version,
+          current: {
+            id: vitals.locationRegime.current.id,
+            entered_at: vitals.locationRegime.current.entered_at,
+            reason: vitals.locationRegime.current.reason,
+            regime_activity: vitals.locationRegime.current.regime_activity,
+            transition_provenance: vitals.locationRegime.current.transition_provenance,
+          },
+          location_context_id: locationContextId(vitals.locationRegime.current.id),
+          next_transition: nextRegimeTransition(mins),
+          configuration: EXERCISE_REGIME.classification,
+          exercise: vitals.locationRegime.activeExerciseEpisode ? {
+            status: vitals.locationRegime.activeExerciseEpisode.status,
+            started_at: vitals.locationRegime.activeExerciseEpisode.started_at,
+            interaction_count: vitals.locationRegime.activeExerciseEpisode.interaction_count,
+          } : null,
+          cell_search: vitals.locationRegime.searchEpisode ? {
+            status: vitals.locationRegime.searchEpisode.status,
+            stage: vitals.locationRegime.searchEpisode.stage,
+            cy_knowledge: vitals.locationRegime.searchEpisode.cy_knowledge,
+            property_result: vitals.locationRegime.searchEpisode.property_result,
+          } : null,
+        },
         persistence: vitalsPersistenceStatus(vitals),
         legacy: {
           status: 'placeholder',
@@ -3559,6 +3754,8 @@ async function main() {
       pendingHigherPriority: pendingPostcards.length > 0 || pendingWarden.length > 0 || client.paused,
       memoryFormationBacklog: memoryPriorityPending ? 1 : 0,
       inferenceBusy: inferPhase !== 'idle',
+      currentLocation: locationContextId(vitals.locationRegime.current.id),
+      plausibleCastIds: plausibleCastAtLocation(vitals.locationRegime.current.id).map((item) => item.key),
       makeId: (prefix) => `${prefix}-${randomUUID()}`,
       generate: (call) => rawGenerate({
         system: call.system,
@@ -3589,6 +3786,14 @@ async function main() {
       }
     }
     if (result.status !== 'ACCEPTED') return result;
+
+    const acceptedType = String(result.applied.event && result.applied.event.eventType || '').toLowerCase();
+    if (result.applied.event && result.applied.event.location === 'cell'
+      && acceptedType.includes('cell_search')) {
+      const actorKey = result.applied.event.participants.find((item) => OFFICERS.some((officer) => officer.key === item));
+      const actor = OFFICERS.find((officer) => officer.key === actorKey) || null;
+      beginCellSearch(Date.now(), { actor });
+    }
 
     const environment = awgEventToEnvironment(result.applied);
     const record = captureEnvironmentEvent(environment.archetypeId, {
@@ -3920,6 +4125,15 @@ async function main() {
         await doWarden(pendingWarden.shift());
         continue;
       }
+      if (vitals.locationRegime.current.id !== LOCATIONS.CELL) {
+        if (currentMode !== 'exercise') {
+          emit({ kind: 'mode', payload: { from: currentMode, to: 'exercise' } });
+          currentMode = 'exercise';
+          client.kick();
+        }
+        await idleSilently(65_000, { allowAwg: true });
+        continue;
+      }
       if (pendingPostcards.length) {
         await doPostcard(pendingPostcards.shift());
         continue;
@@ -3954,6 +4168,10 @@ async function main() {
       if (currentMode === 'paused') {
         emit({ kind: 'mode', payload: { from: 'paused', to: 'journal' } });
         client.kick(); // priority flush: the admin control is waiting on this
+      }
+      if (currentMode === 'exercise') {
+        emit({ kind: 'mode', payload: { from: 'exercise', to: 'journal' } });
+        client.kick();
       }
       const mode = 'journal';
       currentMode = mode;
@@ -3992,14 +4210,15 @@ async function main() {
       }
 
       const cadence = expressiveCadenceAvailability(vitals.expressiveCadence);
-      const availableActions = [];
-      if (cadence.journal) availableActions.push('journal');
-      if (cadence.draw) availableActions.push('draw');
       const lastSilenceAtMs = Number(soma.state && soma.state.action
         && soma.state.action.lastSilenceAtMs) || 0;
-      if (!lastSilenceAtMs || nowMs - lastSilenceAtMs >= EXPRESSIVE_SILENCE_COOLDOWN_MS) {
-        availableActions.push('silence');
-      }
+      const silenceAvailable = !lastSilenceAtMs
+        || nowMs - lastSilenceAtMs >= EXPRESSIVE_SILENCE_COOLDOWN_MS;
+      const availableActions = availableExpressiveActions(
+        vitals.locationRegime,
+        cadence,
+        { silenceAvailable },
+      );
       const choiceContext = buildBrokerContext(CONTEXT_CONSUMERS.EXPRESSIVE_CHOICE, {
         generationRef: `expressive-choice:${nowMs}`,
         cognition,

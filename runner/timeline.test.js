@@ -39,6 +39,9 @@ assert.equal(
   'Cy timestamps are Europe/London wall time, including BST',
 );
 assert.equal(ambientEventLabel({ name: 'cell_search' }), 'the cell is searched');
+assert.equal(ambientEventLabel({ name: 'location_transition', text: 'Cy was taken onto the exercise yard' }), 'Cy was taken onto the exercise yard');
+assert.equal(ambientEventLabel({ name: 'yard_quiet' }), 'a quiet turn around the exercise yard');
+assert.equal(ambientEventLabel({ name: 'cell_search_property_result' }), 'the cell search produced a result');
 assert.equal(ambientEventLabel({ name: 'provider', to: 'deepseek' }), '');
 
 console.log('timeline.test.js: all checks passed');

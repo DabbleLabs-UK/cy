@@ -9,6 +9,7 @@ import {
   awgEventToEnvironment,
   reconcileWorldSimulationState,
   runAmbientWorldCycle,
+  isAwgDue,
   shouldRunAwg,
   validateAwgCandidate,
 } from './ambient-world-generator.js';
@@ -186,6 +187,52 @@ test('M: AWG failure returns safely and leaves authoritative state unchanged', a
 test('N: AWG never runs ahead of higher-priority work', () => {
   const check = shouldRunAwg(null, { nowMs: NOW, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS, pendingHigherPriority: true });
   assert.deepEqual(check, { run: false, reason: 'HIGHER_PRIORITY_WORK' });
+});
+
+test('N1: queued formation work cannot categorically starve an overdue AWG slot', () => {
+  const check = shouldRunAwg(null, {
+    nowMs: NOW,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    memoryFormationBacklog: 12,
+  });
+  assert.equal(check.run, true);
+  assert.equal(check.reason, 'ELIGIBLE_FAIRNESS_SLOT');
+  assert.equal(isAwgDue(null, NOW), true);
+});
+
+test('N1b: location and plausible-cast constraints reject impossible Cy-visible events', () => {
+  const wrongPlace = validateAwgCandidate(candidate(), null, {
+    nowMs: NOW,
+    currentLocation: 'cell',
+    plausibleCastIds: ['reg'],
+  });
+  assert.ok(wrongPlace.errors.includes('IMPOSSIBLE_CY_LOCATION'));
+  const wrongCast = validateAwgCandidate(candidate({ location: 'cell' }), null, {
+    nowMs: NOW,
+    currentLocation: 'cell',
+    plausibleCastIds: ['bill'],
+  });
+  assert.ok(wrongCast.errors.includes('IMPOSSIBLE_CAST_AT_LOCATION'));
+});
+
+test('N1c: offscreen cell event remains possible while Cy is on the yard', () => {
+  const offscreen = candidate({
+    eventFamily: 'OFFICER_ACTIVITY',
+    participants: ['proctor'],
+    location: 'cell',
+    objective: { eventType: 'cell_search_initiated', summary: 'Mr Proctor began a search of the empty cell.' },
+    objects: [],
+    observations: [{ observerId: 'proctor', access: 'CAST_ONLY', summary: 'Mr Proctor entered the empty cell.' }],
+    thread: { action: 'NONE' },
+    publicTimeline: { eligible: false, text: null },
+  });
+  const result = validateAwgCandidate(offscreen, null, {
+    nowMs: NOW,
+    currentLocation: 'exercise_yard',
+    plausibleCastIds: ['reg'],
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.cyObserved, false);
 });
 
 test('N2: public timeline eligibility requires a Cy-visible trace', () => {

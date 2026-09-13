@@ -134,6 +134,7 @@ window.CY = {
   postcardArchive: 'api/postcard-archive.php',
   openverseSearch: 'api/openverse-search.php',
   tempo: 'api/tempo.php',
+  location: 'api/location.php',
   // HISTORY MODE: the aggregate day index the calendar dialog draws itself from,
   // and the raw-event range endpoint it touches ONLY to resolve a chosen moment's seq.
   history: 'api/history.php',
@@ -201,6 +202,7 @@ window.CY = {
          LLM (so idle CPU/memory/draw can be read) and switches the model provider.
          Both actions settle only on the runner's real state off the event stream. -->
     <span id="day" class="pill">DAY <?= $day ?></span>
+    <span id="location" class="pill location-pill" aria-label="Current location unavailable">LOCATION --</span>
     <span id="mode" class="pill" data-mode="journal">JOURNAL</span>
     <span id="status" class="pill status">connecting</span>
     <span id="watchers" class="pill watchers-pill" aria-label="Viewer count unavailable">-- WATCHING</span>

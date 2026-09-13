@@ -701,6 +701,7 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       brain.setDerived(p.derived);
       brain.setAmp(p.monotony, p.amp);
       brain.setCast(p.relations);
+      if (p.location_regime) setLocation(p.location_regime);
       if (p.mode) {
         latestMode = p.mode;
         setMode(p.mode);
@@ -866,6 +867,16 @@ function handleAmbient(p, ts, bootstrap = false) {
     if (!bootstrap) pushTicker(label);
     return;
   }
+  if (name === 'location_transition' || name === 'yard_interaction' || name === 'yard_quiet'
+    || name.startsWith('cell_search_')) {
+    const label = ambientEventLabel(p);
+    const eventKind = name === 'location_transition' ? 'movement'
+      : name.startsWith('yard_') ? 'yard' : 'search';
+    postcards.finishAnimations();
+    if (pen.event && label) pen.event(label, p.text || '', ts, eventKind);
+    if (!bootstrap && label) pushTicker(label);
+    return;
+  }
   const nice = {
     letter_arrives: p.from ? `mail from ${p.from}` : 'mail arrives',
     letter_hostile: 'hostile mail',
@@ -911,6 +922,21 @@ function setDay(n) {
   if (el) el.textContent = 'DAY ' + n;
 }
 
+function setLocation(locationRegime) {
+  const el = $('#location');
+  const current = locationRegime && locationRegime.current;
+  if (!el || !current || !current.id) return;
+  const labels = {
+    CELL: 'CELL',
+    EXERCISE_YARD: 'YARD',
+    WING_OR_LANDING: 'IN TRANSIT',
+  };
+  el.textContent = labels[current.id] || String(current.id).replaceAll('_', ' ');
+  el.dataset.location = current.id;
+  el.title = `Current location since ${current.entered_at || 'an unrecorded time'}`;
+  el.setAttribute('aria-label', `Current location: ${el.textContent}`);
+}
+
 function setMode(mode, cause) {
   // paused is the runner's REAL state off the live stream. Make it unmistakable
   // across the whole page (not just the pill), and feed it to the pause control so
@@ -928,6 +954,8 @@ function setMode(mode, cause) {
           ? 'READING A NOTICE'
           : mode === 'sleep' || mode === 'dream'
             ? 'ASLEEP'
+            : mode === 'exercise'
+              ? 'EXERCISE'
             : 'JOURNAL';
   el.textContent = label + (cause && (mode === 'letter' || mode === 'warden') ? ' - ' + cause : '');
   el.dataset.mode = mode;

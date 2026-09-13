@@ -944,9 +944,45 @@
       "display_name": "AMBIENT WORLD IDLE SCHEDULER",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "Ambient generation runs at the lowest explicit inference priority and only inside spare waking throttle time with no reply, critical retrieval or memory-formation backlog.",
+      "status_note": "Ambient generation runs at the lowest explicit inference priority and only inside spare waking throttle time with no reply or critical retrieval. An overdue 45-minute ambient cycle receives a fairness slot ahead of starting another queued memory-formation call; an already running memory call is never interrupted.",
       "data_dependencies": ["tempo_idle_window", "memory_formation_queue", "visitor_reply_queue"],
       "version": "ambient-world-generator-v1"
+    },
+    {
+      "id": "persistent_location_regime",
+      "display_name": "PERSISTENT LOCATION AND REGIME",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Authoritative restart-safe CELL, EXERCISE_YARD and WING_OR_LANDING state records entry time, reason, source event, activity and transition provenance. It is a fictional prison-world state machine, not a psychological or biological model.",
+      "data_dependencies": ["fictional_hmp_thinkpad_regime_clock", "structured_environment_event", "atomic_vitals_persistence"],
+      "version": "location-regime-v1"
+    },
+    {
+      "id": "daily_exercise_episode",
+      "display_name": "DAILY EXERCISE EPISODE",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The exact 14:15-15:15 daily yard slot is FICTIONAL_HMP_THINKPAD_REGIME_CONFIGURATION, informed only by GOV.UK's general statement that prisoners should spend between 30 minutes and one hour outside daily. Movement and yard observations are factual simulated-world events; the social ledger updates only for an actual structured interaction.",
+      "data_dependencies": ["persistent_location_regime", "existing_cast_roster", "structured_social_world_event"],
+      "version": "location-regime-v1"
+    },
+    {
+      "id": "persistent_cell_search_episode",
+      "display_name": "PERSISTENT CELL-SEARCH EPISODE",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "Restart-safe factual stages distinguish initiation, Cy instruction, search activity, property result, completion and observed aftermath. Searches inspect only existing stored world objects, and off-screen facts remain unknown to Cy until an observable aftermath. Existing deterministic COMPLY/REFUSE and HAND_OVER/WITHHOLD instrumental mechanisms are reused.",
+      "data_dependencies": ["persistent_location_regime", "structured_environment_event", "open_world_threads", "prison_instrumental_opportunities"],
+      "version": "location-regime-v1"
+    },
+    {
+      "id": "location_constrained_ambient_world",
+      "display_name": "LOCATION-CONSTRAINED AMBIENT WORLD",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "The ambient generator receives authoritative location and plausible cast. Deterministic validation rejects direct or partially heard events at Cy's wrong location, implausible present cast, and cell-only activity while Cy is on the yard.",
+      "data_dependencies": ["ambient_world_generator", "ambient_world_validator", "persistent_location_regime", "existing_cast_roster"],
+      "version": "location-regime-v1"
     },
     {
       "id": "biological_global_workspace",

@@ -14,6 +14,16 @@ const pick = (items, rnd) => items[Math.min(items.length - 1, Math.floor(rnd() *
 
 export const PRISON_SCHEDULE_TIME_ZONE = 'Europe/London';
 
+// FICTIONAL_HMP_THINKPAD_REGIME_CONFIGURATION. GOV.UK describes a general
+// expectation of 30-60 minutes outside daily. The exact 14:15 start and the
+// one-hour slot are fictional HMP ThinkPad world configuration.
+export const EXERCISE_REGIME = Object.freeze({
+  classification: 'FICTIONAL_HMP_THINKPAD_REGIME_CONFIGURATION',
+  startMinutes: 14 * 60 + 15,
+  endMinutes: 15 * 60 + 15,
+  durationMinutes: 60,
+});
+
 export const PRISON_REGIME_CONFIGURATION = Object.freeze({
   supperSnackMinutes: 21 * 60,
   supperSnackClassification: 'FICTIONAL PRISON REGIME CONFIGURATION',

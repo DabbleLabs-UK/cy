@@ -160,7 +160,7 @@ export function shouldRunAwg(stateValue, {
   inferenceBusy = false,
 } = {}) {
   const state = reconcileWorldSimulationState(stateValue);
-  if (pendingHigherPriority || inferenceBusy || memoryFormationBacklog > 0) {
+  if (pendingHigherPriority || inferenceBusy) {
     return { run: false, reason: 'HIGHER_PRIORITY_WORK' };
   }
   if (idleBudgetMs < AWG_MIN_IDLE_BUDGET_MS) return { run: false, reason: 'INSUFFICIENT_IDLE_BUDGET' };
@@ -169,10 +169,20 @@ export function shouldRunAwg(stateValue, {
   if (candidateEventCountInWindow(state, nowMs) >= AWG_MAX_EVENTS_PER_WINDOW) {
     return { run: false, reason: 'EVENT_WINDOW_LIMIT' };
   }
-  return { run: true, reason: 'ELIGIBLE', priority: INFERENCE_PRIORITIES.AWG_BACKGROUND };
+  return {
+    run: true,
+    reason: memoryFormationBacklog > 0 ? 'ELIGIBLE_FAIRNESS_SLOT' : 'ELIGIBLE',
+    priority: INFERENCE_PRIORITIES.AWG_BACKGROUND,
+  };
 }
 
-export function buildAwgCall(contextRendering) {
+export function isAwgDue(stateValue, nowMs = Date.now()) {
+  const state = reconcileWorldSimulationState(stateValue);
+  const lastRun = isoMs(state.lastRunAt);
+  return lastRun == null || nowMs - lastRun >= AWG_CADENCE_MS;
+}
+
+export function buildAwgCall(contextRendering, { currentLocation = null, plausibleCastIds = [] } = {}) {
   const system = [
     'You are the Ambient World Generator for HMP ThinkPad.',
     'You are a narrative world-simulation content generator, not Cy, Soma, memory or a narrator.',
@@ -202,7 +212,7 @@ export function buildAwgCall(contextRendering) {
   };
   return {
     system,
-    prompt: `${clean(contextRendering, 12000)}\n\nKNOWN CAST IDS: ${[...KNOWN_CAST_IDS].join(', ')}\nKNOWN LOCATIONS: ${AWG_KNOWN_LOCATIONS.join(', ')}\nOUTPUT SCHEMA:\n${JSON.stringify(schema)}`,
+    prompt: `${clean(contextRendering, 12000)}\n\nCURRENT CY LOCATION: ${clean(currentLocation) || 'unknown'}\nCAST PLAUSIBLE AT CURRENT LOCATION: ${(plausibleCastIds || []).map(id).filter(Boolean).join(', ') || 'none supplied'}\nKNOWN CAST IDS: ${[...KNOWN_CAST_IDS].join(', ')}\nKNOWN LOCATIONS: ${AWG_KNOWN_LOCATIONS.join(', ')}\nOUTPUT SCHEMA:\n${JSON.stringify(schema)}`,
     options: { ...AWG_MODEL_OPTIONS },
     purpose: 'ambient_world_generation',
   };
@@ -248,7 +258,9 @@ function validateObject(object, state, errors) {
   }
 }
 
-export function validateAwgCandidate(candidateValue, stateValue, { nowMs = Date.now() } = {}) {
+export function validateAwgCandidate(candidateValue, stateValue, {
+  nowMs = Date.now(), currentLocation = null, plausibleCastIds = [],
+} = {}) {
   const candidate = candidateValue && typeof candidateValue === 'object' ? clone(candidateValue) : null;
   const state = reconcileWorldSimulationState(stateValue);
   const errors = [];
@@ -330,6 +342,21 @@ export function validateAwgCandidate(candidateValue, stateValue, { nowMs = Date.
     || id(observation.observerId) === 'cy:7734');
   const cyAccess = cyObservation ? clean(cyObservation.access).toUpperCase() : null;
   const cyObserved = ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'].includes(cyAccess);
+  const current = clean(currentLocation);
+  if (cyObserved && current && clean(candidate.location) !== current && cyAccess !== 'CY_LEARNS_LATER') {
+    errors.push('IMPOSSIBLE_CY_LOCATION');
+  }
+  const plausible = new Set((plausibleCastIds || []).map(id).filter(Boolean));
+  if (cyObserved && plausible.size && participants
+    .filter((participant) => !['cy', 'cy:7734'].includes(participant))
+    .some((participant) => !plausible.has(participant))) {
+    errors.push('IMPOSSIBLE_CAST_AT_LOCATION');
+  }
+  const objectiveType = clean(candidate.objective && candidate.objective.eventType).toLowerCase();
+  if (current === 'exercise_yard' && cyObserved
+    && /journal|drawing|draw|sleep|cell_search/.test(objectiveType)) {
+    errors.push('IMPOSSIBLE_ACTIVITY_AT_LOCATION');
+  }
   if (candidate.publicTimeline && candidate.publicTimeline.eligible && !cyObserved) errors.push('PUBLIC_TIMELINE_KNOWLEDGE_LEAK');
   if (candidate.publicTimeline && candidate.publicTimeline.eligible && !clean(candidate.publicTimeline.text)) {
     errors.push('PUBLIC_TIMELINE_TEXT_REQUIRED');
@@ -482,6 +509,8 @@ export async function runAmbientWorldCycle({
   pendingHigherPriority = false,
   memoryFormationBacklog = 0,
   inferenceBusy = false,
+  currentLocation = null,
+  plausibleCastIds = [],
   clock = () => performance.now(),
 } = {}) {
   const original = reconcileWorldSimulationState(stateValue);
@@ -497,9 +526,13 @@ export async function runAmbientWorldCycle({
   let candidate = null;
   try {
     if (typeof generate !== 'function') throw new Error('PROVIDER_UNAVAILABLE');
-    candidate = parseAwgCandidate(await generate(buildAwgCall(contextRendering)));
+    candidate = parseAwgCandidate(await generate(buildAwgCall(contextRendering, {
+      currentLocation, plausibleCastIds,
+    })));
     const validationStarted = clock();
-    const validation = validateAwgCandidate(candidate, stateWithRun, { nowMs });
+    const validation = validateAwgCandidate(candidate, stateWithRun, {
+      nowMs, currentLocation, plausibleCastIds,
+    });
     const validationLatencyMs = Math.max(0, clock() - validationStarted);
     if (!validation.valid) {
       const run = {

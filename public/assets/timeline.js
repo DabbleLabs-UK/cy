@@ -195,6 +195,15 @@ export function ambientEventLabel(payload) {
     delayed_unlock: 'unlock came late',
     assoc_cancelled: 'association was cancelled',
     lockdown: 'the wing went into lockdown',
+    location_transition: p.text || 'Cy moved to another part of the prison',
+    yard_interaction: p.text || 'an encounter on the exercise yard',
+    yard_quiet: p.text || 'a quiet turn around the exercise yard',
+    cell_search_initiated: p.text || 'officers arrived to search the cell',
+    cell_search_cy_instruction: p.text || 'Cy was instructed during the cell search',
+    cell_search_search_ongoing: p.text || 'the cell search continued',
+    cell_search_property_result: p.text || 'the cell search produced a result',
+    cell_search_search_complete: p.text || 'the cell search ended',
+    cell_search_aftermath_observed: p.text || 'Cy saw the aftermath of the cell search',
   };
   return labels[name] || name.replace(/_/g, ' ');
 }

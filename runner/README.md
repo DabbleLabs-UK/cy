@@ -346,6 +346,11 @@ Soma circuits.
   expressive capabilities; no emotion score, utility or instrumental action.
 - `cast.js` - inmates + officers + visitor metadata: real social/officer events,
   overheard remarks, factual visitor recognition, and legacy relation diagnostics.
+- `location-regime.js` - restart-safe factual CELL / EXERCISE_YARD /
+  WING_OR_LANDING state, daily exercise episodes, location-gated activity, yard
+  observations, and persistent staged cell searches. The exact 14:15-15:15 yard
+  slot and event probabilities are documented fictional world configuration,
+  not psychological or policy parameters.
 - `power.js` - electricity meter: CPU-derived watts, kWh/cost, cost injection.
 - `prompt.js` - the three prompt zones (fixed `ZONE_A`, `buildDirectives` for the
   volatile Zone C), static ENGINEERING DEFAULT waking sampling, and `buildPrompt`
