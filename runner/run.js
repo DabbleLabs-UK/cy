@@ -142,6 +142,7 @@ import {
   stripScaffold,
   stripScaffoldAccounted,
 } from './warden.js';
+import { generateWithCharacterRepair } from './character-output.js';
 import { Client, tsNow } from './client.js';
 import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
@@ -1314,6 +1315,31 @@ async function main() {
       /* never crash on debug logging */
     }
   }
+  // Owner-only character validation trace. Rejected raw candidates and the exact
+  // repair prompt stay on the Dell runner and are never emitted to the public API.
+  async function logCharacterValidation(detail, mode, provider) {
+    const lines = [
+      `===== ${tsNow()} ${mode} ${provider.id}/${provider.model} =====`,
+      'INITIAL CANDIDATE',
+      detail.initialCandidate || '(empty)',
+      'REJECTION REASON',
+      (detail.initialValidation.reasons || []).join(' | ') || 'assistant/meta writing frame',
+      'REPAIR ATTEMPT',
+      detail.repairPrompt,
+      'REPAIR RESULT',
+      detail.repairCandidate || '(empty)',
+      `REPAIR VALIDATION: ${detail.repairValidation.ok ? 'accepted' : (detail.repairValidation.reasons || []).join(' | ')}`,
+      `FINAL ACTION: ${detail.finalAction}`,
+      '',
+    ];
+    console.warn(`[cy] character validation (${mode}): ${detail.finalAction}`);
+    try {
+      const { appendFile } = await import('node:fs/promises');
+      await appendFile(join(STATE_DIR, 'character-validation.log'), lines.join('\n'));
+    } catch {
+      /* never crash on owner-only diagnostics */
+    }
+  }
   // RAW-VS-SURVIVING accounting at the natural end of a burst: the true provider
   // char count (BEFORE any stripping), the chars that survived stripScaffold, and
   // the chars that actually reached the page (burstEmitted). When NOTHING survived
@@ -1448,6 +1474,9 @@ async function main() {
         repeat_penalty: typeof o.repeat_penalty === 'number' ? o.repeat_penalty : null,
         num_predict: typeof o.num_predict === 'number' ? o.num_predict : null,
         token_limited: !!(r && r.tokenLimited),
+        // Private/raw diagnostic summary. public_event_payload() omits this field;
+        // rejected text itself remains only in the Dell owner log.
+        character_validation: r && r.characterValidation ? r.characterValidation : null,
         // ---- STRIP ACCOUNTING (raw-vs-surviving) for the ?111 raw view ----
         // Safe aggregates only - NO pre-strip text ever reaches the feed (the raw
         // head sample is server-log only). raw_chars = true provider length before
@@ -1914,7 +1943,7 @@ async function main() {
   // looksLikeRefusal: a refusal is discarded (never emitted), the generation is
   // aborted, and { refused:true } is returned - the caller records it as its own
   // 'refused' cycle outcome, exactly like a blocked generation.
-  async function streamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {
+  async function legacyStreamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {
     burstEmitted = ''; // fresh generation: nothing emitted yet this burst
     burstAllowRepeat = allowRepeat; // repeat-by-design forms opt out of the guard
     burstStopped = false;
@@ -2096,6 +2125,155 @@ async function main() {
       console.log(`[cy] provider ${provider.id} refusal - generation discarded (not emitted)`);
       return { full: '', refused: true, aborted: false };
     }
+  }
+
+  // Generate waking Cy prose behind a complete-candidate boundary. The previous
+  // streaming implementation could publish an in-character prefix before a late
+  // assistant explanation arrived. Here the whole response is collected and
+  // validated first; one failed candidate gets one clean regeneration from the
+  // original Cy/world prompt, and two failures become silence.
+  async function streamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {
+    burstEmitted = '';
+    burstAllowRepeat = allowRepeat;
+    burstStopped = false;
+    burstAssistantFrameDetected = false;
+    burstStripRemoved = { scaffold: 0, narration: 0, stateNotation: 0 };
+    burstAnnihilated = { scaffold: 0, narration: 0, stateNotation: 0 };
+    burstTrimmed = 0;
+    wardenBlocksInGen = 0;
+    const provider = activeProvider();
+    const attempts = [];
+
+    const collectCandidate = async (candidatePrompt) => {
+      const ac = new AbortController();
+      currentAbort = ac;
+      const t0 = Date.now();
+      let ttftMs = null;
+      let stats = null;
+      let candidate = '';
+      let gen;
+      try {
+        gen = await provider.openStream({
+          system,
+          prompt: candidatePrompt,
+          opts,
+          signal: ac.signal,
+          purpose: purpose || mode,
+        });
+      } catch (err) {
+        if (ac.signal.aborted) return { candidate, full: '', aborted: true };
+        console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
+        await sleep(2000);
+        return { candidate, full: '', error: true };
+      }
+      if (!gen.ok) {
+        console.warn(`[cy] provider ${provider.id} HTTP`, gen.status);
+        await sleep(1000);
+        return { candidate, full: '', error: true };
+      }
+      setInfer('eval');
+      let streamRes;
+      try {
+        streamRes = await readNdjsonStream(gen.reader, {
+          signal: ac.signal,
+          onToken: async (text) => {
+            if (ttftMs === null) {
+              ttftMs = Date.now() - t0;
+              setInfer('gen');
+            }
+            candidate += text;
+            tokenCount++;
+            return false;
+          },
+          onDone: (obj) => { stats = obj; },
+        });
+      } catch (err) {
+        if (ac.signal.aborted) return { candidate, full: '', aborted: true, stats, ttftMs };
+        console.warn('[cy] stream error:', err.message);
+        return { candidate, full: '', error: true, stats, ttftMs };
+      } finally {
+        if (currentAbort === ac) currentAbort = null;
+        setInfer('idle');
+      }
+      if (streamRes && streamRes.aborted) return { candidate, full: '', aborted: true, stats, ttftMs };
+      const cleaned = stripScaffold(sanitize(candidate));
+      if (provider.screensContent && cleaned.trim() && looksLikeRefusal(cleaned)) {
+        console.log(`[cy] provider ${provider.id} refusal - generation discarded (not emitted)`);
+        return { candidate, full: '', refused: true, aborted: false, stats, ttftMs };
+      }
+      return {
+        candidate,
+        full: '',
+        aborted: false,
+        stats,
+        model: gen.model || provider.model,
+        ttftMs,
+        tokenLimited: generationHitTokenLimit(stats, opts),
+      };
+    };
+
+    const guarded = await generateWithCharacterRepair({
+      prompt,
+      generate: async (candidatePrompt) => {
+        const result = await collectCandidate(candidatePrompt);
+        attempts.push(result);
+        return result;
+      },
+      onDiagnostic: (detail) => logCharacterValidation(detail, mode, provider),
+    });
+
+    if (guarded.error || guarded.refused || guarded.aborted || guarded.characterDiscarded) {
+      for (const attempt of attempts) await recordSpend(attempt.stats, mode, false);
+      if (guarded.characterDiscarded) {
+        await logAssistantFrameDiscard(guarded.characterValidation.initial.reasons.join(' | '), mode);
+      }
+      return guarded;
+    }
+
+    const rawFull = guarded.candidate || '';
+    const cleaned = sanitize(rawFull);
+    const nHits = narrationHits(cleaned);
+    const sHits = stateNotationHits(cleaned);
+    const accounted = stripScaffoldAccounted(cleaned);
+    burstStripRemoved = { ...accounted.removed };
+    if (nHits.length) await logNarration(nHits, mode);
+    if (sHits.length) await logStateNotation(sHits, mode);
+    if (cleaned.trim() && !accounted.out.trim()) {
+      const bank = dominantBank(accounted.removed);
+      if (bank === 'narration') burstAnnihilated.narration++;
+      else if (bank === 'state-notation') burstAnnihilated.stateNotation++;
+      else burstAnnihilated.scaffold++;
+      await logAnnihilated(bank, cleaned, mode);
+    } else if (Object.values(accounted.removed).some((value) => value > 0)) {
+      burstTrimmed++;
+    }
+
+    if (contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail)) {
+      await logHoldbackDiscard(accounted.out, mode);
+      for (const attempt of attempts) await recordSpend(attempt.stats, mode, false);
+      return { ...guarded, full: accounted.out, repeat: true };
+    }
+
+    const buffer = warden.newBuffer();
+    for (const chunk of buffer.push(accounted.out)) await onChunk(chunk, mode);
+    for (const chunk of buffer.flush({ tokenLimited: guarded.tokenLimited })) await onChunk(chunk, mode);
+    await logBurstStrip(rawFull, mode);
+    for (let i = 0; i < attempts.length; i++) {
+      await recordSpend(attempts[i].stats, mode, i === attempts.length - 1 && !!burstEmitted.trim());
+    }
+    if (burstEmitted.trim()) soma.observeOutput(burstEmitted, { mode, now: Date.now() });
+    return {
+      ...guarded,
+      full: burstEmitted,
+      strip: {
+        rawChars: rawFull.length,
+        survivingChars: accounted.out.length,
+        emittedChars: burstEmitted.length,
+        removed: { ...burstStripRemoved },
+        annihilated: { ...burstAnnihilated },
+        trimmed: burstTrimmed,
+      },
+    };
   }
 
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
@@ -4364,6 +4542,12 @@ async function main() {
           lastOpts = opts;
           break;
         }
+        if (r.characterDiscarded) {
+          assistantFrameDiscards++;
+          await recordOutcome('discarded-assistant-frame');
+          lastResult = r;
+          break;
+        }
         if (r.assistantFrame) {
           assistantFrameDiscards++;
           await recordOutcome('discarded-assistant-frame');
@@ -4646,7 +4830,15 @@ async function loadContext(path) {
         }
       })
       .join('');
-    return stripAssistantContaminatedTail(stripScaffold(sanitize(text)));
+    const cleaned = stripAssistantContaminatedTail(stripScaffold(sanitize(text)));
+    // Persist the cleaned bounded context immediately. Historical public events
+    // remain untouched, but a crash before the next accepted burst cannot reload
+    // the same assistant/meta tail again.
+    if (cleaned !== text) {
+      await saveContext(path, cleaned);
+      console.warn(`[cy] live recent context cleaned on startup (${text.length - cleaned.length} chars removed; public history preserved)`);
+    }
+    return cleaned;
   } catch {
     return '';
   }

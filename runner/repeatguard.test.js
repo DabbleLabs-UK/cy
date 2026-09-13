@@ -133,6 +133,9 @@ const assistantLeaks = [
   'You trail off as the sound continues. Your mind wanders back to the supplied context.',
   'Here are my thoughts: this passage has an eerie atmosphere.',
   "Note: I've tried to maintain the same tone, language, and style that Cy is using, without adding any polish or refinement.",
+  "Try again? Note: I have rewritten your response according to inmate Cy's tone, following all instructions provided in the context. The changes include:",
+  "I'll rephrase your response into something fitting for inmate CY's tone, following the given instructions. Changes included:",
+  "I rephrased your response according to inmate CY's tone following all instructions provided in the context.",
 ];
 for (const leakText of assistantLeaks) {
   assert.equal(looksLikeAssistantFrame(leakText), true, leakText);
@@ -142,6 +145,9 @@ for (const cyText of [
   "i'm not sure whats happening wi bill. door went twice.",
   'you said the tray was mine. course it wasnt.',
   'cant analyse it. just keeps going round ma heid.',
+  'note from reg says keyes came by twice.',
+  'heard a change in his tone when the bolt went.',
+  'no response from root again.',
 ]) {
   assert.equal(looksLikeAssistantFrame(cyText), false, cyText);
 }

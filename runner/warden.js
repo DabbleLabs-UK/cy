@@ -200,6 +200,22 @@ const ASSISTANT_FRAME = [
   /\bhere\s+is\s+(?:a|the)\s+dream\s+(?:for|from)\s+cy\b/i,
   /\bdream\s+analysis\s*:/i,
   /\bbased\s+on\s+the\s+instructions\b/i,
+  // Editing/rewrite-task framing observed in live journal output. These require
+  // the whole assistant structure; ordinary prison uses of note/change/tone/
+  // response remain valid.
+  /(?:^|\n|\|re-?write\|\s*)\s*try\s+again\??\s*(?:note\s*:)?/i,
+  /\bi\s+have\s+rewritten\s+(?:your\s+)?(?:responses?|text|passage)\b/i,
+  /\bi\s+(?:have\s+)?rephrased\s+(?:your\s+)?(?:responses?|text|passage)\b/i,
+  /\bi(?:'|\u2019)?ll\s+rephrase\s+(?:your\s+)?(?:responses?|text|passage)\b/i,
+  /\bi\s+will\s+rephrase\s+(?:your\s+)?(?:responses?|text|passage)\b/i,
+  /\blet(?:'|\u2019)?s\s+rephrase\s+(?:your\s+)?(?:responses?|text|passage)\b/i,
+  /\bfollowing\s+(?:all\s+|the\s+)?(?:given\s+)?instructions\b/i,
+  /\bchanges?\s+include(?:d|s)?\s*:/i,
+  /\btone\s+guidelines?\b/i,
+  /\bbased\s+on\s+the\s+prompt\b/i,
+  /(?:^|\n)\s*here\s+is\s+(?:a|an|the|my)\s+(?:rewritten|rephrased|response|version|attempt|continuation|answer)\b/i,
+  /\|re-?write\|/i,
+  /(?:^|\n)\s*(?:OPENERS|LENGTH)\s*:/i,
 ];
 
 function assistantFrameMatches(s) {
@@ -214,12 +230,22 @@ function assistantFrameMatches(s) {
 }
 
 export function assistantFrameHits(s) {
-  return assistantFrameMatches(s).map((match) =>
-    match.text.trim().replace(/\s+/g, ' ').slice(0, 120));
+  return [
+    ...assistantFrameMatches(s).map((match) => match.text),
+    ...assistantCritiqueBullets(s),
+  ].map((match) => match.trim().replace(/\s+/g, ' ').slice(0, 120));
 }
 
 export function looksLikeAssistantFrame(s) {
-  return assistantFrameMatches(s).length > 0;
+  if (assistantFrameMatches(s).length > 0) return true;
+  return assistantCritiqueBullets(s).length >= 2;
+}
+
+function assistantCritiqueBullets(s) {
+  return String(s || '')
+    .split(/\r?\n/)
+    .filter((line) => /^\s*[*-]\s+/.test(line))
+    .filter((line) => /\b(?:capitali[sz]ation|grammar|language|phrasing|sentences?|style|tone|wording)\b/i.test(line));
 }
 
 // Saved context has no burst markers, so once a strong assistant frame has
