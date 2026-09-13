@@ -337,7 +337,7 @@ export function heartRate(v, asleep = false) {
   const a = asleep ? 1 : 0;
   return Math.round(
     clamp(
-      62 + 46 * m.agitation + 30 * m.anxiety + 10 * p.hunger,
+      62 + 46 * m.agitation + 10 * p.hunger,
       48,
       150,
     ),
@@ -352,7 +352,7 @@ export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
   const p = v.physical;
   const m = v.mental;
   const r = {
-    amygdala: 0.2 + 0.7 * m.anxiety + 0.3 * m.agitation,
+    amygdala: 0.2 + 0.3 * m.agitation,
     acc: 0.25 + 0.6 * m.stress,
     insula: 0.2 + 0.4 * p.hunger,
     hippocampus: 0.3 + 0.5 * (v.imageRecall || 0),

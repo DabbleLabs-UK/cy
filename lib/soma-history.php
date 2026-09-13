@@ -8,7 +8,7 @@ const CAPTIVE_SOMA_RANGES = [
 ];
 
 const CAPTIVE_SOMA_METRICS = [
-    'anxiety', 'arousal', 'pain', 'hunger', 'loneliness', 'anger', 'rumination',
+    'arousal', 'pain', 'hunger', 'loneliness', 'anger', 'rumination',
 ];
 
 const CAPTIVE_SOMA_BRAIN_REGIONS = [
@@ -33,6 +33,14 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'key' => $key,
             'jsonPath' => '$.soma.experienced.metrics.' . $key . '.value',
             'scale' => 1.0,
+        ];
+    }
+    if ($scope === 'operational-anxiety' && $key === 'anxiety') {
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.operationalAnxiety.status',
+            'categorical' => true,
         ];
     }
     if ($scope === 'brain' && in_array($key, CAPTIVE_SOMA_BRAIN_REGIONS, true)) {
@@ -87,6 +95,47 @@ function captive_soma_history_config(string $range, string $key, string $scope =
         ];
     }
     throw new InvalidArgumentException($scope === 'brain' ? 'unknown Soma brain region' : 'unknown Soma metric');
+}
+
+function captive_operational_anxiety_history_points(
+    array $rows,
+    int $fromMs,
+    int $toMs
+): array {
+    $valid = ['QUIET', 'ANTICIPATING', 'THREAT_IMMINENT', 'THREAT_ONGOING', 'UNKNOWN'];
+    $points = [];
+    $previous = null;
+    foreach ($rows as $row) {
+        $state = strtoupper(trim((string)($row['value'] ?? '')));
+        if (!in_array($state, $valid, true)) {
+            continue;
+        }
+        $tsMs = captive_soma_row_timestamp_ms($row);
+        if ($tsMs === null) continue;
+        if ($tsMs < $fromMs || $tsMs > $toMs) {
+            continue;
+        }
+        if ($state === $previous && $points !== []) {
+            $points[count($points) - 1]['lastObservedTs'] = $tsMs;
+            continue;
+        }
+        $points[] = ['ts' => $tsMs, 'state' => $state, 'lastObservedTs' => $tsMs];
+        $previous = $state;
+    }
+    return $points;
+}
+
+function captive_soma_row_timestamp_ms(array $row): ?int
+{
+    if (isset($row['ts_ms']) && is_numeric($row['ts_ms'])) {
+        return (int)round((float)$row['ts_ms']);
+    }
+    $rawTs = (string)($row['ts'] ?? '');
+    $zone = new DateTimeZone('Europe/London');
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s.u', $rawTs, $zone)
+        ?: DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $rawTs, $zone);
+    if ($date === false) return null;
+    return $date->getTimestamp() * 1000 + (int)floor((int)$date->format('u') / 1000);
 }
 
 function captive_somatic_history_events(array $rows, int $fromMs, int $toMs): array

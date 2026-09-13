@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  buildCategoricalStepPath,
   buildHistoryPath,
   buildHistoryUrl,
   closeOtherReadings,
@@ -41,6 +42,16 @@ assert.equal(
   buildHistoryUrl('/api/soma-history.php', 'brain', 'temporalSocial', '7d'),
   '/api/soma-history.php?scope=brain&key=temporalSocial&range=7d',
   'brain regions and Soma metrics share the same history URL builder',
+);
+
+assert.equal(
+  buildCategoricalStepPath([
+    { ts: 1000, state: 'QUIET' },
+    { ts: 2000, state: 'ANTICIPATING' },
+    { ts: 3000, state: 'THREAT_ONGOING' },
+  ], 0, 4000),
+  'M70.0 56.0 H140.0 V40.0 H210.0 V8.0 H280.0',
+  'operational Anxiety history is a categorical stepped line rather than a numeric curve',
 );
 
 const anxietyReading = { open: true };

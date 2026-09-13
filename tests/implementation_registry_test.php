@@ -13,7 +13,7 @@ function check_registry(bool $condition, string $message): void {
 
 $registry = captive_implementation_registry();
 check_registry($registry['schema'] === 'cy.implementation-registry', 'wrong registry schema');
-check_registry(count($registry['soma_variables']) === 9, 'registry must contain nine Soma variables');
+check_registry(count($registry['soma_variables']) === 11, 'registry must contain eleven Soma variables');
 check_registry(captive_implementation_overall_status($registry) === 'provisional', 'overall status must be provisional');
 check_registry(captive_implementation_public_label($registry, 'IMPLEMENTED') === 'LIVE', 'implemented public label');
 check_registry(captive_implementation_public_label($registry, 'PROVISIONAL') === 'PROVISIONAL', 'provisional public label');
@@ -44,7 +44,13 @@ check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'perceived_controllability')['implementation_status'] === 'NOT_IMPLEMENTED', 'perceived control must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'prison_instrumental_opportunities')['implementation_status'] === 'IMPLEMENTED', 'prison instrumental opportunities must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'grounded_instrumental_action_selection')['implementation_status'] === 'NOT_IMPLEMENTED', 'grounded instrumental action selection must remain not modelled');
-check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'anxiety')['implementation_status'] === 'PROVISIONAL', 'Anxiety must remain provisional');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'anxiety')['implementation_status'] === 'IMPLEMENTED', 'operational Anxiety must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'legacy_anxiety_scalar')['lifecycle_status'] === 'DIAGNOSTICS_ONLY', 'legacy Anxiety must be diagnostics only');
+check_registry(captive_implementation_registry_entry($registry, 'soma_variables', 'subjective_anxiety_magnitude')['implementation_status'] === 'NOT_IMPLEMENTED', 'subjective Anxiety magnitude must remain not modelled');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'operational_anxiety_state')['implementation_status'] === 'IMPLEMENTED', 'operational Anxiety state must be implemented');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'temporal_threat_hazard')['implementation_status'] === 'NOT_IMPLEMENTED', 'temporal threat hazard must remain unavailable');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'amygdala_neural_activation')['implementation_status'] === 'NOT_IMPLEMENTED', 'amygdala activation must remain unavailable');
+check_registry(captive_implementation_registry_entry($registry, 'soma_subsystems', 'bnst_neural_activation')['implementation_status'] === 'NOT_IMPLEMENTED', 'BNST activation must remain unavailable');
 check_registry(captive_implementation_registry_entry($registry, 'brain_regions', 'vmpfcControl')['implementation_status'] === 'NOT_IMPLEMENTED', 'vmPFC activation must remain not modelled');
 check_registry(captive_implementation_registry_entry($registry, 'world_systems', 'shared_context_broker')['implementation_status'] === 'IMPLEMENTED', 'shared context broker must be implemented');
 check_registry(captive_implementation_registry_entry($registry, 'world_systems', 'ambient_world_generator')['implementation_status'] === 'IMPLEMENTED', 'ambient world generator must be implemented');

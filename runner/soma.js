@@ -51,6 +51,10 @@ import {
   reconcileCurrentDefensiveContext,
 } from './current-defensive-context.js';
 import {
+  operationalAnxietySnapshot,
+  operationalAnxietyTransition,
+} from './operational-anxiety-state.js';
+import {
   createFeedingState,
   feedingSnapshot,
   observeFeedingRecord as applyFeedingRecord,
@@ -293,12 +297,16 @@ export function observeSomaThreatLearningRecord(state, record) {
 // the grounded learned-state substrates.
 export function observeSomaCurrentDefensiveContextRecord(state, record) {
   if (!state || !record) return null;
-  return applyCurrentDefensiveContextRecord(
+  const result = applyCurrentDefensiveContextRecord(
     state.currentDefensiveContext,
     state.threatLearning,
     state.learnedControllability,
     record,
   );
+  return {
+    ...result,
+    operationalAnxiety: operationalAnxietyTransition(state.currentDefensiveContext, result),
+  };
 }
 
 // The grounded feeding ledger consumes only canonical structured food facts.
@@ -762,7 +770,7 @@ export function tickSoma(state, {
   // Legacy fatigue is diagnostics-only. It must not affect even the retained
   // compatibility drives or circuits; predicted KSS is not an action policy.
   state.drives.rest = 0;
-  state.drives.safety = round(Math.max(experienced.anxiety.value / 100, experienced.arousal.value / 120, experienced.anger.value / 140));
+  state.drives.safety = round(Math.max(experienced.arousal.value / 120, experienced.anger.value / 140));
   state.drives.contact = round(experienced.loneliness.value / 100);
   state.drives.understanding = round(
     0.2 + 0.42 * state.selfModel.uncertainty + 0.38 * state.prediction.error,
@@ -957,6 +965,7 @@ export function somaSnapshot(state) {
     predictedSleepiness: threeProcessSleepinessSnapshot(state.predictedSleepiness, state.lastTickMs),
     threatLearning: threatLearningSnapshot(state.threatLearning),
     currentDefensiveContext: currentDefensiveContextSnapshot(state.currentDefensiveContext),
+    operationalAnxiety: operationalAnxietySnapshot(state.currentDefensiveContext),
     feeding: feedingSnapshot(state.feeding, state.lastTickMs),
     physiologicalSatiety: physiologicalSatietySnapshot(state.physiologicalSatiety),
     physiologicalSatietyInspection: physiologicalSatietyInspection(state.physiologicalSatiety),

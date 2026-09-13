@@ -19,12 +19,35 @@
     {
       "id": "anxiety",
       "display_name": "ANXIETY",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "operational-threat-anticipation-state",
+      "status_note": "A categorical operational state reports whether structured current defensive contexts are quiet, anticipatory, imminent, ongoing or unavailable. Learned cue-outcome uncertainty, world ambiguity, timing and actual control remain separate facts; no subjective magnitude is calculated.",
+      "data_dependencies": ["defensive_context", "associative_learning", "control", "predictability"],
+      "version": "operational-anxiety-state-v1",
+      "provenance": "config/model-specs/operational-anxiety-state.json"
+    },
+    {
+      "id": "legacy_anxiety_scalar",
+      "display_name": "LEGACY ANXIETY SCALAR",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "The displayed anxiety value is still produced by the older heuristic experienced-state model. A separate grounded probabilistic threat-prediction dependency is LIVE, but no approved mapping converts it into anxiety.",
-      "data_dependencies": ["possible_harm", "uncertainty", "control", "learned_context"],
-      "available_future_dependencies": ["probabilistic_threat_learning", "current_defensive_context"],
-      "version": "legacy-experienced-state-v2"
+      "status_note": "The older arbitrary 0-100 Anxiety calculation remains only in legacy diagnostics and persistence compatibility. It is excluded from the public headline, history, prompt, action selection, cadence, drawing, handwriting, brain analogies, grounded threat state and memory.",
+      "data_dependencies": [],
+      "version": "legacy-experienced-state-v2",
+      "ui_exposed": false,
+      "diagnostics_only": true,
+      "lifecycle_status": "DIAGNOSTICS_ONLY",
+      "classification": ["LEGACY", "PROVISIONAL", "DIAGNOSTICS_ONLY"]
+    },
+    {
+      "id": "subjective_anxiety_magnitude",
+      "display_name": "SUBJECTIVE ANXIETY MAGNITUDE",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No scalar model of subjective anxiety magnitude is implemented.",
+      "data_dependencies": [],
+      "version": null,
+      "ui_exposed": false
     },
     {
       "id": "arousal",
@@ -388,6 +411,43 @@
       "data_dependencies": ["structured_environment_event", "probabilistic_threat_learning", "objective_control", "observation_certainty", "outcome_resolution"],
       "version": "current-defensive-context-v1",
       "provenance": "config/model-specs/current-defensive-context.json"
+    },
+    {
+      "id": "operational_anxiety_state",
+      "display_name": "OPERATIONAL THREAT ANTICIPATION STATE",
+      "implementation_status": "IMPLEMENTED",
+      "model_spec_id": "operational-threat-anticipation-state",
+      "status_note": "A parameter-free categorical projection of current defensive context. Concurrent threats remain separate and the public headline uses structural precedence: ongoing, imminent, anticipating, then quiet.",
+      "data_dependencies": ["current_defensive_context", "probabilistic_threat_learning", "objective_controllability", "threat_imminence_representation"],
+      "version": "operational-anxiety-state-v1",
+      "provenance": "config/model-specs/operational-anxiety-state.json"
+    },
+    {
+      "id": "temporal_threat_hazard",
+      "display_name": "TEMPORAL THREAT HAZARD",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No event-time distribution exists from which to calculate a hazard function. The interface reports NOT AVAILABLE rather than inventing one.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "amygdala_neural_activation",
+      "display_name": "AMYGDALA NEURAL ACTIVATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No measured or simulated amygdala neural activation is available. The threat-learning substrate and operational Anxiety state must not be presented as amygdala activation.",
+      "data_dependencies": [],
+      "version": null
+    },
+    {
+      "id": "bnst_neural_activation",
+      "display_name": "BNST NEURAL ACTIVATION",
+      "implementation_status": "NOT_IMPLEMENTED",
+      "model_spec_id": null,
+      "status_note": "No measured or simulated BNST neural activation is available. Temporal uncertainty remains a property of the structured defensive context, not a BNST activation value.",
+      "data_dependencies": [],
+      "version": null
     },
     {
       "id": "objective_controllability",
@@ -1036,8 +1096,8 @@
       "display_name": "AMYGDALA-CENTRED THREAT / SALIENCE ANALOGY",
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
-      "status_note": "Grounded threat prediction and current external defensive-context subsystems are LIVE, but no approved mapping turns them into amygdala firing or activation. The older displayed mapping remains an unapproved linear heuristic and is not shown as live activation.",
-      "data_dependencies": ["probabilistic_threat_learning", "current_defensive_context", "expected_outcome", "uncertainty", "outcome_surprisal", "anxiety", "anger"],
+      "status_note": "The functional association with present threat context is shown, but no mapping to amygdala firing or activation is implemented. The operational Anxiety state does not calculate or display a neural activation percentage.",
+      "data_dependencies": ["probabilistic_threat_learning", "current_defensive_context"],
       "version": "legacy-brain-map-v1"
     },
     {
@@ -1045,7 +1105,7 @@
       "display_name": "BNST / SUSTAINED-UNCERTAIN-THREAT ANALOGY",
       "implementation_status": "NOT_IMPLEMENTED",
       "model_spec_id": null,
-      "status_note": "No BNST activation model or supported artwork mapping exists. Current ambiguity and temporal status are possible future dependencies only.",
+      "status_note": "Sustained uncertain threat is represented in the distributed operational state, but no BNST activation model or supported artwork mapping exists.",
       "data_dependencies": ["current_defensive_context", "world_ambiguity", "temporal_status"],
       "ui_exposed": false,
       "version": null
@@ -1107,7 +1167,7 @@
       "implementation_status": "PROVISIONAL",
       "model_spec_id": null,
       "status_note": "A provenanced autobiographical information-retrieval system is LIVE separately, but no approved mapping converts its storage, retrieval or surfacing into hippocampal firing or activation. The displayed runner mapping remains an unapproved legacy heuristic and is not shown as live activation.",
-      "data_dependencies": ["rumination", "anxiety", "loneliness", "learned_context"],
+      "data_dependencies": ["rumination", "loneliness", "learned_context"],
       "available_future_dependencies": ["autobiographical_memory_system"],
       "version": "legacy-brain-map-v1"
     },

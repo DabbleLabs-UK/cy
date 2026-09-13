@@ -195,7 +195,7 @@ function defensiveSection(state) {
       'current_defensive_context',
       'subjective_defensive_state',
       {
-        anxiety: 'NOT_MODELLED',
+        subjectiveAnxietyMagnitude: 'NOT_MODELLED',
         fearIntensity: 'NOT_MODELLED',
         perceivedControllability: 'NOT_MODELLED',
         causalActionOutcomeControl: 'NOT_MODELLED',

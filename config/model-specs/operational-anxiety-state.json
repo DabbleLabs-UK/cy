@@ -1,0 +1,62 @@
+{
+  "schema": "cy.architecture-spec",
+  "version": 1,
+  "id": "operational-threat-anticipation-state",
+  "implementation_version": "operational-anxiety-state-v1",
+  "locked": true,
+  "public_name": "Anxiety",
+  "implementation_status": "IMPLEMENTED",
+  "interpretation": "A categorical operational summary of current structured threat anticipation. It is not a 0-100 emotion score and does not estimate subjective magnitude.",
+  "scientific_conceptual_basis": [
+    {
+      "authors": "Schmitz and Grillon",
+      "year": 2012,
+      "title": "Assessing fear and anxiety in humans using the threat of predictable and unpredictable aversive events (the NPU-threat test)",
+      "journal": "Nature Protocols",
+      "doi": "10.1038/nprot.2012.001",
+      "url": "https://www.nature.com/articles/nprot.2012.001",
+      "use": "Supports separating predictable, signalled threat from sustained unpredictable threat; it does not supply a software intensity scale."
+    },
+    {
+      "authors": "Holley, Varga, Boorman and Fox",
+      "year": 2024,
+      "title": "Temporal Dynamics of Uncertainty Cause Anxiety and Avoidance",
+      "journal": "Computational Psychiatry",
+      "doi": "10.5334/cpsy.105",
+      "url": "https://escholarship.org/uc/item/56s1g6vp",
+      "use": "Supports keeping temporal uncertainty and event timing explicit, and calculating hazard only from a real event-time distribution rather than collapsing timing into an affect score."
+    }
+  ],
+  "authoritative_dependency": "current-defensive-context-v1",
+  "states": ["QUIET", "ANTICIPATING", "THREAT_IMMINENT", "THREAT_ONGOING", "UNKNOWN"],
+  "state_rules": {
+    "QUIET": "No active current defensive context exists.",
+    "ANTICIPATING": "At least one active context has POTENTIAL or UNKNOWN temporal status and none is imminent or ongoing.",
+    "THREAT_IMMINENT": "At least one active context is IMMINENT and none is ONGOING.",
+    "THREAT_ONGOING": "At least one active context is ONGOING.",
+    "UNKNOWN": "The authoritative current defensive-context state is unavailable."
+  },
+  "headline_precedence": ["THREAT_ONGOING", "THREAT_IMMINENT", "ANTICIPATING", "QUIET", "UNKNOWN"],
+  "concurrent_contexts": "Every context and adverse outcome remains independent. Precedence selects only the public headline; it never sums or merges evidence.",
+  "learning": {
+    "source": "probabilistic-threat-learning-v1",
+    "preserved_fields": ["alpha", "beta", "posterior mean", "posterior variance", "resolved observation count"],
+    "prior_only_display": "NO RESOLVED LEARNING HISTORY",
+    "prior_only_rule": "Beta(1,1) is a prior and must never be displayed as 50% learned threat."
+  },
+  "separate_dimensions": ["learned epistemic uncertainty", "world ambiguity", "temporal status", "objective controllability", "outcome resolution"],
+  "temporal_hazard": {
+    "status": "NOT_AVAILABLE",
+    "reason": "No event-time distribution is produced by the current simulated world.",
+    "future_interface": "A hazard value may be added only when a validated event-time distribution exists."
+  },
+  "state_lifecycle": "The projection changes only when its persistent authoritative current-defensive-context input changes. No decay or interpolation is applied.",
+  "numeric_psychological_parameters": [],
+  "arbitrary_or_heuristic_constants": [],
+  "engineering_constants": [
+    { "name": "state_schema_version", "value": 1, "classification": "storage and API compatibility; not a psychological parameter" },
+    { "name": "history_windows", "value": ["1h", "24h", "7d"], "classification": "presentation only" }
+  ],
+  "behavioural_boundary": "The operational headline is public presentation. Existing underlying grounded defensive facts continue to enter prose and model-mediated expressive choice; this projection adds no instruction, action weight, timing, drawing, handwriting or memory effect.",
+  "not_modelled": ["subjective anxiety magnitude", "perceived controllability", "temporal hazard", "amygdala neural activation", "BNST neural activation", "fear intensity", "behavioural policy"]
+}

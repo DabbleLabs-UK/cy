@@ -8,8 +8,8 @@ import { createEnvironmentEvent, environmentEventToSomaInput } from './environme
 
 const registry = implementationRegistry;
 assert.equal(registry.schema, 'cy.implementation-registry');
-assert.equal(registry.soma_variables.length, 9);
-assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 3);
+assert.equal(registry.soma_variables.length, 11);
+assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 4);
 assert.equal(somaImplementationStatus(), 'provisional');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_prose_context').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_to_expressive_context').implementation_status, 'IMPLEMENTED');
@@ -65,7 +65,13 @@ assert.equal(implementationEntry('soma_subsystems', 'predictive_pain_inference')
 assert.equal(implementationEntry('soma_subsystems', 'peripheral_sensitisation').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'central_sensitisation').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'nocifensive_action_model').implementation_status, 'NOT_IMPLEMENTED');
-assert.equal(implementationEntry('soma_variables', 'anxiety').implementation_status, 'PROVISIONAL');
+assert.equal(implementationEntry('soma_variables', 'anxiety').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_variables', 'legacy_anxiety_scalar').lifecycle_status, 'DIAGNOSTICS_ONLY');
+assert.equal(implementationEntry('soma_variables', 'subjective_anxiety_magnitude').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'operational_anxiety_state').implementation_status, 'IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'temporal_threat_hazard').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'amygdala_neural_activation').implementation_status, 'NOT_IMPLEMENTED');
+assert.equal(implementationEntry('soma_subsystems', 'bnst_neural_activation').implementation_status, 'NOT_IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'amygdala').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'acc').implementation_status, 'PROVISIONAL');
 assert.equal(implementationEntry('brain_regions', 'bnstUncertainThreat').implementation_status, 'NOT_IMPLEMENTED');

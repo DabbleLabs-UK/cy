@@ -1959,6 +1959,38 @@ body.cy-paused::after {
     radial-gradient(90% 120% at 80% 30%, rgba(68, 87, 106, 0.14), transparent 68%),
     rgba(8, 12, 17, 0.58);
 }
+.soma-operational-anxiety-entry .soma-state-row {
+  grid-template-columns: minmax(0, 1fr) auto minmax(11ch, auto);
+}
+.soma-operational-anxiety-entry .soma-state-value {
+  color: #d8ddec;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.operational-anxiety-facts {
+  display: grid;
+  gap: 3px;
+  margin: 7px 0;
+}
+.operational-anxiety-facts > div {
+  display: grid;
+  grid-template-columns: minmax(9ch, 0.8fr) minmax(0, 1.2fr);
+  gap: 7px;
+}
+.operational-anxiety-facts dt { color: #728a97; font-size: 7px; letter-spacing: 0.06em; }
+.operational-anxiety-facts dd { margin: 0; color: #bfd0da; font-size: 7.5px; text-align: right; overflow-wrap: anywhere; }
+.operational-anxiety-contexts { display: grid; gap: 5px; margin-top: 7px; }
+.operational-anxiety-contexts article { padding: 6px; border: 1px solid rgba(94, 126, 144, 0.4); background: rgba(6, 13, 18, 0.35); }
+.operational-anxiety-contexts strong { color: #c8e0ec; font-size: 7.5px; letter-spacing: 0.05em; }
+.operational-anxiety-contexts p { margin: 3px 0 0; color: #91a6b2; font-size: 7.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.operational-anxiety-history-wrap { display: grid; grid-template-columns: 62px minmax(0, 1fr); column-gap: 5px; }
+.operational-anxiety-history-wrap .soma-ranges,
+.operational-anxiety-history-wrap .soma-history-note { grid-column: 1 / -1; }
+.operational-anxiety-axis { display: grid; grid-template-rows: repeat(5, 1fr); height: 80px; color: #78909e; font-size: 6.5px; line-height: 1; }
+.operational-anxiety-axis span { display: flex; align-items: center; }
+.operational-anxiety-history { height: 80px; }
+.operational-anxiety-history path { stroke: #d99d45; stroke-width: 2; }
 .pl-dream-meta { text-transform: uppercase; }
 .pl-dream-canvas { position: relative; min-height: 64px; }
 .pl-dream-fragments { position: relative; z-index: 2; }

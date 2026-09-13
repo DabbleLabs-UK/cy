@@ -35,13 +35,12 @@ const HISTORY_MENTAL_AXES = [
 
 // The subset eligible to be a window's dominant mood (lucidity excluded - see head).
 const HISTORY_EMOTIONAL_AXES = [
-    'anxiety', 'stress', 'despair', 'hope',
+    'stress', 'despair', 'hope',
     'agitation', 'dissociation', 'anger', 'longing',
 ];
 
 // Tint per mood, for the spine bands. Muted, prison-palette; one hex per axis.
 const HISTORY_MOOD_TINTS = [
-    'anxiety'      => '#9aa63d',
     'stress'       => '#c8622d',
     'despair'      => '#3b4a63',
     'hope'         => '#d9a441',
@@ -477,6 +476,7 @@ function history_day_index(PDO $db): array
     $days = [];
     foreach ($dayRows as $d) {
         $day = $d['day'];
+        $mood = history_effective_public_mood($d);
         $hours = [];
         foreach ($hoursByDay[$day] ?? [] as $h) {
             $hours[] = history_shape_hour($h);
@@ -489,9 +489,9 @@ function history_day_index(PDO $db): array
             'bursts' => (int)$d['burst_count'],
             'silence' => (int)$d['silence_seconds'],
             'mood' => [
-                'dominant' => $d['dominant_mood'],
-                'tint' => $d['dominant_mood'] !== null ? (HISTORY_MOOD_TINTS[$d['dominant_mood']] ?? HISTORY_TINT_NONE) : HISTORY_TINT_NONE,
-                'score' => $d['mood_score'] !== null ? round((float)$d['mood_score'], 3) : null,
+                'dominant' => $mood['dominant'],
+                'tint' => $mood['tint'],
+                'score' => $mood['score'],
             ],
             'markers' => history_markers($d),
             'hours' => $hours,
@@ -505,7 +505,8 @@ function history_day_index(PDO $db): array
 // c=chars, b=bursts, s=silence, t=tint, m=nonzero markers).
 function history_shape_hour(array $h): array
 {
-    $dom = $h['dominant_mood'];
+    $mood = history_effective_public_mood($h);
+    $dom = $mood['dominant'];
     $out = [
         'h' => (int)$h['hour'],
         'c' => (int)$h['char_count'],
@@ -521,6 +522,30 @@ function history_shape_hour(array $h): array
         $out['m'] = $markers;
     }
     return $out;
+}
+
+// Recompute presentation from the stored accumulator so pre-deployment rollups
+// cannot continue using the retired legacy Anxiety scalar as a public mood tint.
+// The accumulator remains untouched for compatibility and diagnostics.
+function history_effective_public_mood(array $row): array
+{
+    $acc = json_decode((string)($row['acc'] ?? ''), true);
+    if (is_array($acc)) {
+        $mood = history_reduce_mood($acc);
+        return [
+            'dominant' => $mood['dominant'],
+            'tint' => $mood['tint'],
+            'score' => $mood['score'] !== null ? round((float)$mood['score'], 3) : null,
+        ];
+    }
+    $dominant = ($row['dominant_mood'] ?? null) === 'anxiety'
+        ? null : ($row['dominant_mood'] ?? null);
+    return [
+        'dominant' => $dominant,
+        'tint' => $dominant !== null ? (HISTORY_MOOD_TINTS[$dominant] ?? HISTORY_TINT_NONE) : HISTORY_TINT_NONE,
+        'score' => $dominant !== null && isset($row['mood_score'])
+            ? round((float)$row['mood_score'], 3) : null,
+    ];
 }
 
 // Non-zero notable-event counts only (keeps the payload small over a phone link).

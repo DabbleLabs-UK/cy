@@ -4,7 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../lib/soma-history.php';
 
 $payload = static fn(float $value): string => json_encode([
-    'soma' => ['experienced' => ['metrics' => ['anxiety' => ['value' => $value]]]],
+    'soma' => ['experienced' => ['metrics' => ['arousal' => ['value' => $value]]]],
 ], JSON_THROW_ON_ERROR);
 $rows = [
     ['ts_ms' => 1000, 'payload' => $payload(20)],
@@ -12,7 +12,7 @@ $rows = [
     ['ts_ms' => 5000, 'payload' => $payload(38)],
     ['ts_ms' => 6000, 'payload' => json_encode(['soma' => []], JSON_THROW_ON_ERROR)],
 ];
-$points = captive_soma_history_points($rows, 'anxiety', 0, 10000, 2);
+$points = captive_soma_history_points($rows, 'arousal', 0, 10000, 2);
 if (count($points) !== 2 || $points[0]['value'] !== 22.0 || $points[1]['value'] !== 38.0) {
     fwrite(STDERR, "FAIL: stored points were not downsampled by taking the last real reading\n");
     exit(1);
@@ -27,6 +27,35 @@ if (count($londonPoint) !== 1 || $londonPoint[0]['ts'] !== 1789051085515) {
 try {
     captive_soma_history_config('month', 'anxiety');
     fwrite(STDERR, "FAIL: invalid range accepted\n");
+    exit(1);
+} catch (InvalidArgumentException $e) {
+}
+foreach (['1h', '24h', '7d'] as $range) {
+    $anxietyConfig = captive_soma_history_config($range, 'anxiety', 'operational-anxiety');
+    if ($anxietyConfig['jsonPath'] !== '$.soma.operationalAnxiety.status'
+        || $anxietyConfig['categorical'] !== true) {
+        fwrite(STDERR, "FAIL: operational Anxiety $range history config is incorrect\n");
+        exit(1);
+    }
+}
+$anxietyPoints = captive_operational_anxiety_history_points([
+    ['ts_ms' => 1000, 'value' => 'QUIET'],
+    ['ts_ms' => 2000, 'value' => 'QUIET'],
+    ['ts_ms' => 3000, 'value' => 'ANTICIPATING'],
+    ['ts_ms' => 4000, 'value' => 'THREAT_ONGOING'],
+    ['ts_ms' => 5000, 'value' => 'not-a-state'],
+], 0, 10000);
+if ($anxietyPoints !== [
+    ['ts' => 1000, 'state' => 'QUIET', 'lastObservedTs' => 2000],
+    ['ts' => 3000, 'state' => 'ANTICIPATING', 'lastObservedTs' => 3000],
+    ['ts' => 4000, 'state' => 'THREAT_ONGOING', 'lastObservedTs' => 4000],
+]) {
+    fwrite(STDERR, "FAIL: operational Anxiety history did not preserve categorical transitions\n");
+    exit(1);
+}
+try {
+    captive_soma_history_config('24h', 'anxiety', 'metric');
+    fwrite(STDERR, "FAIL: legacy numeric Anxiety remains available through public history\n");
     exit(1);
 } catch (InvalidArgumentException $e) {
 }
@@ -148,13 +177,13 @@ if ($satietyFromLegacyHunger !== []) {
     exit(1);
 }
 
-if (captive_soma_history_bucket_seconds(captive_soma_history_config('1h', 'anxiety')) !== 30
-    || captive_soma_history_bucket_seconds(captive_soma_history_config('24h', 'anxiety')) !== 600
-    || captive_soma_history_bucket_seconds(captive_soma_history_config('7d', 'anxiety')) !== 3600) {
+if (captive_soma_history_bucket_seconds(captive_soma_history_config('1h', 'arousal')) !== 30
+    || captive_soma_history_bucket_seconds(captive_soma_history_config('24h', 'arousal')) !== 600
+    || captive_soma_history_bucket_seconds(captive_soma_history_config('7d', 'arousal')) !== 3600) {
     fwrite(STDERR, "FAIL: history query buckets do not match the bounded graph resolutions\n");
     exit(1);
 }
-$historyQuery = captive_soma_history_query('$.soma.experienced.metrics.anxiety.value', 600);
+$historyQuery = captive_soma_history_query('$.soma.experienced.metrics.arousal.value', 600);
 if (!str_contains($historyQuery, 'FORCE INDEX (idx_kind_ts)')
     || !str_contains($historyQuery, 'SELECT MAX(seq) AS seq')
     || !str_contains($historyQuery, 'GROUP BY FLOOR(UNIX_TIMESTAMP(ts) / 600)')) {

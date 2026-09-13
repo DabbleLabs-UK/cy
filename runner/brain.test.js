@@ -91,11 +91,11 @@ assert.match(source, /class="circadian-history-band"/);
 assert.match(source, /setAttribute\('class', 'scn-phase-hand'\)/);
 assert.match(source, /class="soma-region-list"/);
 assert.match(source, /probabilistic_threat_learning/);
-assert.match(source, /predicts outcomes; it is not an anxiety or fear-intensity score/);
+assert.match(source, /Learns whether a structured cue has been followed/);
 assert.match(source, /threat-learning-inspector/);
 assert.match(source, /CURRENT DEFENSIVE CONTEXT/);
-assert.match(source, /It is not an anxiety or threat score/);
-assert.match(source, /Learned uncertainty remains the separate posterior variance/);
+assert.doesNotMatch(source, /It is not an anxiety or threat score/);
+assert.match(source, /Learned uncertainty remains separate in the owner inspection/);
 assert.match(source, /defensive-context-inspector/);
 assert.match(source, /ACTUAL CONTROL/);
 assert.equal(

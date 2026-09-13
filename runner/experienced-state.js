@@ -526,7 +526,7 @@ export function experiencedSnapshot(state, now = null) {
   }
   const value = (key) => metrics[key].value;
   const brain = {
-    amygdala: brainRegion('amygdala', 'Amygdala analogy', 0.65 * value('anxiety') + 0.35 * value('anger'), ['anxiety', 'anger']),
+    amygdala: brainRegion('amygdala', 'Amygdala analogy', 0.35 * value('anger'), ['anger']),
     insula: {
       key: 'insula', label: 'Insula analogy', value: null, level: 'unavailable', sources: [],
       explanation: 'Somatic input is recorded, but neural integration and activation are not modelled.',
@@ -535,7 +535,7 @@ export function experiencedSnapshot(state, now = null) {
       key: 'acc', label: 'Anterior cingulate analogy', value: null, level: 'unavailable', sources: [],
       explanation: 'No subjective Pain, affective Pain or control-conflict activation mapping is modelled.',
     },
-    hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination') + 0.25 * value('anxiety') + 0.2 * value('loneliness'), ['rumination', 'anxiety', 'loneliness']),
+    hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination') + 0.2 * value('loneliness'), ['rumination', 'loneliness']),
     prefrontal: {
       key: 'prefrontal', label: 'Prefrontal analogy', value: null, level: 'unavailable', sources: [],
       explanation: 'No validated mapping from legacy Pain or current bodily facts to prefrontal activation is modelled.',

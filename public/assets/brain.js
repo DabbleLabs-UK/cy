@@ -176,6 +176,28 @@ export function buildCountStepPath(points, fromMs, toMs, width = 280, height = 6
   return `${path} H${x(end).toFixed(1)}`;
 }
 
+export const OPERATIONAL_ANXIETY_BANDS = Object.freeze([
+  'THREAT_ONGOING', 'THREAT_IMMINENT', 'ANTICIPATING', 'QUIET', 'UNKNOWN',
+]);
+
+export function buildCategoricalStepPath(points, fromMs, toMs, width = 280, height = 80) {
+  const clean = (Array.isArray(points) ? points : [])
+    .filter((point) => Number.isFinite(point.ts) && OPERATIONAL_ANXIETY_BANDS.includes(point.state))
+    .sort((left, right) => left.ts - right.ts);
+  if (!clean.length) return '';
+  const start = Number.isFinite(fromMs) ? fromMs : clean[0].ts;
+  const end = Number.isFinite(toMs) ? toMs : clean[clean.length - 1].ts;
+  const span = Math.max(1, end - start);
+  const x = (ts) => Math.max(0, Math.min(width, ((ts - start) / span) * width));
+  const y = (state) => ((OPERATIONAL_ANXIETY_BANDS.indexOf(state) + 0.5)
+    / OPERATIONAL_ANXIETY_BANDS.length) * height;
+  let path = `M${x(clean[0].ts).toFixed(1)} ${y(clean[0].state).toFixed(1)}`;
+  for (let index = 1; index < clean.length; index++) {
+    path += ` H${x(clean[index].ts).toFixed(1)} V${y(clean[index].state).toFixed(1)}`;
+  }
+  return `${path} H${x(end).toFixed(1)}`;
+}
+
 export function buildHistoryUrl(base, scope, key, range) {
   const separator = String(base || '').includes('?') ? '&' : '?';
   return `${base}${separator}scope=${encodeURIComponent(scope)}&key=${encodeURIComponent(key)}&range=${encodeURIComponent(range)}`;
@@ -240,6 +262,17 @@ function historyMarkup(axisLabel = null, ariaLabel = 'Stored state history') {
     <svg class="soma-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="${ariaLabel}"><path></path></svg>
     ${axisLabel ? '<p class="soma-history-display-note">Out-of-range markers are clipped to the 1-9 axis for display only; stored raw predictions are unchanged.</p>' : ''}
     <p class="soma-history-note">Open this reading to load stored history.</p>
+  </div>`;
+}
+
+function operationalAnxietyHistoryMarkup() {
+  return `<div class="soma-reading-history operational-anxiety-history-wrap">
+    <div class="soma-ranges" aria-label="Anxiety state history range">
+      <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
+    </div>
+    <div class="operational-anxiety-axis" aria-hidden="true"><span>ONGOING</span><span>IMMINENT</span><span>ANTICIPATING</span><span>QUIET</span><span>UNKNOWN</span></div>
+    <svg class="soma-history operational-anxiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored categorical Anxiety state history"><path></path></svg>
+    <p class="soma-history-note">Open this reading to load factual state periods.</p>
   </div>`;
 }
 
@@ -314,7 +347,7 @@ function predictedSleepinessMarkup(status, admin) {
 function threatLearningMarkup(status, volatilityStatus, generalisationStatus, contextualStatus, admin) {
   return `<section class="threat-learning-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="threat-learning-head"><span>${status.displayName}</span><strong class="threat-learning-status">${status.publicLabel}</strong></div>
-    <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome. This predicts outcomes; it is not an anxiety or fear-intensity score.</p>
+    <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome.</p>
     <div class="threat-learning-associations"><p class="threat-learning-empty">No resolved post-installation trials have been observed yet.</p></div>
     <div class="threat-learning-limits"><span>STATIONARY CUE-OUTCOME LEARNING</span><strong>${status.publicLabel}</strong><span>${volatilityStatus.displayName}</span><strong>${volatilityStatus.publicLabel}</strong><span>${generalisationStatus.displayName}</span><strong>${generalisationStatus.publicLabel}</strong><span>${contextualStatus.displayName}</span><strong>${contextualStatus.publicLabel}</strong></div>
     ${admin ? '<details class="threat-learning-inspector"><summary>THREAT LEARNING INSPECTION</summary><pre>Waiting for a threat-learning snapshot.</pre></details>' : ''}
@@ -324,7 +357,7 @@ function threatLearningMarkup(status, volatilityStatus, generalisationStatus, co
 function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, perceivedStatus, learnedControlStatus, rememberedStatus, admin) {
   return `<section class="defensive-context-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="defensive-context-head"><span>${status.displayName}</span><strong class="defensive-context-status">${status.publicLabel}</strong></div>
-    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution. Learned uncertainty remains the separate posterior variance shown in owner inspection. It is not an anxiety or threat score.</p>
+    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution. Learned uncertainty remains separate in the owner inspection.</p>
     <div class="defensive-contexts"><p class="defensive-context-empty">No current structured defensive context is active.</p></div>
     <div class="defensive-context-limits"><span>${objectiveStatus.displayName}</span><strong>${objectiveStatus.publicLabel}</strong><span>${imminenceStatus.displayName}</span><strong>${imminenceStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${learnedControlStatus.displayName}</span><strong>${learnedControlStatus.publicLabel}</strong><span>${rememberedStatus.displayName}</span><strong>${rememberedStatus.publicLabel}</strong></div>
     ${admin ? '<details class="defensive-context-inspector"><summary>CURRENT DEFENSIVE CONTEXT INSPECTION</summary><pre>Waiting for exact context state and transition history.</pre></details>' : ''}
@@ -568,6 +601,7 @@ export class BrainHud {
     for (const definition of this.metricDefinitions) {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
+      if (definition.key === 'anxiety') entry.classList.add('soma-operational-anxiety-entry');
       if (definition.key === 'sleepiness') entry.classList.add('soma-sleepiness-entry');
       if (definition.key === 'somaticHarm') entry.classList.add('soma-somatic-entry');
       entry.dataset.metric = definition.key;
@@ -636,17 +670,37 @@ export class BrainHud {
         )
         : '';
       const numericHistory = ['somaticHarm', 'loneliness', 'satiety'].includes(definition.key) ? ''
-        : definition.key === 'sleepiness'
+        : definition.key === 'anxiety'
+          ? operationalAnxietyHistoryMarkup()
+          : definition.key === 'sleepiness'
           ? historyMarkup('KSS PREDICTED SLEEPINESS', 'Stored predicted KSS sleepiness history on the 1 to 9 scale')
           : historyMarkup();
       const summary = definition.key === 'somaticHarm'
         ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE - structured bodily state</span><strong class="soma-state-value">--</strong></summary>`
+        : definition.key === 'anxiety'
+          ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong></summary>`
         : `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>`;
       const detail = definition.key === 'somaticHarm'
         ? somatic
+        : definition.key === 'anxiety'
+          ? `<div class="soma-reading-detail operational-anxiety-detail">
+              <p class="soma-reading-description">Current structured threat context is unavailable.</p>
+              <dl class="operational-anxiety-facts">
+                <div><dt>CURRENT CONCERN</dt><dd class="operational-anxiety-concern">NONE</dd></div>
+                <div><dt>EXPECTED OUTCOME</dt><dd class="operational-anxiety-outcome">NONE</dd></div>
+                <div><dt>TIMING</dt><dd class="operational-anxiety-timing">UNKNOWN</dd></div>
+                <div><dt>WORLD AMBIGUITY</dt><dd class="operational-anxiety-ambiguity">UNKNOWN</dd></div>
+                <div><dt>ACTUAL CONTROL</dt><dd class="operational-anxiety-control">UNKNOWN</dd></div>
+                <div><dt>LEARNED HISTORY</dt><dd class="operational-anxiety-learning">UNKNOWN</dd></div>
+                <div><dt>TEMPORAL HAZARD</dt><dd class="operational-anxiety-hazard">NOT AVAILABLE</dd></div>
+              </dl>
+              <div class="operational-anxiety-contexts"></div>
+              ${numericHistory}${anxietyGrounding}
+            </div>`
         : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
       entry.innerHTML = `${summary}${detail}`;
-      const historyScope = definition.key === 'sleepiness' ? 'sleepiness'
+      const historyScope = definition.key === 'anxiety' ? 'operational-anxiety'
+        : definition.key === 'sleepiness' ? 'sleepiness'
         : definition.key === 'satiety' ? 'satiety'
           : definition.key === 'somaticHarm' ? 'somatic' : 'metric';
       this._wireReading(entry, historyScope, definition.registryKey || definition.key);
@@ -740,7 +794,7 @@ export class BrainHud {
         this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
         entry,
       );
-      const registryScope = ['metric', 'sleepiness', 'satiety', 'somatic'].includes(scope) ? 'soma_variables' : 'brain_regions';
+      const registryScope = ['metric', 'operational-anxiety', 'sleepiness', 'satiety', 'somatic'].includes(scope) ? 'soma_variables' : 'brain_regions';
       const registered = implementationStatus(this.registry, registryScope, key);
       if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
       if (registered.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED) return;
@@ -896,6 +950,7 @@ export class BrainHud {
     this.predictedSleepiness = soma.predictedSleepiness || null;
     this.threatLearning = soma.threatLearning || null;
     this.currentDefensiveContext = soma.currentDefensiveContext || null;
+    this.operationalAnxiety = soma.operationalAnxiety || null;
     this.learnedControllability = soma.learnedControllability || null;
     this.feeding = soma.feeding || null;
     this.physiologicalSatiety = soma.physiologicalSatiety || null;
@@ -908,6 +963,7 @@ export class BrainHud {
       const row = this.rows[definition.key];
       if (!row) continue;
       if (definition.key === 'somaticHarm') continue;
+      if (definition.key === 'anxiety') continue;
       if (definition.key === 'satiety') {
         const headline = this.physiologicalSatiety && this.physiologicalSatiety.headline;
         const live = this.physiologicalSatiety && this.physiologicalSatiety.status === 'LIVE'
@@ -959,6 +1015,7 @@ export class BrainHud {
       this.renderMetric(definition.key);
     }
     this.renderSomatic();
+    this.renderOperationalAnxiety();
     this.renderPredictedSleepiness();
     this.renderSleepHomeostasis();
     this.renderCircadianProcessC();
@@ -1053,6 +1110,75 @@ export class BrainHud {
       strong.textContent = value;
       item.append(span, strong);
       selection.appendChild(item);
+    }
+  }
+
+  renderOperationalAnxiety() {
+    const entry = this.rows.anxiety;
+    if (!entry) return;
+    const snapshot = this.operationalAnxiety;
+    const state = snapshot && OPERATIONAL_ANXIETY_BANDS.includes(snapshot.status)
+      ? snapshot.status : 'UNKNOWN';
+    const concern = snapshot && snapshot.currentConcern;
+    entry.querySelector('.soma-state-value').textContent = state.replaceAll('_', ' ');
+    entry.querySelector('.soma-state-status').textContent = 'LIVE';
+    entry.querySelector('summary').title = `Anxiety: ${state.replaceAll('_', ' ')}. Open for current threat context and history.`;
+    entry.querySelector('.soma-reading-description').textContent = state === 'QUIET'
+      ? 'No current structured defensive concern is active.'
+      : state === 'UNKNOWN'
+        ? 'Current structured defensive context is unavailable.'
+        : `${state.replaceAll('_', ' ')} from the current structured defensive context.`;
+
+    const cueLabels = concern && Array.isArray(concern.activeCues)
+      ? concern.activeCues.map((cue) => cue.label).filter(Boolean) : [];
+    entry.querySelector('.operational-anxiety-concern').textContent = cueLabels.length
+      ? cueLabels.join(', ') : state === 'QUIET' ? 'NONE' : 'UNKNOWN';
+    entry.querySelector('.operational-anxiety-outcome').textContent = concern && concern.outcomeClass
+      ? concern.outcomeClass.replaceAll('_', ' ') : state === 'QUIET' ? 'NONE' : 'UNKNOWN';
+    entry.querySelector('.operational-anxiety-timing').textContent = concern
+      ? `${concern.temporalStatus.replaceAll('_', ' ')} - ${concern.temporalPredictability.replaceAll('_', ' ')}`
+      : state === 'QUIET' ? 'NO ACTIVE THREAT TIMING' : 'UNKNOWN';
+    entry.querySelector('.operational-anxiety-ambiguity').textContent = concern
+      ? concern.worldAmbiguity.replaceAll('_', ' ') : state === 'QUIET' ? 'NONE' : 'UNKNOWN';
+    entry.querySelector('.operational-anxiety-control').textContent = concern
+      ? concern.objectiveControllability.replaceAll('_', ' ') : state === 'QUIET' ? 'NOT APPLICABLE' : 'UNKNOWN';
+    const evidence = concern && Array.isArray(concern.learnedCueOutcomeEvidence)
+      ? concern.learnedCueOutcomeEvidence : [];
+    const learnedCounts = evidence.reduce((counts, item) => {
+      const posterior = item && item.evidence && item.evidence.posterior;
+      if (posterior) {
+        counts.occurred += Number(posterior.outcomesOccurred || 0);
+        counts.safe += Number(posterior.outcomesDidNotOccur || 0);
+      }
+      return counts;
+    }, { occurred: 0, safe: 0 });
+    const resolved = learnedCounts.occurred + learnedCounts.safe;
+    entry.querySelector('.operational-anxiety-learning').textContent = evidence.length === 0
+      ? (state === 'QUIET' ? 'NO ACTIVE CUE' : 'UNKNOWN')
+      : resolved === 0 ? 'NO RESOLVED LEARNING HISTORY'
+        : `${learnedCounts.occurred} ADVERSE / ${learnedCounts.safe} SAFE OBSERVATIONS`;
+    entry.querySelector('.operational-anxiety-hazard').textContent = 'NOT AVAILABLE - NO EVENT-TIME DISTRIBUTION';
+
+    const contexts = entry.querySelector('.operational-anxiety-contexts');
+    contexts.textContent = '';
+    for (const item of snapshot && Array.isArray(snapshot.activeConcerns) ? snapshot.activeConcerns : []) {
+      const article = document.createElement('article');
+      const heading = document.createElement('strong');
+      heading.textContent = `${item.state.replaceAll('_', ' ')} - ${item.outcomeClass.replaceAll('_', ' ')}`;
+      const cues = document.createElement('p');
+      cues.textContent = `Present cues: ${(item.activeCues || []).map((cue) => cue.label).join(', ') || 'unknown'}.`;
+      const facts = document.createElement('p');
+      facts.textContent = `Timing ${item.temporalStatus}; world ambiguity ${item.worldAmbiguity}; actual control ${item.objectiveControllability}.`;
+      article.append(heading, cues, facts);
+      for (const learned of item.learnedCueOutcomeEvidence || []) {
+        const line = document.createElement('p');
+        const posterior = learned.evidence && learned.evidence.posterior;
+        line.textContent = posterior
+          ? `${learned.cue.label} -> ${learned.outcomeClass.replaceAll('_', ' ')}: ${posterior.outcomesOccurred} adverse / ${posterior.outcomesDidNotOccur} safe; Beta(${posterior.alpha}, ${posterior.beta}), expected probability ${posterior.mean.toFixed(3)}, variance ${posterior.variance.toFixed(4)}.`
+          : `${learned.cue.label} -> ${learned.outcomeClass.replaceAll('_', ' ')}: NO RESOLVED LEARNING HISTORY (Beta(1, 1) prior).`;
+        article.appendChild(line);
+      }
+      contexts.appendChild(article);
     }
   }
 
@@ -1595,6 +1721,13 @@ export class BrainHud {
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'history unavailable');
       if (this.historyRequests.get(entry) !== request) return;
+      if (scope === 'operational-anxiety') {
+        path.setAttribute('d', buildCategoricalStepPath(data.points, data.fromMs, data.toMs));
+        note.textContent = data.points.length
+          ? `${data.points.length} stored categorical state readings in ${range}. The line steps only when the stored state changes.`
+          : `No operational Anxiety state readings in the last ${range}.`;
+        return;
+      }
       if (scope === 'somatic') {
         const events = Array.isArray(data.events) ? data.events : [];
         path.setAttribute('d', events.length

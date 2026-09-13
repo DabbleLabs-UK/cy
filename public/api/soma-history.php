@@ -85,6 +85,56 @@ try {
             'sampledFromStoredVitals' => true,
         ]);
     }
+    if ($scope === 'operational-anxiety') {
+        $baselineStmt = $db->prepare(
+            "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$.soma.operationalAnxiety.status')) AS value
+             FROM events FORCE INDEX (idx_kind_ts)
+             WHERE kind = 'vitals' AND ts < ?
+             ORDER BY seq DESC LIMIT 1"
+        );
+        $baselineStmt->execute([$fromSql]);
+        $rows = $baselineStmt->fetchAll();
+        if ($rows !== []) {
+            $rows[0]['ts_ms'] = $fromMs;
+        } else {
+            $firstStmt = $db->prepare(
+                "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$.soma.operationalAnxiety.status')) AS value
+                 FROM events FORCE INDEX (idx_kind_ts)
+                 WHERE kind = 'vitals' AND ts >= ?
+                 ORDER BY seq ASC LIMIT 1"
+            );
+            $firstStmt->execute([$fromSql]);
+            $rows = $firstStmt->fetchAll();
+        }
+        $transitionStmt = $db->prepare(
+            "SELECT occurred_at AS ts,
+                    JSON_UNQUOTE(JSON_EXTRACT(record, '$.current_defensive_context.operationalAnxiety.status')) AS value
+             FROM environment_events FORCE INDEX (idx_environment_occurred)
+             WHERE occurred_at >= ?
+               AND JSON_EXTRACT(record, '$.current_defensive_context.operationalAnxiety.status') IS NOT NULL
+             ORDER BY occurred_at ASC, event_id ASC"
+        );
+        $transitionStmt->execute([$fromSql]);
+        $rows = array_merge($rows, $transitionStmt->fetchAll());
+        usort($rows, static function (array $left, array $right): int {
+            return (captive_soma_row_timestamp_ms($left) ?? PHP_INT_MAX)
+                <=> (captive_soma_row_timestamp_ms($right) ?? PHP_INT_MAX);
+        });
+        $points = captive_operational_anxiety_history_points($rows, $fromMs, $toMs);
+        captive_json_response([
+            'ok' => true,
+            'scope' => $scope,
+            'key' => $key,
+            'range' => $range,
+            'fromMs' => $fromMs,
+            'toMs' => $toMs,
+            'points' => $points,
+            'sampledFromStoredVitals' => false,
+            'transitionSource' => 'structured environment records with one stored boundary state',
+            'categorical' => true,
+            'interpolated' => false,
+        ]);
+    }
     $jsonPath = $config['jsonPath'];
     $stmt = $db->prepare(captive_soma_history_query(
         $jsonPath,

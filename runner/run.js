@@ -762,7 +762,11 @@ async function main() {
         ...(worldWithDescription.instrumental && worldWithDescription.instrumental.archetype_id
           ? ['prison-instrumental-opportunities-v1']
           : []),
-        ...(cyObserved ? ['current-defensive-context-v1', 'probabilistic-threat-learning-v1'] : []),
+        ...(cyObserved ? [
+          'current-defensive-context-v1',
+          'operational-anxiety-state-v1',
+          'probabilistic-threat-learning-v1',
+        ] : []),
         ...(['sleep_normal', 'sleep_interrupted', 'forced_wakefulness'].includes(archetypeId)
           ? ['process-s-normalized-v1', 'tpm-predicted-kss-v1']
           : []),
@@ -3629,7 +3633,6 @@ async function main() {
       // Legacy fatigue remains inside the explicitly provisional diagnostic
       // snapshot. It no longer enters compatibility vitals, brain mappings,
       // prompt inputs, action selection or environmental behaviour.
-      vitals.mental.anxiety = experienced.anxiety.value / 100;
       vitals.mental.stress = experienced.arousal.value / 100;
       vitals.mental.agitation = experienced.arousal.value / 100;
       vitals.mental.anger = experienced.anger.value / 100;
