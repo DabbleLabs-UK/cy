@@ -68,6 +68,7 @@ const packet = buildDreamContextPacket({
   recentWorld: [
     { summary: 'private postcard words', location: 'cell', sourceClass: 'VISITOR_PRIVATE' },
     { summary: 'explicitly excluded', location: 'cell', dreamEligible: false },
+    { summary: 'world-only hidden event', location: 'landing', cyObserved: false },
     ...Array.from({ length: 12 }, (_, i) => ({ summary: `recent prison event ${i} ${'x'.repeat(100)}`, location: 'cell' })),
   ],
   material: Array.from({ length: 8 }, (_, i) => ({ kind: 'incident', text: `material ${i} ${'y'.repeat(100)}` })),
@@ -77,6 +78,7 @@ assert.ok(JSON.stringify(packet).length <= DREAM_CONTEXT_CHAR_LIMIT);
 assert.ok(packet.recent_world_residue.length <= 4);
 assert.ok(!JSON.stringify(packet).includes('private postcard words'));
 assert.ok(!JSON.stringify(packet).includes('explicitly excluded'));
+assert.ok(!JSON.stringify(packet).includes('world-only hidden event'));
 assert.ok(packet.immediate_material.length <= 3);
 assert.ok(packet.autobiographical_traces.length <= 3);
 assert.deepEqual(packet.autobiographical_traces.map((memory) => memory.ref), ['D1', 'D2', 'D3']);

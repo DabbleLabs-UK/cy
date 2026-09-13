@@ -71,7 +71,10 @@ export function buildDreamContextPacket({
       local_time: compact(sleepState.localTime, 32),
     },
     recent_world_residue: (Array.isArray(recentWorld) ? recentWorld : [])
-      .filter((item) => item && item.dreamEligible !== false && item.sourceClass !== 'VISITOR_PRIVATE')
+      .filter((item) => item
+        && item.cyObserved !== false
+        && item.dreamEligible !== false
+        && item.sourceClass !== 'VISITOR_PRIVATE')
       .slice(-DREAM_RECENT_WORLD_LIMIT)
       .map((item) => ({
         text: compact(item && (item.summary || item.text), 120),

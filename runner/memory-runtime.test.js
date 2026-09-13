@@ -18,7 +18,7 @@ function client(overrides = {}) {
     async enqueueMemorySource() { return { queued: true, depth: 1 }; },
     async getPreparedMemorySet() { return { prepared_set: null }; },
     async enqueueMemorySurfacing() { return { queued: true }; },
-    async claimMemorySurfacing() { return { job: null }; },
+    async claimMemorySurfacing() { return { job: null, depth: 0 }; },
     async claimMemorySource() { return { job: null, depth: 0 }; },
     async queryMemories() { return { candidates: [] }; },
     async completeMemorySurfacing() {},
@@ -230,6 +230,55 @@ test('background work does not claim while visitor-facing inference is busy', as
   await r.tick();
   r.stop();
   assert.equal(claims, 0);
+});
+
+test('durable priority starts conservative and clears only after both queues are checked empty', async () => {
+  const claims = [];
+  const r = runtime({ client: {
+    async claimMemorySurfacing() { claims.push('surfacing'); return { job: null, depth: 0 }; },
+    async claimMemorySource() { claims.push('formation'); return { job: null, depth: 0 }; },
+  } });
+  assert.equal(r.hasPriorityWork(), true);
+  r.stopped = false;
+  await r.tick();
+  r.stop();
+  assert.deepEqual(claims, ['surfacing', 'formation']);
+  assert.equal(r.hasPriorityWork(), false);
+});
+
+test('an available durable memory job retains priority for the immediate follow-up poll', async () => {
+  const r = runtime({
+    client: {
+      async claimMemorySurfacing() { return { job: null, depth: 0 }; },
+      async claimMemorySource() {
+        return {
+          job: { id: 41, source: { sourceType: 'ENVIRONMENT_EVENT', sourceId: 'event-priority', text: 'a note arrived' } },
+          depth: 1,
+        };
+      },
+      async queryMemories() { return { candidates: [] }; },
+      async completeMemorySource() {},
+    },
+    generate: async () => '{"decision":"NOTHING"}',
+  });
+  r.stopped = false;
+  await r.tick();
+  r.stop();
+  assert.equal(r.hasPriorityWork(), true);
+});
+
+test('a source enqueue in flight prevents lower-priority world generation', async () => {
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const r = runtime({ client: {
+    async enqueueMemorySource() { await pending; return { queued: true, depth: 1 }; },
+  } });
+  r.priorityPending = false;
+  const queued = r.queueSource({ sourceType: 'ENVIRONMENT_EVENT', sourceId: 'event-in-flight', text: 'event' });
+  assert.equal(r.hasPriorityWork(), true);
+  release();
+  await queued;
+  assert.equal(r.pendingSourceWrites, 0);
 });
 
 test('foreground interruption is recorded as preemption for surfacing', async () => {

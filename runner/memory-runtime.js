@@ -77,6 +77,10 @@ export class AutobiographicalMemoryRuntime {
     this.working = { directive: '', selected: [], inspection: null };
     this.desired = null;
     this.busy = false;
+    // Start conservatively: the durable server queues have not been inspected
+    // yet, so lower-priority world generation must wait for the first poll.
+    this.priorityPending = true;
+    this.pendingSourceWrites = 0;
     this.activeAbort = null;
     this.interruptReason = null;
     this.timer = null;
@@ -113,9 +117,19 @@ export class AutobiographicalMemoryRuntime {
 
   async queueSource(source) {
     if (!source || !source.sourceId || !source.sourceType) return { queued: false };
-    const result = await this.client.enqueueMemorySource(source);
-    this.schedule(10);
-    return result;
+    this.pendingSourceWrites += 1;
+    this.priorityPending = true;
+    try {
+      const result = await this.client.enqueueMemorySource(source);
+      this.schedule(10);
+      return result;
+    } finally {
+      this.pendingSourceWrites = Math.max(0, this.pendingSourceWrites - 1);
+    }
+  }
+
+  hasPriorityWork() {
+    return this.busy || this.priorityPending || this.pendingSourceWrites > 0;
   }
 
   async requestWorkingContext(value = {}, { deadlineMs = 0, priority = 80 } = {}) {
@@ -132,6 +146,7 @@ export class AutobiographicalMemoryRuntime {
         });
         if (cached && cached.prepared_set) this.activatePrepared(cached.prepared_set, context);
         if (!this.compatibleWorking(fingerprint, context.currentVisitorId)) {
+          this.priorityPending = true;
           await this.client.enqueueMemorySurfacing({
             context_fingerprint: fingerprint,
             visitor_id: context.currentVisitorId,
@@ -225,6 +240,7 @@ export class AutobiographicalMemoryRuntime {
     }
     this.busy = true;
     let didWork = false;
+    let checkedFormation = false;
     try {
       if (typeof this.client.drainMemorySourceQueue === 'function') {
         await this.client.drainMemorySourceQueue();
@@ -236,6 +252,7 @@ export class AutobiographicalMemoryRuntime {
       }
       else if (this.canRunBackground('formation')) {
         const formation = await this.client.claimMemorySource();
+        checkedFormation = true;
         if (formation && formation.job) {
           didWork = true;
           await this.processFormation(formation.job, formation.depth || 0);
@@ -245,6 +262,12 @@ export class AutobiographicalMemoryRuntime {
       // Durable server rows remain pending or are recovered as retryable.
     } finally {
       this.busy = false;
+      // A completed job may reveal another ready or retryable row only on the
+      // next claim, so retain priority for the immediate follow-up poll. When
+      // both queues have been checked empty, AWG may use a later idle window.
+      this.priorityPending = didWork
+        || !checkedFormation
+        || this.pendingSourceWrites > 0;
       this.activeAbort = null;
       this.interruptReason = null;
       this.schedule(didWork ? 25 : 2000);

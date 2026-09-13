@@ -1944,7 +1944,10 @@ async function main() {
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
   }) {
-    if (!background && autobiographicalMemory) {
+    // AWG is the lowest-priority model job. It may use an otherwise idle
+    // interval, but it must never preempt durable memory work as foreground
+    // prose does. Incoming postcards/notices still abort it through currentAbort.
+    if (!background && purpose !== 'ambient_world_generation' && autobiographicalMemory) {
       autobiographicalMemory.interruptBackground('foreground');
       currentMemoryAbort = null;
     }
@@ -3533,11 +3536,13 @@ async function main() {
   }, POWER_SAMPLE_MS);
 
   async function runAwgDuringIdle(idleBudgetMs) {
+    const memoryPriorityPending = autobiographicalMemory
+      ? autobiographicalMemory.hasPriorityWork() : false;
     const eligibility = shouldRunAwg(vitals.worldSimulation, {
       nowMs: Date.now(),
       idleBudgetMs,
       pendingHigherPriority: pendingPostcards.length > 0 || pendingWarden.length > 0 || client.paused,
-      memoryFormationBacklog: autobiographicalMemory ? autobiographicalMemory.pending.length : 0,
+      memoryFormationBacklog: memoryPriorityPending ? 1 : 0,
       inferenceBusy: inferPhase !== 'idle',
     });
     if (!eligibility.run) return { status: 'SKIPPED', reason: eligibility.reason };
@@ -3552,7 +3557,7 @@ async function main() {
       nowMs: Date.now(),
       idleBudgetMs,
       pendingHigherPriority: pendingPostcards.length > 0 || pendingWarden.length > 0 || client.paused,
-      memoryFormationBacklog: autobiographicalMemory ? autobiographicalMemory.pending.length : 0,
+      memoryFormationBacklog: memoryPriorityPending ? 1 : 0,
       inferenceBusy: inferPhase !== 'idle',
       makeId: (prefix) => `${prefix}-${randomUUID()}`,
       generate: (call) => rawGenerate({
@@ -3576,6 +3581,12 @@ async function main() {
           totalLatencyMs: result.latencyMs,
         },
       });
+      try {
+        await saveVitals(vitalsPath, vitals);
+      } catch (error) {
+        reportPersistenceError('ambient world save', error);
+        return { ...result, status: 'FAILED', reason: 'PERSISTENCE_FAILED' };
+      }
     }
     if (result.status !== 'ACCEPTED') return result;
 
@@ -3587,6 +3598,7 @@ async function main() {
       observation: environment.observation,
       provisionalConsumer: false,
       cyObserved: !!result.applied.cyObserved,
+      dreamEligible: !!result.applied.cyObserved,
     });
     result.applied.event.environmentEventId = record.world_event.id;
     for (const change of result.applied.changes) {
