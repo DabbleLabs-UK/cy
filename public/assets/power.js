@@ -11,11 +11,10 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const ACCENT = '#e6b45e'; // warm amber - the colour of the money
-// The runner now emits a windowed sample every ~3s (min/max/mean watts) instead of
-// one instantaneous point every 30s, so bursts are preserved as real peaks. Keep a
-// larger buffer to still show a useful stretch of history at the finer cadence.
-const MAX_POINTS = 1200; // ~60min at one windowed point per 3s
-const KEEP_MS = 60 * 60 * 1000; // trim to the last hour
+// The runner emits a windowed sample every ~3s (min/max/mean watts). Keep one
+// rolling 30-minute window, independent of the current calendar day.
+export const POWER_WINDOW_MS = 30 * 60 * 1000;
+const MAX_POINTS = 700; // 600 expected samples plus modest timing headroom
 
 // parse the runner's "YYYY-MM-DD HH:MM:SS.mmm" local timestamp to ms
 function parseTs(ts) {
@@ -130,14 +129,40 @@ export class Power {
   // rather than with flush time. Each point carries the window's min/max/mean watts.
   push(p, tsMs) {
     if (!p) return;
+    this.points.push(this._point(p, tsMs));
+    this._trim();
+    this._render();
+  }
+
+  // Replace the one-sample day bootstrap with the rolling history fetched by the
+  // dedicated API. Merge anything already received live, deduplicate by measured
+  // time, and render once instead of repainting hundreds of times during startup.
+  loadHistory(events) {
+    const byTime = new Map();
+    for (const event of events || []) {
+      const payload = event && event.payload ? event.payload : event;
+      if (!payload) continue;
+      const fallback = event && event.ts ? parseTs(event.ts) : NaN;
+      const point = this._point(payload, fallback);
+      byTime.set(point.t, point);
+    }
+    // Existing points are newer than, or equal to, the database response and win
+    // a duplicate timestamp so the headline cannot move backwards during boot.
+    for (const point of this.points) byTime.set(point.t, point);
+    this.points = [...byTime.values()].sort((a, b) => a.t - b.t);
+    this._trim();
+    this._render();
+  }
+
+  _point(p, tsMs) {
     const tMeasured = num(p.t_ms);
     const t = tMeasured != null ? tMeasured : Number.isFinite(tsMs) ? tsMs : Date.now();
     const w = num(p.watts);
-    const wv = w == null ? 0 : w; // mean over the window - the line + the cost area
+    const wv = w == null ? 0 : w;
     const wmin = num(p.watts_min);
     const wmax = num(p.watts_max);
     const winst = num(p.watts_inst);
-    this.points.push({
+    return {
       t,
       w: wv,
       wmin: wmin == null ? wv : wmin,
@@ -146,13 +171,14 @@ export class Power {
       cost: num(p.cost_total) ?? 0,
       cph: num(p.cost_per_hour) ?? 0,
       kwh: num(p.kwh_total) ?? 0,
-    });
-    // trim by count and age
-    const cutoff = t - KEEP_MS;
-    while (this.points.length > MAX_POINTS || (this.points.length && this.points[0].t < cutoff)) {
-      this.points.shift();
-    }
-    this._render();
+    };
+  }
+
+  _trim() {
+    if (!this.points.length) return;
+    const newest = this.points[this.points.length - 1].t;
+    const cutoff = newest - POWER_WINDOW_MS;
+    while (this.points.length > MAX_POINTS || this.points[0].t < cutoff) this.points.shift();
   }
 
   _render() {
@@ -190,27 +216,19 @@ export class Power {
     const x = (t) => ((t - t0) / span) * W;
     const y = (w) => H - Math.max(0, Math.min(1, w / wMax)) * H;
 
-    // Use a held-value step across every interval, including a missing-sample
-    // interval. The chart therefore stays continuous without inventing a
-    // diagonal ramp between two measurements that were taken far apart.
-    const first = pts[0];
-    let line = `M${x(first.t).toFixed(1)} ${y(first.w).toFixed(1)}`;
-    let area = `M${x(first.t).toFixed(1)} ${H} V${y(first.w).toFixed(1)}`;
-    let band = `M${x(first.t).toFixed(1)} ${y(first.wmax).toFixed(1)}`;
-    for (let i = 1; i < pts.length; i++) {
-      const q = pts[i];
-      const qx = x(q.t).toFixed(1);
-      line += ` H${qx} V${y(q.w).toFixed(1)}`;
-      area += ` H${qx} V${y(q.w).toFixed(1)}`;
-      band += ` H${qx} V${y(q.wmax).toFixed(1)}`;
-    }
-    area += ` V${H} Z`;
-    band += ` V${y(last.wmin).toFixed(1)}`;
-    for (let i = pts.length - 2; i >= 0; i--) {
-      const q = pts[i];
-      band += ` H${x(q.t).toFixed(1)} V${y(q.wmin).toFixed(1)}`;
-    }
-    band += ' Z';
+    // Join consecutive measurements with the original continuous sloped trace.
+    // The recent held-value H/V path made ordinary three-second windows look like
+    // chunky blocks. The min/max envelope remains the factual within-window range.
+    const line = pts.map((q, i) =>
+      `${i === 0 ? 'M' : 'L'}${x(q.t).toFixed(1)} ${y(q.w).toFixed(1)}`
+    ).join(' ');
+    const area = `M${x(t0).toFixed(1)} ${H} ` +
+      pts.map((q) => `L${x(q.t).toFixed(1)} ${y(q.w).toFixed(1)}`).join(' ') +
+      ` L${x(t1).toFixed(1)} ${H} Z`;
+    const top = pts.map((q) => `${x(q.t).toFixed(1)} ${y(q.wmax).toFixed(1)}`);
+    const bottom = pts.slice().reverse()
+      .map((q) => `${x(q.t).toFixed(1)} ${y(q.wmin).toFixed(1)}`);
+    const band = 'M' + top.join(' L') + ' L' + bottom.join(' L') + ' Z';
 
     this.lineEl.setAttribute('d', line.trim());
     this.areaEl.setAttribute('d', area);

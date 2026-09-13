@@ -5,7 +5,7 @@
 //   node runner/power.test.js
 
 import assert from 'node:assert/strict';
-import { Power, formatCost } from '../public/assets/power.js';
+import { POWER_WINDOW_MS, Power, formatCost } from '../public/assets/power.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -70,7 +70,7 @@ assert.equal(p.costEl.textContent, '1.23', 'over a pound reads in pounds');
 assert.equal(p.curEl.textContent, 'GBP', 'GBP prefix shown in pounds mode');
 ok('pence/pounds switch works either side of GBP 1.00 as the total moves');
 
-// ---- 5. missed samples remain continuous without diagonal interpolation ----
+// ---- 5. the displayed line is continuous and sloped, not a blocky step path ----
 const outageRoot = fakeRoot();
 const outagePower = new Power(outageRoot);
 const sample = { watts: 30, watts_min: 25, watts_max: 35, watts_inst: 30, cost_total: 0.1, cost_per_hour: 0.01, kwh_total: 1 };
@@ -81,8 +81,24 @@ outagePower.push({ ...sample, t_ms: 1_700_000_063_000 });
 assert.equal((outagePower.lineEl.attrs.d.match(/M/g) || []).length, 1, 'line remains one continuous path');
 assert.equal((outagePower.areaEl.attrs.d.match(/Z/g) || []).length, 1, 'area remains one continuous region');
 assert.equal((outagePower.bandEl.attrs.d.match(/Z/g) || []).length, 1, 'min/max band remains one continuous region');
-assert.match(outagePower.lineEl.attrs.d, /H[^H]+V/, 'line uses horizontal holds and vertical changes');
-assert.doesNotMatch(outagePower.lineEl.attrs.d, /L/, 'line never draws a diagonal between samples');
-ok('power paths hold across missed samples without blank or diagonal joins');
+assert.match(outagePower.lineEl.attrs.d, /L/, 'line joins readings with sloped segments');
+assert.doesNotMatch(outagePower.lineEl.attrs.d, /[HV]/, 'line contains no blocky horizontal/vertical steps');
+ok('power paths use the original continuous sloped trace');
+
+// ---- 6. rolling history crosses midnight and merges without repaint churn ----
+const midnightRoot = fakeRoot();
+const midnightPower = new Power(midnightRoot);
+const justAfterMidnight = Date.parse('2026-09-14T00:07:00+01:00');
+midnightPower.push({ ...sample, t_ms: justAfterMidnight, watts: 45 });
+midnightPower.loadHistory([
+  { ts: '2026-09-13 23:37:00.000', payload: { ...sample, t_ms: justAfterMidnight - POWER_WINDOW_MS, watts: 25 } },
+  { ts: '2026-09-13 23:52:00.000', payload: { ...sample, t_ms: justAfterMidnight - (15 * 60 * 1000), watts: 35 } },
+]);
+assert.equal(midnightPower.points.length, 3, 'previous-day samples merge with the current live point');
+assert.equal(midnightPower.points[0].t, justAfterMidnight - POWER_WINDOW_MS);
+assert.equal(midnightPower.points[2].t, justAfterMidnight);
+assert.equal(midnightPower.wattsEl.textContent, '30 W', 'history merge preserves the existing live headline sample');
+assert.match(midnightPower.lineEl.attrs.d, /L/, 'cross-midnight history uses the same continuous trace');
+ok('rolling 30-minute history survives midnight');
 
 console.log(`\npower.test.js: all ${n} checks passed`);

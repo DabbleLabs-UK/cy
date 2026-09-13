@@ -140,6 +140,7 @@ window.CY = {
   history: 'api/history.php',
   range: 'api/range.php',
   somaHistory: 'api/soma-history.php',
+  powerHistory: 'api/power-history.php',
   threatLearning: <?= $isAdmin ? "'api/threat-learning.php'" : 'null' ?>,
   defensiveContext: <?= $isAdmin ? "'api/defensive-context.php'" : 'null' ?>,
   learnedControllability: <?= $isAdmin ? "'api/action-outcome-contingency.php'" : 'null' ?>,

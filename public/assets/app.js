@@ -187,6 +187,9 @@ async function boot() {
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
   if (powerEl) power = new Power(powerEl);
+  // Start the rolling request immediately, then merge it after the ordinary day
+  // bootstrap. It is deliberately not date-scoped, so 00:05 still shows 23:35.
+  const initialPowerHistory = fetchInitialPowerHistory();
   const tempoEl = $('#tempo');
   if (tempoEl) tempo = new Tempo(tempoEl, TEMPO_ENDPOINT, $('#watchers'));
   const archiveDialog = $('#postcard-archive');
@@ -230,6 +233,7 @@ async function boot() {
 
   // first load fills the page mid-stream, drawn instantly
   await ensureFirstLoad();
+  await applyInitialPowerHistory(initialPowerHistory);
 
   // then poll live
   setInterval(() => {
@@ -920,6 +924,23 @@ function setStatus(text, bad) {
 function setDay(n) {
   const el = $('#day');
   if (el) el.textContent = 'DAY ' + n;
+}
+
+async function fetchInitialPowerHistory() {
+  if (!power || !CFG.powerHistory) return null;
+  try {
+    const res = await fetch(CFG.powerHistory, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.ok !== false && Array.isArray(data.events) ? data.events : null;
+  } catch {
+    return null;
+  }
+}
+
+async function applyInitialPowerHistory(historyPromise) {
+  const events = await historyPromise;
+  if (power && events) power.loadHistory(events);
 }
 
 function setLocation(locationRegime) {
