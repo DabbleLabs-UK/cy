@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, access, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as engine from './soma.js';
 import { createSomaRuntime } from './soma-runtime.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import { buildDirectives, buildPrompt, options } from './prompt.js';
-import { loadVitals, saveVitals, vitalsLoadIssue } from './vitals.js';
+import { loadVitals, saveVitals } from './vitals.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 
 const t0 = Date.parse('2026-09-10T12:00:00Z');
@@ -246,14 +246,12 @@ const temp = await mkdtemp(join(tmpdir(), 'cy-soma-'));
 try {
   const badVitalsPath = join(temp, 'vitals.json');
   await writeFile(badVitalsPath, '{not json');
-  const badVitals = await loadVitals(badVitalsPath);
-  assert.match(vitalsLoadIssue(badVitals), /could not be parsed/);
-  await access(badVitalsPath + '.invalid.bak');
-  const badLoadRuntime = createSomaRuntime(badVitals.cognition, {
-    initialFailure: vitalsLoadIssue(badVitals),
-    logger: { error() {} },
-  });
-  assert.equal(badLoadRuntime.snapshot().status, 'unavailable');
+  await assert.rejects(
+    () => loadVitals(badVitalsPath),
+    (error) => error && error.code === 'CY_STATE_RECOVERY_REQUIRED',
+    'invalid authority without a valid recovery snapshot halts instead of loading defaults',
+  );
+  assert.equal(await readFile(badVitalsPath, 'utf8'), '{not json', 'invalid authority is not overwritten');
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

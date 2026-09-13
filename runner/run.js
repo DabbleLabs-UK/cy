@@ -36,6 +36,8 @@ import {
   computeDerived,
   clamp,
   vitalsLoadIssue,
+  vitalsPersistenceStatus,
+  isStateRecoveryRequired,
 } from './vitals.js';
 import {
   ZONE_A,
@@ -378,6 +380,19 @@ async function main() {
   const blockedLogPath = join(STATE_DIR, 'blocked.log');
 
   const vitals = await loadVitals(vitalsPath);
+  const startupPersistence = vitalsPersistenceStatus(vitals);
+  if (startupPersistence && startupPersistence.startupRecoveryUsed) {
+    console.error(
+      `[cy] STATE RECOVERY: restored vitals.json from validated vitals.previous.json; reason=${startupPersistence.startupRecoveryReason}`,
+    );
+  }
+  let lastPersistenceErrorLogMs = 0;
+  const reportPersistenceError = (context, error) => {
+    const now = Date.now();
+    if (now - lastPersistenceErrorLogMs < 60_000) return;
+    lastPersistenceErrorLogMs = now;
+    console.error(`[cy] STATE SAVE FAILED (${context}); in-memory state retained: ${error && error.message ? error.message : error}`);
+  };
   let pendingSomaFailure = null;
   let reportSomaFailure = (failure) => { pendingSomaFailure = failure; };
   const soma = createSomaRuntime(vitals.cognition, {
@@ -3300,6 +3315,7 @@ async function main() {
         hr,
         brain,
         soma: soma.snapshot(),
+        persistence: vitalsPersistenceStatus(vitals),
         legacy: {
           status: 'placeholder',
           reason: 'legacy dramatic mappings; not implemented Soma or measured physiology',
@@ -3398,8 +3414,8 @@ async function main() {
 
     try {
       await saveVitals(vitalsPath, vitals);
-    } catch {
-      /* keep going */
+    } catch (error) {
+      reportPersistenceError('periodic save', error);
     }
   }, config.tickMs);
 
@@ -4350,8 +4366,8 @@ async function main() {
     }
     try {
       await saveVitals(vitalsPath, vitals);
-    } catch {
-      /* ignore */
+    } catch (error) {
+      reportPersistenceError('shutdown save', error);
     }
     await client.stop();
     process.exit(0);
@@ -4418,6 +4434,6 @@ async function saveContext(path, text) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error('[cy] fatal:', err);
-    process.exit(1);
+    process.exit(isStateRecoveryRequired(err) ? 78 : 1);
   });
 }

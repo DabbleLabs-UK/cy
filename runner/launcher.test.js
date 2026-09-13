@@ -18,5 +18,8 @@ assert.match(supervisor, /node runner\\run\.js/, 'supervisor runs Cy');
 assert.match(supervisor, /goto loop/, 'supervisor restarts after exit');
 assert.match(supervisor, /timeout \/t 15/, 'supervisor backs off before restart');
 assert.match(supervisor, /run\.out\.log/, 'supervisor preserves a runner log');
+assert.match(supervisor, /if "%CY_EXIT%"=="78"/, 'supervisor recognises unrecoverable persistent state');
+assert.match(supervisor, /persistent state requires recovery; supervisor halted/, 'supervisor records why it halted');
+assert.match(supervisor, /exit \/b 78/, 'supervisor does not restart into defaults after state recovery fails');
 
 console.log('launcher.test.js: all checks passed');

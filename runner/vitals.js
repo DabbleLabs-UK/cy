@@ -8,8 +8,146 @@
 // These scalar mappings are legacy placeholders. Implemented cognition lives
 // in the nested `cognition` state managed by soma.js.
 
-import { readFile, writeFile, mkdir, copyFile, access } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readFile, mkdir, copyFile, access, open, rename, unlink, readdir, stat } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
+
+const PERSISTENCE_FORMAT_VERSION = 1;
+const DEFAULT_SAVE_ATTEMPTS = 3;
+const DEFAULT_RETRY_DELAYS_MS = [100, 500];
+const RECOVERY_REFRESH_MS = 60_000;
+const RECOVERY_REQUIRED_CODE = 'CY_STATE_RECOVERY_REQUIRED';
+const INITIALIZATION_EVIDENCE = new Set([
+  'bookkeeping.json',
+  'context.jsonl',
+  'events.jsonl',
+  'power.json',
+  'spend.json',
+  'queue.json',
+  'inbox.json',
+  'memory-queue.json',
+]);
+
+let tempSequence = 0;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export class StateRecoveryRequiredError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'StateRecoveryRequiredError';
+    this.code = RECOVERY_REQUIRED_CODE;
+    this.details = details;
+  }
+}
+
+export function isStateRecoveryRequired(error) {
+  return Boolean(error && error.code === RECOVERY_REQUIRED_CODE);
+}
+
+function assertObject(value, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+}
+
+function assertFiniteNumber(value, label) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+}
+
+export function validateVitalsState(value, { requireFormatVersion = false } = {}) {
+  assertObject(value, 'vitals');
+  if (requireFormatVersion || value.persistenceFormatVersion !== undefined) {
+    if (value.persistenceFormatVersion !== PERSISTENCE_FORMAT_VERSION) {
+      throw new Error(`unsupported persistenceFormatVersion ${String(value.persistenceFormatVersion)}`);
+    }
+  }
+  assertObject(value.physical, 'vitals.physical');
+  for (const key of ['pain', 'hunger', 'fatigue']) {
+    assertFiniteNumber(value.physical[key], `vitals.physical.${key}`);
+  }
+  assertObject(value.mental, 'vitals.mental');
+  for (const key of ['anxiety', 'stress', 'despair', 'hope', 'lucidity', 'agitation', 'dissociation', 'anger', 'longing']) {
+    assertFiniteNumber(value.mental[key], `vitals.mental.${key}`);
+  }
+  assertFiniteNumber(value.day, 'vitals.day');
+  if (value.day < 1) throw new Error('vitals.day must be at least 1');
+  if (value.cognition !== undefined) assertObject(value.cognition, 'vitals.cognition');
+  return true;
+}
+
+function validateBookkeeping(value) {
+  assertObject(value, 'bookkeeping');
+  return true;
+}
+
+async function runHook(hooks, phase, details) {
+  if (hooks && typeof hooks[phase] === 'function') return hooks[phase](details);
+  return undefined;
+}
+
+async function atomicWriteText(targetPath, text, validate, { hooks = null } = {}) {
+  const dir = dirname(targetPath);
+  await mkdir(dir, { recursive: true });
+  const tempPath = join(
+    dir,
+    `.${basename(targetPath)}.${process.pid}.${Date.now()}.${tempSequence++}.tmp`,
+  );
+  let handle = null;
+  try {
+    handle = await open(tempPath, 'wx');
+    const override = await runHook(hooks, 'beforeWrite', { targetPath, tempPath, text, handle });
+    const writeText = override && typeof override.text === 'string' ? override.text : text;
+    await handle.writeFile(writeText, 'utf8');
+    await runHook(hooks, 'afterWrite', { targetPath, tempPath, text: writeText, handle });
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await runHook(hooks, 'afterClose', { targetPath, tempPath });
+
+    const candidateText = await readFile(tempPath, 'utf8');
+    const candidate = JSON.parse(candidateText);
+    validate(candidate);
+    await runHook(hooks, 'beforeRename', { targetPath, tempPath, candidate });
+    await rename(tempPath, targetPath);
+    return Buffer.byteLength(text, 'utf8');
+  } catch (error) {
+    if (handle) {
+      try { await handle.close(); } catch { /* best effort */ }
+    }
+    try { await unlink(tempPath); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
+async function atomicWriteOpaque(targetPath, data) {
+  const dir = dirname(targetPath);
+  await mkdir(dir, { recursive: true });
+  const tempPath = join(dir, `.vitals-forensic.${process.pid}.${Date.now()}.${tempSequence++}.tmp`);
+  let handle = null;
+  try {
+    handle = await open(tempPath, 'wx');
+    await handle.writeFile(data);
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    await rename(tempPath, targetPath);
+  } catch (error) {
+    if (handle) {
+      try { await handle.close(); } catch { /* best effort */ }
+    }
+    try { await unlink(tempPath); } catch { /* best effort */ }
+    throw error;
+  }
+}
+
+async function parseValidated(path, validate) {
+  const text = await readFile(path, 'utf8');
+  const value = JSON.parse(text);
+  validate(value);
+  return { text, value };
+}
 
 export const clamp = (x, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
 
@@ -267,12 +405,13 @@ const zoneFor = (key) => ZONE_OF.get(key) || 'soma';
 // it never collides with a real field name and stays out of enumeration.
 const ZONES = Symbol('somaZones');
 const LOAD_ISSUE = Symbol('vitalsLoadIssue');
+const PERSISTENCE = Symbol('vitalsPersistence');
 
 // Build the flat-facing proxy over the three zone objects. Reads and writes to
 // any old flat path route to the owning zone; nested objects (physical, mental,
 // derived, relations) are returned by reference so in-place mutation
 // (vitals.mental.anxiety = x, vitals.recentOpeners.push(...)) works unchanged.
-function makeVitals(soma, signals, bookkeeping, loadIssue = null) {
+function makeVitals(soma, signals, bookkeeping, loadIssue = null, persistence = null) {
   const zones = { soma, signals, bookkeeping };
   const flatKeys = () =>
     [...new Set([...Object.keys(soma), ...Object.keys(signals), ...Object.keys(bookkeeping)])];
@@ -282,6 +421,7 @@ function makeVitals(soma, signals, bookkeeping, loadIssue = null) {
       get(_t, prop) {
         if (prop === ZONES) return zones;
         if (prop === LOAD_ISSUE) return loadIssue;
+        if (prop === PERSISTENCE) return persistence;
         if (typeof prop === 'symbol') return undefined;
         return zones[zoneFor(prop)][prop];
       },
@@ -321,29 +461,267 @@ const fileExists = async (p) => {
   }
 };
 
-export async function loadVitals(path) {
-  const bookPath = join(dirname(path), 'bookkeeping.json');
-
-  let raw = null;
-  let loadIssue = null;
+async function stateDirectoryHasEvidence(path) {
   try {
-    raw = JSON.parse(await readFile(path, 'utf8'));
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      throw new Error('top-level value is not an object');
-    }
+    const names = await readdir(dirname(path));
+    return names.some((name) => INITIALIZATION_EVIDENCE.has(name));
   } catch (error) {
-    if (await fileExists(path)) {
-      loadIssue = `persisted vitals could not be parsed: ${error && error.message ? error.message : 'invalid JSON'}`;
-      const invalidBackup = path + '.invalid.bak';
-      if (!(await fileExists(invalidBackup))) {
+    if (error && error.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+class VitalsPersistence {
+  constructor(path, options = {}) {
+    this.path = path;
+    this.bookPath = join(dirname(path), 'bookkeeping.json');
+    this.previousPath = join(dirname(path), 'vitals.previous.json');
+    this.markerPath = join(dirname(path), 'vitals.initialized.json');
+    this.hooks = options.hooks || null;
+    this.now = typeof options.now === 'function' ? options.now : Date.now;
+    this.maxAttempts = Number.isInteger(options.maxAttempts)
+      ? Math.max(1, options.maxAttempts)
+      : DEFAULT_SAVE_ATTEMPTS;
+    this.retryDelaysMs = Array.isArray(options.retryDelaysMs)
+      ? options.retryDelaysMs.map((value) => Math.max(0, Number(value) || 0))
+      : DEFAULT_RETRY_DELAYS_MS;
+    this.recoveryRefreshMs = Number.isFinite(options.recoveryRefreshMs)
+      ? Math.max(0, options.recoveryRefreshMs)
+      : RECOVERY_REFRESH_MS;
+    this.lastCommittedText = null;
+    this.previousExists = false;
+    this.markerExists = false;
+    this.pendingJob = null;
+    this.draining = false;
+    this.status = {
+      persistenceFormatVersion: PERSISTENCE_FORMAT_VERSION,
+      lastSuccessfulSave: null,
+      lastSaveDurationMs: null,
+      stateSizeBytes: null,
+      lastValidationResult: 'not-yet-saved',
+      recoverySnapshotTimestamp: null,
+      inProgress: false,
+      pending: false,
+      coalescedSaveCount: 0,
+      failedSaveCount: 0,
+      lastError: null,
+      startupRecoveryUsed: false,
+      startupRecoveryReason: null,
+      firstInstall: false,
+    };
+  }
+
+  initialise({ committedText = null, previousExists = false, markerExists = false, recoveryTimestamp = null, firstInstall = false } = {}) {
+    this.lastCommittedText = committedText;
+    this.previousExists = previousExists;
+    this.markerExists = markerExists;
+    this.status.recoverySnapshotTimestamp = recoveryTimestamp;
+    this.status.firstInstall = firstInstall;
+    if (committedText !== null) this.status.stateSizeBytes = Buffer.byteLength(committedText, 'utf8');
+  }
+
+  snapshot() {
+    return { ...this.status, pending: Boolean(this.pendingJob) };
+  }
+
+  markStartupRecovery(reason) {
+    this.status.startupRecoveryUsed = true;
+    this.status.startupRecoveryReason = reason;
+    this.status.lastValidationResult = 'recovered-from-vitals.previous.json';
+  }
+
+  requestSave(soma, bookkeeping) {
+    const persistedSoma = { ...soma, persistenceFormatVersion: PERSISTENCE_FORMAT_VERSION };
+    const somaText = JSON.stringify(persistedSoma, null, 2);
+    const bookkeepingText = JSON.stringify(bookkeeping, null, 2);
+    validateVitalsState(JSON.parse(somaText), { requireFormatVersion: true });
+    validateBookkeeping(JSON.parse(bookkeepingText));
+
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject };
+      if (this.pendingJob) {
+        this.pendingJob.somaText = somaText;
+        this.pendingJob.bookkeepingText = bookkeepingText;
+        this.pendingJob.waiters.push(waiter);
+        this.status.coalescedSaveCount++;
+      } else {
+        this.pendingJob = { somaText, bookkeepingText, waiters: [waiter] };
+      }
+      this.status.pending = true;
+      if (!this.draining) void this.drain();
+    });
+  }
+
+  async drain() {
+    if (this.draining) return;
+    this.draining = true;
+    this.status.inProgress = true;
+    try {
+      while (this.pendingJob) {
+        const job = this.pendingJob;
+        this.pendingJob = null;
+        this.status.pending = false;
         try {
-          await copyFile(path, invalidBackup);
-        } catch {
-          /* best-effort forensic backup; the runner still continues */
+          await this.commitWithRetry(job);
+          for (const waiter of job.waiters) waiter.resolve(this.snapshot());
+        } catch (error) {
+          for (const waiter of job.waiters) waiter.reject(error);
+        }
+      }
+    } finally {
+      this.draining = false;
+      this.status.inProgress = false;
+      this.status.pending = Boolean(this.pendingJob);
+      if (this.pendingJob) void this.drain();
+    }
+  }
+
+  async commitWithRetry(job) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+      try {
+        await this.commitOnce(job);
+        return;
+      } catch (error) {
+        lastError = error;
+        this.status.lastValidationResult = 'save-failed';
+        this.status.lastError = error && error.message ? error.message : String(error);
+        if (attempt < this.maxAttempts) {
+          const delay = this.retryDelaysMs[Math.min(attempt - 1, this.retryDelaysMs.length - 1)] || 0;
+          if (delay > 0) await sleep(delay);
         }
       }
     }
-    raw = null;
+    this.status.failedSaveCount++;
+    throw lastError;
+  }
+
+  async commitOnce(job) {
+    const started = this.now();
+    const recoveryAge = this.status.recoverySnapshotTimestamp
+      ? started - Date.parse(this.status.recoverySnapshotTimestamp)
+      : Infinity;
+    if (this.lastCommittedText !== null && (!this.previousExists || recoveryAge >= this.recoveryRefreshMs)) {
+      await atomicWriteText(
+        this.previousPath,
+        this.lastCommittedText,
+        (value) => validateVitalsState(value),
+      );
+      this.previousExists = true;
+      this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
+    }
+
+    const stateSizeBytes = await atomicWriteText(
+      this.path,
+      job.somaText,
+      (value) => validateVitalsState(value, { requireFormatVersion: true }),
+      { hooks: this.hooks },
+    );
+    this.lastCommittedText = job.somaText;
+
+    if (!this.previousExists) {
+      await atomicWriteText(
+        this.previousPath,
+        job.somaText,
+        (value) => validateVitalsState(value, { requireFormatVersion: true }),
+      );
+      this.previousExists = true;
+      this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
+    }
+
+    await atomicWriteText(this.bookPath, job.bookkeepingText, validateBookkeeping);
+    if (!this.markerExists) {
+      await atomicWriteText(
+        this.markerPath,
+        JSON.stringify({ persistenceFormatVersion: PERSISTENCE_FORMAT_VERSION, initialisedAt: new Date(this.now()).toISOString() }),
+        (value) => {
+          assertObject(value, 'initialisation marker');
+          if (value.persistenceFormatVersion !== PERSISTENCE_FORMAT_VERSION) throw new Error('invalid initialisation marker');
+        },
+      );
+      this.markerExists = true;
+    }
+
+    const completed = this.now();
+    this.status.lastSuccessfulSave = new Date(completed).toISOString();
+    this.status.lastSaveDurationMs = Math.max(0, completed - started);
+    this.status.stateSizeBytes = stateSizeBytes;
+    this.status.lastValidationResult = 'valid';
+    this.status.lastError = null;
+    this.status.firstInstall = false;
+  }
+}
+
+async function recoveryTimestamp(path) {
+  try {
+    return (await stat(path)).mtime.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+async function preserveCorruptState(path) {
+  try {
+    const bytes = await readFile(path);
+    await atomicWriteOpaque(join(dirname(path), 'vitals.corrupt.json'), bytes);
+  } catch {
+    // Recovery remains fail-safe even when the bounded forensic copy cannot be written.
+  }
+}
+
+export async function loadVitals(path, options = {}) {
+  const bookPath = join(dirname(path), 'bookkeeping.json');
+  const persistence = new VitalsPersistence(path, options.persistence || {});
+  const previousPath = persistence.previousPath;
+
+  let raw = null;
+  let rawText = null;
+  let loadIssue = null;
+  const authorityExists = await fileExists(path);
+  const previousExists = await fileExists(previousPath);
+  const markerExists = await fileExists(persistence.markerPath);
+
+  if (authorityExists) {
+    try {
+      const parsed = await parseValidated(path, (value) => validateVitalsState(value));
+      raw = parsed.value;
+      rawText = parsed.text;
+    } catch (error) {
+      loadIssue = `persisted vitals failed validation: ${error && error.message ? error.message : 'invalid JSON'}`;
+      await preserveCorruptState(path);
+    }
+  }
+
+  if (raw === null && (authorityExists || previousExists)) {
+    try {
+      const recovered = await parseValidated(previousPath, (value) => validateVitalsState(value));
+      await atomicWriteText(path, recovered.text, (value) => validateVitalsState(value));
+      raw = recovered.value;
+      rawText = recovered.text;
+      persistence.markStartupRecovery(loadIssue || 'authoritative vitals.json was missing');
+      loadIssue = null;
+    } catch (recoveryError) {
+      throw new StateRecoveryRequiredError(
+        'Cy state is unavailable: neither vitals.json nor vitals.previous.json is valid; no defaults were loaded',
+        {
+          authorityExists,
+          previousExists,
+          authorityError: loadIssue,
+          recoveryError: recoveryError && recoveryError.message ? recoveryError.message : String(recoveryError),
+        },
+      );
+    }
+  }
+
+  let firstInstall = false;
+  if (raw === null) {
+    if (markerExists || await stateDirectoryHasEvidence(path)) {
+      throw new StateRecoveryRequiredError(
+        'Cy state is missing from an existing installation; refusing to create defaults over prior history',
+        { authorityExists: false, previousExists: false, markerExists },
+      );
+    }
+    firstInstall = true;
   }
 
   let book = null;
@@ -400,24 +778,28 @@ export async function loadVitals(path) {
   // initialVitals default ({}) until the first tick, matching the old code.
   if (raw !== null) signals.derived = computeDerived(soma);
 
-  return makeVitals(soma, signals, bookkeeping, loadIssue);
+  persistence.initialise({
+    committedText: rawText,
+    previousExists,
+    markerExists,
+    recoveryTimestamp: await recoveryTimestamp(previousPath),
+    firstInstall,
+  });
+  return makeVitals(soma, signals, bookkeeping, loadIssue, persistence);
 }
 
 export function vitalsLoadIssue(v) {
   return v && v[LOAD_ISSUE] ? String(v[LOAD_ISSUE]) : null;
 }
 
+export function vitalsPersistenceStatus(v) {
+  const persistence = v && v[PERSISTENCE];
+  return persistence ? persistence.snapshot() : null;
+}
+
 export async function saveVitals(path, v) {
-  await mkdir(dirname(path), { recursive: true });
   const zones = v && v[ZONES];
-  if (zones) {
-    // soma -> vitals.json (signals are never persisted), bookkeeping -> its own
-    // file. Two writes, but each zone stays small and independently lifecycled.
-    await writeFile(path, JSON.stringify(zones.soma, null, 2));
-    await writeFile(join(dirname(path), 'bookkeeping.json'), JSON.stringify(zones.bookkeeping, null, 2));
-  } else {
-    // Fallback: a plain object (e.g. a test built from initialVitals) still
-    // saves wholesale as before.
-    await writeFile(path, JSON.stringify(v, null, 2));
-  }
+  const persistence = v && v[PERSISTENCE];
+  if (!zones || !persistence) throw new Error('saveVitals requires state returned by loadVitals');
+  return persistence.requestSave(zones.soma, zones.bookkeeping);
 }
