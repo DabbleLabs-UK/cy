@@ -349,9 +349,8 @@ function operationalAnxietyHistoryMarkup() {
     <div class="soma-ranges" aria-label="Anxiety state history range">
       <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
     </div>
-    <div class="operational-anxiety-axis" aria-hidden="true"><span>ONGOING</span><span>IMMINENT</span><span>ANTICIPATING</span><span>QUIET</span><span>UNKNOWN</span></div>
     <svg class="soma-history operational-anxiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored categorical Anxiety state history. The vertical order shows states, not psychological magnitude."><rect class="operational-anxiety-unknown-band" x="0" y="64" width="280" height="16"></rect><path></path><g class="operational-anxiety-transitions"></g></svg>
-    <p class="soma-history-note">State order is for displaying transitions only, not psychological magnitude.</p>
+    <p class="soma-history-note">Hover or focus a transition marker for its timestamp and categorical state. Vertical position is not magnitude.</p>
   </div>`;
 }
 
@@ -770,7 +769,7 @@ export class BrainHud {
       const summary = definition.key === 'somaticHarm'
         ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE - structured bodily state</span><strong class="soma-state-value">--</strong></summary>`
         : definition.key === 'anxiety'
-          ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong></summary>`
+          ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong><span class="soma-state-bar operational-anxiety-state-bar" data-state="UNKNOWN" aria-hidden="true"><i></i><i></i><i></i><i></i></span></summary>`
         : `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>`;
       const detail = definition.key === 'somaticHarm'
         ? somatic
@@ -1209,6 +1208,7 @@ export class BrainHud {
     const concern = snapshot && snapshot.currentConcern;
     entry.querySelector('.soma-state-value').textContent = state.replaceAll('_', ' ');
     entry.querySelector('.soma-state-status').textContent = 'LIVE';
+    entry.querySelector('.operational-anxiety-state-bar').dataset.state = state;
     entry.querySelector('summary').title = `Anxiety: ${state.replaceAll('_', ' ')}. Open for current threat context and history.`;
     entry.querySelector('.soma-reading-description').textContent = state === 'QUIET'
       ? 'No current structured defensive concern is active.'
@@ -1830,9 +1830,12 @@ export class BrainHud {
           marker.setAttribute('cx', String(Math.max(0, Math.min(280, ((point.ts - data.fromMs) / span) * 280))));
           marker.setAttribute('cy', String(((OPERATIONAL_ANXIETY_BANDS.indexOf(point.state) + 0.5) / OPERATIONAL_ANXIETY_BANDS.length) * 80));
           marker.setAttribute('r', '2.4');
+          marker.setAttribute('tabindex', '0');
           marker.classList.toggle('is-unknown', point.state === 'UNKNOWN');
           const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-          title.textContent = `${readableState(point.state)} - ${new Date(point.ts).toLocaleString()}`;
+          const markerLabel = `${new Date(point.ts).toLocaleString()} - ${readableState(point.state)}`;
+          marker.setAttribute('aria-label', markerLabel);
+          title.textContent = markerLabel;
           marker.appendChild(title);
           transitions.appendChild(marker);
         }

@@ -60,10 +60,26 @@ const styleSource = await readFile(new URL('../public/assets/style.css', import.
 assert.match(brainSource, /<summary>MODEL DETAILS<\/summary>/,
   'technical Anxiety detail must sit behind a secondary disclosure');
 assert.match(brainSource, /WHAT IS DRIVING THIS/);
-assert.match(brainSource, /State order is for displaying transitions only, not psychological magnitude/);
-assert.doesNotMatch(brainSource,
-  /definition\.key === 'anxiety'[\s\S]{0,300}soma-state-bar/,
-  'the Anxiety summary must not render a magnitude bar');
+assert.match(brainSource, /Hover or focus a transition marker for its timestamp and categorical state/);
+assert.doesNotMatch(brainSource, /class="operational-anxiety-axis"/,
+  'the Anxiety history must not permanently print the categorical y-axis words');
+assert.match(brainSource,
+  /operational-anxiety-state-bar" data-state="UNKNOWN"[\s\S]*?<i><\/i><i><\/i><i><\/i><i><\/i>/,
+  'the Anxiety summary must render exactly four discrete categorical positions');
+assert.match(brainSource,
+  /querySelector\('\.operational-anxiety-state-bar'\)\.dataset\.state = state/,
+  'the categorical bar must follow the established Anxiety state directly');
+assert.match(brainSource, /marker\.setAttribute\('aria-label', markerLabel\)/,
+  'history transition markers must expose timestamp and categorical state');
+assert.match(styleSource,
+  /\.operational-anxiety-state-bar \{[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/,
+  'the Anxiety indicator must use four discrete positions');
+assert.match(styleSource,
+  /data-state="QUIET"[\s\S]*data-state="ANTICIPATING"[\s\S]*data-state="THREAT_IMMINENT"[\s\S]*data-state="THREAT_ONGOING"/,
+  'only the four established ordered categories may fill bar positions');
+assert.match(styleSource,
+  /data-state="UNKNOWN"[\s\S]*border-style: dashed/,
+  'UNKNOWN must use an empty unknown treatment rather than an invented position');
 assert.match(styleSource,
   /grid-template-columns: clamp\(340px, 27vw, 400px\) minmax\(360px, 1fr\) clamp\(300px, 25vw, 380px\)/,
   'large desktop layout must reserve 340-400px for Soma');
