@@ -147,6 +147,12 @@ assert.match(source, /<summary>MODEL DETAILS<\/summary>[\s\S]*?SUBJECTIVE LONELI
   'technical social episodes and unmodelled psychological quantities stay behind Model Details');
 assert.match(source, /SOCIAL HISTORY[\s\S]*?data-range="1h"[\s\S]*?data-range="24h"[\s\S]*?data-range="7d"/,
   'factual rolling social history remains immediately available');
+assert.match(source, /this\.socialContactHistory = null/,
+  'the social history view keeps explicit client-side state');
+assert.match(source, /this\.socialContactHistory = history[\s\S]*?this\.socialContactHistory/,
+  'live vitals redraws must reuse the selected social history instead of erasing it');
+assert.doesNotMatch(source, /const fromMs = Number\(data && data\.fromMs\)/,
+  'an unloaded social history must not turn null into the Unix epoch');
 assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
   'unimplemented region placeholders without artwork must remain hidden');
 assert.doesNotMatch(source, /Learned outcome probability/);

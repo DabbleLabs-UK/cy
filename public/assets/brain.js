@@ -594,6 +594,7 @@ export class BrainHud {
     this.feedingUrl = feedingUrl;
     this.somaticUrl = somaticUrl;
     this.socialContactUrl = socialContactUrl;
+    this.socialContactHistory = null;
     this.registry = registry || {};
     this.admin = admin;
     this.sleepHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'sleep_homeostasis');
@@ -1678,12 +1679,13 @@ export class BrainHud {
       const target = card.querySelector(`[data-social="${key}"]`);
       if (target) target.textContent = value;
     }
-    const data = history && !Array.isArray(history) ? history : null;
+    if (history && !Array.isArray(history)) this.socialContactHistory = history;
+    const data = history && !Array.isArray(history) ? history : this.socialContactHistory;
     const records = data && Array.isArray(data.timeline) ? data.timeline
       : Array.isArray(history) ? history
         : live && Array.isArray(snapshot.recentEpisodes) ? snapshot.recentEpisodes : [];
-    const fromMs = Number(data && data.fromMs);
-    const toMs = Number(data && data.toMs);
+    const fromMs = data ? Number(data.fromMs) : NaN;
+    const toMs = data ? Number(data.toMs) : NaN;
     const track = card.querySelector('.social-history-track');
     track.textContent = '';
     const axisFrom = card.querySelector('[data-social-axis="from"]');
@@ -1694,7 +1696,9 @@ export class BrainHud {
     if (!records.length || !Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
       const empty = document.createElement('p');
       empty.className = 'social-contact-empty';
-      empty.textContent = live ? 'No structured social episodes were observed in this window.' : 'No grounded social ledger has reached this view.';
+      empty.textContent = live
+        ? data ? 'No structured social episodes were observed in this window.' : 'Open this reading to load factual social history.'
+        : 'No grounded social ledger has reached this view.';
       track.appendChild(empty);
     } else {
       for (const episode of records) {
