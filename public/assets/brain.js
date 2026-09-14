@@ -180,6 +180,85 @@ export const OPERATIONAL_ANXIETY_BANDS = Object.freeze([
   'THREAT_ONGOING', 'THREAT_IMMINENT', 'ANTICIPATING', 'QUIET', 'UNKNOWN',
 ]);
 
+function readableState(value) {
+  return String(value || 'UNKNOWN').replaceAll('_', ' ');
+}
+
+function sentenceCase(value) {
+  const text = readableState(value).toLowerCase();
+  return text ? `${text[0].toUpperCase()}${text.slice(1)}` : 'Unknown';
+}
+
+export function publicSomaLabel(value, fallback = 'structured cue') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  if (/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i.test(raw)
+    || /^eventenv[-_:]/i.test(raw)
+    || raw.length > 80) return fallback;
+  return raw.replace(/^[^:]+:/, '').replaceAll('_', ' ').trim() || fallback;
+}
+
+export function operationalAnxietyDrivers(snapshot, limit = 4) {
+  const maximum = Math.max(0, Math.min(4, Number.isFinite(limit) ? Math.floor(limit) : 4));
+  const state = snapshot && OPERATIONAL_ANXIETY_BANDS.includes(snapshot.status)
+    ? snapshot.status : 'UNKNOWN';
+  const concern = snapshot && snapshot.currentConcern;
+  if (!concern) {
+    return state === 'QUIET'
+      ? ['No active structured defensive concern is present.'].slice(0, maximum)
+      : ['Current structured defensive context is unavailable.'].slice(0, maximum);
+  }
+
+  const drivers = [];
+  const add = (text) => {
+    if (text && !drivers.includes(text) && drivers.length < maximum) drivers.push(text);
+  };
+  const cues = Array.isArray(concern.activeCues)
+    ? concern.activeCues.map((cue) => publicSomaLabel(
+      cue && cue.label,
+      cue && cue.type ? `${String(cue.type).toLowerCase()} cue` : 'structured cue',
+    )).filter(Boolean)
+    : [];
+  const cueLabel = cues[0] || '';
+  if (cueLabel) add(`${sentenceCase(cueLabel)} is present.`);
+  else if (concern.outcomeClass) add(`${sentenceCase(concern.outcomeClass)} remains unresolved.`);
+
+  const control = concern.objectiveControllability;
+  if (control === 'NONE') add('Cy has no control over the current outcome.');
+  else if (control === 'LIMITED') add('Cy has only limited control over the current outcome.');
+  else if (control === 'SUBSTANTIAL') add('Cy has substantial control over the current outcome.');
+  else if (control === 'FULL') add('Cy has control over the current outcome.');
+  else add("Cy's control over the current outcome is unknown.");
+
+  const evidence = (Array.isArray(concern.learnedCueOutcomeEvidence)
+    ? concern.learnedCueOutcomeEvidence : [])
+    .map((item) => ({
+      label: publicSomaLabel(
+        item && item.cue && item.cue.label || cueLabel || 'This cue',
+        item && item.cue && item.cue.type ? `${String(item.cue.type).toLowerCase()} cue` : 'structured cue',
+      ),
+      posterior: item && item.evidence && item.evidence.posterior,
+    }))
+    .filter((item) => item.label)
+    .sort((left, right) => {
+      const leftN = Number(left.posterior && left.posterior.resolvedObservations || 0);
+      const rightN = Number(right.posterior && right.posterior.resolvedObservations || 0);
+      return rightN - leftN || left.label.localeCompare(right.label);
+    });
+  const learned = evidence.find((item) => item.posterior);
+  if (learned) {
+    add(`${sentenceCase(learned.label)} has preceded ${Number(learned.posterior.outcomesOccurred || 0)} adverse and ${Number(learned.posterior.outcomesDidNotOccur || 0)} safe resolutions.`);
+  } else if (evidence.length) {
+    add(`No resolved outcome history exists for ${evidence[0].label}.`);
+  }
+
+  if (concern.temporalStatus === 'ONGOING') add('The current threat is happening now.');
+  else if (concern.temporalStatus === 'IMMINENT') add('The current threat is marked as imminent.');
+  else if (['POTENTIAL', 'UNKNOWN'].includes(concern.temporalStatus)) add('The next development has no known timing.');
+  else add('Current threat timing is unavailable.');
+  return drivers;
+}
+
 export function buildCategoricalStepPath(points, fromMs, toMs, width = 280, height = 80) {
   const clean = (Array.isArray(points) ? points : [])
     .filter((point) => Number.isFinite(point.ts) && OPERATIONAL_ANXIETY_BANDS.includes(point.state))
@@ -271,8 +350,8 @@ function operationalAnxietyHistoryMarkup() {
       <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
     </div>
     <div class="operational-anxiety-axis" aria-hidden="true"><span>ONGOING</span><span>IMMINENT</span><span>ANTICIPATING</span><span>QUIET</span><span>UNKNOWN</span></div>
-    <svg class="soma-history operational-anxiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored categorical Anxiety state history"><path></path></svg>
-    <p class="soma-history-note">Open this reading to load factual state periods.</p>
+    <svg class="soma-history operational-anxiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored categorical Anxiety state history. The vertical order shows states, not psychological magnitude."><rect class="operational-anxiety-unknown-band" x="0" y="64" width="280" height="16"></rect><path></path><g class="operational-anxiety-transitions"></g></svg>
+    <p class="soma-history-note">State order is for displaying transitions only, not psychological magnitude.</p>
   </div>`;
 }
 
@@ -471,7 +550,7 @@ function decimal3(value) {
 }
 
 function displayIdentifier(value) {
-  return String(value || 'unknown').replace(/^action:/, '').replaceAll(/[:_]/g, ' ').toUpperCase();
+  return publicSomaLabel(value, 'structured record').replaceAll(/[:_]/g, ' ').toUpperCase();
 }
 
 function contingencyEvidenceText(value) {
@@ -633,7 +712,20 @@ export class BrainHud {
         )
         : '';
       const anxietyGrounding = definition.key === 'anxiety'
-        ? `<details class="soma-substrate-more"><summary>THREAT AND CONTROL DETAILS</summary>${threatLearning}${defensiveContext}${learnedControllability}</details>`
+        ? `<details class="operational-anxiety-model-details"><summary>MODEL DETAILS</summary>
+            <p class="soma-reading-description operational-anxiety-model-note">Categorical threat context, timing, objective control and exact learned cue-outcome statistics.</p>
+            <dl class="operational-anxiety-facts">
+              <div><dt>CURRENT CONCERN</dt><dd class="operational-anxiety-concern">NONE</dd></div>
+              <div><dt>EXPECTED OUTCOME</dt><dd class="operational-anxiety-outcome">NONE</dd></div>
+              <div><dt>TIMING</dt><dd class="operational-anxiety-timing">UNKNOWN</dd></div>
+              <div><dt>WORLD AMBIGUITY</dt><dd class="operational-anxiety-ambiguity">UNKNOWN</dd></div>
+              <div><dt>ACTUAL CONTROL</dt><dd class="operational-anxiety-control">UNKNOWN</dd></div>
+              <div><dt>LEARNED HISTORY</dt><dd class="operational-anxiety-learning">UNKNOWN</dd></div>
+              <div><dt>TEMPORAL HAZARD</dt><dd class="operational-anxiety-hazard">NOT AVAILABLE</dd></div>
+            </dl>
+            <div class="operational-anxiety-contexts"></div>
+            ${threatLearning}${defensiveContext}${learnedControllability}
+          </details>`
         : '';
       const feeding = definition.key === 'satiety'
         ? feedingMarkup(
@@ -685,17 +777,12 @@ export class BrainHud {
         : definition.key === 'anxiety'
           ? `<div class="soma-reading-detail operational-anxiety-detail">
               <p class="soma-reading-description">Current structured threat context is unavailable.</p>
-              <dl class="operational-anxiety-facts">
-                <div><dt>CURRENT CONCERN</dt><dd class="operational-anxiety-concern">NONE</dd></div>
-                <div><dt>EXPECTED OUTCOME</dt><dd class="operational-anxiety-outcome">NONE</dd></div>
-                <div><dt>TIMING</dt><dd class="operational-anxiety-timing">UNKNOWN</dd></div>
-                <div><dt>WORLD AMBIGUITY</dt><dd class="operational-anxiety-ambiguity">UNKNOWN</dd></div>
-                <div><dt>ACTUAL CONTROL</dt><dd class="operational-anxiety-control">UNKNOWN</dd></div>
-                <div><dt>LEARNED HISTORY</dt><dd class="operational-anxiety-learning">UNKNOWN</dd></div>
-                <div><dt>TEMPORAL HAZARD</dt><dd class="operational-anxiety-hazard">NOT AVAILABLE</dd></div>
-              </dl>
-              <div class="operational-anxiety-contexts"></div>
-              ${numericHistory}${anxietyGrounding}
+              ${numericHistory}
+              <section class="operational-anxiety-drivers" aria-labelledby="operational-anxiety-drivers-title">
+                <h3 id="operational-anxiety-drivers-title">WHAT IS DRIVING THIS</h3>
+                <ul><li>Current structured defensive context is unavailable.</li></ul>
+              </section>
+              ${anxietyGrounding}
             </div>`
         : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${feeding}${sleepHomeostasis}${socialContact}</div>`;
       entry.innerHTML = `${summary}${detail}`;
@@ -1129,8 +1216,19 @@ export class BrainHud {
         ? 'Current structured defensive context is unavailable.'
         : `${state.replaceAll('_', ' ')} from the current structured defensive context.`;
 
+    const driverList = entry.querySelector('.operational-anxiety-drivers ul');
+    driverList.textContent = '';
+    for (const driver of operationalAnxietyDrivers(snapshot)) {
+      const item = document.createElement('li');
+      item.textContent = driver;
+      driverList.appendChild(item);
+    }
+
     const cueLabels = concern && Array.isArray(concern.activeCues)
-      ? concern.activeCues.map((cue) => cue.label).filter(Boolean) : [];
+      ? concern.activeCues.map((cue) => publicSomaLabel(
+        cue && cue.label,
+        cue && cue.type ? `${String(cue.type).toLowerCase()} cue` : 'structured cue',
+      )).filter(Boolean) : [];
     entry.querySelector('.operational-anxiety-concern').textContent = cueLabels.length
       ? cueLabels.join(', ') : state === 'QUIET' ? 'NONE' : 'UNKNOWN';
     entry.querySelector('.operational-anxiety-outcome').textContent = concern && concern.outcomeClass
@@ -1166,7 +1264,7 @@ export class BrainHud {
       const heading = document.createElement('strong');
       heading.textContent = `${item.state.replaceAll('_', ' ')} - ${item.outcomeClass.replaceAll('_', ' ')}`;
       const cues = document.createElement('p');
-      cues.textContent = `Present cues: ${(item.activeCues || []).map((cue) => cue.label).join(', ') || 'unknown'}.`;
+      cues.textContent = `Present cues: ${(item.activeCues || []).map((cue) => publicSomaLabel(cue && cue.label, 'structured cue')).join(', ') || 'unknown'}.`;
       const facts = document.createElement('p');
       facts.textContent = `Timing ${item.temporalStatus}; world ambiguity ${item.worldAmbiguity}; actual control ${item.objectiveControllability}.`;
       article.append(heading, cues, facts);
@@ -1174,8 +1272,8 @@ export class BrainHud {
         const line = document.createElement('p');
         const posterior = learned.evidence && learned.evidence.posterior;
         line.textContent = posterior
-          ? `${learned.cue.label} -> ${learned.outcomeClass.replaceAll('_', ' ')}: ${posterior.outcomesOccurred} adverse / ${posterior.outcomesDidNotOccur} safe; Beta(${posterior.alpha}, ${posterior.beta}), expected probability ${posterior.mean.toFixed(3)}, variance ${posterior.variance.toFixed(4)}.`
-          : `${learned.cue.label} -> ${learned.outcomeClass.replaceAll('_', ' ')}: NO RESOLVED LEARNING HISTORY (Beta(1, 1) prior).`;
+          ? `${publicSomaLabel(learned.cue && learned.cue.label, 'structured cue')} -> ${learned.outcomeClass.replaceAll('_', ' ')}: ${posterior.outcomesOccurred} adverse / ${posterior.outcomesDidNotOccur} safe; Beta(${posterior.alpha}, ${posterior.beta}), expected probability ${posterior.mean.toFixed(3)}, variance ${posterior.variance.toFixed(4)}.`
+          : `${publicSomaLabel(learned.cue && learned.cue.label, 'structured cue')} -> ${learned.outcomeClass.replaceAll('_', ' ')}: NO RESOLVED LEARNING HISTORY (Beta(1, 1) prior).`;
         article.appendChild(line);
       }
       contexts.appendChild(article);
@@ -1277,7 +1375,7 @@ export class BrainHud {
         const item = document.createElement('article');
         item.className = 'threat-learning-association';
         const heading = document.createElement('strong');
-        heading.textContent = `${String(association.cueId).replace(':', ' ')} -> ${String(association.outcomeClass).replaceAll('_', ' ')}`;
+        heading.textContent = `${publicSomaLabel(association.cueId)} -> ${String(association.outcomeClass).replaceAll('_', ' ')}`;
         const summary = document.createElement('p');
         summary.textContent = association.evidenceBalance === 'adverse_more_often'
           ? 'This cue has more often been followed by this adverse outcome than not.'
@@ -1316,7 +1414,7 @@ export class BrainHud {
       const cue = Array.isArray(context.activeCues) && context.activeCues.length
         ? context.activeCues[0].cueId : 'external cue';
       const heading = document.createElement('strong');
-      heading.textContent = `${String(cue).replace(':', ' ')} PRESENT`;
+      heading.textContent = `${publicSomaLabel(cue)} PRESENT`;
       const outcome = document.createElement('p');
       outcome.className = 'defensive-context-outcome';
       outcome.textContent = `Possible learned outcome: ${String(context.outcomeClass || 'unknown').replaceAll('_', ' ')}`;
@@ -1330,7 +1428,7 @@ export class BrainHud {
             : association.evidence === 'EVENLY_SPLIT'
               ? 'resolved observations evenly split'
               : 'no resolved observations yet';
-        row.textContent = `${String(association.cueId).replace(':', ' ')}: ${description}`;
+        row.textContent = `${publicSomaLabel(association.cueId)}: ${description}`;
         evidence.appendChild(row);
       }
       const facts = document.createElement('dl');
@@ -1723,8 +1821,23 @@ export class BrainHud {
       if (this.historyRequests.get(entry) !== request) return;
       if (scope === 'operational-anxiety') {
         path.setAttribute('d', buildCategoricalStepPath(data.points, data.fromMs, data.toMs));
+        const transitions = entry.querySelector('.operational-anxiety-transitions');
+        transitions.textContent = '';
+        const span = Math.max(1, data.toMs - data.fromMs);
+        for (const point of data.points) {
+          if (!Number.isFinite(point.ts) || !OPERATIONAL_ANXIETY_BANDS.includes(point.state)) continue;
+          const marker = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          marker.setAttribute('cx', String(Math.max(0, Math.min(280, ((point.ts - data.fromMs) / span) * 280))));
+          marker.setAttribute('cy', String(((OPERATIONAL_ANXIETY_BANDS.indexOf(point.state) + 0.5) / OPERATIONAL_ANXIETY_BANDS.length) * 80));
+          marker.setAttribute('r', '2.4');
+          marker.classList.toggle('is-unknown', point.state === 'UNKNOWN');
+          const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+          title.textContent = `${readableState(point.state)} - ${new Date(point.ts).toLocaleString()}`;
+          marker.appendChild(title);
+          transitions.appendChild(marker);
+        }
         note.textContent = data.points.length
-          ? `${data.points.length} stored categorical state readings in ${range}. The line steps only when the stored state changes.`
+          ? `${data.points.length} stored categorical state periods in ${range}. Markers use stored transition times; UNKNOWN is a separate band.`
           : `No operational Anxiety state readings in the last ${range}.`;
         return;
       }
@@ -1775,6 +1888,8 @@ export class BrainHud {
       if (band) band.setAttribute('d', '');
       const estimate = entry.querySelector('.satiety-history-line');
       if (estimate) estimate.setAttribute('d', '');
+      const transitions = entry.querySelector('.operational-anxiety-transitions');
+      if (transitions) transitions.textContent = '';
       note.textContent = `History unavailable: ${error.message}`;
     }
   }

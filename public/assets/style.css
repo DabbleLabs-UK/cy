@@ -346,12 +346,16 @@ body.cy-paused::after {
 /* ---- layout ---- */
 .layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: clamp(340px, 27vw, 400px) minmax(360px, 1fr) clamp(300px, 25vw, 380px);
+  grid-template-areas: "soma timeline side";
   gap: 14px;
   padding: 14px;
   align-items: start;
 }
 .col { min-width: 0; }
+.col-brain { grid-area: soma; }
+.col-paper { grid-area: timeline; }
+.col-side { grid-area: side; }
 
 .panel {
   background: linear-gradient(180deg, var(--chrome-1), var(--chrome-0));
@@ -1633,13 +1637,24 @@ body.cy-paused::after {
 .tp-cost-sub { font-size: 9px; color: var(--tel-dim); font-variant-numeric: tabular-nums; }
 
 /* ================= RESPONSIVE ================= */
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
-  .col-paper { position: relative; order: -1; }
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: minmax(340px, 400px) minmax(300px, 1fr);
+    grid-template-areas:
+      "timeline timeline"
+      "soma side";
+  }
+  .col-paper { position: relative; }
+}
+
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "timeline" "soma" "side";
+  }
   .paper { height: 58vh; min-height: 340px; }
   .raw { height: 70vh; }
   .plain { height: 70vh; }
-  .col-brain, .col-side { order: 1; }
 }
 
 /* ================= RAW DEBUGGING VIEW (admin only) ================= */
@@ -2253,3 +2268,173 @@ body.cy-paused::after {
 .predicted-sleepiness-facts dt { color: #7895a8; font-size: 8px; letter-spacing: 0.08em; }
 .predicted-sleepiness-facts dd { margin: 0; color: #c5d2da; font-size: 9px; line-height: 1.35; }
 .predicted-sleepiness-separation { color: #9fb2be; }
+
+/* SOMA 1C: readable primary instrument panel and categorical Anxiety display. */
+.soma-caveat {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.soma-public-readout { gap: 7px; }
+.soma-state-row {
+  min-height: 48px;
+  padding: 8px 6px 8px 18px;
+  gap: 7px;
+}
+.soma-state-row::before {
+  left: 5px;
+  top: 10px;
+  font-size: 12px;
+}
+.soma-state-label {
+  font-size: 13px;
+  line-height: 1.25;
+  letter-spacing: 0.045em;
+}
+.soma-state-status {
+  padding: 2px 4px;
+  font-size: 9.5px;
+  line-height: 1.2;
+}
+.soma-state-trend { font-size: 11.5px; }
+.soma-state-row > strong { font-size: 14px; }
+.soma-somatic-entry .soma-state-value { font-size: 13px; }
+.soma-reading-detail {
+  padding: 12px;
+}
+.soma-reading-description,
+.soma-reading-detail p,
+.soma-reading-detail li,
+.soma-reading-detail dd {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.soma-reading-detail dt {
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+.soma-reading-detail pre { font-size: 12px; line-height: 1.5; }
+.soma-reading-detail details > summary,
+.soma-substrate-more > summary {
+  min-height: 34px;
+  padding-block: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.soma-ranges { gap: 6px; margin-bottom: 8px; }
+.soma-ranges button {
+  min-width: 42px;
+  min-height: 30px;
+  font-size: 10px;
+  padding: 5px 9px;
+}
+.soma-history-note { margin-top: 7px; }
+.soma-influences-title { font-size: 10.5px; margin-top: 12px; }
+.soma-contributors { padding-left: 20px; }
+
+.soma-region-list { gap: 6px; margin-top: 10px; }
+.soma-region-entry > summary {
+  min-height: 44px;
+  gap: 8px;
+  padding: 8px 9px 8px 21px;
+}
+.soma-region-entry > summary::before { left: 8px; font-size: 12px; }
+.soma-region-name {
+  font-size: 12.5px;
+  line-height: 1.3;
+  letter-spacing: 0.025em;
+}
+.soma-region-state { font-size: 9.5px; line-height: 1.2; }
+
+.soma-operational-anxiety-entry .soma-state-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.soma-operational-anxiety-entry .soma-state-value {
+  grid-column: 1 / -1;
+  color: #e2c77c;
+  font-size: 15px;
+  line-height: 1.2;
+  letter-spacing: 0.055em;
+  text-align: left;
+}
+.operational-anxiety-detail > .soma-reading-description { color: #aebfca; }
+.operational-anxiety-history-wrap {
+  grid-template-columns: 92px minmax(0, 1fr);
+  column-gap: 9px;
+  margin-top: 12px;
+}
+.operational-anxiety-history-wrap .soma-ranges,
+.operational-anxiety-history-wrap .soma-history-note { grid-column: 1 / -1; }
+.operational-anxiety-axis {
+  height: 132px;
+  color: #9db0bc;
+  font-size: 9.5px;
+  line-height: 1.15;
+}
+.operational-anxiety-history {
+  height: 132px;
+  background: repeating-linear-gradient(to bottom, transparent 0 25px, rgba(75,98,116,0.22) 26px);
+}
+.operational-anxiety-history path {
+  stroke: #dfa64d;
+  stroke-width: 2.25;
+  stroke-linejoin: miter;
+}
+.operational-anxiety-unknown-band { fill: rgba(103, 116, 128, 0.14); }
+.operational-anxiety-transitions circle {
+  fill: #dfa64d;
+  stroke: #111821;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.operational-anxiety-transitions circle.is-unknown { fill: #8997a1; }
+.operational-anxiety-drivers {
+  margin-top: 15px;
+  padding: 11px 12px;
+  border: 1px solid #344a59;
+  background: rgba(18, 29, 37, 0.58);
+}
+.operational-anxiety-drivers h3 {
+  margin: 0 0 8px;
+  color: #c6d9e4;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.12em;
+}
+.operational-anxiety-drivers ul {
+  margin: 0;
+  padding-left: 19px;
+  color: #b8c8d2;
+}
+.operational-anxiety-drivers li + li { margin-top: 5px; }
+.operational-anxiety-model-details {
+  margin-top: 13px;
+  border-top: 1px solid #344a59;
+}
+.operational-anxiety-model-details > summary {
+  color: #93aebb;
+  cursor: pointer;
+  letter-spacing: 0.1em;
+  list-style: none;
+}
+.operational-anxiety-model-details > summary::-webkit-details-marker { display: none; }
+.operational-anxiety-model-details > summary::before { content: '+ '; }
+.operational-anxiety-model-details[open] > summary::before { content: '- '; }
+.operational-anxiety-model-note { margin: 4px 0 10px; }
+.operational-anxiety-facts { gap: 7px; margin: 8px 0 12px; }
+.operational-anxiety-facts > div {
+  grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(75, 101, 116, 0.28);
+}
+.operational-anxiety-facts dd { text-align: left; }
+.operational-anxiety-contexts { gap: 8px; margin-top: 10px; }
+.operational-anxiety-contexts article { padding: 10px; }
+.operational-anxiety-contexts strong { font-size: 11px; }
+
+@media (max-width: 760px) {
+  .layout { padding: 8px; gap: 10px; }
+  .operational-anxiety-history-wrap { grid-template-columns: 82px minmax(0, 1fr); }
+  .operational-anxiety-axis { font-size: 9px; }
+}

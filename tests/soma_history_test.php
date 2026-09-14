@@ -53,6 +53,20 @@ if ($anxietyPoints !== [
     fwrite(STDERR, "FAIL: operational Anxiety history did not preserve categorical transitions\n");
     exit(1);
 }
+$london = new DateTimeZone('Europe/London');
+$midnightFrom = (new DateTimeImmutable('2026-09-13 23:55:00', $london))->getTimestamp() * 1000;
+$midnightTo = (new DateTimeImmutable('2026-09-14 00:05:00', $london))->getTimestamp() * 1000;
+$midnightPoints = captive_operational_anxiety_history_points([
+    ['ts' => '2026-09-13 23:59:30.000', 'value' => 'ANTICIPATING'],
+    ['ts' => '2026-09-14 00:01:15.000', 'value' => 'UNKNOWN'],
+    ['ts' => '2026-09-14 00:03:45.000', 'value' => 'THREAT_IMMINENT'],
+], $midnightFrom, $midnightTo);
+if (array_column($midnightPoints, 'state') !== ['ANTICIPATING', 'UNKNOWN', 'THREAT_IMMINENT']
+    || $midnightPoints[0]['ts'] >= $midnightPoints[1]['ts']
+    || $midnightPoints[1]['ts'] >= $midnightPoints[2]['ts']) {
+    fwrite(STDERR, "FAIL: operational Anxiety history did not cross local midnight with UNKNOWN preserved\n");
+    exit(1);
+}
 try {
     captive_soma_history_config('24h', 'anxiety', 'metric');
     fwrite(STDERR, "FAIL: legacy numeric Anxiety remains available through public history\n");
