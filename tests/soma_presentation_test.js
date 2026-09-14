@@ -73,5 +73,14 @@ assert.match(styleSource, /\.soma-reading-description,[\s\S]*font-size: 13px/,
   'substantive Soma text must have a 13px minimum rule');
 assert.match(styleSource, /\.soma-region-name \{[\s\S]*font-size: 12\.5px/,
   'brain-region names must be readable');
+assert.match(styleSource,
+  /\.soma-state-row \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto/,
+  'collapsed Soma readings must use a two-column, two-line grid without text collisions');
+assert.match(styleSource,
+  /\.soma-state-trend \{[\s\S]*grid-column: 1;[\s\S]*grid-row: 2;/,
+  'trend or model context must sit on the second line');
+assert.match(styleSource,
+  /\.soma-state-row > strong \{[\s\S]*grid-column: 2;[\s\S]*grid-row: 2;/,
+  'the reading value must sit on the second line opposite its context');
 
 console.log('soma_presentation_test.js: all checks passed');

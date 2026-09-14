@@ -2278,6 +2278,7 @@ body.cy-paused::after {
 .soma-state-row {
   min-height: 48px;
   padding: 8px 6px 8px 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 7px;
 }
 .soma-state-row::before {
@@ -2286,17 +2287,37 @@ body.cy-paused::after {
   font-size: 12px;
 }
 .soma-state-label {
+  grid-column: 1;
+  grid-row: 1;
   font-size: 13px;
   line-height: 1.25;
   letter-spacing: 0.045em;
 }
 .soma-state-status {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
   padding: 2px 4px;
   font-size: 9.5px;
   line-height: 1.2;
 }
-.soma-state-trend { font-size: 11.5px; }
-.soma-state-row > strong { font-size: 14px; }
+.soma-state-trend {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
+  font-size: 11.5px;
+}
+.soma-state-row > strong {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  font-size: 14px;
+}
+.soma-state-bar { grid-column: 1 / -1; }
+.soma-sleepiness-entry .soma-state-row,
+.soma-somatic-entry .soma-state-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 .soma-somatic-entry .soma-state-value { font-size: 13px; }
 .soma-reading-detail {
   padding: 12px;
