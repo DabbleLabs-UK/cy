@@ -8,7 +8,7 @@ const CAPTIVE_SOMA_RANGES = [
 ];
 
 const CAPTIVE_SOMA_METRICS = [
-    'arousal', 'pain', 'hunger', 'loneliness', 'anger', 'rumination',
+    'arousal', 'pain', 'hunger', 'anger', 'rumination',
 ];
 
 const CAPTIVE_SOMA_BRAIN_REGIONS = [

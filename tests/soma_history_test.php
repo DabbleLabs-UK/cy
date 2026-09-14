@@ -73,6 +73,18 @@ try {
     exit(1);
 } catch (InvalidArgumentException $e) {
 }
+try {
+    captive_soma_history_config('24h', 'loneliness', 'metric');
+    fwrite(STDERR, "FAIL: legacy numeric Loneliness remains available through public history\n");
+    exit(1);
+} catch (InvalidArgumentException $e) {
+}
+$socialToMs = strtotime('2026-09-12 00:15:00 UTC') * 1000;
+$socialFromMs = $socialToMs - 3600000;
+if (gmdate('Y-m-d H:i', (int)($socialFromMs / 1000)) !== '2026-09-11 23:15') {
+    fwrite(STDERR, "FAIL: rolling one-hour social history does not cross midnight\n");
+    exit(1);
+}
 $brainPayload = json_encode([
     'soma' => ['experienced' => ['brain' => ['amygdala' => ['value' => 0.64]]]],
 ], JSON_THROW_ON_ERROR);

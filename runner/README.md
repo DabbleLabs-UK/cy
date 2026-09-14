@@ -229,6 +229,13 @@ Soma circuits.
   basis. Light entrainment, drift, direct biological phase, and language/action
   effects are not modelled. A specific SCN phase analogy is live without
   presenting the value as neural activation.
+- **LIVE factual social contact / isolation** (`social-contact-substrate.js`) -
+  preserves the canonical structured episode ledger and reports only ongoing
+  contact, open opportunity, explicitly confirmed isolation, observation gaps,
+  no current episode observed or unknown. The public 1H/24H/7D timeline has no
+  magnitude, set-point or invented recency threshold. Subjective Loneliness,
+  social deprivation/need, satisfaction and neural activation are not modelled;
+  the former numeric Loneliness metric is diagnostics-only.
 - **LIVE predicted Sleepiness after calibration** (`three-process-sleepiness.js`) -
   uses the independently validated Ingre et al. 2014 Three-Process Model
   `S_B + C + U` and its fitted `KSS = 9.68 - 0.46 * alertness` transfer. It

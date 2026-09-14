@@ -160,6 +160,8 @@ assert.match(projection.directive, /Definite food intake was recorded 240 minute
 assert.doesNotMatch(projection.directive, /\b(?:hungry|starving)\b/i);
 assert.match(projection.directive, /last supportive contact was 1 minutes ago/);
 assert.doesNotMatch(projection.directive, /\blonely\b/i);
+assert.doesNotMatch(projection.directive, /subjective loneliness/i,
+  'model-facing social context contains grounded facts rather than an unmodelled disclaimer');
 assert.doesNotMatch(projection.directive, /sleep_homeostasis|feeding_intake_ledger|social_contact_ledger|\{"/);
 assert.ok(projection.directive.length < 3000, 'model-facing facts stay compact');
 

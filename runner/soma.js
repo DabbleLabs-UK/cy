@@ -771,7 +771,9 @@ export function tickSoma(state, {
   // compatibility drives or circuits; predicted KSS is not an action policy.
   state.drives.rest = 0;
   state.drives.safety = round(Math.max(experienced.arousal.value / 120, experienced.anger.value / 140));
-  state.drives.contact = round(experienced.loneliness.value / 100);
+  // The legacy Loneliness scalar is diagnostics-only. The factual social
+  // ledger does not license a social-need drive or action policy.
+  state.drives.contact = 0;
   state.drives.understanding = round(
     0.2 + 0.42 * state.selfModel.uncertainty + 0.38 * state.prediction.error,
   );
@@ -785,7 +787,7 @@ export function tickSoma(state, {
 
   state.circuits.interoception = round(hunger);
   state.circuits.threatAppraisal = round(state.drives.safety);
-  state.circuits.affiliation = round(Math.max(state.appraisal.affiliation, state.drives.contact));
+  state.circuits.affiliation = 0;
   state.circuits.predictionError = round(state.prediction.error);
   const selected = selectedEpisode(state);
   const selectedAgeMin = selected ? Math.max(0, now - finite(state.memory.selectedAtMs, now)) / 60000 : Infinity;

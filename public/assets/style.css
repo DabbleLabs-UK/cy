@@ -2176,12 +2176,8 @@ body.cy-paused::after {
 }
 .feed-jump:hover { background: #366fa3; }
 .social-contact-card {
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid #31576b;
-  background: #0c141b;
+  color: #b9cbd4;
 }
-.social-contact-head,
 .social-contact-facts div,
 .social-contact-limits {
   display: grid;
@@ -2189,17 +2185,67 @@ body.cy-paused::after {
   gap: 6px 12px;
   align-items: baseline;
 }
-.social-contact-head { color: #8fcbe6; letter-spacing: .08em; }
 .social-contact-explanation,
 .social-contact-item p,
 .social-contact-empty { color: #9cafba; line-height: 1.45; }
+.social-contact-card h3 {
+  margin: 12px 0 7px;
+  color: #8fcbe6;
+  font: 11px var(--mono);
+  letter-spacing: .1em;
+}
 .social-contact-facts { margin: 10px 0; }
 .social-contact-facts div { padding: 5px 0; border-top: 1px solid #20313b; }
 .social-contact-facts dt,
 .social-contact-limits span { color: #708c9b; font-size: .72em; letter-spacing: .06em; }
 .social-contact-facts dd { margin: 0; color: #d0dae0; text-align: right; }
 .social-ranges { display: flex; gap: 5px; margin: 8px 0; }
+.social-ranges button {
+  min-width: 42px;
+  min-height: 30px;
+  border: 1px solid #405866;
+  background: #0b1117;
+  color: #879dab;
+  font: 10px var(--mono);
+  cursor: pointer;
+}
 .social-ranges button.active { border-color: #79c4e4; color: #bce9fb; }
+.social-history-graph {
+  padding: 9px;
+  border: 1px solid #2b414e;
+  background: #091016;
+}
+.social-history-track {
+  position: relative;
+  height: 54px;
+  overflow: hidden;
+  border: 1px solid #243946;
+  background: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), rgba(102, 131, 148, .15) 25%);
+}
+.social-history-track .social-contact-empty { margin: 16px 8px; text-align: center; }
+.social-history-event {
+  position: absolute;
+  top: 12px;
+  min-width: 3px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: #6fc0df;
+  cursor: help;
+}
+.social-history-event:hover,
+.social-history-event:focus-visible { outline: 2px solid #eef8fc; outline-offset: 1px; z-index: 2; }
+.social-history-opportunity { top: 19px; height: 14px; background: #cfaa62; }
+.social-history-confirmed-isolation { background: #c56b55; }
+.social-history-observation-gap { top: 8px; height: 36px; background: repeating-linear-gradient(135deg, #566570 0 3px, #1a252d 3px 6px); }
+.social-history-unknown { background: #6f7780; }
+.social-history-axis { display: flex; justify-content: space-between; margin-top: 5px; color: #718896; font-size: 10px; }
+.social-history-legend { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 8px; color: #8ea2ae; font-size: 10px; }
+.social-history-legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; background: #6fc0df; }
+.social-history-legend .opportunity::before { background: #cfaa62; }
+.social-history-legend .isolation::before { background: #c56b55; }
+.social-history-legend .gap::before { background: repeating-linear-gradient(135deg, #566570 0 2px, #1a252d 2px 4px); }
 .social-contact-item { padding: 8px; margin: 6px 0; border-left: 2px solid #597888; background: #101b22; }
 .social-contact-item.social-supportive { border-left-color: #55ba8a; }
 .social-contact-item.social-hostile,
@@ -2209,6 +2255,17 @@ body.cy-paused::after {
 .social-contact-limits { margin-top: 10px; padding-top: 8px; border-top: 1px solid #31576b; }
 .social-contact-limits strong { color: #c9a565; font-size: .76em; }
 .social-contact-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b9cbd4; }
+.soma-social-entry .soma-state-row { grid-template-columns: minmax(0, 1fr) auto; }
+.soma-social-entry .soma-state-value {
+  grid-column: 1 / -1;
+  color: #d7e3e8;
+  font-size: 13px;
+  line-height: 1.3;
+  letter-spacing: .035em;
+  text-align: left;
+}
+.social-contact-detail { padding-top: 5px; }
+.social-contact-detail .social-contact-facts dd { max-width: 52%; overflow-wrap: anywhere; }
 .predicted-sleepiness-card {
   margin: 8px 0;
   padding: 9px;
@@ -2465,4 +2522,8 @@ body.cy-paused::after {
 
 @media (max-width: 760px) {
   .layout { padding: 8px; gap: 10px; }
+  .social-contact-facts div,
+  .social-contact-limits { grid-template-columns: 1fr; gap: 3px; }
+  .social-contact-detail .social-contact-facts dd { max-width: none; text-align: left; }
+  .social-history-axis { font-size: 9px; }
 }

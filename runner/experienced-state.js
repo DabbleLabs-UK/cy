@@ -522,6 +522,7 @@ export function experiencedSnapshot(state, now = null) {
       key, label: spec.label, value: state.metrics[key].value, baseline: spec.baseline,
       updatedAtMs: state.metrics[key].updatedAtMs, trend: trend.direction, trendDelta: trend.delta,
       recovery: spec.recovery, contributors: publicContributors(state, key, now),
+      ...(key === 'loneliness' ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
     };
   }
   const value = (key) => metrics[key].value;
@@ -535,12 +536,15 @@ export function experiencedSnapshot(state, now = null) {
       key: 'acc', label: 'Anterior cingulate analogy', value: null, level: 'unavailable', sources: [],
       explanation: 'No subjective Pain, affective Pain or control-conflict activation mapping is modelled.',
     },
-    hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination') + 0.2 * value('loneliness'), ['rumination', 'loneliness']),
+    hippocampal: brainRegion('hippocampal', 'Hippocampal analogy', 0.55 * value('rumination'), ['rumination']),
     prefrontal: {
       key: 'prefrontal', label: 'Prefrontal analogy', value: null, level: 'unavailable', sources: [],
       explanation: 'No validated mapping from legacy Pain or current bodily facts to prefrontal activation is modelled.',
     },
-    temporalSocial: brainRegion('temporalSocial', 'Temporal / social analogy', value('loneliness'), ['loneliness']),
+    temporalSocial: {
+      key: 'temporalSocial', label: 'Temporal / social analogy', value: null, level: 'unavailable', sources: [],
+      explanation: 'Factual social contact is recorded, but social-processing neural activation is not modelled.',
+    },
   };
   return {
     version: EXPERIENCED_VERSION,
@@ -559,7 +563,7 @@ export function experiencedDirective(state, now = null) {
   if (!state) return '';
   now = Number.isFinite(now) ? now : finite(state.updatedAtMs, Date.now());
   const snapshot = experiencedSnapshot(state, now);
-  const active = Object.entries(snapshot.metrics).filter(([key]) => key !== 'pain').map(([, metric]) => ({
+  const active = Object.entries(snapshot.metrics).filter(([key]) => !['pain', 'loneliness'].includes(key)).map(([, metric]) => ({
     ...metric, distance: Math.abs(metric.value - metric.baseline),
   })).filter((metric) => metric.distance >= 8).sort((a, b) => b.distance - a.distance).slice(0, 3);
   if (!active.length) return 'EXPERIENCED STATE: no pressure is far from its resting tendency.';
@@ -569,7 +573,6 @@ export function experiencedDirective(state, now = null) {
     arousal: 'favour immediate, less settled responses',
     hunger: 'let food and deprivation compete for attention',
     fatigue: 'favour shorter output, rest or silence',
-    loneliness: 'notice contact, rejection and social absence',
     anger: 'notice hostility and unfairness, with less patience',
     rumination: 'return attention to unresolved material',
   };

@@ -9,7 +9,7 @@ import { createEnvironmentEvent, environmentEventToSomaInput } from './environme
 const registry = implementationRegistry;
 assert.equal(registry.schema, 'cy.implementation-registry');
 assert.equal(registry.soma_variables.length, 11);
-assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 4);
+assert.equal(registry.soma_variables.filter((entry) => entry.implementation_status === 'IMPLEMENTED').length, 5);
 assert.equal(somaImplementationStatus(), 'provisional');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_prose_context').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('soma_subsystems', 'grounded_soma_to_expressive_context').implementation_status, 'IMPLEMENTED');

@@ -450,12 +450,6 @@ function socialSection(state, now) {
       observationGapCount: (snapshot.observationGaps || []).length,
     },
   ));
-  entries.push(entry(
-    EPISTEMIC_STATUS.NOT_MODELLED,
-    'social_contact_ledger',
-    'subjective_loneliness',
-    snapshot.subjectiveLoneliness,
-  ));
   return section('social', 'SOCIAL', entries);
 }
 

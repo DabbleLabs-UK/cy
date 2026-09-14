@@ -2,7 +2,7 @@
   "schema": "cy.model-spec",
   "version": 1,
   "id": "social-contact-detector-ledger",
-  "implementation_version": "social-contact-detector-ledger-v1",
+  "implementation_version": "social-contact-detector-ledger-v2",
   "status": "IMPLEMENTED",
   "scope": "Factual social detector and post-installation experience ledger only",
   "conceptual_framework": {
@@ -16,6 +16,22 @@
       {
         "citation": "Lee CR, Chen A, Tye KM. The neural circuitry of social homeostasis: Consequences of acute versus chronic social isolation. Cell. 2021;184(6):1500-1516.",
         "doi": "10.1016/j.cell.2021.02.028"
+      },
+      {
+        "citation": "Matthews GA, Nieh EH, Vander Weele CM, et al. Dorsal Raphe Dopamine Neurons Represent the Experience of Social Isolation. Cell. 2016;164(4):617-631.",
+        "doi": "10.1016/j.cell.2015.12.040",
+        "mapping_limit": "Mouse acute-isolation and rebound-social-preference experiment; not a human loneliness equation and not a source of transferable thresholds."
+      },
+      {
+        "citation": "Tomova L, Wang KL, Thompson T, et al. Acute social isolation evokes midbrain craving responses similar to hunger. Nat Neurosci. 2020;23(12):1597-1605.",
+        "doi": "10.1038/s41593-020-00742-z",
+        "mapping_limit": "Forty adults underwent ten hours of experimental isolation or fasting with self-report and fMRI outcomes. The study supports a distinction between objective isolation and social craving but does not supply a universal event-to-loneliness transfer function."
+      },
+      {
+        "citation": "Zhaoyang R, Harrington KD, Scott SB, Graham-Engeland JE, Sliwinski MJ. Daily Social Interactions and Momentary Loneliness: The Role of Trait Loneliness and Neuroticism. J Gerontol B Psychol Sci Soc Sci. 2022;77(10):1791-1802.",
+        "doi": "10.1093/geronb/gbac083",
+        "pmcid": "PMC9535790",
+        "mapping_limit": "Ecological momentary assessment in 317 older adults used participant self-report and population regression. Its coefficients are not treated as universal constants for Cy."
       }
     ]
   },
@@ -25,6 +41,15 @@
     "SOCIAL_EXPERIENCE_LEDGER",
     "CURRENT_FACTUAL_SOCIAL_CONTEXT"
   ],
+  "visitor_facing_construct": {
+    "name": "SOCIAL CONTACT / ISOLATION",
+    "type": "FACTUAL_CATEGORICAL_CONTEXT_AND_EVENT_TIMELINE",
+    "states": ["CONTACT_ONGOING", "OPPORTUNITY_OPEN", "CONFIRMED_ISOLATION", "OBSERVATION_GAP", "NO_CURRENT_EPISODE_OBSERVED", "UNKNOWN"],
+    "ordering": "NONE",
+    "numeric_scale": "NONE",
+    "rule": "Use the latest ONGOING canonical episode when observation continuity is CONTINUOUS; otherwise show OBSERVATION_GAP. With continuous observation and no ongoing episode, report NO_CURRENT_EPISODE_OBSERVED. Invalid or unavailable state remains UNKNOWN.",
+    "claim_limit": "The state reports ledger evidence only. It is not social deprivation, social need, social craving, subjective loneliness or satisfaction."
+  },
   "episode_schema": {
     "schema": "cy.social-episode",
     "channels": ["IN_PERSON", "POSTCARD", "OFFICER_INTERACTION", "OTHER", "UNKNOWN"],
@@ -76,6 +101,7 @@
     "social aversive value",
     "subjective loneliness",
     "social-processing brain activation",
+    "subjective interaction satisfaction",
     "emotional consequences",
     "subjective Loneliness or other emotional interpretation of facts supplied to the language model",
     "action-selection effects"

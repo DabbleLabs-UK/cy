@@ -143,8 +143,10 @@ assert.equal(
   'M93.3 32.0 H186.7 V0.0 H280.0',
   'active-injury history uses a factual integer step line rather than a 0-100 Pain curve',
 );
-assert.match(source, /CONTACT HISTORY AND MODEL LIMITS/,
-  'the long social history and unmodelled dependency list stay behind a secondary disclosure');
+assert.match(source, /<summary>MODEL DETAILS<\/summary>[\s\S]*?SUBJECTIVE LONELINESS<\/span><strong>NOT MODELLED/,
+  'technical social episodes and unmodelled psychological quantities stay behind Model Details');
+assert.match(source, /SOCIAL HISTORY[\s\S]*?data-range="1h"[\s\S]*?data-range="24h"[\s\S]*?data-range="7d"/,
+  'factual rolling social history remains immediately available');
 assert.match(source, /filter\(\(entry\) => entry\.ui_exposed !== false\)/,
   'unimplemented region placeholders without artwork must remain hidden');
 assert.doesNotMatch(source, /Learned outcome probability/);

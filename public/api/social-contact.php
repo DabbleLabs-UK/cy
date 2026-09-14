@@ -12,11 +12,46 @@ header('Cache-Control: no-store');
 
 function captive_social_public_episode(array $episode): array
 {
-    unset($episode['linkedEnvironmentEventIds']);
+    unset($episode['episodeId'], $episode['linkedEnvironmentEventIds']);
+    if (isset($episode['opportunity']) && is_array($episode['opportunity'])) {
+        unset($episode['opportunity']['opportunityId']);
+    }
     if (isset($episode['participants']) && is_array($episode['participants'])) {
         unset($episode['participants']['actorId'], $episode['participants']['targetId'], $episode['participants']['relationshipRef']);
+        if (($episode['channel'] ?? null) === 'POSTCARD') {
+            unset($episode['participants']['actorLabel'], $episode['participants']['targetLabel']);
+        }
     }
     return $episode;
+}
+
+function captive_social_public_snapshot(?array $snapshot): ?array
+{
+    if ($snapshot === null) {
+        return null;
+    }
+    foreach (['latestEpisode', 'recentRejection', 'confirmedIsolation'] as $key) {
+        if (isset($snapshot[$key]) && is_array($snapshot[$key])) {
+            $snapshot[$key] = captive_social_public_episode($snapshot[$key]);
+        }
+    }
+    foreach (['unresolvedOpportunities', 'recentEpisodes'] as $key) {
+        if (isset($snapshot[$key]) && is_array($snapshot[$key])) {
+            $snapshot[$key] = array_map('captive_social_public_episode', $snapshot[$key]);
+        }
+    }
+    if (isset($snapshot['observationGaps']) && is_array($snapshot['observationGaps'])) {
+        foreach ($snapshot['observationGaps'] as &$gap) {
+            if (is_array($gap)) {
+                unset($gap['episodeId']);
+            }
+        }
+        unset($gap);
+    }
+    if (isset($snapshot['currentContext']) && is_array($snapshot['currentContext'])) {
+        unset($snapshot['currentContext']['currentlyWith']);
+    }
+    return $snapshot;
 }
 
 try {
@@ -29,6 +64,9 @@ try {
     }
     $traces = [];
     $episodes = [];
+    $toMs = (int)round(microtime(true) * 1000);
+    $windowMs = ['1h' => 3600000, '24h' => 86400000, '7d' => 604800000];
+    $fromMs = isset($windowMs[$range]) ? $toMs - $windowMs[$range] : null;
     $sql = $range === 'all'
         ? 'SELECT record FROM environment_events ORDER BY occurred_at ASC, event_id ASC'
         : "SELECT record FROM environment_events WHERE occurred_at >= DATE_SUB(NOW(), INTERVAL {$intervals[$range]}) ORDER BY occurred_at ASC, event_id ASC";
@@ -57,7 +95,7 @@ try {
         $payload = json_decode((string)$vitals, true);
         $candidate = is_array($payload) ? ($payload['soma']['social'] ?? null) : null;
         if (is_array($candidate)) {
-            $current = $candidate;
+            $current = captive_social_public_snapshot($candidate);
         }
     }
 
@@ -65,12 +103,14 @@ try {
     $response = [
         'ok' => true,
         'range' => $range,
+        'fromMs' => $fromMs,
+        'toMs' => $toMs,
         'current' => $current,
         'episodes' => $publicEpisodes,
         'socialSetPoint' => 'NOT_MODELLED',
         'socialHomeostaticError' => 'NOT_MODELLED',
         'subjectiveLoneliness' => 'NOT_MODELLED',
-        'legacyDisplayedLoneliness' => 'PROVISIONAL',
+        'legacyDisplayedLoneliness' => 'DIAGNOSTICS_ONLY',
     ];
     if ($isAdmin) {
         $response['inspection'] = [

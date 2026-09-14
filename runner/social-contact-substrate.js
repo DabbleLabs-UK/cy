@@ -8,8 +8,17 @@ export const SOCIAL_STATE_SCHEMA = 'cy.social-contact-substrate';
 export const SOCIAL_STATE_VERSION = 1;
 export const SOCIAL_EPISODE_SCHEMA = 'cy.social-episode';
 export const SOCIAL_MODEL_ID = 'social-contact-detector-ledger';
-export const SOCIAL_MODEL_VERSION = 'social-contact-detector-ledger-v1';
+export const SOCIAL_MODEL_VERSION = 'social-contact-detector-ledger-v2';
 export const SOCIAL_PROVENANCE = 'config/model-specs/social-contact-substrate.json';
+
+export const SOCIAL_CONTEXT_STATES = Object.freeze([
+  'CONTACT_ONGOING',
+  'OPPORTUNITY_OPEN',
+  'CONFIRMED_ISOLATION',
+  'OBSERVATION_GAP',
+  'NO_CURRENT_EPISODE_OBSERVED',
+  'UNKNOWN',
+]);
 
 export const SOCIAL_CHANNELS = Object.freeze(['IN_PERSON', 'POSTCARD', 'OFFICER_INTERACTION', 'OTHER', 'UNKNOWN']);
 export const SOCIAL_FORMS = Object.freeze(['DIRECT_INTERACTION', 'PASSIVE_CO_PRESENCE', 'ATTEMPTED_CONTACT', 'MESSAGE_RECEIVED', 'MESSAGE_SENT', 'UNKNOWN']);
@@ -112,7 +121,14 @@ export function reconcileSocialContactState(raw, { now = Date.now() } = {}) {
   out.observationGaps = Array.isArray(raw.observationGaps) ? raw.observationGaps.filter((gap) =>
     gap && timestampMs(gap.startTimestamp) != null && timestampMs(gap.endTimestamp) != null).map(clone) : [];
   const lastObservedAtMs = Number(raw.continuity && raw.continuity.lastObservedAtMs);
-  if (Number.isFinite(lastObservedAtMs) && now > lastObservedAtMs && out.episodes.length) {
+  if (Number.isFinite(lastObservedAtMs) && now > lastObservedAtMs) {
+    for (const episode of out.episodes) {
+      if (episode.resolution !== 'ONGOING') continue;
+      episode.resolution = 'INTERRUPTED';
+      episode.endTimestamp = new Date(lastObservedAtMs).toISOString();
+      const startMs = timestampMs(episode.startTimestamp);
+      episode.durationMs = startMs == null ? null : Math.max(0, lastObservedAtMs - startMs);
+    }
     out.observationGaps.push({
       episodeType: 'OBSERVATION_GAP', startTimestamp: new Date(lastObservedAtMs).toISOString(),
       endTimestamp: new Date(now).toISOString(), reason: 'RUNNER_NOT_OBSERVING',
@@ -121,6 +137,18 @@ export function reconcileSocialContactState(raw, { now = Date.now() } = {}) {
   }
   out.continuity = { status: 'CONTINUOUS', lastObservedAtMs: now };
   return out;
+}
+
+export function socialContextState(state) {
+  if (!state || !Array.isArray(state.episodes) || !state.continuity) return 'UNKNOWN';
+  if (state.continuity.status !== 'CONTINUOUS') return 'OBSERVATION_GAP';
+  const current = latest(state.episodes, (item) => item.resolution === 'ONGOING');
+  if (!current) return 'NO_CURRENT_EPISODE_OBSERVED';
+  if (current.episodeType === 'CONTACT') return 'CONTACT_ONGOING';
+  if (current.episodeType === 'OPPORTUNITY') return 'OPPORTUNITY_OPEN';
+  if (current.episodeType === 'CONFIRMED_ISOLATION') return 'CONFIRMED_ISOLATION';
+  if (current.episodeType === 'OBSERVATION_GAP') return 'OBSERVATION_GAP';
+  return 'UNKNOWN';
 }
 
 export function touchSocialObservation(state, now = Date.now()) {
@@ -170,11 +198,17 @@ export function observeSocialContactRecord(state, record) {
 function publicEpisode(episode) {
   if (!episode) return null;
   const item = clone(episode);
+  delete item.episodeId;
   delete item.linkedEnvironmentEventIds;
+  if (item.opportunity) delete item.opportunity.opportunityId;
   if (item.participants) {
     delete item.participants.actorId;
     delete item.participants.targetId;
     delete item.participants.relationshipRef;
+    if (item.channel === 'POSTCARD') {
+      delete item.participants.actorLabel;
+      delete item.participants.targetLabel;
+    }
   }
   return item;
 }
@@ -201,14 +235,20 @@ function context(state, now, includePrivate) {
   const unresolved = episodes.filter((item) => item.episodeType === 'OPPORTUNITY' && item.resolution === 'ONGOING');
   const at = (item) => item ? (item.endTimestamp || item.startTimestamp) : null;
   const elapsed = (item) => { const ms = timestampMs(at(item)); return ms == null ? null : Math.max(0, now - ms); };
+  const observationGaps = clone(state && state.observationGaps || []).map((gap) => {
+    if (!includePrivate) delete gap.episodeId;
+    return gap;
+  });
   return {
     status: 'implemented', publicLabel: 'LIVE',
     meaning: 'Factual social episodes and opportunities; not a Loneliness or affiliation score.',
     modelId: SOCIAL_MODEL_ID, modelVersion: SOCIAL_MODEL_VERSION, provenance: SOCIAL_PROVENANCE,
     currentContext: {
+      state: socialContextState(state),
       currentlyInteracting: !!(current && current.episodeType === 'CONTACT'),
       currentlyAlone: !!(current && current.episodeType === 'CONFIRMED_ISOLATION'),
-      currentlyWith: current && current.participants ? current.participants.actorLabel : null,
+      currentlyWith: current && current.participants && (includePrivate || current.channel !== 'POSTCARD')
+        ? current.participants.actorLabel : null,
       currentEpisodeType: current ? current.episodeType : 'NONE_OBSERVED',
       currentSocialCharacter: current ? current.socialCharacter : 'UNKNOWN',
     },
@@ -219,13 +259,13 @@ function context(state, now, includePrivate) {
     latestEpisode: expose(latest(episodes, () => true)), recentRejection: expose(rejection),
     confirmedIsolation: expose(isolation), unresolvedOpportunities: unresolved.map(expose),
     observationContinuity: clone(state && state.continuity),
-    observationGaps: clone(state && state.observationGaps || []),
+    observationGaps,
     recentEpisodes: episodes.slice(-12).map(expose),
     totalEpisodes: episodes.length,
     socialSetPoint: 'NOT_MODELLED', socialHomeostaticError: 'NOT_MODELLED',
     socialSetPointPlasticity: 'NOT_MODELLED', socialToleranceDynamicRange: 'NOT_MODELLED',
     socialAversiveValue: 'NOT_MODELLED', subjectiveLoneliness: 'NOT_MODELLED',
-    legacyDisplayedLoneliness: 'PROVISIONAL',
+    legacyDisplayedLoneliness: 'DIAGNOSTICS_ONLY',
   };
 }
 
