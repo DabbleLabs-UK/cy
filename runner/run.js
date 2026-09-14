@@ -3637,8 +3637,10 @@ async function main() {
       vitals.mental.agitation = experienced.arousal.value / 100;
       vitals.mental.anger = experienced.anger.value / 100;
       // Legacy Loneliness remains available only inside experienced-state
-      // diagnostics. It must not feed the compatibility vitals model.
-      delete vitals.mental.longing;
+      // diagnostics. Keep the required compatibility slot finite and neutral
+      // so it cannot feed prompts, drawing or other legacy behaviour while the
+      // crash-safe state validator can still persist the complete vitals shape.
+      vitals.mental.longing = 0;
       vitals.derived = computeDerived(vitals);
     }
     // Retain the historical expressed-anger value for labelled diagnostics.

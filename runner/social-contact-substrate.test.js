@@ -216,6 +216,9 @@ assert.match(brainSource, /episode\.resolution === 'ONGOING' \? toMs/,
 const somaSource = readFileSync(new URL('./soma.js', import.meta.url), 'utf8');
 const experiencedSource = readFileSync(new URL('./experienced-state.js', import.meta.url), 'utf8');
 assert.doesNotMatch(runSource, /mental\.longing\s*=\s*experienced\.loneliness/);
+assert.doesNotMatch(runSource, /delete vitals\.mental\.longing/);
+assert.match(runSource, /vitals\.mental\.longing = 0;/,
+  'the required legacy persistence slot remains finite but behaviourally neutral');
 assert.doesNotMatch(somaSource, /drives\.contact\s*=\s*round\(experienced\.loneliness/);
 assert.match(experiencedSource, /!\['pain', 'loneliness'\]\.includes\(key\)/);
 assert.match(experiencedSource, /temporalSocial[\s\S]{0,240}value: null/);
