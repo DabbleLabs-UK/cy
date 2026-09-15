@@ -1204,11 +1204,11 @@ async function main() {
       /* never crash on debug logging */
     }
   }
-  // A metered-backoff wait: logged LOUDLY (console + run.out.log) so the paced-down
-  // retry is visible rather than looking like a hang, with the streak length and the
-  // wait so the exponential ramp is legible in the log.
+  // A failed-attempt backoff wait: logged LOUDLY (console + run.out.log) so the
+  // paced-down retry is visible rather than looking like a hang, with the streak
+  // length and the wait so the exponential ramp is legible in the log.
   async function logBackoff(streak, ms) {
-    const line = `[cy] metered backoff: ${streak} non-emitting cycle(s) in a row - waiting ${Math.round(ms / 1000)}s before the next attempt`;
+    const line = `[cy] failed-attempt backoff: ${streak} non-emitting cycle(s) in a row - waiting at least ${Math.round(ms / 1000)}s before the next attempt`;
     console.warn(line);
     try {
       const { appendFile } = await import('node:fs/promises');
@@ -4430,6 +4430,10 @@ async function main() {
         provisionalMemoryCandidate: null,
         availableActions,
       });
+      // Include the action-selection call in the visible cycle's measured work.
+      // It uses the same provider as prose, so omitting it made a nominal 30%
+      // tempo substantially busier than its displayed target.
+      const cycleInferenceStart = Date.now();
       const expressiveChoice = await chooseExpressiveAction(choiceRequest, {
         generate: (call) => rawGenerate({
           system: call.system,
@@ -4513,9 +4517,10 @@ async function main() {
       // fatigue or fixation score creates this exemption.
       const allowRepeat = /say it again|cannot get past|you repeat yourself/.test(directives);
 
-      const burstStart = Date.now();
+      const burstStart = cycleInferenceStart;
       let discards = 0;
       let assistantFrameDiscards = 0;
+      let attempted = false;
       let tempBump = 0;
       let penBump = 0;
       let produced = false;
@@ -4540,6 +4545,7 @@ async function main() {
           repeat_penalty: Number(Math.min(1.6, baseOpts.repeat_penalty + penBump).toFixed(3)),
         };
         await logPrompt(mode, ZONE_A + '\n\n---PROMPT---\n' + prompt);
+        attempted = true;
         const r = await streamGenerate({
           system: ZONE_A,
           prompt,
@@ -4633,8 +4639,9 @@ async function main() {
           await recordOutcome('empty-provider');
         }
       }
-      // METERED BACKOFF classification. A genuine non-emitting FAILURE is a cycle that
-      // paid and put nothing on the page AND was not cut by an inbound interrupt: an
+      // FAILED-ATTEMPT BACKOFF classification. A genuine non-emitting FAILURE is a
+      // cycle that worked and put nothing on the page AND was not cut by an inbound
+      // interrupt: an
       // interrupt-driven abort (lastResult.aborted - a postcard/notice/provider-switch/
       // watchdog break) hands off to real work and must stay responsive, so it is NOT a
       // failure. errored/refused set no lastResult, so interruptAbort is false for them;
@@ -4644,11 +4651,16 @@ async function main() {
       const interruptAbort = !!(lastResult && lastResult.aborted);
       const nonEmittingFailure = !burstEmitted.trim() && !interruptAbort;
       if (nonEmittingFailure) nonEmittingStreak++;
-      // TEMPO: compute the deliberate idle this burst will sit for BEFORE emitting
-      // the gen event, so the diagnostics can show the next gap ('next burst in
-      // ~Ns') rather than leaving it a mystery. Only a burst that produced prose is
-      // throttled. Smooth the representative burst duration the tempo panel reads.
-      const tempoIdle = produced ? tempoIdleMs(burstMs, client.tempo.speed) : 0;
+      // TEMPO: every completed inference attempt earns a quiet period, whether its
+      // text was published, rejected, repeated, empty, or provider-failed. An abort
+      // caused by a real inbound interrupt remains immediately responsive. This keeps
+      // a bad local generation from repeatedly starting Ollama without paying the
+      // selected tempo's rest.
+      const completedAttempt = attempted && !interruptAbort;
+      const tempoIdle = completedAttempt ? tempoIdleMs(burstMs, client.tempo.speed) : 0;
+      const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0
+        ? Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (nonEmittingStreak - 1))
+        : 0;
       // READING-CAP backpressure: how far the emitted prose has run ahead of a human
       // reading clock. A fast provider can outrun any reader even at speed=100 (where
       // the tempo idle is zero), so this second throttle drains the overrun. Only a
@@ -4685,11 +4697,15 @@ async function main() {
       // COMPOSE, do not replace: sit for the GREATER of the exact duty-cycle idle
       // and the (at 100, bypassed) reading backpressure. A low target's required
       // gap must not be shortened or the displayed percentage ceases to be true.
-      const idleMs = produced ? Math.max(tempoIdle, effReadIdle) : 0;
-      // why the runner is about to idle, for the RAW debug view: reading-cap vs tempo.
-      // At 100 both terms are 0, so idleMs is 0 and this is null - honest: neither the
-      // reading cap nor the tempo is inserting any idle.
-      const idleReason = idleMs > 0 ? (effReadIdle > tempoIdle ? 'reading-cap' : 'tempo') : null;
+      const idleMs = completedAttempt ? Math.max(tempoIdle, produced ? effReadIdle : 0, failureBackoff) : 0;
+      // Why the runner is about to idle, for the RAW debug view. At 100 a successful
+      // local generation may have no tempo rest, but a failed attempt still receives
+      // its bounded backoff.
+      const idleReason = idleMs > 0
+        ? (failureBackoff >= tempoIdle && failureBackoff >= effReadIdle
+          ? 'failed-attempt-backoff'
+          : (effReadIdle > tempoIdle ? 'reading-cap' : 'tempo'))
+        : null;
       if (produced) recentBurstMs = Math.round(recentBurstMs * 0.6 + burstMs * 0.4);
       // live diagnostics: publish this burst's generation telemetry (no-op if the
       // burst errored before ollama returned a `done` line with counters).
@@ -4741,39 +4757,21 @@ async function main() {
       // adaptive pacing: near-continuous trickle awake, slow drift asleep. No
       // artificial gap between waking generations that produced prose.
       //
-      // TEMPO (duty cycle): after a waking burst, sit idle in proportion to the
-      // viewer-driven speed - lower speed, more silence between bursts. This is
-      // the machine being throttled, NOT Cy choosing to stop, so no `silence`
-      // event is emitted; the vitals/host/power timers keep ticking on their own
-      // so the page stays alive and never looks broken. idleSilently breaks early
-      // for an inbound postcard/notice so an interrupt is never swallowed.
-      if (produced) {
-        await sleep(150); // the small breather between bursts, as before
-        if (idleMs > 0) {
-          // Reserve this deliberate quiet before any optional background work can
-          // claim it. The visible tempo now means actual inference quiet too.
-          backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
-          await recordOutcome('throttled'); // duty-cycle quiet, a distinct machine-imposed gap
-          // a throttle idle is machine-imposed quiet, not a wedge: the stall counter
-          // is untouched by 'throttled', so the watchdog never mistakes it for one.
-          await idleSilently(idleMs, { breakOnTempo: true, allowAwg: true });
-        }
+      // TEMPO (duty cycle): after every completed inference burst, sit idle in
+      // proportion to the viewer-driven speed. This is the machine being throttled,
+      // not Cy choosing silence, so no `silence` event is emitted. idleSilently
+      // remains interruptible for real incoming mail and tempo changes.
+      if (completedAttempt && idleMs > 0) {
+        if (failureBackoff > 0) await logBackoff(nonEmittingStreak, failureBackoff);
+        backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
+        await recordOutcome('throttled');
+        await idleSilently(idleMs, { breakOnTempo: true, allowAwg: true });
+      } else if (produced) {
+        await sleep(150); // preserve the small breather at full local tempo
       } else {
-        // NON-PRODUCED cycle. On a METERED provider, a genuine non-emitting FAILURE
-        // (empty/blocked/refused/errored - NOT an interrupt-driven abort) backs off
-        // exponentially - 2s, 4s, 8s ... capped at 60s - so a fast paid API cannot be
-        // token-rinsed by instant retries; the streak resets to 0 the moment prose
-        // emits again. A local (ollama) cycle, or an interrupt-driven abort, just takes
-        // the small breather as before. idleSilently lets an inbound postcard cut the
-        // wait short, so responsiveness is preserved.
-        const metered = !activeProvider().local;
-        if (metered && nonEmittingFailure && nonEmittingStreak > 0) {
-          const backoff = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (nonEmittingStreak - 1));
-          await logBackoff(nonEmittingStreak, backoff);
-          await idleSilently(backoff);
-        } else {
-          await sleep(700);
-        }
+        // A genuine inbound interrupt is handed straight to its next task. A cycle
+        // that never reached the provider still takes a small breather.
+        await sleep(700);
       }
     }
   }

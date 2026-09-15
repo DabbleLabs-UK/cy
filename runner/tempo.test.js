@@ -64,5 +64,21 @@ assert.match(runSource, /reason: 'TEMPO_RESERVED'/,
   'ambient world work cannot consume a reserved tempo quiet period');
 assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, Date\.now\(\), client\.tempo\.speed\)/,
   'each background model call earns its own tempo quiet');
+assert.match(runSource, /const cycleInferenceStart = Date\.now\(\);[\s\S]*?chooseExpressiveAction\(/,
+  'the visible burst timer starts before model-mediated action selection');
+assert.match(runSource, /const burstStart = cycleInferenceStart;/,
+  'action-selection inference is included in the measured visible burst');
+assert.match(runSource, /let attempted = false;[\s\S]*?attempted = true;[\s\S]*?streamGenerate\(/,
+  'the runner records whether the prose provider was actually invoked');
+assert.match(runSource, /const completedAttempt = attempted && !interruptAbort;/,
+  'only a real inbound interrupt bypasses post-attempt pacing');
+assert.match(runSource, /const tempoIdle = completedAttempt \? tempoIdleMs\(burstMs, client\.tempo\.speed\) : 0;/,
+  'rejected, repeated, empty, and failed completed attempts earn normal tempo quiet');
+assert.match(runSource, /const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0[\s\S]*?BACKOFF_BASE_MS/s,
+  'all providers receive bounded backoff after a genuine non-emitting failure');
+assert.match(runSource, /if \(completedAttempt && idleMs > 0\) \{[\s\S]*?await idleSilently\(idleMs, \{ breakOnTempo: true, allowAwg: true \}\);/,
+  'completed local attempts are paced before another model call can begin');
+assert.doesNotMatch(runSource, /const metered = !activeProvider\(\)\.local;/,
+  'local Ollama failures are no longer exempt from failure pacing');
 
 console.log('tempo.test.js: all checks passed');
