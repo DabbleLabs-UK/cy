@@ -35,6 +35,7 @@ const POST_POSTCARD = CFG.postPostcard || 'api/post-postcard.php';
 const OPENVERSE_SEARCH = CFG.openverseSearch || 'api/openverse-search.php';
 const TEMPO_ENDPOINT = CFG.tempo || 'api/tempo.php';
 const RANGE_ENDPOINT = CFG.range || 'api/range.php';
+const POWER_HISTORY_ENDPOINT = CFG.powerHistory || 'api/power-history.php';
 const POLL_MS = 1000;
 const LETTER_MAX = 900;
 const FROM_MAX = 40;
@@ -949,9 +950,9 @@ function setDay(n) {
 }
 
 async function fetchInitialPowerHistory() {
-  if (!power || !CFG.powerHistory) return null;
+  if (!power) return null;
   try {
-    const res = await fetch(CFG.powerHistory, { cache: 'no-store' });
+    const res = await fetch(POWER_HISTORY_ENDPOINT, { cache: 'no-store' });
     if (!res.ok) return null;
     const data = await res.json();
     return data && data.ok !== false && Array.isArray(data.events) ? data.events : null;

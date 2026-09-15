@@ -9,12 +9,15 @@ $ErrorActionPreference = 'Stop'
 $runnerDir = Split-Path -Parent $PSCommandPath
 $stateDir = Join-Path $runnerDir 'state'
 $heartbeatPath = Join-Path $stateDir 'power.json'
-$logPath = Join-Path $stateDir 'run.out.log'
+$watchdogLogPath = Join-Path $stateDir 'watchdog.log'
 $launcherPath = Join-Path $runnerDir 'cy-hidden.vbs'
 
 function Write-WatchdogLog([string]$Message) {
     $line = '[{0}] watchdog: {1}' -f (Get-Date -Format 'dd/MM/yyyy HH:mm:ss.fff'), $Message
-    Add-Content -LiteralPath $logPath -Value $line
+    # The runner holds run.out.log open while it is active. Keep watchdog
+    # diagnostics separate so an otherwise healthy watchdog cannot fail on a
+    # locked runner log.
+    Add-Content -LiteralPath $watchdogLogPath -Value $line
     Write-Output $line
 }
 
