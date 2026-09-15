@@ -19,6 +19,12 @@ export const GROUNDED_PROSE_CONTEXT_VERSION = 1;
 export const GROUNDED_PROSE_CONTEXT_CLASSIFICATION =
   'ENGINEERING_PROMPT_PROJECTION_OF_LIVE_GROUNDED_STATE';
 
+// This is a prompt-budget boundary, not a model of threat intensity or a
+// claim that older unresolved contexts ceased to exist. The full structured
+// state remains inspectable and persisted; only the most recently updated
+// current situations are relevant to one short piece of prose.
+export const MAX_MODEL_DEFENSIVE_CONTEXTS = 4;
+
 export const EPISTEMIC_STATUS = Object.freeze({
   OBSERVED_FACT: 'OBSERVED FACT',
   MODEL_ESTIMATE: 'MODEL ESTIMATE',
@@ -119,7 +125,15 @@ function defensiveSection(state) {
     group.contexts.push(context);
     for (const cue of context.activeCues || []) group.cues.set(cue.cueId, cue);
   }
-  for (const [contextId, group] of byContext) {
+  const currentGroups = [...byContext.entries()]
+    .sort(([, left], [, right]) => {
+      const leftUpdatedAt = Math.max(...left.contexts.map((context) => Date.parse(context.updatedAt) || 0));
+      const rightUpdatedAt = Math.max(...right.contexts.map((context) => Date.parse(context.updatedAt) || 0));
+      return rightUpdatedAt - leftUpdatedAt || String(left.contexts[0]?.contextId || '')
+        .localeCompare(String(right.contexts[0]?.contextId || ''));
+    })
+    .slice(0, MAX_MODEL_DEFENSIVE_CONTEXTS);
+  for (const [contextId, group] of currentGroups) {
     entries.push(entry(
       EPISTEMIC_STATUS.OBSERVED_FACT,
       'current_defensive_context',

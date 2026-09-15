@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
+import { MAX_MODEL_DEFENSIVE_CONTEXTS } from './grounded-prose-context.js';
 import {
   chooseSomaAction,
   groundedSomaDirective,
@@ -164,6 +165,30 @@ assert.doesNotMatch(projection.directive, /subjective loneliness/i,
   'model-facing social context contains grounded facts rather than an unmodelled disclaimer');
 assert.doesNotMatch(projection.directive, /sleep_homeostasis|feeding_intake_ledger|social_contact_ledger|\{"/);
 assert.ok(projection.directive.length < 3000, 'model-facing facts stay compact');
+
+// The full defensive ledger can contain many unresolved historical contexts.
+// Model-facing prose receives only the most recently updated contexts so a
+// stale ledger cannot turn one journal generation into an enormous prompt.
+const promptBounded = JSON.parse(JSON.stringify(state));
+const latestContext = Object.values(promptBounded.currentDefensiveContext.contexts)[0];
+for (let index = 0; index < MAX_MODEL_DEFENSIVE_CONTEXTS + 12; index++) {
+  const contextId = `stale:context-${index}`;
+  const contextKey = `${contextId}|COERCIVE_LOSS_OF_CONTROL`;
+  promptBounded.currentDefensiveContext.contexts[contextKey] = {
+    ...latestContext,
+    contextId,
+    contextKey,
+    updatedAt: at(NOW - (MAX_MODEL_DEFENSIVE_CONTEXTS + 12 - index) * 60000),
+    activeCues: [{ cueId: `actor:stale-${index}`, cueType: 'actor', presence: 'PRESENT_EXTERNAL_CUE' }],
+  };
+}
+const boundedProjection = groundedSomaDirective(promptBounded, { now: NOW });
+assert.ok(boundedProjection.directive.length < 6000,
+  'defensive prompt projection remains bounded even when persisted contexts are numerous');
+assert.match(boundedProjection.directive, /stale-15/,
+  'the newest active context remains available to prose');
+assert.doesNotMatch(boundedProjection.directive, /stale-0/,
+  'older active contexts stay in persisted state but are omitted from one prose prompt');
 
 // H. Provisional visitor metrics cannot change the grounded projection.
 const beforeMetrics = groundedSomaDirective(state, { now: NOW }).directive;
