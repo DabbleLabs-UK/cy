@@ -24,7 +24,7 @@ import {
   NARRATIVE_KINDS,
 } from './history-feed.js';
 import { ambientEventLabel, dayLabel, isLiveDate, shiftDate } from './timeline.js';
-import { liveStatusTitle, newestLiveEventMs } from './live-status.js';
+import { liveStatusTitle, newestLiveEventMs } from './live-status.js?v=20260915';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
 import '../components/async-select/async-select.js';
