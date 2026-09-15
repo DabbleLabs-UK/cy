@@ -144,7 +144,7 @@ import {
 } from './warden.js';
 import { generateWithCharacterRepair } from './character-output.js';
 import { Client, tsNow } from './client.js';
-import { tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC } from './tempo.js';
+import { BackgroundTempoGate, tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
@@ -606,6 +606,7 @@ async function main() {
   // idle + (speed/100)*(load-idle), so pence/hour is linear in speed between
   // pph_idle (speed->0) and pph_load (speed=100). The viewer interpolates.
   let tempoEpoch = 0;
+  const backgroundTempoGate = new BackgroundTempoGate();
   // The client callback also fires when only the live viewer count changes. That
   // must refresh the public tempo readout, but it must NOT cancel the current
   // duty-cycle idle: presence heartbeats can briefly move the count between 0
@@ -615,8 +616,12 @@ async function main() {
   client.onTempo = (t) => {
     const nextIdleTempoSpeed = clampSpeed(t.speed);
     if (nextIdleTempoSpeed !== idleTempoSpeed) {
+      backgroundTempoGate.onTempoChange(idleTempoSpeed, nextIdleTempoSpeed);
       idleTempoSpeed = nextIdleTempoSpeed;
       tempoEpoch++;
+      // A speed increase may have released a background reservation. Wake the
+      // durable queue immediately rather than waiting for its bounded poll.
+      if (autobiographicalMemory) autobiographicalMemory.schedule(0);
     }
     const pph = (w) => (w / 1000) * powerMeter.tariff * 100;
     // Turn the speed into a legible CADENCE for the viewer: the deliberate idle
@@ -2287,6 +2292,7 @@ async function main() {
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
   }) {
+    const startedAtMs = Date.now();
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
     // prose does. Incoming postcards/notices still abort it through currentAbort.
@@ -2330,6 +2336,7 @@ async function main() {
       if (timeout) clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', relayAbort);
       if (background) {
+        backgroundTempoGate.recordBackgroundWork(startedAtMs, Date.now(), client.tempo.speed);
         if (currentMemoryAbort === ac) {
           currentMemoryAbort = null;
           setInfer('idle');
@@ -2523,10 +2530,12 @@ async function main() {
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
     canRunBackground: (kind) => inferPhase === 'idle'
+      && backgroundTempoGate.canStart(Date.now())
       && (kind === 'surfacing' || (currentMode !== 'letter' && pendingPostcards.length === 0))
       && pendingWarden.length === 0
       && !client.paused
       && !(kind === 'formation' && isAwgDue(vitals.worldSimulation)),
+    backgroundWaitMs: () => backgroundTempoGate.waitMs(Date.now()),
     providerInfo: () => ({ id: activeProvider().id, model: activeProvider().model }),
   });
   autobiographicalMemory.start();
@@ -3916,6 +3925,9 @@ async function main() {
   }, POWER_SAMPLE_MS);
 
   async function runAwgDuringIdle(idleBudgetMs) {
+    if (!backgroundTempoGate.canStart(Date.now())) {
+      return { status: 'SKIPPED', reason: 'TEMPO_RESERVED' };
+    }
     const memoryPriorityPending = autobiographicalMemory
       ? autobiographicalMemory.hasPriorityWork() : false;
     const eligibility = shouldRunAwg(vitals.worldSimulation, {
@@ -4738,6 +4750,9 @@ async function main() {
       if (produced) {
         await sleep(150); // the small breather between bursts, as before
         if (idleMs > 0) {
+          // Reserve this deliberate quiet before any optional background work can
+          // claim it. The visible tempo now means actual inference quiet too.
+          backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
           await recordOutcome('throttled'); // duty-cycle quiet, a distinct machine-imposed gap
           // a throttle idle is machine-imposed quiet, not a wedge: the stall counter
           // is untouched by 'throttled', so the watchdog never mistakes it for one.

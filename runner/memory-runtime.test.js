@@ -38,6 +38,7 @@ function runtime(overrides = {}) {
     generate: overrides.generate || (async () => '{"memoryRefs":[]}'),
     now: overrides.now || (() => Date.now()),
     canRunBackground: overrides.canRunBackground || (() => true),
+    backgroundWaitMs: overrides.backgroundWaitMs || (() => 250),
     backgroundTimeoutMs: overrides.backgroundTimeoutMs || 100,
     providerInfo: () => ({ id: 'ollama', model: 'test-model' }),
   });
@@ -230,6 +231,21 @@ test('background work does not claim while visitor-facing inference is busy', as
   await r.tick();
   r.stop();
   assert.equal(claims, 0);
+});
+
+test('a long tempo reservation backs off memory polling instead of spinning', async () => {
+  let claims = 0;
+  const r = runtime({
+    canRunBackground: () => false,
+    backgroundWaitMs: () => 90000,
+    client: { async claimMemorySurfacing() { claims++; return { job: null }; } },
+  });
+  const delays = [];
+  r.schedule = (delay) => { delays.push(delay); };
+  r.stopped = false;
+  await r.tick();
+  assert.equal(claims, 0);
+  assert.deepEqual(delays, [10000], 'long reservations use bounded low-frequency polling');
 });
 
 test('durable priority starts conservative and clears only after both queues are checked empty', async () => {

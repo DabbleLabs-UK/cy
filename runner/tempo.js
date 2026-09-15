@@ -75,3 +75,43 @@ export function clampSpeed(speed) {
   if (n > 100) return 100;
   return n;
 }
+
+// Background model work (memory formation/surfacing and ambient world work) must
+// obey the same deliberate quiet as visible prose. Without this gate a low tempo
+// merely made the journal look quiet while hidden inference consumed the entire
+// gap. This is scheduling only: it neither changes a model call nor claims that
+// hidden work is part of Cy's visible duty percentage.
+export class BackgroundTempoGate {
+  constructor() {
+    this.notBeforeMs = 0;
+  }
+
+  reserveVisibleIdle(idleMs, nowMs) {
+    const now = Number(nowMs) || 0;
+    const until = now + Math.max(0, Number(idleMs) || 0);
+    this.notBeforeMs = Math.max(this.notBeforeMs, until);
+    return this.notBeforeMs;
+  }
+
+  recordBackgroundWork(startedAtMs, endedAtMs, speed) {
+    const end = Math.max(Number(startedAtMs) || 0, Number(endedAtMs) || 0);
+    const start = Math.min(Number(startedAtMs) || end, end);
+    const until = end + tempoIdleMs(end - start, speed);
+    this.notBeforeMs = Math.max(this.notBeforeMs, until);
+    return this.notBeforeMs;
+  }
+
+  canStart(nowMs) {
+    return (Number(nowMs) || 0) >= this.notBeforeMs;
+  }
+
+  waitMs(nowMs) {
+    return Math.max(0, this.notBeforeMs - (Number(nowMs) || 0));
+  }
+
+  onTempoChange(previousSpeed, nextSpeed) {
+    // A user who explicitly speeds Cy up should not have to wait for an old
+    // slower reservation. Lowering the speed preserves the existing quiet.
+    if (clampSpeed(nextSpeed) > clampSpeed(previousSpeed)) this.notBeforeMs = 0;
+  }
+}

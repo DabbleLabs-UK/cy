@@ -64,6 +64,7 @@ export class AutobiographicalMemoryRuntime {
   constructor({
     client, generate, makeId, now = () => Date.now(), contextBroker = null,
     canRunBackground = () => true, providerInfo = () => ({}),
+    backgroundWaitMs = () => 250,
     backgroundTimeoutMs = BACKGROUND_TIMEOUT_MS,
   }) {
     this.client = client;
@@ -72,6 +73,7 @@ export class AutobiographicalMemoryRuntime {
     this.now = now;
     this.contextBroker = contextBroker;
     this.canRunBackground = canRunBackground;
+    this.backgroundWaitMs = backgroundWaitMs;
     this.providerInfo = providerInfo;
     this.backgroundTimeoutMs = backgroundTimeoutMs;
     this.working = { directive: '', selected: [], inspection: null };
@@ -235,7 +237,11 @@ export class AutobiographicalMemoryRuntime {
   async tick() {
     if (this.stopped || this.busy) return;
     if (!this.canRunBackground('surfacing')) {
-      this.schedule(250);
+      // A tempo reservation can be minutes long. Polling it four times a second
+      // adds no value and makes a supposedly quiet interval needlessly busy.
+      const requested = Number(this.backgroundWaitMs('surfacing'));
+      this.schedule(Number.isFinite(requested)
+        ? Math.max(250, Math.min(requested, 10000)) : 250);
       return;
     }
     this.busy = true;
