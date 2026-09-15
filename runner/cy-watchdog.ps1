@@ -23,7 +23,7 @@ function Write-WatchdogLog([string]$Message) {
 
 function Get-CyProcesses {
     @(Get-CimInstance Win32_Process | Where-Object {
-        $_.Name -ieq 'node.exe' -and $_.CommandLine -match '[\\/]runner[\\/]run\.js'
+        $_.Name -ieq 'node.exe' -and $_.CommandLine -match '(^|[\\/\s])runner[\\/]run\.js'
     })
 }
 
