@@ -19,7 +19,7 @@
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { appendFile, readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -144,7 +144,14 @@ import {
 } from './warden.js';
 import { generateWithCharacterRepair } from './character-output.js';
 import { Client, tsNow } from './client.js';
-import { BackgroundTempoGate, tempoIdleMs, readingIdleMs, clampSpeed, READ_CHARS_PER_SEC } from './tempo.js';
+import {
+  BackgroundTempoGate,
+  tempoIdleMs,
+  remainingTempoIdleMs,
+  readingIdleMs,
+  clampSpeed,
+  READ_CHARS_PER_SEC,
+} from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
@@ -176,6 +183,7 @@ import {
   sourceFromReply,
 } from './autobiographical-memory.js';
 import { AutobiographicalMemoryRuntime } from './memory-runtime.js';
+import { InferenceCoordinator } from './inference-coordinator.js';
 import {
   CONTEXT_CONSUMERS,
   createContextItem,
@@ -528,6 +536,72 @@ async function main() {
   console.log(`[cy] providers: ollama ready; deepseek ${providers[DEEPSEEK].available() ? 'ready' : 'unavailable (no key file)'}`);
   let activeProviderId = OLLAMA;
   const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
+  const inferenceDiagnosticPath = join(STATE_DIR, 'inference-requests.jsonl');
+  const recentCompletedInference = [];
+  function recordInferenceDiagnostic(detail) {
+    const record = { schema: 'cy.inference-request.v1', ...detail };
+    if (record.event === 'end') {
+      recentCompletedInference.push({ id: record.id, startedAtMs: Date.parse(record.started_at) || 0 });
+      while (recentCompletedInference.length > 100) recentCompletedInference.shift();
+    }
+    const line = JSON.stringify(record);
+    console.log(`[cy-infer] ${line}`);
+    void appendFile(inferenceDiagnosticPath, `${line}\n`).catch((error) => {
+      console.warn(`[cy-infer] diagnostic append failed: ${error.message}`);
+    });
+  }
+  const inferenceCoordinator = new InferenceCoordinator({
+    onPhase: setInfer,
+    onEvent: recordInferenceDiagnostic,
+  });
+  function inferenceMeta({ provider, system, prompt, opts, purpose, attempt, background, transport }) {
+    const selected = provider || activeProvider();
+    const model = typeof selected.modelFor === 'function'
+      ? selected.modelFor(purpose) : selected.model;
+    return {
+      purpose: purpose || 'unknown',
+      provider: selected.id,
+      model,
+      transport,
+      attempt: attempt || 'initial',
+      background: !!background,
+      system_chars: String(system || '').length,
+      prompt_chars: String(prompt || '').length,
+      context_tokens: Number(opts && opts.num_ctx) || null,
+      max_output_tokens: Number(opts && opts.num_predict) || null,
+      phase: transport === 'stream' ? 'eval' : 'gen',
+    };
+  }
+  function inferenceStats(stats) {
+    if (!stats || typeof stats !== 'object') return {};
+    return {
+      prompt_tokens: Number(stats.prompt_eval_count ?? stats.usage?.prompt_tokens) || null,
+      output_tokens: Number(stats.eval_count ?? stats.usage?.completion_tokens) || null,
+      load_duration_ns: Number(stats.load_duration) || null,
+      prompt_eval_duration_ns: Number(stats.prompt_eval_duration) || null,
+      eval_duration_ns: Number(stats.eval_duration) || null,
+    };
+  }
+  function recordInferenceOutcome(requestId, result, detail = {}) {
+    if (!requestId) return;
+    recordInferenceDiagnostic({
+      event: 'outcome', id: requestId, at: new Date().toISOString(), result, ...detail,
+    });
+  }
+  function recordTempoDiagnostic(cycleStartedAtMs, idleMs, reason, entered = idleMs > 0) {
+    const requestIds = recentCompletedInference
+      .filter((item) => item.startedAtMs >= cycleStartedAtMs)
+      .map((item) => item.id);
+    recordInferenceDiagnostic({
+      event: 'throttle',
+      at: new Date().toISOString(),
+      after_request_ids: requestIds,
+      entered: !!entered,
+      idle_ms: Math.max(0, Math.round(idleMs || 0)),
+      reason: reason || null,
+      tempo_speed: clampSpeed(client.tempo.speed),
+    });
+  }
   soma.observe(
     {
       name: 'runner_restart',
@@ -2141,7 +2215,16 @@ async function main() {
   // assistant explanation arrived. Here the whole response is collected and
   // validated first; one failed candidate gets one clean regeneration from the
   // original Cy/world prompt, and two failures become silence.
-  async function streamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {
+  async function streamGenerate({
+    system, prompt, opts, mode, purpose, contextTail, allowRepeat = false, attempt = 'initial',
+  }) {
+    // Visible prose is foreground work. Stop any lower-priority memory job before
+    // waiting for the provider slot so a postcard, warden reply or journal turn
+    // cannot sit behind hidden inference.
+    if (autobiographicalMemory) {
+      autobiographicalMemory.interruptBackground('foreground');
+      currentMemoryAbort = null;
+    }
     burstEmitted = '';
     burstAllowRepeat = allowRepeat;
     burstStopped = false;
@@ -2153,7 +2236,7 @@ async function main() {
     const provider = activeProvider();
     const attempts = [];
 
-    const collectCandidate = async (candidatePrompt) => {
+    const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
       currentAbort = ac;
       const t0 = Date.now();
@@ -2161,7 +2244,28 @@ async function main() {
       let stats = null;
       let candidate = '';
       let gen;
+      let lease = null;
+      let transportResult = 'error';
+      const finishRequest = () => {
+        if (!lease) return;
+        lease.finish({
+          result: transportResult,
+          ttft_ms: ttftMs,
+          output_chars: candidate.length,
+          ...inferenceStats(stats),
+        });
+      };
       try {
+        lease = await inferenceCoordinator.acquire(inferenceMeta({
+          provider,
+          system,
+          prompt: candidatePrompt,
+          opts,
+          purpose: purpose || mode,
+          attempt: repair ? `${attempt}:character-repair` : attempt,
+          background: false,
+          transport: 'stream',
+        }), ac.signal);
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
@@ -2170,17 +2274,20 @@ async function main() {
           purpose: purpose || mode,
         });
       } catch (err) {
-        if (ac.signal.aborted) return { candidate, full: '', aborted: true };
+        transportResult = ac.signal.aborted ? 'aborted' : 'error';
+        finishRequest();
+        if (ac.signal.aborted) return { candidate, full: '', aborted: true, requestId: lease && lease.id };
         console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
         await sleep(2000);
-        return { candidate, full: '', error: true };
+        return { candidate, full: '', error: true, requestId: lease && lease.id };
       }
       if (!gen.ok) {
+        transportResult = 'http-error';
+        finishRequest();
         console.warn(`[cy] provider ${provider.id} HTTP`, gen.status);
         await sleep(1000);
-        return { candidate, full: '', error: true };
+        return { candidate, full: '', error: true, requestId: lease.id };
       }
-      setInfer('eval');
       let streamRes;
       try {
         streamRes = await readNdjsonStream(gen.reader, {
@@ -2188,7 +2295,7 @@ async function main() {
           onToken: async (text) => {
             if (ttftMs === null) {
               ttftMs = Date.now() - t0;
-              setInfer('gen');
+              lease.setPhase('gen');
             }
             candidate += text;
             tokenCount++;
@@ -2196,20 +2303,28 @@ async function main() {
           },
           onDone: (obj) => { stats = obj; },
         });
+        transportResult = streamRes && streamRes.aborted
+          ? 'aborted' : (candidate.trim() ? 'candidate' : 'empty');
       } catch (err) {
-        if (ac.signal.aborted) return { candidate, full: '', aborted: true, stats, ttftMs };
+        transportResult = ac.signal.aborted ? 'aborted' : 'error';
+        if (ac.signal.aborted) return { candidate, full: '', aborted: true, stats, ttftMs, requestId: lease.id };
         console.warn('[cy] stream error:', err.message);
-        return { candidate, full: '', error: true, stats, ttftMs };
+        return { candidate, full: '', error: true, stats, ttftMs, requestId: lease.id };
       } finally {
         if (currentAbort === ac) currentAbort = null;
-        setInfer('idle');
+        finishRequest();
       }
-      if (streamRes && streamRes.aborted) return { candidate, full: '', aborted: true, stats, ttftMs };
+      if (streamRes && streamRes.aborted) {
+        transportResult = 'aborted';
+        return { candidate, full: '', aborted: true, stats, ttftMs, requestId: lease.id };
+      }
       const cleaned = stripScaffold(sanitize(candidate));
       if (provider.screensContent && cleaned.trim() && looksLikeRefusal(cleaned)) {
         console.log(`[cy] provider ${provider.id} refusal - generation discarded (not emitted)`);
-        return { candidate, full: '', refused: true, aborted: false, stats, ttftMs };
+        recordInferenceOutcome(lease.id, 'rejected-refusal');
+        return { candidate, full: '', refused: true, aborted: false, stats, ttftMs, requestId: lease.id };
       }
+      transportResult = cleaned.trim() ? 'candidate' : 'empty';
       return {
         candidate,
         full: '',
@@ -2217,21 +2332,29 @@ async function main() {
         stats,
         model: gen.model || provider.model,
         ttftMs,
+        requestId: lease.id,
         tokenLimited: generationHitTokenLimit(stats, opts),
       };
     };
 
     const guarded = await generateWithCharacterRepair({
       prompt,
-      generate: async (candidatePrompt) => {
-        const result = await collectCandidate(candidatePrompt);
+      generate: async (candidatePrompt, attemptDetail) => {
+        const result = await collectCandidate(candidatePrompt, attemptDetail);
         attempts.push(result);
         return result;
       },
       onDiagnostic: (detail) => logCharacterValidation(detail, mode, provider),
     });
+    if (guarded.characterValidation && guarded.characterValidation.repairAttempted) {
+      recordInferenceOutcome(attempts[0] && attempts[0].requestId, 'rejected-character');
+    }
 
     if (guarded.error || guarded.refused || guarded.aborted || guarded.characterDiscarded) {
+      recordInferenceOutcome(guarded.requestId,
+        guarded.characterDiscarded ? 'rejected-character'
+          : guarded.refused ? 'rejected-refusal'
+            : guarded.aborted ? 'aborted' : 'error');
       for (const attempt of attempts) await recordSpend(attempt.stats, mode, false);
       if (guarded.characterDiscarded) {
         await logAssistantFrameDiscard(guarded.characterValidation.initial.reasons.join(' | '), mode);
@@ -2258,6 +2381,7 @@ async function main() {
     }
 
     if (contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail)) {
+      recordInferenceOutcome(guarded.requestId, 'repeat');
       await logHoldbackDiscard(accounted.out, mode);
       for (const attempt of attempts) await recordSpend(attempt.stats, mode, false);
       return { ...guarded, full: accounted.out, repeat: true };
@@ -2271,6 +2395,7 @@ async function main() {
       await recordSpend(attempts[i].stats, mode, i === attempts.length - 1 && !!burstEmitted.trim());
     }
     if (burstEmitted.trim()) soma.observeOutput(burstEmitted, { mode, now: Date.now() });
+    recordInferenceOutcome(guarded.requestId, burstEmitted.trim() ? 'emitted' : 'rejected-after-filtering');
     return {
       ...guarded,
       full: burstEmitted,
@@ -2291,8 +2416,9 @@ async function main() {
   async function rawGenerate({
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
+    attempt = 'initial',
   }) {
-    const startedAtMs = Date.now();
+    let startedAtMs = Date.now();
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
     // prose does. Incoming postcards/notices still abort it through currentAbort.
@@ -2310,40 +2436,62 @@ async function main() {
       ? setTimeout(() => ac.abort(), timeoutMs) : null;
     if (background) currentMemoryAbort = ac;
     else currentAbort = ac;
-    // a non-streamed generation is opaque to the viewer (nothing reaches the page),
-    // but the model IS working the whole time - light the LED so the pinned CPU is
-    // accounted for rather than looking like idle time.
-    setInfer('gen');
+    const provider = activeProvider();
+    let lease = null;
+    let requestResult = 'error';
+    let requestStats = null;
+    let outputChars = 0;
     try {
-      const out = await activeProvider().rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
+      lease = await inferenceCoordinator.acquire(inferenceMeta({
+        provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
+      }), ac.signal);
+      startedAtMs = Date.now();
+      const out = await provider.rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
+      requestStats = out.stats || null;
+      outputChars = String(out.text || '').length;
       if (!out.ok) {
+        requestResult = ac.signal.aborted ? 'aborted' : 'http-error';
         if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
         return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
       }
+      requestResult = out.text && out.text.trim() ? 'nonempty' : 'empty';
       // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
       // DSL pass that returned text is productive (it will attempt to render); an empty
       // return paid for nothing, so it lands in the non-emitting series.
       await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
       return returnMeta
-        ? { ok: true, text: out.text || '', stats: out.stats || null, model: out.model || activeProvider().model }
+        ? { ok: true, text: out.text || '', stats: out.stats || null, model: out.model || provider.model }
         : out.text || '';
     } catch (error) {
+      requestResult = ac.signal.aborted ? 'aborted' : 'error';
       if (background) throw error;
       return returnMeta
-        ? { ok: false, text: '', stats: null, model: activeProvider().model, error: String(error && error.message || error) }
+        ? { ok: false, text: '', stats: null, model: provider.model, error: String(error && error.message || error) }
         : ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
+      if (lease) {
+        lease.finish({
+          result: requestResult,
+          output_chars: outputChars,
+          ...inferenceStats(requestStats),
+        });
+      }
       if (timeout) clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', relayAbort);
       if (background) {
-        backgroundTempoGate.recordBackgroundWork(startedAtMs, Date.now(), client.tempo.speed);
+        const endedAtMs = Date.now();
+        backgroundTempoGate.recordBackgroundWork(startedAtMs, endedAtMs, client.tempo.speed);
+        recordTempoDiagnostic(
+          startedAtMs,
+          tempoIdleMs(endedAtMs - startedAtMs, client.tempo.speed),
+          'background-tempo',
+          tempoIdleMs(endedAtMs - startedAtMs, client.tempo.speed) > 0,
+        );
         if (currentMemoryAbort === ac) {
           currentMemoryAbort = null;
-          setInfer('idle');
         }
       } else if (currentAbort === ac) {
         currentAbort = null;
-        setInfer('idle');
       }
     }
   }
@@ -2527,6 +2675,7 @@ async function main() {
       accountingMode: call.purpose,
       signal: call.signal || null,
       background: !!call.background,
+      attempt: call.purpose || 'memory-background',
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
     canRunBackground: (kind) => inferPhase === 'idle'
@@ -2741,7 +2890,9 @@ async function main() {
     const prompt = buildPrompt(letterTail, 'postcard', pc, directives);
     const opts = options(vitals, config.threads, 'letter', { num_predict: completionBudget(targetPredict) });
     await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'letter', purpose: 'postcard' });
+    const r = await streamGenerate({
+      system: ZONE_A, prompt, opts, mode: 'letter', purpose: 'postcard', attempt: 'postcard-initial',
+    });
     emitGen(r, 'letter', {
       zoneA: ZONE_A,
       zoneB: letterTail,
@@ -2857,7 +3008,7 @@ async function main() {
     const prompt = buildPrompt(wardenTail, 'warden', notice, directives);
     const opts = options(vitals, config.threads, 'journal', { num_predict: completionBudget(targetPredict) });
     await logPrompt('warden', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden' });
+    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden', attempt: 'warden-initial' });
     emitGen(r, 'warden', {
       zoneA: ZONE_A,
       zoneB: wardenTail,
@@ -2904,7 +3055,9 @@ async function main() {
     const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
     o1.stop = [...o1.stop, '\n']; // one line only
     await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
-    const r1 = await streamGenerate({ system: ZONE_A, prompt: p1, opts: o1, mode: 'journal', purpose: 'drawing' });
+    const r1 = await streamGenerate({
+      system: ZONE_A, prompt: p1, opts: o1, mode: 'journal', purpose: 'drawing', attempt: 'drawing-intent',
+    });
     if (r1.aborted) return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
     const line = (r1.full || '').trim();
     // the decision line is itself real journal text; whether the DSL below renders or
@@ -2945,7 +3098,9 @@ async function main() {
     // base pass: the main shapes.
     const basePrompt = drawDslPrompt(subject, { badly: intent.mode === 'badly' });
     await logPrompt('draw-dsl', sys2 + '\n---\n' + basePrompt);
-    const baseRaw = await rawGenerate({ system: sys2, prompt: basePrompt, opts: o2, purpose: 'drawing' });
+    const baseRaw = await rawGenerate({
+      system: sys2, prompt: basePrompt, opts: o2, purpose: 'drawing', attempt: 'drawing-base',
+    });
     if (!baseRaw || !baseRaw.trim()) {
       // an empty DSL pass is a FAILURE, not a repeat (the model emitted END first, or
       // was cut off). Skip the garnish; the decision line already stands.
@@ -2968,7 +3123,13 @@ async function main() {
     const baseGeom = baseVal.strokes.filter((s) => s.t !== 'T').length;
     if (baseGeom > 6) {
       for (const pass of ['detail', 'shade']) {
-        const raw = await rawGenerate({ system: sys2, prompt: drawPassPrompt(subject, strokesToDsl(all), pass), opts: o2, purpose: 'drawing' });
+        const raw = await rawGenerate({
+          system: sys2,
+          prompt: drawPassPrompt(subject, strokesToDsl(all), pass),
+          opts: o2,
+          purpose: 'drawing',
+          attempt: `drawing-${pass}`,
+        });
         if (!raw || !raw.trim()) continue; // this pass added nothing - stop appending junk
         const val = validateDrawing(parseStrokes(raw).strokes, { min: 1, maxText: 0 });
         if (!val.ok) continue;
@@ -3961,6 +4122,7 @@ async function main() {
         purpose: call.purpose,
         accountingMode: 'ambient_world_generation',
         timeoutMs: Math.min(AWG_TIMEOUT_MS, idleBudgetMs),
+        attempt: 'ambient-world-candidate',
       }),
     });
     vitals.worldSimulation = result.state;
@@ -4043,6 +4205,25 @@ async function main() {
       if (pendingPostcards.length || pendingWarden.length || tempoChanged) break;
       await sleep(Math.min(500, Math.max(0, end - Date.now())));
     }
+  }
+
+  async function paceCompletedInferenceCycle(startedAtMs, {
+    busyEndedAtMs = Date.now(),
+    quietAlreadyMs = 0,
+    reason = 'tempo',
+  } = {}) {
+    const busyMs = Math.max(0, busyEndedAtMs - startedAtMs);
+    const idleMs = remainingTempoIdleMs(busyMs, client.tempo.speed, quietAlreadyMs);
+    recentBurstMs = Math.round(recentBurstMs * 0.6 + busyMs * 0.4);
+    recordTempoDiagnostic(startedAtMs, idleMs, reason, idleMs > 0);
+    if (idleMs <= 0) {
+      await sleep(150);
+      return { busyMs, idleMs: 0 };
+    }
+    backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
+    await recordOutcome('throttled');
+    await idleSilently(idleMs, { breakOnTempo: true, allowAwg: false });
+    return { busyMs, idleMs };
   }
 
   // ---- DREAM: murmurs, one slow abstract drawing, night waking ---------------
@@ -4215,7 +4396,9 @@ async function main() {
       const opts = options(vitals, config.threads, 'dream', { num_predict: DREAM_TOKEN_LIMIT });
       await logPrompt('dream-wake', ZONE_A + '\n\n---PROMPT---\n' + prompt);
       const started = Date.now();
-      const result = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true });
+      const result = await rawGenerate({
+        system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-waking',
+      });
       const raw = result.text || '';
       const validation = validateDreamOutput(raw);
       if (validation.valid) {
@@ -4269,7 +4452,9 @@ async function main() {
       const opts = options(vitals, config.threads, 'dream', { num_predict: DREAM_TOKEN_LIMIT });
       await logPrompt('dream', ZONE_A + '\n\n---PROMPT---\n' + prompt);
       const started = Date.now();
-      const result = await rawGenerate({ system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true });
+      const result = await rawGenerate({
+        system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-murmur',
+      });
       const raw = result.text || '';
       const validation = validateDreamOutput(raw);
       if (validation.valid) {
@@ -4401,8 +4586,11 @@ async function main() {
         await refreshPendingMemory(`journal:${nowMs}`, cognition.groundedDirective);
       }
 
+      const cycleInferenceStart = Date.now();
       if (hasDrawRequest) {
-        await recordOutcome((await doDraw({ cognition, incidentContext })) || 'empty');
+        const drawOutcome = (await doDraw({ cognition, incidentContext })) || 'empty';
+        await recordOutcome(drawOutcome);
+        await paceCompletedInferenceCycle(cycleInferenceStart, { reason: 'drawing-tempo' });
         continue;
       }
 
@@ -4433,7 +4621,6 @@ async function main() {
       // Include the action-selection call in the visible cycle's measured work.
       // It uses the same provider as prose, so omitting it made a nominal 30%
       // tempo substantially busier than its displayed target.
-      const cycleInferenceStart = Date.now();
       const expressiveChoice = await chooseExpressiveAction(choiceRequest, {
         generate: (call) => rawGenerate({
           system: call.system,
@@ -4441,6 +4628,7 @@ async function main() {
           opts: options(vitals, config.threads, 'journal', call.options),
           purpose: call.purpose,
           accountingMode: 'expressive_choice',
+          attempt: 'expressive-choice',
         }),
       });
       soma.recordExpressiveChoice(expressiveChoice, { now: nowMs });
@@ -4469,17 +4657,26 @@ async function main() {
       // event marks its end. Provisional rest/fatigue does not change duration.
       if (selectedAction === 'silence') {
         const seconds = AUTONOMOUS_SILENCE_SECONDS;
+        const busyEndedAtMs = Date.now();
+        const quietStartedAtMs = Date.now();
         await recordOutcome('deliberate-silence');
         await recordCompletedSilence(seconds, {
           idle: idleSilently,
           emit,
           reason: 'model-mediated subjective character choice',
         });
+        await paceCompletedInferenceCycle(cycleInferenceStart, {
+          busyEndedAtMs,
+          quietAlreadyMs: Date.now() - quietStartedAtMs,
+          reason: 'silence-plus-tempo',
+        });
         continue;
       }
 
       if (selectedAction === 'draw') {
-        await recordOutcome((await doDraw({ cognition, incidentContext })) || 'empty');
+        const drawOutcome = (await doDraw({ cognition, incidentContext })) || 'empty';
+        await recordOutcome(drawOutcome);
+        await paceCompletedInferenceCycle(cycleInferenceStart, { reason: 'drawing-tempo' });
         continue;
       }
 
@@ -4553,6 +4750,7 @@ async function main() {
           mode,
           contextTail: forceEmit ? undefined : tail,
           allowRepeat: allowRepeat || forceEmit,
+          attempt: forceEmit ? 'forced-after-repeats' : (discards ? `near-repeat-retry-${discards}` : 'journal-initial'),
         });
         if (r.error) { errored = true; break; } // provider already backed off; move on
         if (r.refused) { refusedGen = true; break; } // DeepSeek refusal: discard, no retry
@@ -4763,12 +4961,15 @@ async function main() {
       // remains interruptible for real incoming mail and tempo changes.
       if (completedAttempt && idleMs > 0) {
         if (failureBackoff > 0) await logBackoff(nonEmittingStreak, failureBackoff);
+        recordTempoDiagnostic(burstStart, idleMs, idleReason, true);
         backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
         await recordOutcome('throttled');
         await idleSilently(idleMs, { breakOnTempo: true, allowAwg: true });
       } else if (produced) {
+        recordTempoDiagnostic(burstStart, 0, 'full-tempo', false);
         await sleep(150); // preserve the small breather at full local tempo
       } else {
+        recordTempoDiagnostic(burstStart, 0, interruptAbort ? 'inbound-interrupt' : 'no-completed-attempt', false);
         // A genuine inbound interrupt is handed straight to its next task. A cycle
         // that never reached the provider still takes a small breather.
         await sleep(700);

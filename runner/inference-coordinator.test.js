@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { InferenceCoordinator } from './inference-coordinator.js';
+
+test('serializes requests and keeps telemetry busy until the owner finishes', async () => {
+  const phases = [];
+  const events = [];
+  let now = 1000;
+  const coordinator = new InferenceCoordinator({
+    now: () => now,
+    onPhase: (phase) => phases.push(phase),
+    onEvent: (event) => events.push(event),
+  });
+  const first = await coordinator.acquire({ purpose: 'journal', phase: 'eval' });
+  let secondGranted = false;
+  const secondPromise = coordinator.acquire({ purpose: 'memory', background: true, phase: 'gen' })
+    .then((lease) => { secondGranted = true; return lease; });
+  await Promise.resolve();
+  assert.equal(secondGranted, false);
+  first.setPhase('gen');
+  now = 1500;
+  first.finish({ result: 'emitted' });
+  const second = await secondPromise;
+  assert.equal(secondGranted, true);
+  assert.deepEqual(phases, ['eval', 'gen']);
+  now = 1700;
+  second.finish({ result: 'rejected' });
+  assert.equal(phases.at(-1), 'idle');
+  assert.equal(events.filter((event) => event.event === 'start').length, 2);
+  assert.equal(events.filter((event) => event.event === 'end').length, 2);
+});
+
+test('foreground overtakes queued background work', async () => {
+  const coordinator = new InferenceCoordinator();
+  const owner = await coordinator.acquire({ purpose: 'owner' });
+  const order = [];
+  const backgroundPromise = coordinator.acquire({ purpose: 'memory', background: true })
+    .then((lease) => { order.push('background'); return lease; });
+  const foregroundPromise = coordinator.acquire({ purpose: 'journal', background: false })
+    .then((lease) => { order.push('foreground'); return lease; });
+  owner.finish();
+  const foreground = await foregroundPromise;
+  assert.deepEqual(order, ['foreground']);
+  foreground.finish();
+  const background = await backgroundPromise;
+  assert.deepEqual(order, ['foreground', 'background']);
+  background.finish();
+});
+
+test('an aborted queued request never reaches the provider slot', async () => {
+  const coordinator = new InferenceCoordinator();
+  const owner = await coordinator.acquire({ purpose: 'journal' });
+  const controller = new AbortController();
+  const queued = coordinator.acquire({ purpose: 'memory', background: true }, controller.signal);
+  controller.abort();
+  await assert.rejects(queued, { name: 'AbortError' });
+  owner.finish();
+  assert.equal(coordinator.owner, null);
+  assert.equal(coordinator.queue.length, 0);
+});

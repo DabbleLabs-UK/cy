@@ -297,7 +297,7 @@ function makeOllama(config) {
       });
       if (!res.ok) return { ok: false, status: res.status, text: '' };
       const j = await res.json();
-      return { ok: true, status: 200, text: j.response || '', stats: null, model };
+      return { ok: true, status: 200, text: j.response || '', stats: j, model };
     },
   };
 }

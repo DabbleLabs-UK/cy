@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { BackgroundTempoGate, clampSpeed, tempoIdleMs } from './tempo.js';
+import { BackgroundTempoGate, clampSpeed, remainingTempoIdleMs, tempoIdleMs } from './tempo.js';
 import { cadencePhrase, tempoIdleMs as publicTempoIdleMs } from '../public/assets/tempo.js';
 
 function realisedDuty(burstMs, idleMs) {
@@ -25,6 +25,10 @@ assert.ok(correctedIdleMs > 11829 * 30, 'the former 11.8s cap cannot silently tu
 assert.equal(cadencePhrase(recentBurstMs, 31), 'about every 10 min');
 assert.equal(clampSpeed(0), 1);
 assert.equal(clampSpeed(101), 100);
+assert.equal(remainingTempoIdleMs(60000, 30, 45000), 95000,
+  'a chosen 45s silence counts toward, but cannot erase, the 30% tempo rest');
+assert.equal(remainingTempoIdleMs(10000, 50, 15000), 0,
+  'quiet already longer than the required rest needs no additional wait');
 
 const gate = new BackgroundTempoGate();
 const gateNow = 1_000_000;
@@ -62,12 +66,20 @@ assert.match(runSource, /canRunBackground: \(kind\) => inferPhase === 'idle'\s*&
   'memory background work is gated by the tempo reservation');
 assert.match(runSource, /reason: 'TEMPO_RESERVED'/,
   'ambient world work cannot consume a reserved tempo quiet period');
-assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, Date\.now\(\), client\.tempo\.speed\)/,
+assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, endedAtMs, client\.tempo\.speed\)/,
   'each background model call earns its own tempo quiet');
 assert.match(runSource, /const cycleInferenceStart = Date\.now\(\);[\s\S]*?chooseExpressiveAction\(/,
   'the visible burst timer starts before model-mediated action selection');
 assert.match(runSource, /const burstStart = cycleInferenceStart;/,
   'action-selection inference is included in the measured visible burst');
+assert.match(runSource, /if \(hasDrawRequest\)[\s\S]*?paceCompletedInferenceCycle\(cycleInferenceStart, \{ reason: 'drawing-tempo' \}\)/,
+  'an explicit drawing request earns tempo quiet after all of its model calls');
+assert.match(runSource, /if \(selectedAction === 'draw'\)[\s\S]*?paceCompletedInferenceCycle\(cycleInferenceStart, \{ reason: 'drawing-tempo' \}\)/,
+  'a model-selected drawing earns tempo quiet instead of immediately starting another cycle');
+assert.match(runSource, /async function streamGenerate[\s\S]*?autobiographicalMemory\.interruptBackground\('foreground'\)[\s\S]*?inferenceCoordinator\.acquire[\s\S]*?provider\.openStream/,
+  'foreground prose preempts hidden memory work and owns the coordinator before opening a stream');
+assert.match(runSource, /async function rawGenerate[\s\S]*?inferenceCoordinator\.acquire[\s\S]*?provider\.rawGenerate/,
+  'non-streaming production inference owns the coordinator before reaching the provider');
 assert.match(runSource, /let attempted = false;[\s\S]*?attempted = true;[\s\S]*?streamGenerate\(/,
   'the runner records whether the prose provider was actually invoked');
 assert.match(runSource, /const completedAttempt = attempted && !interruptAbort;/,

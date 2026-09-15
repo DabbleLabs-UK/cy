@@ -76,6 +76,14 @@ export function clampSpeed(speed) {
   return n;
 }
 
+// Remaining quiet after another intentional quiet interval has already followed
+// a measured inference burst (for example a model-selected silence). This lets
+// that real quiet count toward tempo without letting the inference branch skip
+// its duty-cycle obligation entirely.
+export function remainingTempoIdleMs(burstMs, speed, quietAlreadyMs = 0) {
+  return Math.max(0, tempoIdleMs(burstMs, speed) - Math.max(0, Number(quietAlreadyMs) || 0));
+}
+
 // Background model work (memory formation/surfacing and ambient world work) must
 // obey the same deliberate quiet as visible prose. Without this gate a low tempo
 // merely made the journal look quiet while hidden inference consumed the entire
