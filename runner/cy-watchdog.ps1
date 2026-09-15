@@ -39,8 +39,8 @@ if (Test-Path -LiteralPath $heartbeatPath) {
     $heartbeatFresh = $age -le $MaxHeartbeatAgeSeconds
 }
 
-$runners = Get-CyProcesses
-$supervisors = Get-CySupervisors
+$runners = @(Get-CyProcesses)
+$supervisors = @(Get-CySupervisors)
 if ($heartbeatFresh -and $runners.Count -eq 1) {
     Write-Output 'Cy watchdog: runner heartbeat is fresh.'
     exit 0
