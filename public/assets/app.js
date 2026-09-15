@@ -24,6 +24,7 @@ import {
   NARRATIVE_KINDS,
 } from './history-feed.js';
 import { ambientEventLabel, dayLabel, isLiveDate, shiftDate } from './timeline.js';
+import { liveStatusTitle, newestLiveEventMs } from './live-status.js';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
 import '../components/async-select/async-select.js';
@@ -46,6 +47,8 @@ let postcardArchive;
 let memoryPanel;
 let postcardWait = null;
 let lastSeq = 0;
+let lastLiveEventMs = NaN;
+let pollFailures = 0;
 let polling = false;
 let feedLoading = false;
 let feedRenderToken = 0;
@@ -394,6 +397,7 @@ async function replayLoadedDays(token, prependState = null, positionState = null
     if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(day.date, currentDate);
     for (const ev of day.events || []) {
       dispatch(ev, true, false);
+      rememberLastLiveEvent([ev]);
       if (ev.kind === 'gen') latestGen = ev;
       replayed++;
       if (replayed % REPLAY_YIELD_EVERY === 0) {
@@ -405,7 +409,10 @@ async function replayLoadedDays(token, prependState = null, positionState = null
   // Operational snapshots belong after the newest narrative day. They update the
   // side panels but do not create centre-column objects.
   const newest = loadedDays[loadedDays.length - 1];
-  for (const ev of (newest && newest.snapshot) || []) dispatch(ev, true, false);
+  for (const ev of (newest && newest.snapshot) || []) {
+    dispatch(ev, true, false);
+    rememberLastLiveEvent([ev]);
+  }
   // Generation boundaries are needed to split the chronology, but repainting
   // the telemetry card thousands of times during replay is pure wasted work.
   if (latestGen) hud.setGen(latestGen.payload || {});
@@ -512,15 +519,20 @@ async function poll() {
     if (historyMode || feedLoading || renderToken !== feedRenderToken || transitionToken !== viewTransitionToken) return;
     rememberLiveBatch(events);
     dispatchBatch(events);
+    rememberLastLiveEvent(events);
     // Drive the public LED from the freshest inference phase in THIS live batch
     // (after rendering, so it wins over any token fast-path in the same batch).
     driveLedFromBatch(events);
     lastSeq = advanceStreamCursor(lastSeq, events);
+    const recovering = pollFailures > 0;
+    pollFailures = 0;
+    if (recovering) void refreshPowerHistory();
     setStatus('Live', false);
   } catch (e) {
     if (!historyMode && renderToken === feedRenderToken && transitionToken === viewTransitionToken) {
       setStatus('reconnecting', true);
     }
+    pollFailures++;
   } finally {
     polling = false;
   }
@@ -919,6 +931,16 @@ function setStatus(text, bad) {
   if (!el) return;
   el.textContent = text;
   el.classList.toggle('bad', !!bad);
+  updateLiveStatusTitle();
+}
+
+function updateLiveStatusTitle() {
+  if (historyMode) return;
+  const el = $('#status');
+  if (!el) return;
+  const title = liveStatusTitle(el.textContent || 'Live', lastLiveEventMs);
+  el.title = title;
+  el.setAttribute('aria-label', title);
 }
 
 function setDay(n) {
@@ -938,9 +960,27 @@ async function fetchInitialPowerHistory() {
   }
 }
 
+function rememberLastLiveEvent(events) {
+  const newest = newestLiveEventMs(events);
+  if (Number.isFinite(newest) && (!Number.isFinite(lastLiveEventMs) || newest > lastLiveEventMs)) {
+    lastLiveEventMs = newest;
+    updateLiveStatusTitle();
+  }
+}
+
+async function refreshPowerHistory() {
+  const events = await fetchInitialPowerHistory();
+  if (!events || !power) return;
+  power.loadHistory(events);
+  rememberLastLiveEvent(events);
+}
+
 async function applyInitialPowerHistory(historyPromise) {
   const events = await historyPromise;
-  if (power && events) power.loadHistory(events);
+  if (power && events) {
+    power.loadHistory(events);
+    rememberLastLiveEvent(events);
+  }
 }
 
 function setLocation(locationRegime) {

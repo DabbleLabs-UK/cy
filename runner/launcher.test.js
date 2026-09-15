@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const hidden = readFileSync(join(here, 'cy-hidden.vbs'), 'utf8');
 const supervisor = readFileSync(join(here, 'cy-supervisor.bat'), 'utf8');
+const watchdog = readFileSync(join(here, 'cy-watchdog.ps1'), 'utf8');
+const installer = readFileSync(join(here, 'install-watchdog-task.ps1'), 'utf8');
 
 assert.doesNotMatch(hidden, /\r(?!\n)/, 'launcher contains no embedded carriage returns');
 assert.match(hidden, /WScript\.ScriptFullName/, 'launcher resolves its own checkout');
@@ -21,5 +23,11 @@ assert.match(supervisor, /run\.out\.log/, 'supervisor preserves a runner log');
 assert.match(supervisor, /if "%CY_EXIT%"=="78"/, 'supervisor recognises unrecoverable persistent state');
 assert.match(supervisor, /persistent state requires recovery; supervisor halted/, 'supervisor records why it halted');
 assert.match(supervisor, /exit \/b 78/, 'supervisor does not restart into defaults after state recovery fails');
+
+assert.match(watchdog, /power\.json/, 'watchdog uses the persisted power heartbeat');
+assert.match(watchdog, /Get-CySupervisors/, 'watchdog detects the existing supervisor');
+assert.match(watchdog, /wscript\.exe/, 'watchdog starts the hidden launcher only when needed');
+assert.match(installer, /Cy Runner Watchdog/, 'installer creates a named OS-managed watchdog task');
+assert.match(installer, /\/SC MINUTE \/MO 1/, 'watchdog is scheduled once per minute');
 
 console.log('launcher.test.js: all checks passed');
