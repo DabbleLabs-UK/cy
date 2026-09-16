@@ -36,6 +36,9 @@ assert.equal(remainingTempoIdleMs(60000, 30, 45000), 95000,
 assert.equal(remainingTempoIdleMs(10000, 50, 15000), 0,
   'quiet already longer than the required rest needs no additional wait');
 const requestPacer = new InferenceTempoPacer();
+requestPacer.record(null, 999999);
+assert.equal(requestPacer.remaining(999999, 30), 0,
+  'a cancelled request that never started cannot create a synthetic busy interval');
 requestPacer.record(1000, 61000);
 assert.equal(requestPacer.remaining(61000, 30), 140000,
   'a completed one-minute request requires its own 30% duty-cycle quiet');

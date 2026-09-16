@@ -2275,7 +2275,7 @@ async function main() {
       };
       try {
         await waitForInferenceTempo(ac.signal, purpose || mode);
-        lease = await inferenceCoordinator.acquire(inferenceMeta({
+        lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
           provider,
           system,
           prompt: candidatePrompt,
@@ -2284,8 +2284,13 @@ async function main() {
           attempt: repair ? `${attempt}:character-repair` : attempt,
           background: false,
           transport: 'stream',
-        }), ac.signal);
-        t0 = Date.now();
+        }), deferStart: true }, ac.signal);
+        // Pacing and provider ownership form one atomic boundary. A background
+        // request may have completed after the first check but before this lease
+        // was granted; recheck while holding the slot so another request cannot
+        // slip into the gap. The coordinator remains IDLE until begin().
+        await waitForInferenceTempo(ac.signal, purpose || mode);
+        t0 = lease.begin();
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
@@ -2438,7 +2443,7 @@ async function main() {
     timeoutMs = null, signal = null, background = false, returnMeta = false,
     attempt = 'initial',
   }) {
-    let startedAtMs = Date.now();
+    let startedAtMs = null;
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
     // prose does. Incoming postcards/notices still abort it through currentAbort.
@@ -2463,10 +2468,11 @@ async function main() {
     let outputChars = 0;
     try {
       if (!background) await waitForInferenceTempo(ac.signal, purpose);
-      lease = await inferenceCoordinator.acquire(inferenceMeta({
+      lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
         provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
-      }), ac.signal);
-      startedAtMs = Date.now();
+      }), deferStart: true }, ac.signal);
+      if (!background) await waitForInferenceTempo(ac.signal, purpose);
+      startedAtMs = lease.begin();
       const out = await provider.rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
       requestStats = out.stats || null;
       outputChars = String(out.text || '').length;
@@ -2500,7 +2506,7 @@ async function main() {
       }
       if (timeout) clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', relayAbort);
-      if (background) {
+      if (background && startedAtMs !== null) {
         const endedAtMs = Date.now();
         backgroundTempoGate.recordBackgroundWork(startedAtMs, endedAtMs, client.tempo.speed);
         recordTempoDiagnostic(

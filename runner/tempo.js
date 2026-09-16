@@ -95,6 +95,8 @@ export class InferenceTempoPacer {
   }
 
   record(startedAtMs, endedAtMs) {
+    if (startedAtMs === null || startedAtMs === undefined
+      || endedAtMs === null || endedAtMs === undefined) return;
     const start = Number(startedAtMs);
     const end = Number(endedAtMs);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return;

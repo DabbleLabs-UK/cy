@@ -23,9 +23,11 @@ export class InferenceCoordinator {
     if (signal && signal.aborted) throw abortError();
     const queuedAtMs = this.now();
     return new Promise((resolve, reject) => {
+      const { deferStart = false, ...requestMeta } = meta;
       const waiter = {
         id: `infer-${++this.sequence}`,
-        meta: { ...meta },
+        meta: requestMeta,
+        deferStart: !!deferStart,
         signal,
         queuedAtMs,
         resolve,
@@ -62,23 +64,43 @@ export class InferenceCoordinator {
     }
     if (!waiter) return;
     if (waiter.signal) waiter.signal.removeEventListener('abort', waiter.onAbort);
-    const startedAtMs = this.now();
+    const ownerAcquiredAtMs = this.now();
     const record = {
       id: waiter.id,
       ...waiter.meta,
       queued_at: new Date(waiter.queuedAtMs).toISOString(),
-      started_at: new Date(startedAtMs).toISOString(),
-      queue_ms: Math.max(0, startedAtMs - waiter.queuedAtMs),
+      queue_ms: Math.max(0, ownerAcquiredAtMs - waiter.queuedAtMs),
     };
-    this.owner = { id: waiter.id, phase: waiter.meta.phase || 'eval', startedAtMs, record };
-    this.setPhase(this.owner.phase);
-    this.onEvent({ event: 'start', ...record });
+    this.owner = {
+      id: waiter.id,
+      phase: 'idle',
+      ownerAcquiredAtMs,
+      startedAtMs: null,
+      record,
+    };
+
+    const begin = (phase = waiter.meta.phase || 'eval') => {
+      if (finished || !this.owner || this.owner.id !== waiter.id) return null;
+      if (this.owner.startedAtMs !== null) return this.owner.startedAtMs;
+      const startedAtMs = this.now();
+      this.owner.startedAtMs = startedAtMs;
+      this.owner.phase = phase;
+      record.started_at = new Date(startedAtMs).toISOString();
+      record.pacing_ms = Math.max(0, startedAtMs - ownerAcquiredAtMs);
+      this.setPhase(phase);
+      this.onEvent({ event: 'start', ...record });
+      return startedAtMs;
+    };
 
     let finished = false;
+    if (!waiter.deferStart) begin();
+    else this.setPhase('idle');
     waiter.resolve({
       id: waiter.id,
+      begin,
       setPhase: (phase) => {
         if (finished || !this.owner || this.owner.id !== waiter.id) return;
+        if (this.owner.startedAtMs === null) begin(phase);
         this.owner.phase = phase;
         this.setPhase(phase);
       },
@@ -86,13 +108,22 @@ export class InferenceCoordinator {
         if (finished) return;
         finished = true;
         const endedAtMs = this.now();
-        this.onEvent({
-          event: 'end',
-          ...record,
-          ended_at: new Date(endedAtMs).toISOString(),
-          duration_ms: Math.max(0, endedAtMs - startedAtMs),
-          ...detail,
-        });
+        if (this.owner && this.owner.startedAtMs !== null) {
+          this.onEvent({
+            event: 'end',
+            ...record,
+            ended_at: new Date(endedAtMs).toISOString(),
+            duration_ms: Math.max(0, endedAtMs - this.owner.startedAtMs),
+            ...detail,
+          });
+        } else {
+          this.onEvent({
+            event: 'cancelled',
+            ...record,
+            ended_at: new Date(endedAtMs).toISOString(),
+            ...detail,
+          });
+        }
         if (this.owner && this.owner.id === waiter.id) this.owner = null;
         if (this.queue.length) this.drain();
         else this.setPhase('idle');

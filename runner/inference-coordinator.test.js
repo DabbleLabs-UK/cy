@@ -59,3 +59,35 @@ test('an aborted queued request never reaches the provider slot', async () => {
   assert.equal(coordinator.owner, null);
   assert.equal(coordinator.queue.length, 0);
 });
+
+test('a deferred owner remains idle until provider work actually begins', async () => {
+  const phases = [];
+  const events = [];
+  let now = 1000;
+  const coordinator = new InferenceCoordinator({
+    now: () => now,
+    onPhase: (phase) => phases.push(phase),
+    onEvent: (event) => events.push(event),
+  });
+  const background = await coordinator.acquire({ purpose: 'memory', phase: 'gen' });
+  now = 1010;
+  const foregroundPromise = coordinator.acquire({
+    purpose: 'journal', phase: 'eval', deferStart: true,
+  });
+  now = 1100;
+  background.finish({ result: 'nonempty' });
+  const foreground = await foregroundPromise;
+  assert.equal(phases.at(-1), 'idle');
+  assert.equal(events.filter((event) => event.event === 'start').length, 1);
+  now = 1500;
+  assert.equal(foreground.begin(), 1500);
+  assert.equal(phases.at(-1), 'eval');
+  const start = events.find((event) => event.event === 'start' && event.purpose === 'journal');
+  assert.equal(start.queue_ms, 90);
+  assert.equal(start.pacing_ms, 400);
+  now = 1700;
+  foreground.finish({ result: 'emitted' });
+  const end = events.find((event) => event.event === 'end' && event.purpose === 'journal');
+  assert.equal(end.duration_ms, 200);
+  assert.equal(phases.at(-1), 'idle');
+});
