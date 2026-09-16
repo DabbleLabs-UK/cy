@@ -57,6 +57,17 @@ test('journal context request does not await a slow surfacing model call', async
   assert.equal(generated, false);
 });
 
+test('foreground context can defer the background claim until its model call has started', async () => {
+  const delays = [];
+  const r = runtime();
+  r.schedule = (delay) => delays.push(delay);
+  await r.requestWorkingContext(
+    { text: 'a current event' },
+    { scheduleDelayMs: 1000 },
+  );
+  assert.deepEqual(delays, [1000]);
+});
+
 test('postcard memory lookup observes its total engineering deadline', async () => {
   const r = runtime({ client: {
     async getPreparedMemorySet() { return new Promise(() => {}); },

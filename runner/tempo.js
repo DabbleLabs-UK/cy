@@ -84,6 +84,30 @@ export function remainingTempoIdleMs(burstMs, speed, quietAlreadyMs = 0) {
   return Math.max(0, tempoIdleMs(burstMs, speed) - Math.max(0, Number(quietAlreadyMs) || 0));
 }
 
+// Tempo is a machine-duty control, so one logical Cy cycle must not hide several
+// back-to-back model requests inside a single long busy block. Record the most
+// recently completed provider request and make the next one pay that request's
+// remaining quiet first. The cycle tail uses the same remainder, so this moves
+// quiet between calls without charging it twice.
+export class InferenceTempoPacer {
+  constructor() {
+    this.last = null;
+  }
+
+  record(startedAtMs, endedAtMs) {
+    const start = Number(startedAtMs);
+    const end = Number(endedAtMs);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return;
+    this.last = { endedAtMs: end, busyMs: Math.max(0, end - start) };
+  }
+
+  remaining(nowMs, speed) {
+    if (!this.last) return 0;
+    const elapsedQuietMs = Math.max(0, Number(nowMs) - this.last.endedAtMs);
+    return remainingTempoIdleMs(this.last.busyMs, speed, elapsedQuietMs);
+  }
+}
+
 // Background model work (memory formation/surfacing and ambient world work) must
 // obey the same deliberate quiet as visible prose. Without this gate a low tempo
 // merely made the journal look quiet while hidden inference consumed the entire

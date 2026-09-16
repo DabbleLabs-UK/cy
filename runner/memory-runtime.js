@@ -134,7 +134,9 @@ export class AutobiographicalMemoryRuntime {
     return this.busy || this.priorityPending || this.pendingSourceWrites > 0;
   }
 
-  async requestWorkingContext(value = {}, { deadlineMs = 0, priority = 80 } = {}) {
+  async requestWorkingContext(value = {}, {
+    deadlineMs = 0, priority = 80, scheduleDelayMs = 0,
+  } = {}) {
     const started = this.now();
     const context = stableContext(value);
     const fingerprint = memoryContextFingerprint(context);
@@ -155,7 +157,8 @@ export class AutobiographicalMemoryRuntime {
             context,
             priority,
           });
-          this.schedule(0);
+          const requestedDelay = Number(scheduleDelayMs);
+          this.schedule(Number.isFinite(requestedDelay) ? Math.max(0, requestedDelay) : 0);
         }
       } catch (error) {
         if (this.desired && this.desired.fingerprint === fingerprint) {

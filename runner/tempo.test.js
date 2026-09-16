@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { BackgroundTempoGate, clampSpeed, remainingTempoIdleMs, tempoIdleMs } from './tempo.js';
+import {
+  BackgroundTempoGate,
+  InferenceTempoPacer,
+  clampSpeed,
+  remainingTempoIdleMs,
+  tempoIdleMs,
+} from './tempo.js';
 import { cadencePhrase, tempoIdleMs as publicTempoIdleMs } from '../public/assets/tempo.js';
 
 function realisedDuty(burstMs, idleMs) {
@@ -29,6 +35,14 @@ assert.equal(remainingTempoIdleMs(60000, 30, 45000), 95000,
   'a chosen 45s silence counts toward, but cannot erase, the 30% tempo rest');
 assert.equal(remainingTempoIdleMs(10000, 50, 15000), 0,
   'quiet already longer than the required rest needs no additional wait');
+const requestPacer = new InferenceTempoPacer();
+requestPacer.record(1000, 61000);
+assert.equal(requestPacer.remaining(61000, 30), 140000,
+  'a completed one-minute request requires its own 30% duty-cycle quiet');
+assert.equal(requestPacer.remaining(106000, 30), 95000,
+  'elapsed quiet is deducted rather than charged twice');
+assert.equal(requestPacer.remaining(61000, 100), 0,
+  'full tempo leaves no deliberate inter-request quiet');
 
 const gate = new BackgroundTempoGate();
 const gateNow = 1_000_000;
@@ -62,8 +76,8 @@ assert.doesNotMatch(runSource, /Math\.min\(MAX_TEMPO_IDLE_MS/,
   'the runtime does not reintroduce an absolute cap around the exact duty idle');
 assert.match(runSource, /backgroundTempoGate\.reserveVisibleIdle\(idleMs, Date\.now\(\)\)/,
   'visible tempo quiet is reserved before background inference can use it');
-assert.match(runSource, /canRunBackground: \(kind\) => inferPhase === 'idle'\s*&& backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
-  'memory background work is gated by the tempo reservation');
+assert.match(runSource, /canRunBackground: \(kind\) => inferPhase === 'idle'[\s\S]*?inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) <= 0[\s\S]*?backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
+  'memory background work respects per-request pacing and the tempo reservation');
 assert.match(runSource, /reason: 'TEMPO_RESERVED'/,
   'ambient world work cannot consume a reserved tempo quiet period');
 assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, endedAtMs, client\.tempo\.speed\)/,
@@ -72,6 +86,12 @@ assert.match(runSource, /const cycleInferenceStart = Date\.now\(\);[\s\S]*?choos
   'the visible burst timer starts before model-mediated action selection');
 assert.match(runSource, /const burstStart = cycleInferenceStart;/,
   'action-selection inference is included in the measured visible burst');
+assert.match(runSource, /waitForInferenceTempo\(ac\.signal, purpose \|\| mode\)[\s\S]*?inferenceCoordinator\.acquire/,
+  'streaming requests pay inter-request tempo before taking the provider slot');
+assert.match(runSource, /if \(!background\) await waitForInferenceTempo\(ac\.signal, purpose\)[\s\S]*?inferenceCoordinator\.acquire/,
+  'foreground non-streaming requests pay inter-request tempo before taking the provider slot');
+assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining/,
+  'the cycle tail charges only the final request remainder, not the whole multi-call wall time');
 assert.match(runSource, /if \(hasDrawRequest\)[\s\S]*?paceCompletedInferenceCycle\(cycleInferenceStart, \{ reason: 'drawing-tempo' \}\)/,
   'an explicit drawing request earns tempo quiet after all of its model calls');
 assert.match(runSource, /if \(selectedAction === 'draw'\)[\s\S]*?paceCompletedInferenceCycle\(cycleInferenceStart, \{ reason: 'drawing-tempo' \}\)/,
@@ -84,8 +104,8 @@ assert.match(runSource, /let attempted = false;[\s\S]*?attempted = true;[\s\S]*?
   'the runner records whether the prose provider was actually invoked');
 assert.match(runSource, /const completedAttempt = attempted && !interruptAbort;/,
   'only a real inbound interrupt bypasses post-attempt pacing');
-assert.match(runSource, /const tempoIdle = completedAttempt \? tempoIdleMs\(burstMs, client\.tempo\.speed\) : 0;/,
-  'rejected, repeated, empty, and failed completed attempts earn normal tempo quiet');
+assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) : 0;/,
+  'rejected, repeated, empty, and failed completed attempts retain the final request tempo quiet');
 assert.match(runSource, /const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0[\s\S]*?BACKOFF_BASE_MS/s,
   'all providers receive bounded backoff after a genuine non-emitting failure');
 assert.match(runSource, /if \(completedAttempt && idleMs > 0\) \{[\s\S]*?await idleSilently\(idleMs, \{ breakOnTempo: true, allowAwg: true \}\);/,

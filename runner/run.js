@@ -146,8 +146,8 @@ import { generateWithCharacterRepair } from './character-output.js';
 import { Client, tsNow } from './client.js';
 import {
   BackgroundTempoGate,
+  InferenceTempoPacer,
   tempoIdleMs,
-  remainingTempoIdleMs,
   readingIdleMs,
   clampSpeed,
   READ_CHARS_PER_SEC,
@@ -554,6 +554,7 @@ async function main() {
     onPhase: setInfer,
     onEvent: recordInferenceDiagnostic,
   });
+  const inferenceTempoPacer = new InferenceTempoPacer();
   function inferenceMeta({ provider, system, prompt, opts, purpose, attempt, background, transport }) {
     const selected = provider || activeProvider();
     const model = typeof selected.modelFor === 'function'
@@ -601,6 +602,21 @@ async function main() {
       reason: reason || null,
       tempo_speed: clampSpeed(client.tempo.speed),
     });
+  }
+  async function waitForInferenceTempo(signal, purpose) {
+    // Incoming human/operator work stays responsive. Its completed request still
+    // establishes pacing for whatever model work follows it.
+    if (purpose === 'postcard' || purpose === 'warden') return 0;
+    let remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed);
+    if (remaining <= 0) return 0;
+    const startedAtMs = Date.now();
+    recordTempoDiagnostic(startedAtMs, remaining, 'inter-request-tempo', true);
+    while (remaining > 0) {
+      if (signal && signal.aborted) throw new DOMException('inference pacing interrupted', 'AbortError');
+      await sleep(Math.min(1000, remaining));
+      remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed);
+    }
+    return Date.now() - startedAtMs;
   }
   soma.observe(
     {
@@ -2239,7 +2255,7 @@ async function main() {
     const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
       currentAbort = ac;
-      const t0 = Date.now();
+      let t0 = null;
       let ttftMs = null;
       let stats = null;
       let candidate = '';
@@ -2248,6 +2264,8 @@ async function main() {
       let transportResult = 'error';
       const finishRequest = () => {
         if (!lease) return;
+        const endedAtMs = Date.now();
+        inferenceTempoPacer.record(t0, endedAtMs);
         lease.finish({
           result: transportResult,
           ttft_ms: ttftMs,
@@ -2256,6 +2274,7 @@ async function main() {
         });
       };
       try {
+        await waitForInferenceTempo(ac.signal, purpose || mode);
         lease = await inferenceCoordinator.acquire(inferenceMeta({
           provider,
           system,
@@ -2266,6 +2285,7 @@ async function main() {
           background: false,
           transport: 'stream',
         }), ac.signal);
+        t0 = Date.now();
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
@@ -2442,6 +2462,7 @@ async function main() {
     let requestStats = null;
     let outputChars = 0;
     try {
+      if (!background) await waitForInferenceTempo(ac.signal, purpose);
       lease = await inferenceCoordinator.acquire(inferenceMeta({
         provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
       }), ac.signal);
@@ -2470,6 +2491,7 @@ async function main() {
         : ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
       if (lease) {
+        inferenceTempoPacer.record(startedAtMs, Date.now());
         lease.finish({
           result: requestResult,
           output_chars: outputChars,
@@ -2679,6 +2701,7 @@ async function main() {
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
     canRunBackground: (kind) => inferPhase === 'idle'
+      && inferenceTempoPacer.remaining(Date.now(), client.tempo.speed) <= 0
       && backgroundTempoGate.canStart(Date.now())
       && (kind === 'surfacing' || (currentMode !== 'letter' && pendingPostcards.length === 0))
       && pendingWarden.length === 0
@@ -2695,7 +2718,8 @@ async function main() {
     pendingMemoryQuery = null;
     void autobiographicalMemory.requestWorkingContext({
       ...query, groundedContext, generationRef,
-    }).catch((error) => console.warn(`[cy] memory surfacing deferred: ${error.message}`));
+    }, { scheduleDelayMs: 1000 })
+      .catch((error) => console.warn(`[cy] memory surfacing deferred: ${error.message}`));
     return autobiographicalMemory.working;
   }
 
@@ -2870,7 +2894,7 @@ async function main() {
       publicSituation: `A postcard has arrived: ${postcardText.slice(0, 600)}`,
       groundedContext: cognition.groundedDirective,
       generationRef: `postcard:${pc.id}`,
-    }, { deadlineMs: 750, priority: 100 });
+    }, { deadlineMs: 750, priority: 100, scheduleDelayMs: 1000 });
 
     // Recognition supplies factual visitor identity/count/timing only. Legacy
     // relation values are retained for private visitor diagnostics, not prose.
@@ -4209,11 +4233,10 @@ async function main() {
 
   async function paceCompletedInferenceCycle(startedAtMs, {
     busyEndedAtMs = Date.now(),
-    quietAlreadyMs = 0,
     reason = 'tempo',
   } = {}) {
     const busyMs = Math.max(0, busyEndedAtMs - startedAtMs);
-    const idleMs = remainingTempoIdleMs(busyMs, client.tempo.speed, quietAlreadyMs);
+    const idleMs = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed);
     recentBurstMs = Math.round(recentBurstMs * 0.6 + busyMs * 0.4);
     recordTempoDiagnostic(startedAtMs, idleMs, reason, idleMs > 0);
     if (idleMs <= 0) {
@@ -4658,7 +4681,6 @@ async function main() {
       if (selectedAction === 'silence') {
         const seconds = AUTONOMOUS_SILENCE_SECONDS;
         const busyEndedAtMs = Date.now();
-        const quietStartedAtMs = Date.now();
         await recordOutcome('deliberate-silence');
         await recordCompletedSilence(seconds, {
           idle: idleSilently,
@@ -4667,7 +4689,6 @@ async function main() {
         });
         await paceCompletedInferenceCycle(cycleInferenceStart, {
           busyEndedAtMs,
-          quietAlreadyMs: Date.now() - quietStartedAtMs,
           reason: 'silence-plus-tempo',
         });
         continue;
@@ -4855,7 +4876,8 @@ async function main() {
       // a bad local generation from repeatedly starting Ollama without paying the
       // selected tempo's rest.
       const completedAttempt = attempted && !interruptAbort;
-      const tempoIdle = completedAttempt ? tempoIdleMs(burstMs, client.tempo.speed) : 0;
+      const tempoIdle = completedAttempt
+        ? inferenceTempoPacer.remaining(Date.now(), client.tempo.speed) : 0;
       const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0
         ? Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (nonEmittingStreak - 1))
         : 0;
