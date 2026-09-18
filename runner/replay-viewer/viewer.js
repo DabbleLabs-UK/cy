@@ -1,10 +1,13 @@
 // viewer.js - Soma replay workbench client.
 //
 // Reads replay JSON from the local /api/replay endpoint (backed directly by
-// runner/soma-replay.js) and draws it. No math happens here beyond axis
-// scaling and step-line layout: every value shown is read straight from the
-// replay report. The CANDIDATE/BOTH modes stay disabled because no candidate
-// model exists yet - this file never fabricates one.
+// runner/soma-replay.js and runner/candidate-threat-anticipation-load.js)
+// and draws it. No math happens here beyond axis scaling and line layout:
+// every value shown is read straight from the server response. The
+// CANDIDATE line is a REPLAY-ONLY illustrative model, not a validated
+// psychological measurement - see the calibration panel this file renders
+// from the server's own calibration ledger, never from a value hard-coded
+// here.
 
 import {
   ROWS, rowIndex, findTransitionFor, precedingEventLabel, describeTransition, stepVertices,
@@ -22,7 +25,9 @@ const state = {
   fixtures: [],
   activeFixtureId: null,
   sampleParam: '15',
+  mode: 'current', // 'current' | 'candidate' | 'both' - controls the GRAPH only, not the inspector
   report: null,
+  candidate: null,
   fixtureMetaRaw: null,
   selectedIndex: null,
 };
@@ -34,6 +39,14 @@ const el = {
   status: document.getElementById('timelineStatus'),
   inspector: document.getElementById('inspector'),
   sampleSelect: document.getElementById('sampleSelect'),
+  modeButtons: {
+    current: document.getElementById('modeCurrent'),
+    candidate: document.getElementById('modeCandidate'),
+    both: document.getElementById('modeBoth'),
+  },
+  candidatePanel: document.getElementById('candidatePanel'),
+  candidateToggle: document.getElementById('candidateToggle'),
+  candidateDetail: document.getElementById('candidateDetail'),
 };
 
 async function fetchJson(url) {
@@ -100,9 +113,11 @@ async function loadReplay() {
       `/api/replay?fixture=${encodeURIComponent(state.activeFixtureId)}&sampleMinutes=${encodeURIComponent(sampleMinutes)}`,
     );
     state.report = data.report;
+    state.candidate = data.candidate;
     state.fixtureMetaRaw = data.fixture;
     hideStatus();
     renderMeta();
+    renderCandidatePanel();
     renderTimeline();
     renderInspector(null);
   } catch (error) {
@@ -128,6 +143,32 @@ function renderMeta() {
     + `<br/>checksum ${r.checksum.slice(0, 12)}&hellip;`;
 }
 
+function renderCandidatePanel() {
+  const model = state.candidate && state.candidate.model;
+  if (!model) return;
+  const rows = Object.entries(model.calibration).map(([key, entry]) => {
+    const value = 'value' in entry
+      ? `${entry.value}${entry.unit ? ` ${entry.unit}` : ''}`
+      : Object.entries(entry).filter(([k]) => !['classification', 'note'].includes(k))
+        .map(([k, v]) => `${k}: ${v}`).join(', ');
+    return `<tr>
+      <td>${key}</td>
+      <td class="wb-cal-value">${value}</td>
+      <td><span class="wb-cal-tag">${entry.classification}</span></td>
+      <td>${entry.note}</td>
+    </tr>`;
+  }).join('');
+  el.candidateDetail.innerHTML = `
+    <p><strong>Status:</strong> ${model.status.replace(/_/g, ' ')}. ${model.constructScope}</p>
+    <p>The candidate line is drawn as straight segments between exact computed points; increase time
+      sampling density above for a visually smoother decay curve (the underlying values are exact
+      regardless of sampling - only the on-screen connecting line is a linear approximation).</p>
+    <div style="overflow-x:auto"><table class="wb-cal-table">
+      <thead><tr><th>Constant</th><th>Value</th><th>Class</th><th>Rationale</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
 function timeFmt(ms) {
   const d = new Date(ms);
   return d.toISOString().slice(11, 16);
@@ -141,7 +182,7 @@ function renderTimeline() {
   const height = svg.clientHeight || 300;
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
 
-  const margin = { top: 14, right: 18, bottom: 34, left: 96 };
+  const margin = { top: 14, right: 34, bottom: 34, left: 96 };
   const plotW = width - margin.left - margin.right;
   const plotH = height - margin.top - margin.bottom;
   const { startMs, endMs } = report.interval;
@@ -192,15 +233,39 @@ function renderTimeline() {
     })).textContent = timeFmt(t);
   }
 
+  const showCurrent = state.mode !== 'candidate';
+  const showCandidate = state.mode !== 'current' && Array.isArray(state.candidate && state.candidate.trajectory);
+
   // Step-after line for the CURRENT categorical trajectory.
   const points = report.trajectory;
-  const vertices = stepVertices(points);
-  if (vertices.length) {
-    let d = `M ${x(vertices[0].timestampMs)} ${yRow(vertices[0].row)}`;
-    for (let i = 1; i < vertices.length; i += 1) {
-      d += ` L ${x(vertices[i].timestampMs)} ${yRow(vertices[i].row)}`;
+  if (showCurrent) {
+    const vertices = stepVertices(points);
+    if (vertices.length) {
+      let d = `M ${x(vertices[0].timestampMs)} ${yRow(vertices[0].row)}`;
+      for (let i = 1; i < vertices.length; i += 1) {
+        d += ` L ${x(vertices[i].timestampMs)} ${yRow(vertices[i].row)}`;
+      }
+      svg.appendChild(make('path', { d, class: 'wb-step-line' }));
     }
-    svg.appendChild(make('path', { d, class: 'wb-step-line' }));
+  }
+
+  // Continuous line for the CANDIDATE replay-only scalar, on its own 0-1
+  // scale mapped onto the same plot height (1=top, matching the categorical
+  // rows' "top = most severe" convention). Rendered as straight segments
+  // between the exact computed points - see the calibration panel note.
+  if (showCandidate) {
+    const yLoad = (load) => margin.top + (1 - load) * plotH;
+    const series = state.candidate.trajectory;
+    let d = `M ${x(series[0].timestampMs)} ${yLoad(series[0].load)}`;
+    for (let i = 1; i < series.length; i += 1) {
+      d += ` L ${x(series[i].timestampMs)} ${yLoad(series[i].load)}`;
+    }
+    svg.appendChild(make('path', { d, class: 'wb-candidate-line' }));
+    for (const frac of [0, 0.5, 1]) {
+      svg.appendChild(make('text', {
+        x: width - margin.right + 6, y: yLoad(frac) + 3, class: 'wb-candidate-axis-label',
+      })).textContent = frac.toFixed(1);
+    }
   }
 
   // Markers. Same-timestamp EVENT nodes are jittered apart and badged with
@@ -285,6 +350,22 @@ function fieldBlock(title, contentHtml) {
   return `<div class="wb-field"><h3>${title}</h3>${contentHtml}</div>`;
 }
 
+function candidateField(index) {
+  const point = state.candidate && state.candidate.trajectory && state.candidate.trajectory[index];
+  if (!point) return '';
+  const c = point.components;
+  return fieldBlock('Candidate load (replay-only)', `<p>
+      load = <strong>${point.load.toFixed(2)}</strong>, drive = ${point.drive.toFixed(2)}
+    </p>
+    <ul>
+      <li>severity ${c.severity.toFixed(2)}
+        <span class="wb-cal-tag" style="${c.severityBasis === 'GROUNDED_LEARNED_POSTERIOR' ? 'background:rgba(63,178,127,0.18);color:var(--quiet)' : ''}">${c.severityBasis.replace(/_/g, ' ')}</span></li>
+      <li>imminence weight ${c.imminenceWeight} for ${c.temporalStatus} <span class="wb-cal-tag">CALIBRATION</span></li>
+      <li>control discount ${c.controlDiscount} for ${c.objectiveControllability} <span class="wb-cal-tag">CALIBRATION</span></li>
+      <li>ambiguity gain ${c.ambiguityGain} for ${c.worldAmbiguity} <span class="wb-cal-tag">CALIBRATION</span></li>
+    </ul>`);
+}
+
 function renderInspector(index) {
   if (index == null) {
     el.inspector.innerHTML = '<div class="wb-inspector-empty">Click an event marker, a sample dot, or the line itself to inspect that moment.</div>';
@@ -323,6 +404,7 @@ function renderInspector(index) {
         ? `<ul>${controllability.slice(0, 4).map((c) => `<li>${c.contextId} / ${c.actionId}: action ${c.action ? `${c.action.alpha}/${c.action.alpha + c.action.beta}` : 'n/a'}, no-action ${c.noAction ? `${c.noAction.alpha}/${c.noAction.alpha + c.noAction.beta}` : 'n/a'}</li>`).join('')}</ul>`
         : '<p>no action-outcome evidence recorded yet</p>')}
       ${fieldBlock('Why', `<p class="wb-reason">${describeTransition(point, beforeStatus, afterStatus, concern, precedingEventLabel(state.report.trajectory, index, timeFmt))}</p>`)}
+      ${candidateField(index)}
     </div>`;
   el.inspector.innerHTML = html;
 }
@@ -330,6 +412,22 @@ function renderInspector(index) {
 el.sampleSelect.addEventListener('change', () => {
   state.sampleParam = el.sampleSelect.value;
   loadReplay();
+});
+
+for (const [mode, button] of Object.entries(el.modeButtons)) {
+  button.addEventListener('click', () => {
+    state.mode = mode;
+    for (const [otherMode, otherButton] of Object.entries(el.modeButtons)) {
+      otherButton.classList.toggle('is-active', otherMode === mode);
+    }
+    if (state.report) renderTimeline();
+  });
+}
+
+el.candidateToggle.addEventListener('click', () => {
+  const expanded = el.candidateToggle.getAttribute('aria-expanded') === 'true';
+  el.candidateToggle.setAttribute('aria-expanded', String(!expanded));
+  el.candidateDetail.hidden = expanded;
 });
 
 window.addEventListener('resize', () => {

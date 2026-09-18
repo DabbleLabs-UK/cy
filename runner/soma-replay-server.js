@@ -13,6 +13,7 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GOLDEN_SOMA_REPLAY_FIXTURES, goldenFixture } from './soma-replay-fixtures.js';
 import { runSomaReplay, DEFAULT_REPLAY_SAMPLE_INTERVAL_MS } from './soma-replay.js';
+import { computeCandidateTrajectory, candidateModelMetadata } from './candidate-threat-anticipation-load.js';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.SOMA_REPLAY_PORT) || 4610;
@@ -71,7 +72,15 @@ async function handleApi(req, res, url) {
     try {
       const sampleIntervalMs = resolveSampleParam(url.searchParams.get('sampleMinutes'));
       const report = runSomaReplay({ ...fixture, sampleIntervalMs });
-      sendJson(res, 200, { fixture: fixtureSummary(fixture), report });
+      // The candidate is a pure post-process over the already-computed
+      // CURRENT report - no second replay run, no Soma state mutation, no
+      // new grounded input. See candidate-threat-anticipation-load.js.
+      const candidate = computeCandidateTrajectory(report);
+      sendJson(res, 200, {
+        fixture: fixtureSummary(fixture),
+        report,
+        candidate: { model: candidateModelMetadata(), trajectory: candidate },
+      });
     } catch (error) {
       sendJson(res, 500, { error: String(error && error.message || error) });
     }

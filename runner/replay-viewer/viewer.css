@@ -101,6 +101,8 @@ body {
 .wb-axis-label { fill: var(--text-dim); font-size: 9.5px; }
 .wb-row-label { fill: var(--text-dim); font-size: 9.5px; }
 .wb-step-line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.wb-candidate-line { fill: none; stroke: var(--candidate); stroke-width: 2; stroke-dasharray: 5 3; }
+.wb-candidate-axis-label { fill: var(--candidate); font-size: 9.5px; }
 .wb-event-label { fill: var(--text-dim); font-size: 9px; }
 .wb-gap-band { fill: var(--gap); }
 
@@ -110,8 +112,27 @@ body {
 .wb-swatch-event { background: var(--ongoing); }
 .wb-swatch-sample { background: var(--text-dim); }
 .wb-swatch-line { background: var(--accent); }
-.wb-swatch-candidate { background: var(--candidate); opacity: 0.5; }
+.wb-swatch-candidate { background: var(--candidate); }
 .wb-swatch-gap { background: var(--gap); border: 1px solid var(--ongoing); }
+
+.wb-candidate-panel {
+  margin: 10px 18px 0; border: 1px solid var(--candidate); border-radius: 8px;
+  background: var(--panel); overflow: hidden;
+}
+.wb-candidate-toggle {
+  width: 100%; text-align: left; background: transparent; border: 0; color: var(--candidate);
+  font: inherit; font-size: 12px; font-weight: 600; padding: 9px 14px; cursor: pointer;
+}
+.wb-candidate-detail { padding: 4px 14px 14px; font-size: 12px; color: var(--text); }
+.wb-candidate-detail p { margin: 0 0 8px; color: var(--text-dim); }
+.wb-cal-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.wb-cal-table th, .wb-cal-table td { text-align: left; padding: 4px 8px 4px 0; vertical-align: top; border-bottom: 1px solid var(--line); }
+.wb-cal-table th { color: var(--text-dim); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+.wb-cal-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wb-cal-tag {
+  display: inline-block; font-size: 9.5px; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px;
+  background: rgba(154,126,224,0.18); color: var(--candidate); margin-left: 6px;
+}
 
 .wb-inspector {
   margin: 10px 18px 24px; padding: 12px 16px; background: var(--panel);

@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { GOLDEN_SOMA_REPLAY_FIXTURES } from './soma-replay-fixtures.js';
 import { runSomaReplay } from './soma-replay.js';
+import { computeCandidateTrajectory, candidateModelMetadata } from './candidate-threat-anticipation-load.js';
 
 const serverSource = readFileSync(new URL('./soma-replay-server.js', import.meta.url), 'utf8');
 assert.doesNotMatch(serverSource, /Date\.now\s*\(/, 'server source performs no wall-clock read of its own replay path');
@@ -43,8 +44,9 @@ function jsonHandler(req, res) {
       return;
     }
     const report = runSomaReplay({ ...fixture, sampleIntervalMs: 15 * 60 * 1000 });
+    const candidate = { model: candidateModelMetadata(), trajectory: computeCandidateTrajectory(report) };
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ report }));
+    res.end(JSON.stringify({ report, candidate }));
     return;
   }
   res.writeHead(404).end();
@@ -69,12 +71,20 @@ try {
       `${fixture.id} applies every event through the server path`);
     assert.ok(body.report.trajectory.some((point) => point.kind === 'SAMPLE'),
       `${fixture.id} produces time-sample points when sampling is requested`);
+    assert.equal(body.candidate.trajectory.length, body.report.trajectory.length,
+      `${fixture.id} candidate trajectory has one point per replay trajectory point`);
+    assert.match(body.candidate.model.status, /NOT_IMPLEMENTED_IN_PRODUCTION/,
+      `${fixture.id} candidate response clearly flags its replay-only status`);
+    assert.ok(Object.values(body.candidate.model.calibration)
+      .every((entry) => String(entry.classification).startsWith('CALIBRATION_ONLY')),
+      `${fixture.id} candidate response labels every non-grounded constant as calibration-only`);
   }
 
   // Determinism across two independent requests for the same fixture.
   const first = await (await fetch(`${base}/api/replay?fixture=quiet-routine-baseline`)).json();
   const second = await (await fetch(`${base}/api/replay?fixture=quiet-routine-baseline`)).json();
   assert.deepEqual(first.report, second.report, 'server replay is deterministic across repeat requests');
+  assert.deepEqual(first.candidate, second.candidate, 'server candidate trajectory is deterministic across repeat requests');
 
   const missing = await fetch(`${base}/api/replay?fixture=does-not-exist`);
   assert.equal(missing.status, 404);
