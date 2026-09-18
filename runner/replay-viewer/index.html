@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Soma Replay Workbench</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="stylesheet" href="viewer.css" />
+</head>
+<body>
+  <header class="wb-header">
+    <h1>Soma Replay Workbench</h1>
+    <p class="wb-sub">Developer tool, not a public Cy feature. Deterministic replay of the grounded Soma engine over the six golden prison days.</p>
+  </header>
+
+  <nav class="wb-tabs" id="fixtureTabs" role="tablist" aria-label="Golden day"></nav>
+
+  <section class="wb-toolbar">
+    <div class="wb-modegroup" role="group" aria-label="Trajectory mode">
+      <button id="modeCurrent" class="wb-mode is-active" type="button" data-mode="current">CURRENT</button>
+      <button id="modeCandidate" class="wb-mode" type="button" data-mode="candidate" disabled
+        title="No candidate model has been implemented yet">CANDIDATE</button>
+      <button id="modeBoth" class="wb-mode" type="button" data-mode="both" disabled
+        title="No candidate model has been implemented yet">BOTH</button>
+    </div>
+    <div class="wb-sampling">
+      <label for="sampleSelect">Time sampling</label>
+      <select id="sampleSelect">
+        <option value="off">Off (events only)</option>
+        <option value="5">Every 5 min</option>
+        <option value="15" selected>Every 15 min</option>
+        <option value="60">Every 60 min</option>
+      </select>
+    </div>
+    <div class="wb-meta" id="fixtureMeta">Loading&hellip;</div>
+  </section>
+
+  <main class="wb-timeline-wrap">
+    <div id="timelineStatus" class="wb-timeline-status" hidden></div>
+    <svg id="timeline" class="wb-timeline" role="img" aria-label="Anxiety trajectory timeline"></svg>
+    <div class="wb-legend" id="legend">
+      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-event"></i>event</span>
+      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-sample"></i>time sample</span>
+      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-line"></i>current anxiety (categorical)</span>
+      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-candidate"></i>candidate (not available yet)</span>
+      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-gap"></i>UNKNOWN / observation gap</span>
+    </div>
+  </main>
+
+  <section class="wb-inspector" id="inspector">
+    <div class="wb-inspector-empty">Click an event marker, a sample dot, or the line itself to inspect that moment.</div>
+  </section>
+
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

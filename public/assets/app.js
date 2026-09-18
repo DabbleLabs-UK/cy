@@ -1198,6 +1198,11 @@ const GEAR_SVG =
 const CLOCK_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm.5-13H11v6l5.2 3.1.8-1.3-4.5-2.7V7z"/></svg>';
 
+// Local-only developer tool. Requires `node runner/soma-replay-server.js` to
+// be running on this machine; the link is admin-only and never fetched by
+// this page itself, so an idle/absent local server has no effect on Cy.
+const REPLAY_WORKBENCH_URL = 'http://127.0.0.1:4610/';
+
 function makeItem(kind, val, label) {
   const b = document.createElement('button');
   b.type = 'button';
@@ -1288,12 +1293,43 @@ function initGearMenu() {
     sep2.className = 'cy-menu-sep';
     sep2.setAttribute('role', 'separator');
 
+    // ---- Dev tools: OWNER-ONLY link to the local Soma replay workbench ----
+    // Developer tooling, not a public Cy feature. It never renders for a
+    // non-admin visitor and this page never fetches the local URL itself -
+    // it is only a link the admin can open on their own machine.
+    const sepDev = document.createElement('div');
+    sepDev.className = 'cy-menu-sep';
+    sepDev.setAttribute('role', 'separator');
+    const capDev = document.createElement('span');
+    capDev.className = 'cy-menu-cap';
+    capDev.textContent = 'Dev tools';
+    const replayLink = document.createElement('a');
+    replayLink.className = 'cy-menu-item';
+    replayLink.setAttribute('role', 'menuitem');
+    replayLink.href = REPLAY_WORKBENCH_URL;
+    replayLink.target = '_blank';
+    replayLink.rel = 'noopener noreferrer';
+    replayLink.style.textDecoration = 'none';
+    replayLink.title = 'Opens the local Soma replay workbench (run node runner/soma-replay-server.js on this machine first)';
+    const rMark = document.createElement('span');
+    rMark.className = 'cy-mark';
+    rMark.setAttribute('aria-hidden', 'true');
+    const rLab = document.createElement('span');
+    rLab.className = 'cy-menu-lab';
+    rLab.textContent = 'Soma replay workbench';
+    replayLink.appendChild(rMark);
+    replayLink.appendChild(rLab);
+    gearItems.replayLink = replayLink;
+
     gearMenu.appendChild(capR);
     gearMenu.appendChild(gearItems.active);
     gearMenu.appendChild(gearItems.paused);
     gearMenu.appendChild(sep);
     gearMenu.appendChild(modelToggle);
     gearMenu.appendChild(modelGroup);
+    gearMenu.appendChild(sepDev);
+    gearMenu.appendChild(capDev);
+    gearMenu.appendChild(replayLink);
     gearMenu.appendChild(sep2);
   }
 
@@ -1399,6 +1435,7 @@ function focusableGearItems() {
   return [
     gearItems.active, gearItems.paused,
     modelToggle, gearItems.ollama, gearItems.deepseek,
+    gearItems.replayLink,
     regimeToggle, gearItems.auto, gearItems.day, gearItems.night,
   ].filter((el) => el && !el.hidden && !el.disabled && el.offsetParent !== null);
 }
