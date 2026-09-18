@@ -39,11 +39,26 @@
     <div id="timelineStatus" class="wb-timeline-status" hidden></div>
     <svg id="timeline" class="wb-timeline" role="img" aria-label="Anxiety trajectory timeline"></svg>
     <div class="wb-legend" id="legend">
-      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-event"></i>event</span>
-      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-sample"></i>time sample</span>
-      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-line"></i>current anxiety (categorical)</span>
-      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-candidate"></i>candidate load, 0-1 (replay-only)</span>
-      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-gap"></i>UNKNOWN / observation gap</span>
+      <span class="wb-legend-item">
+        <svg class="wb-legend-swatch" viewBox="0 0 22 14" aria-hidden="true"><line x1="1" y1="7" x2="21" y2="7" class="wb-step-line"/></svg>
+        Current categorical Anxiety
+      </span>
+      <span class="wb-legend-item">
+        <svg class="wb-legend-swatch" viewBox="0 0 22 14" aria-hidden="true"><line x1="1" y1="7" x2="21" y2="7" class="wb-candidate-line"/></svg>
+        <span title="Replay-only experimental scalar derived from grounded threat evidence. Not a subjective anxiety rating.">Candidate threat-anticipation load <span class="wb-legend-sub">(0-1, replay-only)</span></span>
+      </span>
+      <span class="wb-legend-item">
+        <svg class="wb-legend-swatch" viewBox="0 0 22 14" aria-hidden="true"><circle cx="11" cy="7" r="5" fill="var(--imminent)" class="wb-node-event"/></svg>
+        event
+      </span>
+      <span class="wb-legend-item">
+        <svg class="wb-legend-swatch" viewBox="0 0 22 14" aria-hidden="true"><circle cx="11" cy="7" r="3.4" fill="var(--unknown)" class="wb-node-sample"/></svg>
+        time sample
+      </span>
+      <span class="wb-legend-item">
+        <svg class="wb-legend-swatch" viewBox="0 0 22 14" aria-hidden="true"><rect x="1" y="1" width="20" height="12" class="wb-gap-band"/></svg>
+        UNKNOWN / observation gap
+      </span>
     </div>
   </main>
 
