@@ -6,7 +6,7 @@ import {
   observeEnvironmentRecord,
 } from './grounded-environment-transition.js';
 import { GOLDEN_SOMA_REPLAY_FIXTURES, goldenFixture } from './soma-replay-fixtures.js';
-import { runSomaReplay } from './soma-replay.js';
+import { runSomaReplay, DEFAULT_REPLAY_SAMPLE_INTERVAL_MS } from './soma-replay.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -130,5 +130,69 @@ for (const fixture of GOLDEN_SOMA_REPLAY_FIXTURES) {
   assert.equal(report.diagnostics.length, 0, `${fixture.id} has no replay diagnostics`);
   assert.equal(report.invariantFailures.length, 0, `${fixture.id} has no invariant failures`);
 }
+
+// Deterministic optional time sampling (workbench visual timeline support).
+// Disabled by default: omitting sampleIntervalMs must reproduce the exact
+// pre-sampling trajectory shape used by every assertion above.
+const unsampled = runSomaReplay(quiet);
+assert.equal(unsampled.sampling, null, 'sampling is off by default');
+assert.ok(unsampled.trajectory.every((point) => point.kind !== 'SAMPLE'),
+  'no SAMPLE nodes appear unless sampling is requested');
+
+const sampledOnce = runSomaReplay({ ...quiet, sampleIntervalMs: true });
+const sampledTwice = runSomaReplay({ ...quiet, sampleIntervalMs: true });
+assert.equal(sampledOnce.checksum, sampledTwice.checksum, 'time sampling is deterministic across repeat runs');
+assert.deepEqual(sampledOnce, sampledTwice, 'time sampling produces an identical report on repeat runs');
+assert.equal(sampledOnce.sampling.intervalMs, DEFAULT_REPLAY_SAMPLE_INTERVAL_MS,
+  'sampleIntervalMs: true resolves to the documented default interval');
+
+const explicitInterval = 5 * 60 * 1000;
+const sampledExplicit = runSomaReplay({ ...quiet, sampleIntervalMs: explicitInterval });
+assert.equal(sampledExplicit.sampling.intervalMs, explicitInterval);
+const sampleNodes = sampledExplicit.trajectory.filter((point) => point.kind === 'SAMPLE');
+assert.ok(sampleNodes.length > 0, 'quiet baseline produces sample nodes across its long quiet stretches');
+for (let index = 1; index < sampleNodes.length; index += 1) {
+  assert.ok(sampleNodes[index].timestampMs > sampleNodes[index - 1].timestampMs,
+    'sample timestamps are strictly increasing');
+}
+assert.ok(sampledExplicit.trajectory.every((point, index, all) => index === 0
+  || point.timestampMs >= all[index - 1].timestampMs),
+  'sample nodes interleave with events in strict chronological order');
+assert.ok(sampleNodes.every((point) => !unsampled.trajectory.some((other) => other.timestampMs === point.timestampMs
+  && other.kind === 'EVENT')), 'a time sample never lands exactly on an event timestamp (no fabricated duplicate)');
+assert.equal(sampleNodes.length, sampledExplicit.sampling.sampleCount,
+  'reported sampleCount matches the actual number of SAMPLE nodes');
+assert.ok(sampleNodes.every((point) => point.snapshot.anxiety.status === 'QUIET'),
+  'time samples read existing state only; the quiet baseline never fabricates a threat between events');
+
+// A sample point must reflect exactly the same categorical state as the
+// preceding event's "after" snapshot (current-defensive-context performs no
+// interpolation between events), proving samples are pure reads, not a new
+// psychological model.
+const lockdownSampled = runSomaReplay({
+  ...goldenFixture('prolonged-uncertain-lockdown'), sampleIntervalMs: 15 * 60 * 1000,
+});
+const onsetTransition = lockdownSampled.transitions.find((item) => item.sourceEventId === 'lockdown-onset');
+const midSample = lockdownSampled.trajectory.find((point) => point.kind === 'SAMPLE'
+  && point.timestampMs > onsetTransition.timestampMs && point.timestampMs < lockdownSampled.transitions
+    .find((item) => item.sourceEventId === 'lockdown-resolution').timestampMs);
+assert.ok(midSample, 'a sample point exists inside the unresolved lockdown window');
+assert.deepEqual(midSample.snapshot, onsetTransition.after,
+  'a mid-lockdown time sample exactly reproduces the last resolved event snapshot (no fabricated dynamics)');
+
+// UNKNOWN observation gaps remain explicit on sampled points, not silently
+// treated as continuously-observed state.
+const gapSampled = runSomaReplay({
+  ...quiet,
+  sampleIntervalMs: 60 * 60 * 1000,
+  coverage: [
+    { fromMs: quiet.startMs, toMs: quiet.startMs + 3 * 60 * 60 * 1000, status: 'OBSERVED', reason: 'observed morning' },
+    { fromMs: quiet.startMs + 3 * 60 * 60 * 1000, toMs: quiet.endMs, status: 'UNKNOWN', reason: 'no observation after mid-morning' },
+  ],
+});
+const gapSamples = gapSampled.trajectory.filter((point) => point.kind === 'SAMPLE');
+assert.ok(gapSamples.some((point) => point.coverageStatus === 'OBSERVED'));
+assert.ok(gapSamples.some((point) => point.coverageStatus === 'UNKNOWN'),
+  'a sample falling inside an observation gap is marked UNKNOWN, not silently OBSERVED');
 
 console.log('soma-replay.test.js: all checks passed');
