@@ -125,6 +125,28 @@ function normalizeCoverage(coverage, startMs, endMs) {
   });
 }
 
+export const DEFAULT_REPLAY_SAMPLE_INTERVAL_MS = 15 * 60 * 1000;
+
+function coverageStatusAt(normalizedCoverage, timestampMs) {
+  const segment = normalizedCoverage.find((item) => timestampMs >= item.fromMs && timestampMs <= item.toMs);
+  return segment ? segment.status : 'UNKNOWN';
+}
+
+function resolveSampleIntervalMs(sampleIntervalMs) {
+  if (sampleIntervalMs === true) return DEFAULT_REPLAY_SAMPLE_INTERVAL_MS;
+  if (!Number.isFinite(sampleIntervalMs) || sampleIntervalMs <= 0) return null;
+  return sampleIntervalMs;
+}
+
+function generateSampleTimestamps({ startMs, endMs, intervalMs, exclude }) {
+  if (!intervalMs) return [];
+  const timestamps = [];
+  for (let t = startMs + intervalMs; t <= endMs; t += intervalMs) {
+    if (!exclude.has(t)) timestamps.push(t);
+  }
+  return timestamps;
+}
+
 function normalizeRecords(records, diagnostics) {
   if (!Array.isArray(records)) throw new TypeError('records must be an array');
   return records.map((entry, inputIndex) => {
@@ -163,6 +185,7 @@ export function runSomaReplay({
   coverage = [],
   algorithm = CURRENT_ANXIETY_REPLAY_ALGORITHM,
   algorithmMetadata = null,
+  sampleIntervalMs = null,
 } = {}) {
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
     throw new Error('explicit valid startMs and endMs are required');
@@ -205,11 +228,39 @@ export function runSomaReplay({
     timestampMs: startMs,
     timestamp: new Date(startMs).toISOString(),
     sourceEventId: null,
+    coverageStatus: coverageStatusAt(normalizedCoverage, startMs),
     snapshot: clone(algorithm.snapshot(state)),
   }];
   const transitions = [];
 
-  for (const item of ordered) {
+  const intervalMs = resolveSampleIntervalMs(sampleIntervalMs);
+  const sampleTimestamps = generateSampleTimestamps({
+    startMs, endMs, intervalMs, exclude: new Set([startMs, ...ordered.map((item) => item.timestampMs)]),
+  });
+  const instants = [
+    ...ordered.map((item) => ({ timestampMs: item.timestampMs, kind: 'EVENT', item })),
+    ...sampleTimestamps.map((timestampMs) => ({ timestampMs, kind: 'SAMPLE' })),
+  ].sort((left, right) => left.timestampMs - right.timestampMs);
+
+  for (const instant of instants) {
+    if (instant.kind === 'SAMPLE') {
+      // A time sample only reads the already-reconciled state at this instant.
+      // It applies no record and fabricates no event; between events the
+      // grounded defensive-context seam holds its last resolved value exactly
+      // as current-defensive-context.json specifies ("No time decay or
+      // interpolation occurs between events"), so a flat run of samples here
+      // is the correct, honest rendering of that behaviour - not a sampling bug.
+      trajectory.push({
+        kind: 'SAMPLE',
+        timestampMs: instant.timestampMs,
+        timestamp: new Date(instant.timestampMs).toISOString(),
+        sourceEventId: null,
+        coverageStatus: coverageStatusAt(normalizedCoverage, instant.timestampMs),
+        snapshot: clone(algorithm.snapshot(state)),
+      });
+      continue;
+    }
+    const item = instant.item;
     if (item.timestampMs < startMs || item.timestampMs > endMs) {
       diagnostics.push({
         code: 'EVENT_OUTSIDE_INTERVAL',
@@ -241,6 +292,7 @@ export function runSomaReplay({
       sequence: item.sequence,
       sourceEventId: item.eventId,
       eventType: transition.eventType,
+      coverageStatus: coverageStatusAt(normalizedCoverage, item.timestampMs),
       snapshot: after,
     });
   }
@@ -261,6 +313,7 @@ export function runSomaReplay({
       timestampMs: endMs,
       timestamp: new Date(endMs).toISOString(),
       sourceEventId: null,
+      coverageStatus: coverageStatusAt(normalizedCoverage, endMs),
       snapshot: finalSnapshot,
     });
   }
@@ -272,6 +325,7 @@ export function runSomaReplay({
       || invariantFailures.length
       ? 'COUNTERFACTUAL' : 'CONTROLLED_REPLAY',
     interval: { startMs, endMs },
+    sampling: intervalMs ? { intervalMs, sampleCount: sampleTimestamps.length } : null,
     algorithm: clone(algorithmMetadata || { id: algorithm.id, version: algorithm.version }),
     coverage: normalizedCoverage,
     orderedEventIds: transitions.map((item) => item.sourceEventId),
