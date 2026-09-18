@@ -354,7 +354,7 @@ function candidateField(index) {
   const point = state.candidate && state.candidate.trajectory && state.candidate.trajectory[index];
   if (!point) return '';
   const c = point.components;
-  return fieldBlock('Candidate load (replay-only)', `<p>
+  return fieldBlock('Candidate threat-anticipation load (0-1, replay-only)', `<p>
       load = <strong>${point.load.toFixed(2)}</strong>, drive = ${point.drive.toFixed(2)}
     </p>
     <ul>
