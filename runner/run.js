@@ -67,6 +67,7 @@ import {
   validateDreamOutput,
 } from './dream.js';
 import { createSomaRuntime } from './soma-runtime.js';
+import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import {
   buildExpressiveChoiceRequest,
@@ -879,12 +880,7 @@ async function main() {
       ],
     });
     if (cyObserved) {
-      record.feeding = soma.observeFeedingRecord(record);
-      record.somatic_nociceptive = soma.observeSomaticRecord(record);
-      record.social_contact = soma.observeSocialContactRecord(record);
-      record.action_outcome_contingency = soma.observeControllabilityRecord(record);
-      record.current_defensive_context = soma.observeCurrentDefensiveContextRecord(record);
-      record.threat_learning = soma.observeThreatLearningRecord(record);
+      Object.assign(record, observeEnvironmentRecord(soma, record));
     }
     emit({ kind: 'world_event_record', payload: record });
     recentWorldHistory.push({

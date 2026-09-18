@@ -87,7 +87,7 @@ function sampleHistory(state, atMs, force = false) {
 }
 
 export function createSleepHomeostasis(now = Date.now()) {
-  const atMs = finite(now, Date.now());
+  const atMs = Number.isFinite(now) ? now : Date.now();
   return {
     schema: SLEEP_HOMEOSTASIS_SCHEMA,
     version: SLEEP_HOMEOSTASIS_VERSION,
@@ -201,7 +201,7 @@ export function reconcileSleepHomeostasis(raw, {
   now = Date.now(),
   knownStateDuringGap = null,
 } = {}) {
-  const atMs = finite(now, Date.now());
+  const atMs = Number.isFinite(now) ? now : Date.now();
   if (!raw || typeof raw !== 'object' || raw.schema !== SLEEP_HOMEOSTASIS_SCHEMA
     || raw.version !== SLEEP_HOMEOSTASIS_VERSION || raw.modelId !== SLEEP_HOMEOSTASIS_MODEL_ID) {
     return createSleepHomeostasis(atMs);

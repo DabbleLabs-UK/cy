@@ -247,7 +247,7 @@ export function createCircadianProcessC({
   habitualWakeMinutes,
   timeZone = 'Europe/London',
 } = {}) {
-  const atMs = finite(now, Date.now());
+  const atMs = Number.isFinite(now) ? now : Date.now();
   const schedule = scheduleMetadata(habitualWakeMinutes, timeZone);
   const state = {
     schema: CIRCADIAN_PROCESS_C_SCHEMA,
@@ -288,7 +288,7 @@ function validHistory(raw, installedAtMs) {
 }
 
 export function reconcileCircadianProcessC(raw, options = {}) {
-  const atMs = finite(options.now, Date.now());
+  const atMs = Number.isFinite(options.now) ? options.now : Date.now();
   const habitualWakeMinutes = options.habitualWakeMinutes;
   const timeZone = options.timeZone || 'Europe/London';
   if (!raw || raw.schema !== CIRCADIAN_PROCESS_C_SCHEMA || raw.version !== CIRCADIAN_PROCESS_C_VERSION
@@ -317,7 +317,7 @@ export function tickCircadianProcessC(state, {
   if (!state || state.schema !== CIRCADIAN_PROCESS_C_SCHEMA) throw new Error('invalid circadian Process C state');
   const scheduleChanged = habitualWakeMinutes !== state.schedule.habitualWakeMinutes || timeZone !== state.schedule.timeZone;
   if (scheduleChanged) Object.assign(state, scheduleMetadata(habitualWakeMinutes, timeZone));
-  return evaluateAt(state, finite(now, Date.now()), scheduleChanged);
+  return evaluateAt(state, Number.isFinite(now) ? now : Date.now(), scheduleChanged);
 }
 
 export function circadianProcessCSnapshot(state) {

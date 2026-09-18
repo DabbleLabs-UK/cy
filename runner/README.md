@@ -21,6 +21,17 @@ has `dryRun: true`), so a bare checkout runs offline out of the box.
 Stop with Ctrl-C (SIGINT): the batch queue is flushed and vitals are persisted
 before exit.
 
+## Grounded Soma replay
+
+`node runner/soma-replay-cli.js` runs six synthetic golden prison days through
+the current grounded Anxiety stack entirely in memory. Pass a fixture ID to run
+one case, or add `--json` for the full machine-readable transition report. LIVE
+and REPLAY both call `grounded-environment-transition.js`, so there is no second
+implementation of the event mutation order. The fixtures test deterministic
+state transitions and consistency, not scientific validity. Historical runs
+must be labelled counterfactual whenever their initial checkpoint, event
+coverage or ordering is incomplete; replay never invents missing events.
+
 ## Run continuously on Dell Windows
 
 The Dell Startup shortcut runs `runner\cy-hidden.vbs`. That launcher resolves its

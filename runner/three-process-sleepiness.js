@@ -177,7 +177,7 @@ export function createThreeProcessSleepiness(now = Date.now(), timeZone = 'Europ
     lastHistorySampleMs: null,
     history: [],
     lastInspection: null,
-    installedAtMs: finite(now, Date.now()),
+    installedAtMs: Number.isFinite(now) ? now : Date.now(),
   };
 }
 
