@@ -18,10 +18,10 @@
   <section class="wb-toolbar">
     <div class="wb-modegroup" role="group" aria-label="Trajectory mode">
       <button id="modeCurrent" class="wb-mode is-active" type="button" data-mode="current">CURRENT</button>
-      <button id="modeCandidate" class="wb-mode" type="button" data-mode="candidate" disabled
-        title="No candidate model has been implemented yet">CANDIDATE</button>
-      <button id="modeBoth" class="wb-mode" type="button" data-mode="both" disabled
-        title="No candidate model has been implemented yet">BOTH</button>
+      <button id="modeCandidate" class="wb-mode" type="button" data-mode="candidate"
+        title="Replay-only candidate scalar model - see the calibration panel below">CANDIDATE</button>
+      <button id="modeBoth" class="wb-mode" type="button" data-mode="both"
+        title="Overlay both trajectories">BOTH</button>
     </div>
     <div class="wb-sampling">
       <label for="sampleSelect">Time sampling</label>
@@ -42,10 +42,17 @@
       <span class="wb-legend-item"><i class="wb-swatch wb-swatch-event"></i>event</span>
       <span class="wb-legend-item"><i class="wb-swatch wb-swatch-sample"></i>time sample</span>
       <span class="wb-legend-item"><i class="wb-swatch wb-swatch-line"></i>current anxiety (categorical)</span>
-      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-candidate"></i>candidate (not available yet)</span>
+      <span class="wb-legend-item"><i class="wb-swatch wb-swatch-candidate"></i>candidate load, 0-1 (replay-only)</span>
       <span class="wb-legend-item"><i class="wb-swatch wb-swatch-gap"></i>UNKNOWN / observation gap</span>
     </div>
   </main>
+
+  <section class="wb-candidate-panel" id="candidatePanel">
+    <button type="button" class="wb-candidate-toggle" id="candidateToggle" aria-expanded="false">
+      Candidate model &amp; calibration constants &#9656;
+    </button>
+    <div class="wb-candidate-detail" id="candidateDetail" hidden></div>
+  </section>
 
   <section class="wb-inspector" id="inspector">
     <div class="wb-inspector-empty">Click an event marker, a sample dot, or the line itself to inspect that moment.</div>
