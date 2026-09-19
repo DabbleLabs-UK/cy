@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/soma-history.php';
+require __DIR__ . '/../../lib/live_vitals.php';
 
 header('Cache-Control: private, max-age=5');
 
@@ -22,7 +23,7 @@ try {
         ->setTimezone(new DateTimeZone('Europe/London'))
         ->format('Y-m-d H:i:s');
     if ($scope === 'circadian') {
-        $latest = $db->query("SELECT payload FROM events WHERE kind = 'vitals' ORDER BY seq DESC LIMIT 1")->fetch();
+        $latest = captive_latest_vitals_row($db);
         $payload = $latest ? json_decode((string)$latest['payload'], true) : null;
         $circadian = is_array($payload) && isset($payload['soma']['circadianProcessC'])
             && is_array($payload['soma']['circadianProcessC'])

@@ -22,6 +22,7 @@ import {
   fetchDaySnapshot,
   narrativeEventsForDate,
   NARRATIVE_KINDS,
+  mergeLiveVitals,
 } from './history-feed.js';
 import { ambientEventLabel, dayLabel, isLiveDate, shiftDate } from './timeline.js';
 import { liveStatusTitle, newestLiveEventMs } from './live-status.js?v=20260915';
@@ -48,6 +49,7 @@ let postcardArchive;
 let memoryPanel;
 let postcardWait = null;
 let lastSeq = 0;
+let lastLiveVitalsTimestamp = null;
 let lastLiveEventMs = NaN;
 let pollFailures = 0;
 let polling = false;
@@ -292,7 +294,9 @@ async function firstLoadRecent() {
   postcards.setInstant(true);
   // Keep operational snapshots from the bounded backlog, but never place older
   // narrative beneath today's banner if the normal day endpoint failed at boot.
-  const events = data.events || [];
+  const mergedLive = mergeLiveVitals(data.events || [], data.live_vitals, lastLiveVitalsTimestamp);
+  const events = mergedLive.events;
+  lastLiveVitalsTimestamp = mergedLive.timestamp;
   const narrative = currentDate
     ? narrativeEventsForDate(events, currentDate)
     : events.filter((ev) => NARRATIVE_KINDS.includes(ev.kind));
@@ -513,11 +517,13 @@ async function poll() {
   polling = true;
   try {
     const data = await fetchStream(lastSeq);
-    const events = data.events || [];
+    const mergedLive = mergeLiveVitals(data.events || [], data.live_vitals, lastLiveVitalsTimestamp);
+    const events = mergedLive.events;
     // A request that began before a day render or a live/history transition must
     // not paint into the replacement surface. Its cursor also stays untouched so
     // the next live poll can collect those events normally.
     if (historyMode || feedLoading || renderToken !== feedRenderToken || transitionToken !== viewTransitionToken) return;
+    lastLiveVitalsTimestamp = mergedLive.timestamp;
     rememberLiveBatch(events);
     dispatchBatch(events);
     rememberLastLiveEvent(events);

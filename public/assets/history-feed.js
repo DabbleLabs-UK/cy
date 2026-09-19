@@ -37,6 +37,19 @@ export function advanceStreamCursor(current, events) {
   return cursor;
 }
 
+// A live-vitals singleton is outside the append-only sequence. Fold it into a
+// stream batch only when its timestamp changes, without advancing the cursor.
+export function mergeLiveVitals(events, liveVitals, previousTimestamp = null) {
+  const merged = [...(events || [])];
+  const timestamp = String((liveVitals && liveVitals.ts) || '');
+  const payload = liveVitals && liveVitals.payload;
+  if (!timestamp || timestamp === previousTimestamp || !payload || typeof payload !== 'object') {
+    return { events: merged, timestamp: previousTimestamp };
+  }
+  merged.push({ seq: null, ts: timestamp, kind: 'vitals', payload });
+  return { events: merged, timestamp };
+}
+
 function endpoint(rangeUrl, params) {
   const q = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

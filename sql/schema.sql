@@ -26,6 +26,15 @@ CREATE TABLE soma_diagnostic_latest (
     payload     JSON NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Fresh live vitals are overwritten in place every runner tick. A compact
+-- sample is copied to events once per minute for graphs and historical replay.
+CREATE TABLE live_vitals_latest (
+    id          TINYINT UNSIGNED PRIMARY KEY,
+    updated_at  DATETIME(3) NOT NULL,
+    payload     JSON NOT NULL,
+    CONSTRAINT chk_live_vitals_singleton CHECK (id = 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Private structured prison-world records. Unlike the public events table,
 -- these keep objective facts, observation and Soma input as separate stages
 -- for the admin-only event inspector.

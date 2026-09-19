@@ -6,6 +6,7 @@ import {
   fetchDaySnapshot,
   narrativeEventsForDate,
   NARRATIVE_KINDS,
+  mergeLiveVitals,
 } from '../public/assets/history-feed.js';
 
 assert.ok(NARRATIVE_KINDS.includes('fan_mail_in'), 'fan mail remains part of historical replay');
@@ -24,6 +25,21 @@ assert.equal(
   600,
   'a capped stream advances only through rows actually received',
 );
+const liveVitals = mergeLiveVitals(
+  [{ seq: 7, kind: 'event' }],
+  { ts: '2026-09-19 23:00:05.000', payload: { cpu: 12 } },
+  null,
+);
+assert.equal(liveVitals.events.length, 2);
+assert.equal(liveVitals.events[1].seq, null);
+assert.equal(liveVitals.events[1].kind, 'vitals');
+assert.equal(liveVitals.timestamp, '2026-09-19 23:00:05.000');
+const unchangedVitals = mergeLiveVitals(
+  [{ seq: 8, kind: 'event' }],
+  { ts: liveVitals.timestamp, payload: { cpu: 13 } },
+  liveVitals.timestamp,
+);
+assert.equal(unchangedVitals.events.length, 1, 'unchanged latest row is not dispatched twice');
 
 const calls = [];
 const pages = [

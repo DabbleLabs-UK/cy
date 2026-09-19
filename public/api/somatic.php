@@ -8,6 +8,7 @@ declare(strict_types=1);
 require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/admin.php';
+require __DIR__ . '/../../lib/live_vitals.php';
 
 header('Cache-Control: no-store');
 
@@ -28,9 +29,9 @@ try {
     }
 
     $latest = null;
-    $vitals = $db->query("SELECT payload FROM events WHERE kind = 'vitals' ORDER BY seq DESC LIMIT 1")->fetchColumn();
-    if ($vitals !== false) {
-        $payload = json_decode((string)$vitals, true);
+    $vitalsRow = captive_latest_vitals_row($db);
+    if ($vitalsRow !== null) {
+        $payload = json_decode((string)$vitalsRow['payload'], true);
         $candidate = is_array($payload) ? ($payload['soma']['somaticNociceptive'] ?? null) : null;
         if (is_array($candidate)) {
             $latest = $candidate;

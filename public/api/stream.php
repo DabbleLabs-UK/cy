@@ -5,6 +5,7 @@ require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/presence.php';
 require __DIR__ . '/../../lib/admin.php';
+require __DIR__ . '/../../lib/live_vitals.php';
 
 header('Cache-Control: no-store');
 
@@ -68,7 +69,17 @@ try {
         ];
     }, $rows);
 
-    captive_json_response(['now' => $maxSeq, 'events' => $events]);
+    $latestVitalsRow = captive_latest_vitals_row($db);
+    $liveVitals = null;
+    if ($latestVitalsRow !== null) {
+        $decodedVitals = json_decode((string)$latestVitalsRow['payload'], true);
+        $liveVitals = [
+            'ts' => $latestVitalsRow['ts'],
+            'payload' => captive_public_event_payload('vitals', $decodedVitals, false),
+        ];
+    }
+
+    captive_json_response(['now' => $maxSeq, 'events' => $events, 'live_vitals' => $liveVitals]);
 } catch (Throwable $e) {
     captive_error_response('internal error', 500);
 }
