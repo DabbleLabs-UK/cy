@@ -20,6 +20,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { appendFile, readFile } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -210,6 +211,23 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// TEMPORARY DIAGNOSTIC (2026-09-19 incident instrumentation): a dedicated,
+// append-only, SYNCHRONOUS log for process-lifecycle events only, so it can
+// never be hidden by ordinary async logging/state-write code losing its
+// buffer on an abrupt exit. Never used by any other code path. Remove once
+// the process-tree-death investigation concludes.
+const LIFECYCLE_LOG_PATH = join(STATE_DIR, 'lifecycle-diagnostic.log');
+function logLifecycle(event, extra = '') {
+  try {
+    appendFileSync(
+      LIFECYCLE_LOG_PATH,
+      `[${new Date().toISOString()}] NODE pid=${process.pid} ${event}${extra ? ' ' + extra : ''}\n`,
+    );
+  } catch {
+    /* diagnostic logging must never itself crash the process */
+  }
+}
 
 // HARD CAP on consecutive near-repeat discards in one burst. Past this many the
 // journal loop STOPS discarding and forces the text out anyway (see genLoop): a
@@ -5084,10 +5102,36 @@ async function main() {
       reportPersistenceError('shutdown save', error);
     }
     await client.stop();
+    logLifecycle('shutdown() reached process.exit(0)');
     process.exit(0);
   }
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+
+  // TEMPORARY DIAGNOSTIC (2026-09-19 incident instrumentation): the repeated
+  // process-tree deaths give no clue whether Node ever gets a chance to run
+  // ANY of its own exit-path code. Registering uncaughtException/
+  // unhandledRejection handlers changes Node's default behaviour (it would
+  // otherwise auto-exit), so both explicitly re-exit(1) after logging -
+  // preserving the exact existing crash-and-restart semantics the supervisor
+  // depends on; this only ADDS a log line before the same outcome. 'exit'
+  // fires on every termination Node's own runtime gets to observe (including
+  // process.exit(0/1/78) above and these handlers' own exit(1) calls), so if
+  // a death produces NO 'exit' line here, Node's JS runtime was never given
+  // the chance to run at all - i.e. an external hard kill, not a JS failure.
+  logLifecycle('STARTUP', `argv=${JSON.stringify(process.argv)}`);
+  process.on('exit', (code) => logLifecycle('exit', `code=${code}`));
+  process.on('beforeExit', (code) => logLifecycle('beforeExit', `code=${code}`));
+  process.on('uncaughtException', (err) => {
+    logLifecycle('uncaughtException', `message=${String(err && err.message || err)} stack=${String(err && err.stack || '').replace(/\s+/g, ' ')}`);
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    logLifecycle('unhandledRejection', `reason=${String(reason && reason.message || reason)} stack=${String(reason && reason.stack || '').replace(/\s+/g, ' ')}`);
+    process.exit(1);
+  });
+  process.on('SIGINT', () => logLifecycle('SIGINT received'));
+  process.on('SIGTERM', () => logLifecycle('SIGTERM received'));
 
   client.start();
   console.log(`[cy] runner up. dryRun=${config.dryRun} model=${config.model} threads=${config.threads}`);
@@ -5156,6 +5200,8 @@ async function saveContext(path, text) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error('[cy] fatal:', err);
-    process.exit(isStateRecoveryRequired(err) ? 78 : 1);
+    const exitCode = isStateRecoveryRequired(err) ? 78 : 1;
+    logLifecycle('main().catch fatal', `exitCode=${exitCode} message=${String(err && err.message || err)} stack=${String(err && err.stack || '').replace(/\s+/g, ' ')}`);
+    process.exit(exitCode);
   });
 }
