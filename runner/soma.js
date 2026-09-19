@@ -1030,13 +1030,17 @@ export function somaSnapshot(state) {
 // only current state plus small recent windows. Canonical history remains in
 // environment_events and the complete Soma state remains in vitals.json.
 export const SOMA_LIVE_SNAPSHOT_LIMITS = Object.freeze({
-  anxietyConcerns: 8,
-  defensiveContexts: 8,
-  contingencies: 12,
-  feedingUnknownIntervals: 12,
-  socialObservationGaps: 12,
-  socialOpportunities: 12,
-  somaticActiveItems: 16,
+  anxietyConcerns: 0,
+  defensiveContexts: 4,
+  contingencies: 0,
+  experiencedContributors: 4,
+  feedingRecentMeals: 0,
+  feedingUnknownIntervals: 0,
+  socialObservationGaps: 0,
+  socialOpportunities: 4,
+  socialRecentEpisodes: 0,
+  somaticActiveItems: 0,
+  somaticRecentEvents: 0,
 });
 
 function boundedHead(items, limit) {
@@ -1044,7 +1048,8 @@ function boundedHead(items, limit) {
 }
 
 function boundedTail(items, limit) {
-  return Array.isArray(items) ? items.slice(-limit) : [];
+  if (!Array.isArray(items) || limit <= 0) return [];
+  return items.slice(-limit);
 }
 
 export function somaLiveSnapshot(state) {
@@ -1094,6 +1099,14 @@ export function somaLiveSnapshot(state) {
     );
     snapshot.feeding.unknownIntervalsTruncated =
       snapshot.feeding.unknownIntervalCount > snapshot.feeding.unknownIntervals.length;
+
+    const meals = snapshot.feeding.recentMealOutcomes;
+    snapshot.feeding.recentMealOutcomeCount = Array.isArray(meals) ? meals.length : 0;
+    snapshot.feeding.recentMealOutcomes = boundedTail(
+      meals, SOMA_LIVE_SNAPSHOT_LIMITS.feedingRecentMeals,
+    );
+    snapshot.feeding.recentMealOutcomesTruncated =
+      snapshot.feeding.recentMealOutcomeCount > snapshot.feeding.recentMealOutcomes.length;
   }
 
   if (snapshot.social) {
@@ -1113,6 +1126,14 @@ export function somaLiveSnapshot(state) {
     );
     snapshot.social.unresolvedOpportunitiesTruncated =
       snapshot.social.unresolvedOpportunityCount > snapshot.social.unresolvedOpportunities.length;
+
+    const episodes = snapshot.social.recentEpisodes;
+    snapshot.social.recentEpisodeCount = Array.isArray(episodes) ? episodes.length : 0;
+    snapshot.social.recentEpisodes = boundedTail(
+      episodes, SOMA_LIVE_SNAPSHOT_LIMITS.socialRecentEpisodes,
+    );
+    snapshot.social.recentEpisodesTruncated =
+      snapshot.social.recentEpisodeCount > snapshot.social.recentEpisodes.length;
   }
 
   if (snapshot.somaticNociceptive) {
@@ -1134,6 +1155,34 @@ export function somaLiveSnapshot(state) {
     snapshot.somaticNociceptive.activeNoxiousStimuliTruncated =
       snapshot.somaticNociceptive.activeNoxiousStimulusCount
         > snapshot.somaticNociceptive.activeNoxiousStimuli.length;
+
+    const recentEvents = snapshot.somaticNociceptive.recentSomaticEvents;
+    snapshot.somaticNociceptive.recentSomaticEventCount = Array.isArray(recentEvents)
+      ? recentEvents.length : 0;
+    snapshot.somaticNociceptive.recentSomaticEvents = boundedTail(
+      recentEvents, SOMA_LIVE_SNAPSHOT_LIMITS.somaticRecentEvents,
+    );
+    snapshot.somaticNociceptive.recentSomaticEventsTruncated =
+      snapshot.somaticNociceptive.recentSomaticEventCount
+        > snapshot.somaticNociceptive.recentSomaticEvents.length;
+
+    const sources = snapshot.somaticNociceptive.sourceEvents;
+    snapshot.somaticNociceptive.sourceEventCount = Array.isArray(sources) ? sources.length : 0;
+    snapshot.somaticNociceptive.sourceEvents = [];
+    snapshot.somaticNociceptive.sourceEventsTruncated =
+      snapshot.somaticNociceptive.sourceEventCount > 0;
+  }
+
+  if (snapshot.experienced && snapshot.experienced.metrics) {
+    for (const metric of Object.values(snapshot.experienced.metrics)) {
+      if (!metric || typeof metric !== 'object') continue;
+      const contributors = metric.contributors;
+      metric.contributorCount = Array.isArray(contributors) ? contributors.length : 0;
+      metric.contributors = boundedHead(
+        contributors, SOMA_LIVE_SNAPSHOT_LIMITS.experiencedContributors,
+      );
+      metric.contributorsTruncated = metric.contributorCount > metric.contributors.length;
+    }
   }
 
   return snapshot;

@@ -241,14 +241,14 @@ export function reconcileControllabilityState(raw, { now = Date.now() } = {}) {
       || raw.version !== CONTROLLABILITY_STATE_VERSION) return out;
   out.installedAtMs = Number.isFinite(raw.installedAtMs) ? raw.installedAtMs : now;
   for (const [id, opportunity] of Object.entries(raw.opportunities || {})) {
-    if (validOpportunity(opportunity) && opportunity.opportunityId === id) {
+    if (validOpportunity(opportunity) && opportunity.opportunityId === id
+        && opportunity.resolutionStatus !== 'RESOLVED') {
       out.opportunities[id] = clone(opportunity);
     }
   }
   out.opportunityHistory = Array.isArray(raw.opportunityHistory)
     ? raw.opportunityHistory.filter(validOpportunity).map(clone) : [];
-  out.resolvedOpportunityIds = uniqueStrings(raw.resolvedOpportunityIds)
-    .filter((id) => Boolean(out.opportunities[id]));
+  out.resolvedOpportunityIds = uniqueStrings(raw.resolvedOpportunityIds);
   for (const [key, value] of Object.entries(raw.pairs || {})) {
     const clean = validPair(value, key);
     if (clean) out.pairs[key] = clean;
@@ -320,7 +320,11 @@ export function observeControllabilityRecord(state, record) {
   if (state.opportunityHistory.some((item) => item.sourceEnvironmentEventIds.includes(record.world_event.id))) {
     return { updated: false, reason: 'duplicate_event', opportunity: clone(opportunity), updates: [] };
   }
-  state.opportunities[opportunity.opportunityId] = clone(opportunity);
+  if (opportunity.resolutionStatus === 'RESOLVED') {
+    delete state.opportunities[opportunity.opportunityId];
+  } else {
+    state.opportunities[opportunity.opportunityId] = clone(opportunity);
+  }
   state.opportunityHistory.push(clone(opportunity));
   if (opportunity.resolutionStatus !== 'RESOLVED') {
     return { updated: false, reason: 'unresolved_opportunity', opportunity: clone(opportunity), updates: [] };

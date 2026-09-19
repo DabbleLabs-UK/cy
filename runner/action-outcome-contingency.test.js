@@ -196,8 +196,28 @@ const restartSource = learnFixture({
 const restarted = reconcileControllabilityState(JSON.parse(JSON.stringify(restartSource)));
 assert.equal(restarted.opportunityHistory.length, 2);
 assert.equal(restarted.history.length, 2);
+assert.equal(Object.keys(restarted.opportunities).length, 0,
+  'L: resolved opportunities retire from current state after their evidence is learned');
+assert.equal(restarted.resolvedOpportunityIds.length, 2,
+  'L: durable resolution IDs still prevent duplicate posterior updates after restart');
 assert.equal(controllabilityInspection(restarted).contingencies[0].contingencyDifference > 0, true,
   'L: opportunities, posteriors and updates survive restart');
+
+const repeatedResolved = createControllabilityState();
+for (let index = 0; index < 200; index += 1) {
+  observeControllabilityRecord(repeatedResolved, actionRecord({
+    id: `repeated-${index}`,
+    contextId: 'stable:repeated-context',
+    outcomeStatus: index % 2 === 0 ? 'occurred' : 'did_not_occur',
+  }));
+}
+assert.equal(Object.keys(repeatedResolved.opportunities).length, 0,
+  'resolved trials never accumulate in the current-opportunity registry');
+assert.equal(Object.keys(repeatedResolved.pairs).length, 1,
+  'repeated trials update one durable learned posterior rather than proliferating contexts');
+assert.equal(repeatedResolved.pairs['stable:repeated-context|action:comply|COERCIVE_LOSS_OF_CONTROL']
+  .action.resolvedObservations, 200,
+  'all meaningful learned evidence remains in the durable posterior');
 
 const parsed = actionOpportunityFromEnvironment(actionRecord({ id: 'traceable' }));
 assert.equal(parsed.schema, 'cy.action-opportunity');

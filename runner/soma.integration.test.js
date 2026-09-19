@@ -214,8 +214,17 @@ assert.equal(restarted.state.expression.lastText, runtime.state.expression.lastT
 assert.deepEqual(restarted.state.threatLearning, runtime.state.threatLearning);
 assert.deepEqual(restarted.state.currentDefensiveContext, runtime.state.currentDefensiveContext);
 assert.deepEqual(restarted.state.feeding.records, runtime.state.feeding.records);
-assert.deepEqual(restarted.state.learnedControllability, runtime.state.learnedControllability,
-  'L: action opportunities and exact posteriors survive restart');
+assert.deepEqual(restarted.state.learnedControllability.pairs, runtime.state.learnedControllability.pairs,
+  'L: exact learned posteriors survive restart');
+assert.deepEqual(restarted.state.learnedControllability.opportunityHistory,
+  runtime.state.learnedControllability.opportunityHistory,
+  'L: exact opportunity history survives restart');
+assert.deepEqual(restarted.state.learnedControllability.history,
+  runtime.state.learnedControllability.history,
+  'L: exact posterior updates survive restart');
+assert.equal(Object.values(restarted.state.learnedControllability.opportunities)
+  .every((item) => item.resolutionStatus !== 'RESOLVED'), true,
+  'L: only unresolved opportunities remain in current state after restart');
 assert.equal(restarted.state.feeding.lastKnownIntakeEventId, runtime.state.feeding.lastKnownIntakeEventId);
 assert.equal(restarted.state.feeding.unknownIntervals.at(-1).ingestionAssumption, 'NONE_MADE');
 

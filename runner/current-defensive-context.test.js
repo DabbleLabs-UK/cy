@@ -114,6 +114,8 @@ assert.equal(resolved.transitions[0].temporalStatus, 'RESOLVED');
 assert.equal(resolved.transitions[0].resolutionStatus, 'RESOLVED_SAFE');
 assert.equal(resolved.transitions[0].active, false, 'D: potential -> ongoing -> resolved closes the context');
 assert.equal(resolved.transitions[0].resolvedAt, '2026-09-11 09:02:00.000');
+assert.equal(Object.hasOwn(state.contexts, 'search:one|COERCIVE_LOSS_OF_CONTROL'), false,
+  'D: a resolved context leaves current state rather than remaining as inactive accumulated history');
 assert.equal(state.history.length, 3, 'I: every actual transition is stored');
 assert.deepEqual(state.history.map((item) => item.temporalStatus), ['POTENTIAL', 'ONGOING', 'RESOLVED']);
 
@@ -243,5 +245,55 @@ assert.deepEqual(reconcileCurrentDefensiveContext(reconciledBoundedHistory), rec
   'S: bounded rehydration is idempotent');
 assert.deepEqual(currentDefensiveContextSnapshot(reconciledBoundedHistory), currentDefensiveContextSnapshot(boundedHistory),
   'T: diagnostic history length does not affect the current public snapshot');
+
+const learnedCueWithoutLifecycle = createEnvironmentRecord(createEnvironmentEvent('ambiguous_overheard_remark', {
+  id: 'overheard-without-context-id',
+  timestamp: T0,
+  eventType: 'overheard',
+  world: {
+    participants: { actor: 'proctor' },
+    context: { location: 'wing' },
+  },
+  observation: { certainty: 'uncertain' },
+}));
+const implicitState = createCurrentDefensiveContext();
+const implicitResult = observeCurrentDefensiveContextRecord(implicitState, learning, learnedCueWithoutLifecycle);
+assert.equal(implicitResult.transitions.length, 0,
+  'U: learned cues cannot fabricate a persistent current context without a producer context_id');
+assert.equal(Object.keys(implicitState.contexts).length, 0);
+
+const legacyAccumulated = createCurrentDefensiveContext();
+legacyAccumulated.contexts['event:legacy|COERCIVE_LOSS_OF_CONTROL'] = {
+  ...boundedHistory.history.at(-1),
+  contextKey: 'event:legacy|COERCIVE_LOSS_OF_CONTROL',
+  contextId: 'event:legacy',
+  contextIdentityProvenance: undefined,
+  active: true,
+  temporalStatus: 'UNKNOWN',
+  resolutionStatus: 'UNRESOLVED',
+};
+legacyAccumulated.contexts['resolved:legacy|COERCIVE_LOSS_OF_CONTROL'] = {
+  ...resolved.transitions[0],
+  contextKey: 'resolved:legacy|COERCIVE_LOSS_OF_CONTROL',
+  contextId: 'resolved:legacy',
+};
+const reconciledLegacy = reconcileCurrentDefensiveContext(legacyAccumulated);
+assert.deepEqual(reconciledLegacy.contexts, {},
+  'V: rehydration retires event-scoped fallbacks and already-resolved legacy entries');
+
+const lifecycleState = createCurrentDefensiveContext();
+for (let index = 0; index < 200; index += 1) {
+  const contextId = `search:lifecycle:${index}`;
+  observeCurrentDefensiveContextRecord(lifecycleState, learning, searchRecord({
+    id: `lifecycle-open-${index}`, contextId, phase: 'IMMINENT',
+  }));
+  observeCurrentDefensiveContextRecord(lifecycleState, learning, searchRecord({
+    id: `lifecycle-close-${index}`, contextId, phase: 'RESOLVED', outcome: 'did_not_occur',
+  }));
+}
+assert.equal(Object.keys(lifecycleState.contexts).length, 0,
+  'W: repeated explicitly resolved incidents do not grow current state');
+assert.equal(lifecycleState.history.length, DEFENSIVE_CONTEXT_HISTORY_MAX,
+  'X: repeated incidents retain only bounded diagnostic transitions');
 
 console.log('current-defensive-context.test.js: all checks passed');

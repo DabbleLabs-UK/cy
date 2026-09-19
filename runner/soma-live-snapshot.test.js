@@ -53,6 +53,13 @@ for (let index = 0; index < 500; index += 1) {
     endedAtMs: now + index * 2000 + 1000,
     reason: 'RUNNER_NOT_OBSERVING',
   });
+  state.socialContact.episodes.push({
+    episodeId: `social-${index}`,
+    startTimestamp: new Date(now + index * 2000).toISOString(),
+    episodeType: 'DIRECT_CONTACT',
+    socialCharacter: 'NEUTRAL',
+    resolution: 'RESOLVED',
+  });
   state.physiologicalSatiety.intakeHistory.push({
     eventId: `meal-${index}`,
     timestamp: new Date(now + index * 2000).toISOString(),
@@ -69,7 +76,7 @@ const liveBytes = Buffer.byteLength(JSON.stringify(live));
 const diagnosticBytes = Buffer.byteLength(JSON.stringify(diagnostic));
 
 assert.ok(fullBytes > 1_000_000, `fixture must expose accumulated growth; got ${fullBytes}`);
-assert.ok(liveBytes < 100_000, `live vitals snapshot must remain compact; got ${liveBytes}`);
+assert.ok(liveBytes < 50_000, `live vitals snapshot must remain compact; got ${liveBytes}`);
 assert.ok(diagnosticBytes < 50_000, `latest-only diagnostic must remain compact; got ${diagnosticBytes}`);
 assert.ok(liveBytes < fullBytes / 10, 'live snapshot should be at least an order of magnitude smaller');
 
@@ -84,6 +91,8 @@ assert.equal(
   live.currentDefensiveContext.activeContexts.length,
   SOMA_LIVE_SNAPSHOT_LIMITS.defensiveContexts,
 );
+assert.equal(live.learnedControllability.contingencies.length, 0,
+  'the durable learned ledger is not repeated in live telemetry');
 assert.equal(live.feeding.unknownIntervalCount, 500);
 assert.equal(
   live.feeding.unknownIntervals.length,
@@ -94,11 +103,23 @@ assert.equal(
   live.social.observationGaps.length,
   SOMA_LIVE_SNAPSHOT_LIMITS.socialObservationGaps,
 );
+assert.equal(live.social.recentEpisodeCount, 12);
+assert.equal(
+  live.social.recentEpisodes.length,
+  SOMA_LIVE_SNAPSHOT_LIMITS.socialRecentEpisodes,
+);
+assert.equal(live.somaticNociceptive.activeInjuries.length, 0,
+  'recoverable injury records are represented by counts, not copied into every sample');
+assert.equal(live.somaticNociceptive.recentSomaticEvents.length, 0,
+  'somatic event history remains in its dedicated history store');
 
 assert.equal('environmentInput' in live, false);
 assert.equal('physiologicalSatietyInspection' in live, false);
 assert.ok(live.operationalAnxiety.currentConcern, 'current Anxiety state remains available to the UI');
 assert.ok(live.experienced && live.experienced.metrics, 'legacy UI compatibility metrics remain available');
+for (const metric of Object.values(live.experienced.metrics)) {
+  assert.ok(metric.contributors.length <= SOMA_LIVE_SNAPSHOT_LIMITS.experiencedContributors);
+}
 assert.ok(live.circuits, 'brain/UI compatibility fields remain available');
 
 assert.equal(diagnostic.physiologicalSatietyInspection.intakeHistoryCount, 500);
@@ -118,7 +139,7 @@ const largerLive = somaLiveSnapshot(state);
 assert.equal(largerLive.operationalAnxiety.activeConcerns.length, SOMA_LIVE_SNAPSHOT_LIMITS.anxietyConcerns);
 assert.equal(largerLive.currentDefensiveContext.activeContexts.length, SOMA_LIVE_SNAPSHOT_LIMITS.defensiveContexts);
 assert.ok(
-  Buffer.byteLength(JSON.stringify(largerLive)) < 100_000,
+  Buffer.byteLength(JSON.stringify(largerLive)) < 50_000,
   'live payload remains bounded as authoritative history grows',
 );
 

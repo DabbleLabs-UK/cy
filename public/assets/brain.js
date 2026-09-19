@@ -1509,7 +1509,9 @@ export class BrainHud {
       const empty = document.createElement('p');
       empty.className = 'controllability-empty';
       empty.textContent = live
-        ? 'No resolved comparable action opportunities have been observed yet.'
+        ? Number(snapshot.contingencyCount) > 0
+          ? `${snapshot.contingencyCount} learned comparison${snapshot.contingencyCount === 1 ? '' : 's'} retained; detailed ledger omitted from live telemetry.`
+          : 'No resolved comparable action opportunities have been observed yet.'
         : 'No grounded action-outcome contingency state has reached this view.';
       root.appendChild(empty);
       return;
@@ -1572,8 +1574,10 @@ export class BrainHud {
       ? `${latestBody.site || 'UNKNOWN'} - ${latestStimulus.modality || 'UNKNOWN'}` : 'NO SOMATIC RECORD';
     const facts = {
       category: headline ? String(headline.category).replaceAll('_', ' ') : 'UNKNOWN',
-      injuries: live && Array.isArray(snapshot.activeInjuries)
-        ? String(snapshot.activeInjuries.length) : 'UNKNOWN',
+      injuries: live && Number.isFinite(snapshot.activeInjuryCount)
+        ? String(snapshot.activeInjuryCount)
+        : live && Array.isArray(snapshot.activeInjuries)
+          ? String(snapshot.activeInjuries.length) : 'UNKNOWN',
       latest: latestDescription,
       'stimulus-status': latest ? String(latestStimulus.status || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
       damage: live ? String(snapshot.tissueDamageStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
@@ -1641,7 +1645,9 @@ export class BrainHud {
       const empty = document.createElement('p');
       empty.className = 'feeding-timeline-empty';
       empty.textContent = ledgerLive
-        ? 'No structured feeding records have been observed yet.'
+        ? Number(snapshot.recentMealOutcomeCount) > 0
+          ? `${snapshot.recentMealOutcomeCount} recent feeding record${snapshot.recentMealOutcomeCount === 1 ? '' : 's'} retained; detailed history omitted from live telemetry.`
+          : 'No structured feeding records have been observed yet.'
         : 'No grounded feeding ledger has reached this view.';
       timeline.appendChild(empty);
       return;

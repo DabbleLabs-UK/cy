@@ -52,8 +52,8 @@
   "resolution_ontology": ["UNRESOLVED", "RESOLVED_ADVERSE", "RESOLVED_SAFE", "UNKNOWN"],
   "ontology_classification": "ENGINEERING ONTOLOGY informed by scientific concepts; not a published numeric biological scale and not claimed to reproduce the Predatory Imminence Continuum.",
   "posterior_dependency": "Exact alpha, beta, posterior mean, posterior variance and resolved-observation count are inherited from probabilistic-threat-learning-v1. No new probability calculation is introduced.",
-  "state_lifecycle": "Changes only when a structured environment record opens, updates or resolves a context. No time decay or interpolation occurs between events.",
-  "producer_requirement": "An unresolved context remains active until a later structured environment event uses the same context_id and explicitly resolves it. Producers that omit that closure leave the context active by design.",
+  "state_lifecycle": "Changes only when a structured environment record with an explicit context_id opens, updates or resolves a context. Resolution removes the entry from current state; canonical environment events and a bounded diagnostic transition trace preserve history. No time decay or interpolation occurs between events.",
+  "producer_requirement": "Only a producer-supplied stable context_id can create persistent current state. An unresolved context remains active until a later structured environment event uses that same context_id and explicitly resolves it. Event-scoped fallback identities are diagnostic only and cannot remain active because no later producer event can address them.",
   "controllability_distinction": {
     "objective_controllability": "LIVE only as an exact structured world category",
     "perceived_controllability": "NOT MODELLED",
@@ -62,7 +62,8 @@
   },
   "numeric_psychological_parameters": [],
   "engineering_constants": [
-    { "name": "state_schema_version", "value": 1, "classification": "storage compatibility; not a psychological parameter" }
+    { "name": "state_schema_version", "value": 1, "classification": "storage compatibility; not a psychological parameter" },
+    { "name": "diagnostic_transition_history_max", "value": 64, "classification": "bounded diagnostic retention; canonical environment events remain authoritative" }
   ],
   "limitations": [
     "The structured environment producer, not this subsystem, determines whether a cue is present and assigns temporal, objective-control, ambiguity and resolution categories.",

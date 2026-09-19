@@ -72,7 +72,7 @@
     "free_or_fitted_parameters": []
   },
   "causal_limit": "The estimates are observational. Cy's choices are not randomly assigned, so differences can be confounded by context, actor, opportunity and prior situation. Causal control is not established.",
-  "state_lifecycle": "Complete post-installation opportunities and exact posterior updates persist in Soma state. No prose backfill, forgetting, decay, recency weighting or arbitrary time window is used.",
+  "state_lifecycle": "Unresolved structured opportunities remain in current state. On resolution they retire from the current-opportunity registry after updating durable Beta posterior pairs. Exact opportunity/update history and resolved opportunity IDs remain persisted for provenance, replay and idempotency. No prose backfill, forgetting, decay, recency weighting or arbitrary time window is used.",
   "public_boundary": "Public output contains exact aggregate posteriors, counts, means, variances and contingency differences, but not opportunity IDs or source event IDs. Owner inspection contains the complete trace.",
   "soma_boundary": "The ledger is accessible in Soma state. Matching current-context observational evidence may enter the grounded prose prompt with its causal limitation preserved, but it does not alter Anxiety, Arousal, Anger, Rumination, action selection or brain-region activation.",
   "numeric_inventory": [

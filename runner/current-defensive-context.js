@@ -166,7 +166,12 @@ function contextIdentity(event, outcomeClass) {
   const supplied = canonicalPart(explicitDefensiveFacts(event).context_id);
   const eventPart = canonicalPart(event.id) || 'unknown_event';
   const contextId = supplied || `event:${eventPart}`;
-  return { contextId, contextKey: `${contextId}|${outcomeClass}` };
+  return {
+    contextId,
+    contextKey: `${contextId}|${outcomeClass}`,
+    persistent: Boolean(supplied),
+    provenance: supplied ? 'EXPLICIT_STRUCTURED_CONTEXT_ID' : 'EVENT_SCOPED_FALLBACK',
+  };
 }
 
 export function createCurrentDefensiveContext(now = Date.now()) {
@@ -199,6 +204,9 @@ export function reconcileCurrentDefensiveContext(raw, { now = Date.now() } = {})
   out.installedAtMs = Number.isFinite(raw.installedAtMs) ? raw.installedAtMs : now;
   for (const [key, context] of Object.entries(raw.contexts || {})) {
     if (!validContext(context) || context.contextKey !== key) continue;
+    if (!context.active || context.temporalStatus === 'RESOLVED') continue;
+    if (context.contextIdentityProvenance === 'EVENT_SCOPED_FALLBACK'
+      || (context.contextIdentityProvenance == null && context.contextId.startsWith('event:'))) continue;
     out.contexts[key] = clone(context);
   }
   out.history = Array.isArray(raw.history)
@@ -228,7 +236,8 @@ export function contextsFromEnvironmentRecord(state, threatLearning, learnedCont
       threatLearning,
     );
     if (!learnedAssociations.length) continue;
-    const { contextId, contextKey } = contextIdentity(event, outcomeClass);
+    const identity = contextIdentity(event, outcomeClass);
+    const { contextId, contextKey } = identity;
     const actionFacts = event.world && event.world.action_opportunity;
     const availableActions = actionFacts && Array.isArray(actionFacts.available_actions)
       ? actionFacts.available_actions : [];
@@ -239,6 +248,7 @@ export function contextsFromEnvironmentRecord(state, threatLearning, learnedCont
     );
     const previous = state && state.contexts ? state.contexts[contextKey] : null;
     const temporal = temporalStatus(event, outcomeStatus);
+    if (!identity.persistent && temporal !== 'RESOLVED') continue;
     const resolution = resolutionStatus(event, outcomeStatus);
     const at = timestampOf(event);
     const sourceEvents = [...new Set([
@@ -249,6 +259,7 @@ export function contextsFromEnvironmentRecord(state, threatLearning, learnedCont
     const transition = {
       contextKey,
       contextId,
+      contextIdentityProvenance: identity.provenance,
       outcomeClass,
       openedAt: previous ? previous.openedAt : at,
       updatedAt: at,
@@ -290,7 +301,8 @@ export function observeCurrentDefensiveContextRecord(state, threatLearning, lear
   if (!state || !record) return { updated: false, reason: 'invalid_record', transitions: [] };
   const transitions = contextsFromEnvironmentRecord(state, threatLearning, learnedControllability, record);
   for (const transition of transitions) {
-    state.contexts[transition.contextKey] = clone(transition);
+    if (transition.active) state.contexts[transition.contextKey] = clone(transition);
+    else delete state.contexts[transition.contextKey];
     state.history.push(clone(transition));
   }
   if (state.history.length > DEFENSIVE_CONTEXT_HISTORY_MAX) {
