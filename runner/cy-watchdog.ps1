@@ -6,6 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path (Split-Path -Parent $PSCommandPath) 'cy-watchdog-lib.ps1')
+
 $runnerDir = Split-Path -Parent $PSCommandPath
 $stateDir = Join-Path $runnerDir 'state'
 $heartbeatPath = Join-Path $stateDir 'power.json'
@@ -33,14 +35,22 @@ function Get-CySupervisors {
     })
 }
 
-$heartbeatFresh = $false
-if (Test-Path -LiteralPath $heartbeatPath) {
-    $age = ((Get-Date) - (Get-Item -LiteralPath $heartbeatPath).LastWriteTime).TotalSeconds
-    $heartbeatFresh = $age -le $MaxHeartbeatAgeSeconds
-}
-
+$now = Get-Date
 $runners = @(Get-CyProcesses)
 $supervisors = @(Get-CySupervisors)
+
+# See cy-watchdog-lib.ps1 (Test-CyHeartbeatFresh) for the startup-grace logic
+# and its rationale.
+$heartbeatFresh = $false
+if (Test-Path -LiteralPath $heartbeatPath) {
+    $heartbeatMtime = (Get-Item -LiteralPath $heartbeatPath).LastWriteTime
+    $processStart = if ($runners.Count -gt 0) {
+        ($runners | Sort-Object CreationDate | Select-Object -First 1).CreationDate
+    } else { $null }
+    $heartbeatFresh = Test-CyHeartbeatFresh -Now $now -HeartbeatMtime $heartbeatMtime `
+        -ProcessStart $processStart -MaxAgeSeconds $MaxHeartbeatAgeSeconds
+}
+
 if ($heartbeatFresh -and $runners.Count -eq 1) {
     Write-Output 'Cy watchdog: runner heartbeat is fresh.'
     exit 0
