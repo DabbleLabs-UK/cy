@@ -49,6 +49,26 @@ try {
         }
     }
 
+    // New runners publish the owner-only detailed inspection to a latest-only
+    // table. The vitals fallback above preserves compatibility during a guarded
+    // rolling deployment and with pre-migration historical data.
+    try {
+        $diagnosticJson = $db->query(
+            "SELECT payload FROM soma_diagnostic_latest WHERE channel = 'soma' LIMIT 1"
+        )->fetchColumn();
+        if ($diagnosticJson !== false) {
+            $diagnostic = json_decode((string)$diagnosticJson, true);
+            $candidate = is_array($diagnostic)
+                ? ($diagnostic['physiologicalSatietyInspection'] ?? null) : null;
+            if (is_array($candidate)) {
+                $satietyInspection = $candidate;
+            }
+        }
+    } catch (PDOException) {
+        // Migration 018 may not yet exist during the first half of a rolling
+        // deploy. Continue serving the legacy vitals field until it does.
+    }
+
     $latestScheduled = $latest['latestScheduledMeal'] ?? null;
     $latestResolved = $latest['latestResolvedMeal'] ?? null;
     captive_json_response([

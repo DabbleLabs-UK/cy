@@ -18,6 +18,14 @@ CREATE TABLE events (
     INDEX idx_kind_ts (kind, ts)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Private, latest-only diagnostics that are too detailed for five-second
+-- historical vitals. Upserted by channel so storage does not grow with time.
+CREATE TABLE soma_diagnostic_latest (
+    channel     VARCHAR(32) PRIMARY KEY,
+    updated_at  DATETIME(3) NOT NULL,
+    payload     JSON NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Private structured prison-world records. Unlike the public events table,
 -- these keep objective facts, observation and Soma input as separate stages
 -- for the admin-only event inspector.

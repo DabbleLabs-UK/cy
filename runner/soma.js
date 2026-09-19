@@ -1024,6 +1024,138 @@ export function somaSnapshot(state) {
   };
 }
 
+// The complete snapshot is useful for local recovery and explicit owner
+// inspection, but it contains accumulated ledgers whose size grows with Cy's
+// lifetime. Public vitals are sampled every few seconds, so they must contain
+// only current state plus small recent windows. Canonical history remains in
+// environment_events and the complete Soma state remains in vitals.json.
+export const SOMA_LIVE_SNAPSHOT_LIMITS = Object.freeze({
+  anxietyConcerns: 8,
+  defensiveContexts: 8,
+  contingencies: 12,
+  feedingUnknownIntervals: 12,
+  socialObservationGaps: 12,
+  socialOpportunities: 12,
+  somaticActiveItems: 16,
+});
+
+function boundedHead(items, limit) {
+  return Array.isArray(items) ? items.slice(0, limit) : [];
+}
+
+function boundedTail(items, limit) {
+  return Array.isArray(items) ? items.slice(-limit) : [];
+}
+
+export function somaLiveSnapshot(state) {
+  const snapshot = somaSnapshot(state);
+  if (!snapshot) return null;
+
+  delete snapshot.environmentInput;
+  delete snapshot.physiologicalSatietyInspection;
+
+  if (snapshot.operationalAnxiety) {
+    const all = snapshot.operationalAnxiety.activeConcerns;
+    snapshot.operationalAnxiety.activeConcernCount = Array.isArray(all) ? all.length : 0;
+    snapshot.operationalAnxiety.activeConcerns = boundedHead(
+      all, SOMA_LIVE_SNAPSHOT_LIMITS.anxietyConcerns,
+    );
+    snapshot.operationalAnxiety.activeConcernsTruncated =
+      snapshot.operationalAnxiety.activeConcernCount > snapshot.operationalAnxiety.activeConcerns.length;
+  }
+
+  if (snapshot.currentDefensiveContext) {
+    const all = snapshot.currentDefensiveContext.activeContexts;
+    snapshot.currentDefensiveContext.activeContextCount = Array.isArray(all) ? all.length : 0;
+    snapshot.currentDefensiveContext.activeContexts = boundedTail(
+      all, SOMA_LIVE_SNAPSHOT_LIMITS.defensiveContexts,
+    );
+    snapshot.currentDefensiveContext.activeContextsTruncated =
+      snapshot.currentDefensiveContext.activeContextCount
+        > snapshot.currentDefensiveContext.activeContexts.length;
+  }
+
+  if (snapshot.learnedControllability) {
+    const all = snapshot.learnedControllability.contingencies;
+    snapshot.learnedControllability.contingencyCount = Array.isArray(all) ? all.length : 0;
+    snapshot.learnedControllability.contingencies = boundedTail(
+      all, SOMA_LIVE_SNAPSHOT_LIMITS.contingencies,
+    );
+    snapshot.learnedControllability.contingenciesTruncated =
+      snapshot.learnedControllability.contingencyCount
+        > snapshot.learnedControllability.contingencies.length;
+  }
+
+  if (snapshot.feeding) {
+    const all = snapshot.feeding.unknownIntervals;
+    snapshot.feeding.unknownIntervalCount = Array.isArray(all) ? all.length : 0;
+    snapshot.feeding.unknownIntervals = boundedTail(
+      all, SOMA_LIVE_SNAPSHOT_LIMITS.feedingUnknownIntervals,
+    );
+    snapshot.feeding.unknownIntervalsTruncated =
+      snapshot.feeding.unknownIntervalCount > snapshot.feeding.unknownIntervals.length;
+  }
+
+  if (snapshot.social) {
+    const gaps = snapshot.social.observationGaps;
+    snapshot.social.observationGapCount = Array.isArray(gaps) ? gaps.length : 0;
+    snapshot.social.observationGaps = boundedTail(
+      gaps, SOMA_LIVE_SNAPSHOT_LIMITS.socialObservationGaps,
+    );
+    snapshot.social.observationGapsTruncated =
+      snapshot.social.observationGapCount > snapshot.social.observationGaps.length;
+
+    const opportunities = snapshot.social.unresolvedOpportunities;
+    snapshot.social.unresolvedOpportunityCount = Array.isArray(opportunities)
+      ? opportunities.length : 0;
+    snapshot.social.unresolvedOpportunities = boundedTail(
+      opportunities, SOMA_LIVE_SNAPSHOT_LIMITS.socialOpportunities,
+    );
+    snapshot.social.unresolvedOpportunitiesTruncated =
+      snapshot.social.unresolvedOpportunityCount > snapshot.social.unresolvedOpportunities.length;
+  }
+
+  if (snapshot.somaticNociceptive) {
+    const injuries = snapshot.somaticNociceptive.activeInjuries;
+    snapshot.somaticNociceptive.activeInjuryCount = Array.isArray(injuries) ? injuries.length : 0;
+    snapshot.somaticNociceptive.activeInjuries = boundedTail(
+      injuries, SOMA_LIVE_SNAPSHOT_LIMITS.somaticActiveItems,
+    );
+    snapshot.somaticNociceptive.activeInjuriesTruncated =
+      snapshot.somaticNociceptive.activeInjuryCount
+        > snapshot.somaticNociceptive.activeInjuries.length;
+
+    const stimuli = snapshot.somaticNociceptive.activeNoxiousStimuli;
+    snapshot.somaticNociceptive.activeNoxiousStimulusCount = Array.isArray(stimuli)
+      ? stimuli.length : 0;
+    snapshot.somaticNociceptive.activeNoxiousStimuli = boundedTail(
+      stimuli, SOMA_LIVE_SNAPSHOT_LIMITS.somaticActiveItems,
+    );
+    snapshot.somaticNociceptive.activeNoxiousStimuliTruncated =
+      snapshot.somaticNociceptive.activeNoxiousStimulusCount
+        > snapshot.somaticNociceptive.activeNoxiousStimuli.length;
+  }
+
+  return snapshot;
+}
+
+export function somaDiagnosticSnapshot(state) {
+  if (!state) return null;
+  const inspection = physiologicalSatietyInspection(state.physiologicalSatiety);
+  const history = Array.isArray(inspection && inspection.intakeHistory)
+    ? inspection.intakeHistory : [];
+  const { intakeHistory: _accumulatedHistory, ...boundedInspection } = inspection;
+  return {
+    schema: 'cy.soma-diagnostic-snapshot',
+    version: 1,
+    physiologicalSatietyInspection: {
+      ...boundedInspection,
+      intakeHistoryCount: history.length,
+      recentIntakeHistory: boundedTail(history, 8),
+    },
+  };
+}
+
 export {
   VERSION as SOMA_VERSION,
   MEMORY_MAX as SOMA_MEMORY_MAX,

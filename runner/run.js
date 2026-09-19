@@ -128,6 +128,7 @@ import {
   CAST,
   OFFICERS,
 } from './cast.js';
+
 import { PowerMeter, costInjection } from './power.js';
 import { SpendMeter } from './spend.js';
 import { makeProviders, loadDeepSeekKey, looksLikeRefusal, OLLAMA, DEEPSEEK } from './provider.js';
@@ -210,6 +211,7 @@ import {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STATE_DIR = join(HERE, 'state');
+const SOMA_DIAGNOSTIC_INTERVAL_MS = 5 * 60 * 1000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // TEMPORARY DIAGNOSTIC (2026-09-19 incident instrumentation): a dedicated,
@@ -523,6 +525,7 @@ async function main() {
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
   const emit = (ev) => client.enqueue(ev);
+  let lastSomaDiagnosticAtMs = 0;
   const locationNow = Date.now();
   const locationClock = londonParts(new Date(locationNow));
   vitals.locationRegime = reconcileLocationRegimeState(vitals.locationRegime, {
@@ -3936,7 +3939,7 @@ async function main() {
         derived: vitals.derived,
         hr,
         brain,
-        soma: soma.snapshot(),
+        soma: soma.liveSnapshot(),
         location_regime: {
           schema: vitals.locationRegime.schema,
           version: vitals.locationRegime.version,
@@ -3991,6 +3994,13 @@ async function main() {
         cycles: { window: OUTCOME_WINDOW, counts: outcomeWindow(), totals: { ...outcomeTotals } },
       },
     });
+    if (now - lastSomaDiagnosticAtMs >= SOMA_DIAGNOSTIC_INTERVAL_MS) {
+      const diagnostic = soma.diagnosticSnapshot();
+      if (diagnostic) {
+        emit({ kind: 'soma_diagnostic', payload: diagnostic });
+        lastSomaDiagnosticAtMs = now;
+      }
+    }
 
     // NB the electricity meter is NOT integrated here anymore - it runs on its own
     // fast 1s sampler (see powerTimer below) so bursts that switch within seconds

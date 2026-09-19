@@ -221,6 +221,30 @@ export function createSomaRuntime(rawState, {
         return { version: null, status: 'unavailable', reason: failure.reason };
       }
     },
+    liveSnapshot() {
+      if (failure || !state) {
+        return {
+          version: null,
+          status: 'unavailable',
+          reason: failure ? failure.reason : 'Soma state is unavailable',
+        };
+      }
+      try {
+        return engine.somaLiveSnapshot(state);
+      } catch (error) {
+        disable('live snapshot', error);
+        return { version: null, status: 'unavailable', reason: failure.reason };
+      }
+    },
+    diagnosticSnapshot() {
+      if (failure || !state) return null;
+      try {
+        return engine.somaDiagnosticSnapshot(state);
+      } catch (error) {
+        disable('diagnostic snapshot', error);
+        return null;
+      }
+    },
   };
 }
 

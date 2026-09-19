@@ -126,6 +126,33 @@ try {
             throw new InvalidArgumentException('invalid kind');
         }
 
+        // Detailed Soma diagnostics are private and latest-only. They must not
+        // enter the append-only public events table: doing so would repeat an
+        // accumulated inspection payload indefinitely.
+        if ($kind === 'soma_diagnostic') {
+            if (!is_array($event['payload'])) {
+                throw new InvalidArgumentException('invalid Soma diagnostic');
+            }
+            $diagnosticJson = json_encode(
+                $event['payload'],
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            );
+            if ($diagnosticJson === false) {
+                throw new InvalidArgumentException('invalid Soma diagnostic');
+            }
+            $somaDiagnosticUpsert = $db->prepare(
+                'INSERT INTO soma_diagnostic_latest (channel, updated_at, payload)
+                 VALUES (\'soma\', :updated_at, :payload)
+                 ON DUPLICATE KEY UPDATE
+                    updated_at = VALUES(updated_at), payload = VALUES(payload)'
+            );
+            $somaDiagnosticUpsert->execute([
+                ':updated_at' => (string)$event['ts'],
+                ':payload' => $diagnosticJson,
+            ]);
+            continue;
+        }
+
         // A private structured world record. It is stored separately and never
         // inserted into the public events stream.
         if ($kind === 'world_event_record') {
