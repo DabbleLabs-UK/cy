@@ -20,6 +20,7 @@ export const DEFENSIVE_CONTEXT_VERSION = 1;
 export const DEFENSIVE_CONTEXT_MODEL_ID = 'current-defensive-context-dimensional-ontology';
 export const DEFENSIVE_CONTEXT_MODEL_VERSION = 'current-defensive-context-v1';
 export const DEFENSIVE_CONTEXT_PROVENANCE = 'config/model-specs/current-defensive-context.json';
+export const DEFENSIVE_CONTEXT_HISTORY_MAX = 64;
 
 export const DEFENSIVE_TEMPORAL_STATUSES = Object.freeze([
   'POTENTIAL',
@@ -200,7 +201,9 @@ export function reconcileCurrentDefensiveContext(raw, { now = Date.now() } = {})
     if (!validContext(context) || context.contextKey !== key) continue;
     out.contexts[key] = clone(context);
   }
-  out.history = Array.isArray(raw.history) ? raw.history.filter(validContext).map(clone) : [];
+  out.history = Array.isArray(raw.history)
+    ? raw.history.filter(validContext).map(clone).slice(-DEFENSIVE_CONTEXT_HISTORY_MAX)
+    : [];
   return out;
 }
 
@@ -289,6 +292,9 @@ export function observeCurrentDefensiveContextRecord(state, threatLearning, lear
   for (const transition of transitions) {
     state.contexts[transition.contextKey] = clone(transition);
     state.history.push(clone(transition));
+  }
+  if (state.history.length > DEFENSIVE_CONTEXT_HISTORY_MAX) {
+    state.history = state.history.slice(-DEFENSIVE_CONTEXT_HISTORY_MAX);
   }
   return {
     modelId: DEFENSIVE_CONTEXT_MODEL_ID,

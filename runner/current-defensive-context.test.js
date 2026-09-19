@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  DEFENSIVE_CONTEXT_HISTORY_MAX,
   createCurrentDefensiveContext,
   currentDefensiveContextInspection,
   currentDefensiveContextSnapshot,
@@ -208,5 +209,39 @@ const unattachedControl = observeCurrentDefensiveContextRecord(
 ).transitions[0];
 assert.deepEqual(unattachedControl.learnedActionOutcomeContingency, [],
   'learned action evidence is not attached without a genuinely available current action');
+
+const boundedHistory = createCurrentDefensiveContext();
+for (let index = 0; index < DEFENSIVE_CONTEXT_HISTORY_MAX + 20; index += 1) {
+  observeCurrentDefensiveContextRecord(boundedHistory, learning, searchRecord({
+    id: `history-${index}`,
+    timestamp: `2026-09-11 10:${String(index % 60).padStart(2, '0')}:00.000`,
+    contextId: `history:${index}`,
+    phase: 'POTENTIAL',
+  }));
+}
+assert.equal(boundedHistory.history.length, DEFENSIVE_CONTEXT_HISTORY_MAX,
+  'N: live diagnostic history is bounded');
+assert.equal(boundedHistory.history[0].contextId, 'history:20',
+  'O: live history retains the newest diagnostic transitions');
+
+const legacyHistory = createCurrentDefensiveContext();
+legacyHistory.history = Array.from({ length: 500 }, (_, index) => ({
+  ...boundedHistory.history[index % boundedHistory.history.length],
+  contextKey: `legacy:${index}|COERCIVE_LOSS_OF_CONTROL`,
+  contextId: `legacy:${index}`,
+}));
+const contextsBeforeReconcile = JSON.stringify(boundedHistory.contexts);
+legacyHistory.contexts = JSON.parse(contextsBeforeReconcile);
+const reconciledBoundedHistory = reconcileCurrentDefensiveContext(legacyHistory);
+assert.equal(reconciledBoundedHistory.history.length, DEFENSIVE_CONTEXT_HISTORY_MAX,
+  'P: rehydration compacts legacy unbounded diagnostic history');
+assert.equal(reconciledBoundedHistory.history[0].contextId, 'legacy:436',
+  'Q: rehydration retains the newest diagnostic transitions');
+assert.equal(JSON.stringify(reconciledBoundedHistory.contexts), contextsBeforeReconcile,
+  'R: diagnostic history compaction preserves active model contexts exactly');
+assert.deepEqual(reconcileCurrentDefensiveContext(reconciledBoundedHistory), reconciledBoundedHistory,
+  'S: bounded rehydration is idempotent');
+assert.deepEqual(currentDefensiveContextSnapshot(reconciledBoundedHistory), currentDefensiveContextSnapshot(boundedHistory),
+  'T: diagnostic history length does not affect the current public snapshot');
 
 console.log('current-defensive-context.test.js: all checks passed');
