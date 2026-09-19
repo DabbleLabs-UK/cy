@@ -234,6 +234,21 @@ export const AUTONOMOUS_SILENCE_SECONDS = 45;
 const WATCHDOG_MS = 4 * 60 * 1000; // a generation pinned this long with zero tokens is hung
 const STALL_CYCLES = 3; // this many consecutive no-text cycles = a real stall
 
+// WATCHDOG_MS's stall/hung detection above deliberately excludes 'dream' mode
+// and asleep periods (ordinary night silence must not trip it). That leaves a
+// foreground generation issued while dreaming or asleep with no ceiling at
+// all if the provider request itself never resolves - confirmed as the
+// mechanism behind the 2026-09-18 05:20 outage (a dream-waking generation
+// that never received a response and never recovered). This is a separate,
+// mode-agnostic per-request ceiling applied at the provider-call layer
+// (rawGenerate/streamGenerate) so every foreground call - awake or asleep -
+// eventually self-aborts and the cycle can retry, independent of the
+// mode-aware watchdog above. On this hardware (~3.4 tok/s, up to ~4500-char
+// system prompts) legitimate generations have been observed taking 40-150+
+// seconds; 10 minutes gives wide margin above that before treating a request
+// as genuinely stuck.
+const FOREGROUND_INFERENCE_TIMEOUT_MS = 600000;
+
 // ---- abortable ollama stream reader ---------------------------------------
 //
 // Reads an ollama NDJSON /api/generate stream from `reader`, line by line, and
@@ -285,6 +300,22 @@ export function generationHitTokenLimit(stats, opts = {}) {
   const cap = Number(opts && opts.num_predict);
   const used = Number(stats && (stats.eval_count ?? (stats.usage && stats.usage.completion_tokens)));
   return Number.isFinite(cap) && cap > 0 && Number.isFinite(used) && used >= cap;
+}
+
+// Dependency-free timeout wrapper shared by every foreground/background
+// inference call site (rawGenerate, streamGenerate's collectCandidate). If
+// timeoutMs is a finite positive number, aborts `ac` after that many ms
+// unless `fn` settles first; the timer is always cleared on the way out,
+// whichever way `fn` settles. This is the ONLY place a generation timeout is
+// wired up - a call site opts in purely by passing timeoutMs.
+export async function withAbortTimeout(ac, timeoutMs, fn) {
+  const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? setTimeout(() => ac.abort(), timeoutMs) : null;
+  try {
+    return await fn();
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 // ---- config ---------------------------------------------------------------
@@ -2229,6 +2260,7 @@ async function main() {
   // original Cy/world prompt, and two failures become silence.
   async function streamGenerate({
     system, prompt, opts, mode, purpose, contextTail, allowRepeat = false, attempt = 'initial',
+    timeoutMs = null,
   }) {
     // Visible prose is foreground work. Stop any lower-priority memory job before
     // waiting for the provider slot so a postcard, warden reply or journal turn
@@ -2251,6 +2283,14 @@ async function main() {
     const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
       currentAbort = ac;
+      // A foreground streaming generation has no other ceiling: with no
+      // superseding event (a new postcard, a mode change) nothing else ever
+      // aborts a genuinely stuck provider request. Same shared timeout
+      // wrapper rawGenerate uses.
+      return withAbortTimeout(ac, timeoutMs, () => collectCandidateBody(candidatePrompt, { repair }, ac));
+    };
+
+    const collectCandidateBody = async (candidatePrompt, { repair = false } = {}, ac) => {
       let t0 = null;
       let ttftMs = null;
       let stats = null;
@@ -2453,8 +2493,6 @@ async function main() {
       if (signal.aborted) ac.abort();
       else signal.addEventListener('abort', relayAbort, { once: true });
     }
-    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
-      ? setTimeout(() => ac.abort(), timeoutMs) : null;
     if (background) currentMemoryAbort = ac;
     else currentAbort = ac;
     const provider = activeProvider();
@@ -2463,28 +2501,30 @@ async function main() {
     let requestStats = null;
     let outputChars = 0;
     try {
-      if (!background) await waitForInferenceTempo(ac.signal, purpose);
-      lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
-        provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
-      }), deferStart: true }, ac.signal);
-      if (!background) await waitForInferenceTempo(ac.signal, purpose);
-      startedAtMs = lease.begin();
-      const out = await provider.rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
-      requestStats = out.stats || null;
-      outputChars = String(out.text || '').length;
-      if (!out.ok) {
-        requestResult = ac.signal.aborted ? 'aborted' : 'http-error';
-        if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
-        return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
-      }
-      requestResult = out.text && out.text.trim() ? 'nonempty' : 'empty';
-      // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
-      // DSL pass that returned text is productive (it will attempt to render); an empty
-      // return paid for nothing, so it lands in the non-emitting series.
-      await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
-      return returnMeta
-        ? { ok: true, text: out.text || '', stats: out.stats || null, model: out.model || provider.model }
-        : out.text || '';
+      return await withAbortTimeout(ac, timeoutMs, async () => {
+        if (!background) await waitForInferenceTempo(ac.signal, purpose);
+        lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
+          provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
+        }), deferStart: true }, ac.signal);
+        if (!background) await waitForInferenceTempo(ac.signal, purpose);
+        startedAtMs = lease.begin();
+        const out = await provider.rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
+        requestStats = out.stats || null;
+        outputChars = String(out.text || '').length;
+        if (!out.ok) {
+          requestResult = ac.signal.aborted ? 'aborted' : 'http-error';
+          if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
+          return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
+        }
+        requestResult = out.text && out.text.trim() ? 'nonempty' : 'empty';
+        // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
+        // DSL pass that returned text is productive (it will attempt to render); an empty
+        // return paid for nothing, so it lands in the non-emitting series.
+        await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
+        return returnMeta
+          ? { ok: true, text: out.text || '', stats: out.stats || null, model: out.model || provider.model }
+          : out.text || '';
+      });
     } catch (error) {
       requestResult = ac.signal.aborted ? 'aborted' : 'error';
       if (background) throw error;
@@ -2500,7 +2540,6 @@ async function main() {
           ...inferenceStats(requestStats),
         });
       }
-      if (timeout) clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', relayAbort);
       if (background && startedAtMs !== null) {
         const endedAtMs = Date.now();
@@ -2699,6 +2738,10 @@ async function main() {
       accountingMode: call.purpose,
       signal: call.signal || null,
       background: !!call.background,
+      // Foreground calls through this shared callback get the same ceiling as
+      // every other foreground path; background (memory_surfacing) behaviour
+      // is untouched.
+      timeoutMs: call.background ? null : FOREGROUND_INFERENCE_TIMEOUT_MS,
       attempt: call.purpose || 'memory-background',
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
@@ -2918,6 +2961,7 @@ async function main() {
     await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
     const r = await streamGenerate({
       system: ZONE_A, prompt, opts, mode: 'letter', purpose: 'postcard', attempt: 'postcard-initial',
+      timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
     });
     emitGen(r, 'letter', {
       zoneA: ZONE_A,
@@ -3034,7 +3078,10 @@ async function main() {
     const prompt = buildPrompt(wardenTail, 'warden', notice, directives);
     const opts = options(vitals, config.threads, 'journal', { num_predict: completionBudget(targetPredict) });
     await logPrompt('warden', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    const r = await streamGenerate({ system: ZONE_A, prompt, opts, mode: 'warden', attempt: 'warden-initial' });
+    const r = await streamGenerate({
+      system: ZONE_A, prompt, opts, mode: 'warden', attempt: 'warden-initial',
+      timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
+    });
     emitGen(r, 'warden', {
       zoneA: ZONE_A,
       zoneB: wardenTail,
@@ -3083,6 +3130,7 @@ async function main() {
     await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
     const r1 = await streamGenerate({
       system: ZONE_A, prompt: p1, opts: o1, mode: 'journal', purpose: 'drawing', attempt: 'drawing-intent',
+      timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
     });
     if (r1.aborted) return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
     const line = (r1.full || '').trim();
@@ -3126,6 +3174,7 @@ async function main() {
     await logPrompt('draw-dsl', sys2 + '\n---\n' + basePrompt);
     const baseRaw = await rawGenerate({
       system: sys2, prompt: basePrompt, opts: o2, purpose: 'drawing', attempt: 'drawing-base',
+      timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
     });
     if (!baseRaw || !baseRaw.trim()) {
       // an empty DSL pass is a FAILURE, not a repeat (the model emitted END first, or
@@ -3155,6 +3204,7 @@ async function main() {
           opts: o2,
           purpose: 'drawing',
           attempt: `drawing-${pass}`,
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
         });
         if (!raw || !raw.trim()) continue; // this pass added nothing - stop appending junk
         const val = validateDrawing(parseStrokes(raw).strokes, { min: 1, maxText: 0 });
@@ -4423,6 +4473,7 @@ async function main() {
       const started = Date.now();
       const result = await rawGenerate({
         system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-waking',
+        timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
       });
       const raw = result.text || '';
       const validation = validateDreamOutput(raw);
@@ -4479,6 +4530,7 @@ async function main() {
       const started = Date.now();
       const result = await rawGenerate({
         system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-murmur',
+        timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
       });
       const raw = result.text || '';
       const validation = validateDreamOutput(raw);
@@ -4654,6 +4706,7 @@ async function main() {
           purpose: call.purpose,
           accountingMode: 'expressive_choice',
           attempt: 'expressive-choice',
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
         }),
       });
       soma.recordExpressiveChoice(expressiveChoice, { now: nowMs });
@@ -4774,6 +4827,7 @@ async function main() {
           contextTail: forceEmit ? undefined : tail,
           allowRepeat: allowRepeat || forceEmit,
           attempt: forceEmit ? 'forced-after-repeats' : (discards ? `near-repeat-retry-${discards}` : 'journal-initial'),
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
         });
         if (r.error) { errored = true; break; } // provider already backed off; move on
         if (r.refused) { refusedGen = true; break; } // DeepSeek refusal: discard, no retry
