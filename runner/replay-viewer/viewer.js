@@ -1,13 +1,14 @@
 // viewer.js - Soma replay workbench client.
 //
-// Reads replay JSON from the local /api/replay endpoint (backed directly by
-// runner/soma-replay.js and runner/candidate-threat-anticipation-load.js)
-// and draws it. No math happens here beyond axis scaling and line layout:
-// every value shown is read straight from the server response. The
-// CANDIDATE line is a REPLAY-ONLY illustrative model, not a validated
-// psychological measurement - see the calibration panel this file renders
-// from the server's own calibration ledger, never from a value hard-coded
-// here.
+// Reads replay JSON from a relative api.php?action=... entrypoint (backed by
+// runner/soma-replay-api.js, either directly in soma-replay-server.js for
+// local dev, or via a subprocess from public/replay/api.php when hosted at
+// cy.dabblelabs.uk/replay/ - see docs/dev-admin-ui-hosting.md) and draws it.
+// No math happens here beyond axis scaling and line layout: every value shown
+// is read straight from the server response. The CANDIDATE line is a
+// REPLAY-ONLY illustrative model, not a validated psychological measurement -
+// see the calibration panel this file renders from the server's own
+// calibration ledger, never from a value hard-coded here.
 
 import {
   ROWS, rowIndex, findTransitionFor, precedingEventLabel, describeTransition, stepVertices,
@@ -62,8 +63,15 @@ async function fetchJson(url) {
   return body;
 }
 
+// A single relative 'action=' entrypoint, resolved against the CURRENT page
+// URL - this is what lets the exact same viewer.js run unmodified both from
+// the local dev server (soma-replay-server.js, served at /) and from the
+// hosted admin-gated deployment (public/replay/api.php, served at /replay/).
+// See docs/dev-admin-ui-hosting.md.
+const API_PATH = 'api.php';
+
 async function loadFixtures() {
-  const data = await fetchJson('/api/fixtures');
+  const data = await fetchJson(`${API_PATH}?action=fixtures`);
   state.fixtures = data.fixtures;
   renderTabs();
   if (state.fixtures.length) selectFixture(state.fixtures[0].id);
@@ -117,7 +125,7 @@ async function loadReplay() {
     const sampleMinutes = state.sampleParam;
     const viewParam = state.view === 'full-day' ? '&view=full-day' : '';
     const data = await fetchJson(
-      `/api/replay?fixture=${encodeURIComponent(state.activeFixtureId)}&sampleMinutes=${encodeURIComponent(sampleMinutes)}${viewParam}`,
+      `${API_PATH}?action=replay&fixture=${encodeURIComponent(state.activeFixtureId)}&sampleMinutes=${encodeURIComponent(sampleMinutes)}${viewParam}`,
     );
     state.report = data.report;
     state.candidate = data.candidate;
