@@ -8,6 +8,7 @@ import { goldenFixture } from '../soma-replay-fixtures.js';
 import { runSomaReplay } from '../soma-replay.js';
 import {
   ROWS, rowIndex, findTransitionFor, precedingEventLabel, describeConcern, describeTransition, stepVertices,
+  HOUR_MS, chooseTickStepMs, tickTimestamps,
 } from './timeline-model.js';
 
 assert.equal(rowIndex('THREAT_ONGOING'), 0);
@@ -69,5 +70,38 @@ assert.equal(vertices.at(-1).row, rowIndex(search.trajectory.at(-1).snapshot.anx
 for (let i = 1; i < vertices.length; i += 1) {
   assert.ok(vertices[i].timestampMs >= vertices[i - 1].timestampMs, 'step vertices never move backwards in time');
 }
+
+// --- x-axis tick helpers: EVENT WINDOW keeps the original hourly ticks
+// exactly; FULL DAY widens spacing so a 24h day stays readable. ---
+
+// EVENT WINDOW (fullDay: false) always uses 1-hour ticks regardless of span.
+assert.equal(chooseTickStepMs(2 * HOUR_MS, { fullDay: false }), HOUR_MS);
+assert.equal(chooseTickStepMs(13 * HOUR_MS, { fullDay: false }), HOUR_MS);
+assert.equal(chooseTickStepMs(24 * HOUR_MS), HOUR_MS, 'event-window is the default when no options are passed');
+
+// FULL DAY never goes below 1 hour and keeps the label count sane (~12-13
+// across a 24h span, not 24 crammed-together hourly labels).
+const dayStep = chooseTickStepMs(24 * HOUR_MS, { fullDay: true });
+assert.ok(dayStep >= HOUR_MS, 'full-day tick step is never finer than an hour');
+assert.equal(dayStep, 2 * HOUR_MS, 'a 24h span targets ~12 labels -> 2-hour ticks');
+const dayTicks = tickTimestamps(0, 24 * HOUR_MS, dayStep);
+assert.ok(dayTicks.length <= 13, 'a full day produces a readable number of tick labels, not 24');
+
+// tickTimestamps with the hourly step reproduces the viewer's ORIGINAL inline
+// loop exactly (the behaviour EVENT WINDOW must preserve byte-for-byte).
+const start = Date.parse('2026-09-16T07:00:00Z');
+const end = Date.parse('2026-09-16T20:00:00Z');
+const legacyHourly = [];
+for (let t = Math.ceil(start / HOUR_MS) * HOUR_MS; t <= end; t += HOUR_MS) legacyHourly.push(t);
+assert.deepEqual(tickTimestamps(start, end, HOUR_MS), legacyHourly,
+  'tickTimestamps(HOUR_MS) matches the original hourly axis loop exactly');
+
+// Ticks stay within the window and strictly increase.
+assert.ok(tickTimestamps(start, end, HOUR_MS).every((t) => t >= start && t <= end));
+for (let i = 1; i < dayTicks.length; i += 1) {
+  assert.ok(dayTicks[i] > dayTicks[i - 1], 'tick timestamps strictly increase');
+}
+// A non-positive step is handled without looping forever.
+assert.deepEqual(tickTimestamps(start, end, 0), []);
 
 console.log('timeline-model.test.js: all checks passed');

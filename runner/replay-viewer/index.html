@@ -23,6 +23,12 @@
       <button id="modeBoth" class="wb-mode" type="button" data-mode="both"
         title="Overlay both trajectories">BOTH</button>
     </div>
+    <div class="wb-modegroup" role="group" aria-label="Plot window">
+      <button id="viewEventWindow" class="wb-mode is-active" type="button" data-view="event-window"
+        title="Plot only the fixture's own event window">EVENT WINDOW</button>
+      <button id="viewFullDay" class="wb-mode" type="button" data-view="full-day"
+        title="Plot the fixture across a complete 00:00-24:00 day, keeping real event times and showing the quiet periods before and after">FULL DAY</button>
+    </div>
     <div class="wb-sampling">
       <label for="sampleSelect">Time sampling</label>
       <select id="sampleSelect">

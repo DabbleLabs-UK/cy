@@ -11,6 +11,7 @@
 
 import {
   ROWS, rowIndex, findTransitionFor, precedingEventLabel, describeTransition, stepVertices,
+  chooseTickStepMs, tickTimestamps,
 } from './timeline-model.js';
 
 const ROW_COLOR = {
@@ -26,6 +27,7 @@ const state = {
   activeFixtureId: null,
   sampleParam: '15',
   mode: 'current', // 'current' | 'candidate' | 'both' - controls the GRAPH only, not the inspector
+  view: 'event-window', // 'event-window' | 'full-day' - controls the plotted time window only
   report: null,
   candidate: null,
   fixtureMetaRaw: null,
@@ -43,6 +45,10 @@ const el = {
     current: document.getElementById('modeCurrent'),
     candidate: document.getElementById('modeCandidate'),
     both: document.getElementById('modeBoth'),
+  },
+  viewButtons: {
+    'event-window': document.getElementById('viewEventWindow'),
+    'full-day': document.getElementById('viewFullDay'),
   },
   candidatePanel: document.getElementById('candidatePanel'),
   candidateToggle: document.getElementById('candidateToggle'),
@@ -109,8 +115,9 @@ async function loadReplay() {
   showStatus('Loading replay...');
   try {
     const sampleMinutes = state.sampleParam;
+    const viewParam = state.view === 'full-day' ? '&view=full-day' : '';
     const data = await fetchJson(
-      `/api/replay?fixture=${encodeURIComponent(state.activeFixtureId)}&sampleMinutes=${encodeURIComponent(sampleMinutes)}`,
+      `/api/replay?fixture=${encodeURIComponent(state.activeFixtureId)}&sampleMinutes=${encodeURIComponent(sampleMinutes)}${viewParam}`,
     );
     state.report = data.report;
     state.candidate = data.candidate;
@@ -220,10 +227,10 @@ function renderTimeline() {
     }));
   }
 
-  // Hour gridlines + labels.
-  const hourMs = 60 * 60 * 1000;
-  const firstHour = Math.ceil(startMs / hourMs) * hourMs;
-  for (let t = firstHour; t <= endMs; t += hourMs) {
+  // Time gridlines + labels. EVENT WINDOW stays on the original hourly ticks;
+  // FULL DAY widens the tick spacing so a 24h span stays readable.
+  const tickStepMs = chooseTickStepMs(span, { fullDay: state.view === 'full-day' });
+  for (const t of tickTimestamps(startMs, endMs, tickStepMs)) {
     const gx = x(t);
     svg.appendChild(make('line', {
       x1: gx, x2: gx, y1: margin.top, y2: margin.top + plotH, class: 'wb-guide',
@@ -421,6 +428,20 @@ for (const [mode, button] of Object.entries(el.modeButtons)) {
       otherButton.classList.toggle('is-active', otherMode === mode);
     }
     if (state.report) renderTimeline();
+  });
+}
+
+for (const [view, button] of Object.entries(el.viewButtons)) {
+  button.addEventListener('click', () => {
+    if (state.view === view) return;
+    state.view = view;
+    state.selectedIndex = null;
+    for (const [otherView, otherButton] of Object.entries(el.viewButtons)) {
+      otherButton.classList.toggle('is-active', otherView === view);
+    }
+    // FULL DAY changes the plotted window, so the server returns a different
+    // set of samples: reload the replay rather than only re-drawing.
+    loadReplay();
   });
 }
 
