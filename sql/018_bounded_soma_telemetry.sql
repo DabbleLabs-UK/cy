@@ -1,6 +1,6 @@
 -- Latest-only private Soma diagnostics. High-frequency public vitals contain a
 -- bounded live projection; complete recovery state remains on the runner and
--- canonical history remains in environment_events.
+-- meaningful structured history remains in its event-specific stores.
 
 CREATE TABLE IF NOT EXISTS soma_diagnostic_latest (
     channel     VARCHAR(32) PRIMARY KEY,

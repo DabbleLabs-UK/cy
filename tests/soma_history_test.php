@@ -33,6 +33,7 @@ try {
 foreach (['1h', '24h', '7d'] as $range) {
     $anxietyConfig = captive_soma_history_config($range, 'anxiety', 'operational-anxiety');
     if ($anxietyConfig['jsonPath'] !== '$.soma.operationalAnxiety.status'
+        || $anxietyConfig['compactJsonPath'] !== '$.anxiety'
         || $anxietyConfig['categorical'] !== true) {
         fwrite(STDERR, "FAIL: operational Anxiety $range history config is incorrect\n");
         exit(1);
@@ -106,6 +107,10 @@ if ($brainConfig['jsonPath'] !== '$.soma.experienced.brain.amygdala.value' || $b
     fwrite(STDERR, "FAIL: brain-region history config is incorrect\n");
     exit(1);
 }
+if ($brainConfig['compactJsonPath'] !== '$.brain.amygdala') {
+    fwrite(STDERR, "FAIL: compact brain-region history path is incorrect\n");
+    exit(1);
+}
 try {
     captive_soma_history_config('24h', 'unknown', 'brain');
     fwrite(STDERR, "FAIL: invalid brain region accepted\n");
@@ -154,6 +159,9 @@ $satietyConfig = captive_soma_history_config('24h', 'satiety', 'satiety');
 if ($satietyConfig['jsonPath'] !== '$.soma.physiologicalSatiety.headline.estimate'
     || $satietyConfig['jsonPathMin'] !== '$.soma.physiologicalSatiety.headline.central95.lower'
     || $satietyConfig['jsonPathMax'] !== '$.soma.physiologicalSatiety.headline.central95.upper'
+    || $satietyConfig['compactJsonPath'] !== '$.satiety.estimate'
+    || $satietyConfig['compactJsonPathMin'] !== '$.satiety.minimum'
+    || $satietyConfig['compactJsonPathMax'] !== '$.satiety.maximum'
     || $satietyConfig['scale'] !== 1.0) {
     fwrite(STDERR, "FAIL: physiological Satiety history config is incorrect\n");
     exit(1);
@@ -216,6 +224,23 @@ if (!str_contains($historyQuery, 'FORCE INDEX (idx_kind_ts)')
     fwrite(STDERR, "FAIL: history query does not sample indexed time buckets before reading payload JSON\n");
     exit(1);
 }
+$combinedHistoryQuery = captive_combined_soma_history_query(
+    '$.soma.experienced.metrics.arousal.value', '$.metrics.arousal', 600
+);
+if (!str_contains($combinedHistoryQuery, 'FROM vitals_history h')
+    || !str_contains($combinedHistoryQuery, 'FROM events FORCE INDEX (idx_kind_ts)')
+    || !str_contains($combinedHistoryQuery, 'UNION ALL')
+    || !str_contains($combinedHistoryQuery, "'$.metrics.arousal'")) {
+    fwrite(STDERR, "FAIL: combined history query does not bridge legacy and compact storage\n");
+    exit(1);
+}
+$anxietyBoundary = captive_operational_anxiety_boundary_query(true);
+if (!str_contains($anxietyBoundary, 'FROM vitals_history h')
+    || !str_contains($anxietyBoundary, "'$.soma.operationalAnxiety.status'")
+    || !str_contains($anxietyBoundary, 'ORDER BY boundary.ts DESC')) {
+    fwrite(STDERR, "FAIL: Anxiety boundary query does not bridge legacy and compact storage\n");
+    exit(1);
+}
 $satietyQuery = captive_soma_history_query(
     '$.soma.physiologicalSatiety.headline.estimate',
     600,
@@ -229,9 +254,30 @@ if (!str_contains($satietyQuery, ' AS minimum') || !str_contains($satietyQuery, 
 
 $circadianConfig = captive_soma_history_config('24h', 'processC', 'circadian');
 if ($circadianConfig['jsonPath'] !== '$.soma.circadianProcessC.processCEstimate'
-    || $circadianConfig['mathematicallyReconstructed'] !== true
+    || $circadianConfig['jsonPathMin'] !== '$.soma.circadianProcessC.processCMin'
+    || $circadianConfig['jsonPathMax'] !== '$.soma.circadianProcessC.processCMax'
+    || $circadianConfig['compactJsonPath'] !== '$.processC.estimate'
+    || $circadianConfig['compactJsonPathMin'] !== '$.processC.minimum'
+    || $circadianConfig['compactJsonPathMax'] !== '$.processC.maximum'
+    || $circadianConfig['mathematicallyReconstructed'] !== false
+    || $circadianConfig['storedHistoricalSamples'] !== true
     || $circadianConfig['points'] !== 144) {
     fwrite(STDERR, "FAIL: Process C history config is incorrect\n");
+    exit(1);
+}
+$storedCircadianPoints = captive_soma_history_points([[
+    'ts_ms' => 9300,
+    'value' => '-0.123456',
+    'minimum' => '-0.234567',
+    'maximum' => '-0.012345',
+]], 'processC', 0, 10000, 10, 'circadian', 1.0);
+if ($storedCircadianPoints !== [[
+    'ts' => 9300,
+    'value' => -0.123456,
+    'minimum' => -0.234567,
+    'maximum' => -0.012345,
+]]) {
+    fwrite(STDERR, "FAIL: stored Process C sample was recomputed or lost its uncertainty range\n");
     exit(1);
 }
 $harmonics = [0.97, 0.22, 0.07, 0.03, 0.001];

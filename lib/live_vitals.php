@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
 
-// Return the freshest compact runner snapshot. New deployments keep the live
-// value in a singleton row; the events fallback keeps rolling deployments and
+// Return the freshest rich current-state presentation. New deployments keep
+// it in a singleton row; the events fallback keeps rolling deployments and
 // pre-migration installations readable.
 function captive_latest_vitals_row(PDO $db): ?array
 {

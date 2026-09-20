@@ -7,6 +7,7 @@ $schema = file_get_contents($root . '/sql/schema.sql');
 $ingest = file_get_contents($root . '/public/api/ingest.php');
 $feeding = file_get_contents($root . '/public/api/feeding.php');
 $latestMigration = file_get_contents($root . '/sql/019_latest_live_vitals.sql');
+$compactMigration = file_get_contents($root . '/sql/020_compact_vitals_history.sql');
 $stream = file_get_contents($root . '/public/api/stream.php');
 
 if (!is_string($migration) || !str_contains($migration, 'CREATE TABLE IF NOT EXISTS soma_diagnostic_latest')) {
@@ -33,10 +34,29 @@ if (!is_string($latestMigration)
 if (!is_string($schema) || !str_contains($schema, 'CREATE TABLE live_vitals_latest')) {
     throw new RuntimeException('fresh schema must include the latest-only live vitals table');
 }
+if (!is_string($compactMigration)
+    || !str_contains($compactMigration, 'CREATE TABLE IF NOT EXISTS vitals_history')
+    || !str_contains($compactMigration, 'schema_version')
+    || !str_contains($compactMigration, 'payload')) {
+    throw new RuntimeException('migration 020 must create compact historical vitals');
+}
+if (!str_contains($schema, 'CREATE TABLE vitals_history')) {
+    throw new RuntimeException('fresh schema must include compact historical vitals');
+}
 if (!str_contains($ingest, 'VITALS_HISTORY_INTERVAL_MS = 60000')
     || !str_contains($ingest, 'INSERT INTO live_vitals_latest')
+    || !str_contains($ingest, 'INSERT INTO vitals_history')
+    || !str_contains($ingest, 'captive_compact_vitals_history_json')
     || !str_contains($ingest, "if (\$kind === 'vitals')")) {
-    throw new RuntimeException('live vitals must be upserted and history limited to one sample per minute');
+    throw new RuntimeException('rich live vitals must be upserted and compact history sampled once per minute');
+}
+$vitalsBlockStart = strpos($ingest, "if (\$kind === 'vitals')");
+$genericInsertStart = strpos($ingest, "\$insert->bindValue(':ts'", $vitalsBlockStart ?: 0);
+$vitalsBlock = $vitalsBlockStart !== false && $genericInsertStart !== false
+    ? substr($ingest, $vitalsBlockStart, $genericInsertStart - $vitalsBlockStart)
+    : '';
+if (!str_contains($vitalsBlock, 'continue;')) {
+    throw new RuntimeException('rich vitals must always bypass the append-only events insert');
 }
 if (!is_string($stream)
     || !str_contains($stream, "'live_vitals' => \$liveVitals")

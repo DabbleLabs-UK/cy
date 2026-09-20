@@ -26,13 +26,23 @@ CREATE TABLE soma_diagnostic_latest (
     payload     JSON NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Fresh live vitals are overwritten in place every runner tick. A compact
--- sample is copied to events once per minute for graphs and historical replay.
+-- Fresh live vitals are overwritten in place every runner tick. They are rich
+-- enough for the current UI but are not permanent history.
 CREATE TABLE live_vitals_latest (
     id          TINYINT UNSIGNED PRIMARY KEY,
     updated_at  DATETIME(3) NOT NULL,
     payload     JSON NOT NULL,
     CONSTRAINT chk_live_vitals_singleton CHECK (id = 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Small permanent time-series samples used by the 1H/24H/7D charts. Meaningful
+-- incidents remain in their event-specific stores; complete recovery state
+-- remains on the runner.
+CREATE TABLE vitals_history (
+    observed_at    DATETIME(3) NOT NULL PRIMARY KEY,
+    schema_version TINYINT UNSIGNED NOT NULL,
+    payload        JSON NOT NULL,
+    INDEX idx_vitals_history_schema_time (schema_version, observed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Private structured prison-world records. Unlike the public events table,

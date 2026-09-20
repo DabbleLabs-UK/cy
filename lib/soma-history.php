@@ -32,6 +32,7 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.experienced.metrics.' . $key . '.value',
+            'compactJsonPath' => '$.metrics.' . $key,
             'scale' => 1.0,
         ];
     }
@@ -40,6 +41,7 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.operationalAnxiety.status',
+            'compactJsonPath' => '$.anxiety',
             'categorical' => true,
         ];
     }
@@ -48,6 +50,7 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.experienced.brain.' . $key . '.value',
+            'compactJsonPath' => '$.brain.' . $key,
             'scale' => 100.0,
         ];
     }
@@ -56,6 +59,7 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.sleepHomeostasis.sleepPressure',
+            'compactJsonPath' => '$.sleepPressure',
             'scale' => 100.0,
         ];
     }
@@ -64,6 +68,7 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.predictedSleepiness.predictedKss',
+            'compactJsonPath' => '$.predictedKss',
             'scale' => 1.0,
         ];
     }
@@ -74,6 +79,9 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'jsonPath' => '$.soma.physiologicalSatiety.headline.estimate',
             'jsonPathMin' => '$.soma.physiologicalSatiety.headline.central95.lower',
             'jsonPathMax' => '$.soma.physiologicalSatiety.headline.central95.upper',
+            'compactJsonPath' => '$.satiety.estimate',
+            'compactJsonPathMin' => '$.satiety.minimum',
+            'compactJsonPathMax' => '$.satiety.maximum',
             'scale' => 1.0,
         ];
     }
@@ -82,8 +90,14 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.circadianProcessC.processCEstimate',
+            'jsonPathMin' => '$.soma.circadianProcessC.processCMin',
+            'jsonPathMax' => '$.soma.circadianProcessC.processCMax',
+            'compactJsonPath' => '$.processC.estimate',
+            'compactJsonPathMin' => '$.processC.minimum',
+            'compactJsonPathMax' => '$.processC.maximum',
             'scale' => 1.0,
-            'mathematicallyReconstructed' => true,
+            'mathematicallyReconstructed' => false,
+            'storedHistoricalSamples' => true,
         ];
     }
     if ($scope === 'somatic' && $key === 'somatic_harm_headline') {
@@ -91,6 +105,7 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'scope' => $scope,
             'key' => $key,
             'jsonPath' => '$.soma.somaticNociceptive.headline.activeInjuryCount',
+            'compactJsonPath' => '$.activeInjuryCount',
             'scale' => 1.0,
         ];
     }
@@ -222,6 +237,84 @@ function captive_soma_history_query(
                 GROUP BY FLOOR(UNIX_TIMESTAMP(ts) / $bucketSeconds)
             ) sampled ON sampled.seq = e.seq
             ORDER BY e.ts ASC";
+}
+
+// Bridge the immutable legacy vitals rows and the new compact history table.
+// Legacy rows are considered only before the first compact sample, so a rolling
+// deployment cannot duplicate or reorder a bucket at the cutover boundary.
+function captive_combined_soma_history_query(
+    string $legacyJsonPath,
+    string $compactJsonPath,
+    int $bucketSeconds,
+    ?string $legacyJsonPathMin = null,
+    ?string $legacyJsonPathMax = null,
+    ?string $compactJsonPathMin = null,
+    ?string $compactJsonPathMax = null
+): string {
+    $bucketSeconds = max(1, $bucketSeconds);
+    $legacyRanges = $legacyJsonPathMin !== null && $legacyJsonPathMax !== null
+        ? ", JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$legacyJsonPathMin')) AS minimum,
+             JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$legacyJsonPathMax')) AS maximum"
+        : ', NULL AS minimum, NULL AS maximum';
+    $compactRanges = $compactJsonPathMin !== null && $compactJsonPathMax !== null
+        ? ", JSON_UNQUOTE(JSON_EXTRACT(h.payload, '$compactJsonPathMin')) AS minimum,
+             JSON_UNQUOTE(JSON_EXTRACT(h.payload, '$compactJsonPathMax')) AS maximum"
+        : ', NULL AS minimum, NULL AS maximum';
+    return "SELECT combined.ts, combined.value, combined.minimum, combined.maximum
+            FROM (
+                SELECT e.ts,
+                       JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$legacyJsonPath')) AS value
+                       $legacyRanges
+                FROM events e
+                JOIN (
+                    SELECT MAX(seq) AS seq
+                    FROM events FORCE INDEX (idx_kind_ts)
+                    WHERE kind = 'vitals' AND ts >= ?
+                      AND ts < COALESCE(
+                          (SELECT MIN(observed_at) FROM vitals_history),
+                          '9999-12-31 23:59:59.999'
+                      )
+                    GROUP BY FLOOR(UNIX_TIMESTAMP(ts) / $bucketSeconds)
+                ) legacy_sampled ON legacy_sampled.seq = e.seq
+                UNION ALL
+                SELECT h.observed_at AS ts,
+                       JSON_UNQUOTE(JSON_EXTRACT(h.payload, '$compactJsonPath')) AS value
+                       $compactRanges
+                FROM vitals_history h
+                JOIN (
+                    SELECT MAX(observed_at) AS observed_at
+                    FROM vitals_history
+                    WHERE schema_version = 1 AND observed_at >= ?
+                    GROUP BY FLOOR(UNIX_TIMESTAMP(observed_at) / $bucketSeconds)
+                ) compact_sampled ON compact_sampled.observed_at = h.observed_at
+                WHERE h.schema_version = 1
+            ) combined
+            ORDER BY combined.ts ASC";
+}
+
+function captive_operational_anxiety_boundary_query(bool $before): string
+{
+    $operator = $before ? '<' : '>=';
+    $direction = $before ? 'DESC' : 'ASC';
+    return "SELECT boundary.ts, boundary.value
+            FROM (
+                SELECT e.ts,
+                       JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$.soma.operationalAnxiety.status')) AS value
+                FROM events e FORCE INDEX (idx_kind_ts)
+                WHERE e.kind = 'vitals' AND e.ts $operator ?
+                  AND e.ts < COALESCE(
+                      (SELECT MIN(observed_at) FROM vitals_history),
+                      '9999-12-31 23:59:59.999'
+                  )
+                UNION ALL
+                SELECT h.observed_at AS ts,
+                       JSON_UNQUOTE(JSON_EXTRACT(h.payload, '$.anxiety')) AS value
+                FROM vitals_history h
+                WHERE h.schema_version = 1 AND h.observed_at $operator ?
+            ) boundary
+            WHERE boundary.value IS NOT NULL
+            ORDER BY boundary.ts $direction
+            LIMIT 1";
 }
 
 function captive_circadian_normalize_hour(float $hours): float
@@ -402,12 +495,13 @@ function captive_soma_history_points(
         $bucket = (int)floor(($tsMs - $fromMs) / $bucketMs);
         // Keep the last real reading in each bucket. No interpolation or fake
         // samples are introduced when the runner was offline.
-        $digits = $scope === 'satiety' ? 3 : 1;
+        $digits = in_array($scope, ['satiety', 'circadian'], true) ? ($scope === 'circadian' ? 6 : 3) : 1;
         $point = ['ts' => $tsMs, 'value' => round((float)$value * $scale, $digits)];
-        if ($scope === 'satiety' && is_numeric($row['minimum'] ?? null) && is_numeric($row['maximum'] ?? null)) {
-            $point['minimum'] = round((float)$row['minimum'] * $scale, 3);
-            $point['maximum'] = round((float)$row['maximum'] * $scale, 3);
-        } elseif ($scope === 'satiety') {
+        if (in_array($scope, ['satiety', 'circadian'], true)
+            && is_numeric($row['minimum'] ?? null) && is_numeric($row['maximum'] ?? null)) {
+            $point['minimum'] = round((float)$row['minimum'] * $scale, $digits);
+            $point['maximum'] = round((float)$row['maximum'] * $scale, $digits);
+        } elseif (in_array($scope, ['satiety', 'circadian'], true)) {
             continue;
         }
         $buckets[$bucket] = $point;

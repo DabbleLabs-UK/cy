@@ -1026,8 +1026,9 @@ export function somaSnapshot(state) {
 
 // The complete snapshot is useful for local recovery and explicit owner
 // inspection, but it contains accumulated ledgers whose size grows with Cy's
-// lifetime. Public vitals are sampled every few seconds, so they must contain
-// only current state plus small recent windows. Canonical history remains in
+// lifetime. Public live vitals update every few seconds, so they contain only
+// current state plus small recent windows. The server stores chart scalars in
+// a separate one-minute projection; canonical meaningful events remain in
 // environment_events and the complete Soma state remains in vitals.json.
 export const SOMA_LIVE_SNAPSHOT_LIMITS = Object.freeze({
   anxietyConcerns: 0,

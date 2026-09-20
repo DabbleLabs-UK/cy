@@ -22,34 +22,6 @@ try {
     $fromSql = (new DateTimeImmutable('@' . (string)floor($fromMs / 1000)))
         ->setTimezone(new DateTimeZone('Europe/London'))
         ->format('Y-m-d H:i:s');
-    if ($scope === 'circadian') {
-        $latest = captive_latest_vitals_row($db);
-        $payload = $latest ? json_decode((string)$latest['payload'], true) : null;
-        $circadian = is_array($payload) && isset($payload['soma']['circadianProcessC'])
-            && is_array($payload['soma']['circadianProcessC'])
-            ? $payload['soma']['circadianProcessC']
-            : [];
-        $points = captive_circadian_history_points(
-            $circadian,
-            $fromMs,
-            $toMs,
-            $config['points']
-        );
-        captive_json_response([
-            'ok' => true,
-            'scope' => $scope,
-            'key' => $key,
-            'range' => $range,
-            'fromMs' => $fromMs,
-            'toMs' => $toMs,
-            'points' => $points,
-            'sampledFromStoredVitals' => false,
-            'mathematicallyReconstructed' => true,
-            'phaseBasisSource' => 'latest stored habitual schedule estimate',
-            'directBiologicalPhaseObserved' => false,
-            'waveformRange' => $circadian['waveformRange'] ?? null,
-        ]);
-    }
     if ($scope === 'somatic') {
         $eventStmt = $db->prepare(
             "SELECT record FROM environment_events
@@ -59,11 +31,12 @@ try {
         );
         $eventStmt->execute([$fromSql]);
         $events = captive_somatic_history_events($eventStmt->fetchAll(), $fromMs, $toMs);
-        $countStmt = $db->prepare(captive_soma_history_query(
+        $countStmt = $db->prepare(captive_combined_soma_history_query(
             $config['jsonPath'],
+            $config['compactJsonPath'],
             captive_soma_history_bucket_seconds($config)
         ));
-        $countStmt->execute([$fromSql]);
+        $countStmt->execute([$fromSql, $fromSql]);
         $points = captive_soma_history_points(
             $countStmt->fetchAll(),
             $key,
@@ -87,24 +60,14 @@ try {
         ]);
     }
     if ($scope === 'operational-anxiety') {
-        $baselineStmt = $db->prepare(
-            "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$.soma.operationalAnxiety.status')) AS value
-             FROM events FORCE INDEX (idx_kind_ts)
-             WHERE kind = 'vitals' AND ts < ?
-             ORDER BY seq DESC LIMIT 1"
-        );
-        $baselineStmt->execute([$fromSql]);
+        $baselineStmt = $db->prepare(captive_operational_anxiety_boundary_query(true));
+        $baselineStmt->execute([$fromSql, $fromSql]);
         $rows = $baselineStmt->fetchAll();
         if ($rows !== []) {
             $rows[0]['ts_ms'] = $fromMs;
         } else {
-            $firstStmt = $db->prepare(
-                "SELECT ts, JSON_UNQUOTE(JSON_EXTRACT(payload, '$.soma.operationalAnxiety.status')) AS value
-                 FROM events FORCE INDEX (idx_kind_ts)
-                 WHERE kind = 'vitals' AND ts >= ?
-                 ORDER BY seq ASC LIMIT 1"
-            );
-            $firstStmt->execute([$fromSql]);
+            $firstStmt = $db->prepare(captive_operational_anxiety_boundary_query(false));
+            $firstStmt->execute([$fromSql, $fromSql]);
             $rows = $firstStmt->fetchAll();
         }
         $transitionStmt = $db->prepare(
@@ -131,19 +94,21 @@ try {
             'toMs' => $toMs,
             'points' => $points,
             'sampledFromStoredVitals' => false,
-            'transitionSource' => 'structured environment records with one stored boundary state',
+            'transitionSource' => 'structured environment records with one compact or legacy boundary state',
             'categorical' => true,
             'interpolated' => false,
         ]);
     }
-    $jsonPath = $config['jsonPath'];
-    $stmt = $db->prepare(captive_soma_history_query(
-        $jsonPath,
+    $stmt = $db->prepare(captive_combined_soma_history_query(
+        $config['jsonPath'],
+        $config['compactJsonPath'],
         captive_soma_history_bucket_seconds($config),
         $config['jsonPathMin'] ?? null,
-        $config['jsonPathMax'] ?? null
+        $config['jsonPathMax'] ?? null,
+        $config['compactJsonPathMin'] ?? null,
+        $config['compactJsonPathMax'] ?? null
     ));
-    $stmt->execute([$fromSql]);
+    $stmt->execute([$fromSql, $fromSql]);
     $points = captive_soma_history_points(
         $stmt->fetchAll(),
         $key,
@@ -153,7 +118,7 @@ try {
         $scope,
         $config['scale']
     );
-    captive_json_response([
+    $response = [
         'ok' => true,
         'scope' => $scope,
         'key' => $key,
@@ -162,7 +127,18 @@ try {
         'toMs' => $toMs,
         'points' => $points,
         'sampledFromStoredVitals' => true,
-    ]);
+    ];
+    if ($scope === 'circadian') {
+        $latest = captive_latest_vitals_row($db);
+        $payload = $latest ? json_decode((string)$latest['payload'], true) : null;
+        $response['mathematicallyReconstructed'] = false;
+        $response['storedHistoricalSamples'] = true;
+        $response['directBiologicalPhaseObserved'] = false;
+        $response['waveformRange'] = is_array($payload)
+            ? ($payload['soma']['circadianProcessC']['waveformRange'] ?? null)
+            : null;
+    }
+    captive_json_response($response);
 } catch (InvalidArgumentException $e) {
     captive_error_response($e->getMessage(), 400);
 } catch (Throwable $e) {

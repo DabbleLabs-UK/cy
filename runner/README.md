@@ -193,6 +193,10 @@ All events are `{ ts, kind, payload }`. `ts` is a MariaDB `DATETIME(3)` string.
 | `gen`    | `{ tokens_in, tokens_out, prompt_tok_s, gen_tok_s, ttft_ms, total_ms, load_ms, mode, ctx_chars, duty, threads, model, num_ctx, inbox_ok, tempo_ok, last_error }` - per-burst generation telemetry, emitted after each completed burst. It ALSO carries the RAW debugging view's per-burst detail: `{ zone_a, zone_b, zone_c }` (the three prompt zones, POST-WARDEN - prompt text is fine to publish, the repo is public), `output` (the full post-warden burst text as one block), `form`, `styles`, and the sampling actually sent (`temperature, top_p, repeat_penalty, num_predict`) |
 | `warden` | `{ category, chars, mode }` - a redaction marker: the warden dropped a chunk. Carries its category and how many characters were dropped, NEVER the blocked content. This is the only trace of a drop any viewer sees; the RAW view renders it as `[redacted by warden: <category>]` |
 
+The server overwrites the rich `vitals` presentation in a latest-only row for
+the live UI. It stores at most one separate compact historical sample per minute
+for charts; the rich payload is never appended to the permanent event stream.
+
 `soma` contains the PROVISIONAL experienced-state snapshot plus narrower LIVE
 subsystems: normalized homeostatic sleep pressure (Process S), the published
 five-harmonic circadian Process C waveform, structured feeding records,
@@ -236,9 +240,9 @@ Soma circuits.
   The phase interval is derived by placing the waveform minimum in an estimated
   CBTmin window 2-3 hours before the configured habitual wake time. The current
   value and uncertainty are exposed separately from provisional fatigue, and
-  public 1H/24H/7D curves are mathematically reconstructed from the stored phase
-  basis. Light entrainment, drift, direct biological phase, and language/action
-  effects are not modelled. A specific SCN phase analogy is live without
+  public 1H/24H/7D curves use the estimate and uncertainty range actually stored
+  at each historical sample. Light entrainment, drift, direct biological phase,
+  and language/action effects are not modelled. A specific SCN phase analogy is live without
   presenting the value as neural activation.
 - **LIVE factual social contact / isolation** (`social-contact-substrate.js`) -
   preserves the canonical structured episode ledger and reports only ongoing

@@ -1,5 +1,5 @@
--- High-frequency current telemetry is overwritten in place. The append-only
--- events table receives a compact historical sample at a bounded cadence.
+-- High-frequency rich current telemetry is overwritten in place. Migration
+-- 020 adds the separate compact permanent time-series table.
 
 CREATE TABLE IF NOT EXISTS live_vitals_latest (
     id          TINYINT UNSIGNED PRIMARY KEY,

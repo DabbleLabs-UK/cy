@@ -9,6 +9,7 @@ require __DIR__ . '/../../lib/postcard_queue.php';
 require __DIR__ . '/../../lib/environment_event.php';
 require __DIR__ . '/../../lib/world_simulation.php';
 require __DIR__ . '/../../lib/live_vitals.php';
+require __DIR__ . '/../../lib/vitals_history.php';
 
 const VITALS_HISTORY_INTERVAL_MS = 60000;
 
@@ -119,13 +120,19 @@ try {
              updated_at = VALUES(updated_at)'
     );
     $inserted = 0;
-    $lastVitalsArchiveAtMs = null;
-    $lastVitalsArchiveLoaded = false;
+    $lastVitalsHistoryAtMs = null;
+    $lastVitalsHistoryLoaded = false;
     $liveVitalsUpsert = $db->prepare(
         'INSERT INTO live_vitals_latest (id, updated_at, payload)
          VALUES (1, :updated_at, :payload)
          ON DUPLICATE KEY UPDATE
             updated_at = VALUES(updated_at), payload = VALUES(payload)'
+    );
+    $vitalsHistoryUpsert = $db->prepare(
+        'INSERT INTO vitals_history (observed_at, schema_version, payload)
+         VALUES (:observed_at, :schema_version, :payload)
+         ON DUPLICATE KEY UPDATE
+            schema_version = VALUES(schema_version), payload = VALUES(payload)'
     );
 
     foreach ($input['events'] as $event) {
@@ -375,9 +382,10 @@ try {
             throw new InvalidArgumentException('invalid payload');
         }
 
-        // The UI needs a fresh reading every runner tick, but retaining every
-        // one forever is not useful history. Keep current state in one row and
-        // append at most one compact sample per minute for graphs and replay.
+        // The UI needs the rich current presentation every runner tick. It is
+        // overwritten in one row. Permanent history is a separate, explicitly
+        // compact projection sampled at most once per minute; the rich payload
+        // must never enter the append-only events table.
         if ($kind === 'vitals') {
             if (!is_array($payload)) {
                 throw new InvalidArgumentException('invalid vitals payload');
@@ -386,28 +394,34 @@ try {
                 ':updated_at' => (string)$event['ts'],
                 ':payload' => $payloadJson,
             ]);
-            if (!$lastVitalsArchiveLoaded) {
+            if (!$lastVitalsHistoryLoaded) {
                 $lastArchived = $db->query(
-                    "SELECT ts FROM events WHERE kind = 'vitals' ORDER BY seq DESC LIMIT 1"
+                    'SELECT observed_at FROM vitals_history ORDER BY observed_at DESC LIMIT 1'
                 )->fetchColumn();
                 if ($lastArchived !== false) {
-                    $lastVitalsArchiveAtMs = (int)round(
+                    $lastVitalsHistoryAtMs = (int)round(
                         (new DateTimeImmutable((string)$lastArchived))->format('U.u') * 1000
                     );
                 }
-                $lastVitalsArchiveLoaded = true;
+                $lastVitalsHistoryLoaded = true;
             }
             $eventVitalsAtMs = (int)round(
                 (new DateTimeImmutable((string)$event['ts']))->format('U.u') * 1000
             );
             if (!captive_should_archive_vitals(
-                $lastVitalsArchiveAtMs,
+                $lastVitalsHistoryAtMs,
                 $eventVitalsAtMs,
                 VITALS_HISTORY_INTERVAL_MS
             )) {
                 continue;
             }
-            $lastVitalsArchiveAtMs = $eventVitalsAtMs;
+            $vitalsHistoryUpsert->execute([
+                ':observed_at' => (string)$event['ts'],
+                ':schema_version' => CAPTIVE_VITALS_HISTORY_SCHEMA_VERSION,
+                ':payload' => captive_compact_vitals_history_json($payload),
+            ]);
+            $lastVitalsHistoryAtMs = $eventVitalsAtMs;
+            continue;
         }
 
         $insert->bindValue(':ts', (string)$event['ts'], PDO::PARAM_STR);

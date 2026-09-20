@@ -359,10 +359,10 @@ function circadianHistoryMarkup() {
     <div class="circadian-ranges" aria-label="Circadian Process C history range">
       <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
     </div>
-    <svg class="circadian-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Mathematically reconstructed Circadian Process C history and phase uncertainty">
+    <svg class="circadian-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored Circadian Process C history and phase uncertainty">
       <path class="circadian-history-band"></path><path class="circadian-history-line"></path>
     </svg>
-    <p class="circadian-history-note">Open this reading to reconstruct the published waveform from the stored schedule phase basis.</p>
+    <p class="circadian-history-note">Open this reading to load stored Process C history.</p>
   </div>`;
 }
 
@@ -2004,7 +2004,7 @@ export class BrainHud {
     if (!this.historyUrl) { note.textContent = 'History endpoint unavailable.'; return; }
     const request = {};
     this.circadianHistoryRequests.set(entry, request);
-    note.textContent = 'Reconstructing Process C from the stored schedule phase basis...';
+    note.textContent = 'Loading stored Process C history...';
     try {
       const response = await fetch(buildHistoryUrl(this.historyUrl, 'circadian', 'processC', range));
       const data = await response.json();
@@ -2014,8 +2014,8 @@ export class BrainHud {
       line.setAttribute('d', paths.estimate);
       band.setAttribute('d', paths.band);
       note.textContent = data.points.length
-        ? `${data.points.length} ${range} waveform points mathematically reconstructed from the latest stored schedule phase basis; the band is phase uncertainty, not observed biology.`
-        : 'No valid stored schedule phase basis is available.';
+        ? `${data.points.length} stored ${range} Process C readings; the band is stored phase uncertainty, not observed biology.`
+        : `No stored Process C readings in the last ${range}.`;
     } catch (error) {
       if (this.circadianHistoryRequests.get(entry) !== request) return;
       line.setAttribute('d', '');
