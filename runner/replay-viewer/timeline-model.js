@@ -4,6 +4,29 @@
 
 export const ROWS = ['THREAT_ONGOING', 'THREAT_IMMINENT', 'ANTICIPATING', 'QUIET', 'UNKNOWN'];
 
+export const HOUR_MS = 60 * 60 * 1000;
+
+// X-axis tick spacing. EVENT WINDOW keeps the original 1-hour ticks exactly, so
+// that view is unchanged. FULL DAY targets roughly a dozen labels across the
+// whole span so a 24h day stays readable instead of cramming 24 hourly labels
+// together. Pure: no DOM, no fabricated value.
+export function chooseTickStepMs(spanMs, { fullDay = false } = {}) {
+  if (!fullDay) return HOUR_MS;
+  const targetLabels = 12;
+  return Math.max(HOUR_MS, Math.ceil(spanMs / (targetLabels * HOUR_MS)) * HOUR_MS);
+}
+
+// The tick timestamps to draw/label: the first whole step at/after startMs
+// through endMs inclusive. With stepMs === HOUR_MS this reproduces the viewer's
+// original hourly loop exactly.
+export function tickTimestamps(startMs, endMs, stepMs) {
+  const ticks = [];
+  if (!(stepMs > 0)) return ticks;
+  const first = Math.ceil(startMs / stepMs) * stepMs;
+  for (let t = first; t <= endMs; t += stepMs) ticks.push(t);
+  return ticks;
+}
+
 export function rowIndex(statusValue) {
   const index = ROWS.indexOf(statusValue);
   return index === -1 ? ROWS.length - 1 : index;

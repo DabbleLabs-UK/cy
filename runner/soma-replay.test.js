@@ -6,7 +6,7 @@ import {
   observeEnvironmentRecord,
 } from './grounded-environment-transition.js';
 import { GOLDEN_SOMA_REPLAY_FIXTURES, goldenFixture } from './soma-replay-fixtures.js';
-import { runSomaReplay, DEFAULT_REPLAY_SAMPLE_INTERVAL_MS } from './soma-replay.js';
+import { runSomaReplay, fullDayWindowMs, DEFAULT_REPLAY_SAMPLE_INTERVAL_MS } from './soma-replay.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -217,5 +217,90 @@ const gapSamples = gapSampled.trajectory.filter((point) => point.kind === 'SAMPL
 assert.ok(gapSamples.some((point) => point.coverageStatus === 'OBSERVED'));
 assert.ok(gapSamples.some((point) => point.coverageStatus === 'UNKNOWN'),
   'a sample falling inside an observation gap is marked UNKNOWN, not silently OBSERVED');
+
+// --- FULL DAY view (workbench plot-window widening) ------------------------
+// The workbench's FULL DAY control widens ONLY the plotted interval to a whole
+// 00:00-24:00 UTC day, reusing this same deterministic replay + sampling
+// machinery. It must not change any per-event snapshot - only add baseline
+// time samples before the first event and after the last.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// fullDayWindowMs floors/ceils to UTC midnight and always contains the fixture
+// window and all event timestamps.
+for (const fixture of GOLDEN_SOMA_REPLAY_FIXTURES) {
+  const window = fullDayWindowMs(fixture);
+  assert.equal(window.startMs % DAY_MS, 0, `${fixture.id}: full-day start is a UTC midnight`);
+  assert.equal(window.endMs % DAY_MS, 0, `${fixture.id}: full-day end is a UTC midnight`);
+  assert.equal(window.endMs - window.startMs, DAY_MS, `${fixture.id}: golden fixtures span exactly one day`);
+  assert.ok(window.startMs <= fixture.startMs && window.endMs >= fixture.endMs,
+    `${fixture.id}: full-day window contains the fixture's own window`);
+  for (const entry of fixture.records) {
+    const t = Date.parse(entry.record.world_event.timestamp);
+    assert.ok(t >= window.startMs && t <= window.endMs,
+      `${fixture.id}: every real event timestamp lies inside the full-day window`);
+  }
+}
+
+// A degenerate fixture whose window and events all sit at one instant still
+// yields a full, non-empty day (never a zero-width interval).
+const instant = Date.parse('2026-09-16T09:00:00Z');
+const degenerate = fullDayWindowMs({ startMs: instant, endMs: instant, records: [] });
+assert.equal(degenerate.endMs - degenerate.startMs, DAY_MS, 'a single-instant fixture still widens to a full day');
+
+// The core guarantee: widening the window changes NO per-event snapshot; it
+// only adds baseline samples. Checked across every golden fixture, comparing
+// each event's before/after snapshot between EVENT WINDOW and FULL DAY at the
+// same sampling density.
+for (const fixture of GOLDEN_SOMA_REPLAY_FIXTURES) {
+  const sampleIntervalMs = 15 * 60 * 1000;
+  const eventWindow = runSomaReplay({ ...fixture, sampleIntervalMs });
+  const window = fullDayWindowMs(fixture);
+  const fullDay = runSomaReplay({ ...fixture, startMs: window.startMs, endMs: window.endMs, sampleIntervalMs });
+
+  assert.deepEqual(fullDay.orderedEventIds, eventWindow.orderedEventIds,
+    `${fixture.id}: FULL DAY applies exactly the same events in the same order`);
+  assert.equal(fullDay.classification, eventWindow.classification,
+    `${fixture.id}: widening the window does not change the replay classification`);
+  assert.equal(fullDay.diagnostics.length, 0, `${fixture.id}: FULL DAY has no replay diagnostics`);
+  assert.equal(fullDay.invariantFailures.length, 0, `${fixture.id}: FULL DAY has no invariant failures`);
+
+  const eventAfterById = Object.fromEntries(eventWindow.transitions.map((t) => [t.sourceEventId, JSON.stringify(t.after)]));
+  const eventBeforeById = Object.fromEntries(eventWindow.transitions.map((t) => [t.sourceEventId, JSON.stringify(t.before)]));
+  for (const transition of fullDay.transitions) {
+    assert.equal(JSON.stringify(transition.after), eventAfterById[transition.sourceEventId],
+      `${fixture.id}: FULL DAY event ${transition.sourceEventId} "after" snapshot is byte-identical to EVENT WINDOW`);
+    assert.equal(JSON.stringify(transition.before), eventBeforeById[transition.sourceEventId],
+      `${fixture.id}: FULL DAY event ${transition.sourceEventId} "before" snapshot is byte-identical to EVENT WINDOW`);
+    assert.equal(transition.timestampMs, eventWindow.transitions
+      .find((t) => t.sourceEventId === transition.sourceEventId).timestampMs,
+      `${fixture.id}: FULL DAY keeps the real event timestamp, unshifted`);
+  }
+  assert.deepEqual(fullDay.finalSnapshot, eventWindow.finalSnapshot,
+    `${fixture.id}: the resolved end-of-day state matches the event-window final state`);
+
+  // FULL DAY must actually show quiet/baseline periods both before the first
+  // event and after the last, produced by the existing sampling machinery.
+  const preSamples = fullDay.trajectory.filter((p) => p.kind === 'SAMPLE' && p.timestampMs < fixture.startMs);
+  const postSamples = fullDay.trajectory.filter((p) => p.kind === 'SAMPLE' && p.timestampMs > fixture.endMs);
+  assert.ok(preSamples.length > 0, `${fixture.id}: FULL DAY shows baseline samples before the fixture window`);
+  assert.ok(postSamples.length > 0, `${fixture.id}: FULL DAY shows baseline samples after the fixture window`);
+  assert.ok(fullDay.trajectory.length > eventWindow.trajectory.length,
+    `${fixture.id}: FULL DAY only ADDS samples relative to EVENT WINDOW`);
+}
+
+// FULL DAY is still deterministic (same machinery), and candidate trajectories
+// keep evolving through the post-event sampled tail rather than stopping at the
+// last event: recovery-after-stress starts elevated and its later samples read
+// the resolved QUIET state, exactly as the categorical semantics prescribe.
+const recoveryWindow = fullDayWindowMs(recovery);
+const recoveryFullA = runSomaReplay({ ...recovery, startMs: recoveryWindow.startMs, endMs: recoveryWindow.endMs, sampleIntervalMs: 15 * 60 * 1000 });
+const recoveryFullB = runSomaReplay({ ...recovery, startMs: recoveryWindow.startMs, endMs: recoveryWindow.endMs, sampleIntervalMs: 15 * 60 * 1000 });
+assert.equal(recoveryFullA.checksum, recoveryFullB.checksum, 'FULL DAY replay is deterministic across repeat runs');
+assert.equal(recoveryFullA.trajectory[0].snapshot.anxiety.status, 'THREAT_ONGOING',
+  'FULL DAY shows the inherited active context across the early-morning baseline before the resolution event');
+assert.ok(recoveryFullA.trajectory.filter((p) => p.kind === 'SAMPLE' && p.timestampMs > recovery.endMs)
+  .every((p) => p.snapshot.anxiety.status === 'QUIET'),
+  'FULL DAY post-event samples continue reading the resolved (recovered) QUIET state');
 
 console.log('soma-replay.test.js: all checks passed');
