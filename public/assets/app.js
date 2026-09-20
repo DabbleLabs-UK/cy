@@ -1301,10 +1301,10 @@ const GEAR_SVG =
 const CLOCK_SVG =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm.5-13H11v6l5.2 3.1.8-1.3-4.5-2.7V7z"/></svg>';
 
-// Local-only developer tool. Requires `node runner/soma-replay-server.js` to
-// be running on this machine; the link is admin-only and never fetched by
-// this page itself, so an idle/absent local server has no effect on Cy.
-const REPLAY_WORKBENCH_URL = 'http://127.0.0.1:4610/';
+// Hosted admin tool at a stable URL (see docs/dev-admin-ui-hosting.md) - no
+// local server to start, no port to remember. The link is admin-only and
+// this page never fetches the URL itself.
+const REPLAY_WORKBENCH_URL = '/replay/';
 
 function makeItem(kind, val, label) {
   const b = document.createElement('button');
@@ -1396,10 +1396,11 @@ function initGearMenu() {
     sep2.className = 'cy-menu-sep';
     sep2.setAttribute('role', 'separator');
 
-    // ---- Dev tools: OWNER-ONLY link to the local Soma replay workbench ----
+    // ---- Dev tools: OWNER-ONLY link to the hosted Soma replay workbench ----
     // Developer tooling, not a public Cy feature. It never renders for a
-    // non-admin visitor and this page never fetches the local URL itself -
-    // it is only a link the admin can open on their own machine.
+    // non-admin visitor; the workbench itself is separately admin-gated
+    // server-side (captive_is_admin), so this link is a convenience, not the
+    // security boundary.
     const sepDev = document.createElement('div');
     sepDev.className = 'cy-menu-sep';
     sepDev.setAttribute('role', 'separator');
@@ -1413,7 +1414,7 @@ function initGearMenu() {
     replayLink.target = '_blank';
     replayLink.rel = 'noopener noreferrer';
     replayLink.style.textDecoration = 'none';
-    replayLink.title = 'Opens the local Soma replay workbench (run node runner/soma-replay-server.js on this machine first)';
+    replayLink.title = 'Opens the Soma replay workbench';
     const rMark = document.createElement('span');
     rMark.className = 'cy-mark';
     rMark.setAttribute('aria-hidden', 'true');
