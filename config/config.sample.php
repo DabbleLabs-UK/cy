@@ -21,4 +21,14 @@ return [
     // invalidates all existing visitor cookies (people become strangers again).
     // Generate a long random value, e.g. bin2hex(random_bytes(32)).
     'cookie_secret' => 'CHANGE_ME_LONG_RANDOM_KEY_2',
+
+    // Optional. Path to the `node` binary used by public/replay/api.php to run
+    // the Soma replay workbench (see lib/replay_workbench.php and
+    // docs/dev-admin-ui-hosting.md). Defaults to 'node', which only works if
+    // PHP-FPM's own PATH includes it - PHP-FPM pools often run with a much
+    // narrower PATH than an interactive shell, so on a fresh vps3 deploy this
+    // very likely needs to be an absolute path, e.g. '/usr/bin/node' (check
+    // with `which node` as the same user/pool PHP-FPM runs as). Admin-only and
+    // synthetic-fixture-only - never touches production data.
+    'replay_node_bin' => 'node',
 ];

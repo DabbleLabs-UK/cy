@@ -11,9 +11,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GOLDEN_SOMA_REPLAY_FIXTURES, goldenFixture } from './soma-replay-fixtures.js';
-import { runSomaReplay, fullDayWindowMs, DEFAULT_REPLAY_SAMPLE_INTERVAL_MS } from './soma-replay.js';
-import { computeCandidateTrajectory, candidateModelMetadata } from './candidate-threat-anticipation-load.js';
+import { buildFixturesResponse, buildReplayResponse } from './soma-replay-api.js';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.SOMA_REPLAY_PORT) || 4610;
@@ -36,71 +34,32 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
-function fixtureSummary(fixture) {
-  return {
-    id: fixture.id,
-    title: fixture.title,
-    startMs: fixture.startMs,
-    endMs: fixture.endMs,
-    eventCount: fixture.records.length,
-  };
-}
-
-function resolveSampleParam(raw) {
-  if (raw == null || raw === '' || raw === 'off' || raw === '0') return null;
-  if (raw === 'default') return true;
-  const minutes = Number(raw);
-  if (!Number.isFinite(minutes) || minutes <= 0) return true;
-  return minutes * 60 * 1000;
-}
-
+// Single 'action=' entrypoint matching the hosted deployment's api.php
+// exactly (see docs/dev-admin-ui-hosting.md), so runner/replay-viewer/viewer.js
+// needs no environment-specific branching between local dev and vps3.
 async function handleApi(req, res, url) {
-  if (url.pathname === '/api/fixtures') {
-    sendJson(res, 200, {
-      defaultSampleIntervalMs: DEFAULT_REPLAY_SAMPLE_INTERVAL_MS,
-      fixtures: GOLDEN_SOMA_REPLAY_FIXTURES.map(fixtureSummary),
-    });
+  if (url.pathname !== '/api.php') return false;
+  const action = url.searchParams.get('action');
+  if (action === 'fixtures') {
+    sendJson(res, 200, buildFixturesResponse());
     return true;
   }
-  if (url.pathname === '/api/replay') {
-    const id = url.searchParams.get('fixture');
-    const fixture = id ? goldenFixture(id) : null;
-    if (!fixture) {
-      sendJson(res, 404, { error: `unknown fixture: ${id || '(none supplied)'}` });
-      return true;
-    }
+  if (action === 'replay') {
     try {
-      let sampleIntervalMs = resolveSampleParam(url.searchParams.get('sampleMinutes'));
-      const fullDay = url.searchParams.get('view') === 'full-day';
-      const replayArgs = { ...fixture, sampleIntervalMs };
-      if (fullDay) {
-        // Widen only the plot interval to the whole day; records/initialState/
-        // coverage are untouched, so every per-event snapshot is identical and
-        // only baseline time samples are added before and after the events. A
-        // full 24h with sampling off would render as just two endpoints, so
-        // default full-day sampling to the documented 15-minute interval.
-        const window = fullDayWindowMs(fixture);
-        replayArgs.startMs = window.startMs;
-        replayArgs.endMs = window.endMs;
-        if (!sampleIntervalMs) sampleIntervalMs = true;
-        replayArgs.sampleIntervalMs = sampleIntervalMs;
-      }
-      const report = runSomaReplay(replayArgs);
-      // The candidate is a pure post-process over the already-computed
-      // CURRENT report - no second replay run, no Soma state mutation, no
-      // new grounded input. See candidate-threat-anticipation-load.js.
-      const candidate = computeCandidateTrajectory(report);
-      sendJson(res, 200, {
-        fixture: fixtureSummary(fixture),
-        report,
-        candidate: { model: candidateModelMetadata(), trajectory: candidate },
+      const body = buildReplayResponse({
+        fixtureId: url.searchParams.get('fixture'),
+        sampleMinutes: url.searchParams.get('sampleMinutes'),
+        fullDay: url.searchParams.get('view') === 'full-day',
       });
+      sendJson(res, 200, body);
     } catch (error) {
-      sendJson(res, 500, { error: String(error && error.message || error) });
+      sendJson(res, Number.isInteger(error && error.status) ? error.status : 500,
+        { error: String(error && error.message || error) });
     }
     return true;
   }
-  return false;
+  sendJson(res, 400, { error: `unknown action: ${action || '(none supplied)'}` });
+  return true;
 }
 
 async function handleStatic(req, res, url) {
