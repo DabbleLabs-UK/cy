@@ -127,6 +127,35 @@ function normalizeCoverage(coverage, startMs, endMs) {
 
 export const DEFAULT_REPLAY_SAMPLE_INTERVAL_MS = 15 * 60 * 1000;
 
+const FULL_DAY_MS = 24 * 60 * 60 * 1000;
+
+// Compute the whole-UTC-day window that fully contains a fixture's own window
+// AND all of its event timestamps, floored/ceiled to UTC midnight boundaries.
+// Epoch-aligned day boundaries ARE UTC midnights (the epoch begins at UTC
+// midnight and FULL_DAY_MS divides evenly), so this needs no timezone maths.
+// It only widens the replay interval - it does not touch records, initialState
+// or coverage - so the existing deterministic replay produces the identical
+// per-event trajectory plus additional baseline time samples before the first
+// event and after the last. For every current golden fixture this resolves to
+// exactly 00:00-24:00 on the fixture's single day.
+export function fullDayWindowMs({ startMs, endMs, records = [] } = {}) {
+  const stamps = [];
+  if (Number.isFinite(startMs)) stamps.push(startMs);
+  if (Number.isFinite(endMs)) stamps.push(endMs);
+  for (const entry of Array.isArray(records) ? records : []) {
+    const record = entry && entry.record ? entry.record : entry;
+    const parsed = Date.parse(record && record.world_event && record.world_event.timestamp);
+    if (Number.isFinite(parsed)) stamps.push(parsed);
+  }
+  if (!stamps.length) throw new Error('fullDayWindowMs requires at least one finite timestamp');
+  const min = Math.min(...stamps);
+  const max = Math.max(...stamps);
+  const dayStart = Math.floor(min / FULL_DAY_MS) * FULL_DAY_MS;
+  let dayEnd = Math.ceil(max / FULL_DAY_MS) * FULL_DAY_MS;
+  if (dayEnd <= dayStart) dayEnd = dayStart + FULL_DAY_MS;
+  return { startMs: dayStart, endMs: dayEnd };
+}
+
 function coverageStatusAt(normalizedCoverage, timestampMs) {
   const segment = normalizedCoverage.find((item) => timestampMs >= item.fromMs && timestampMs <= item.toMs);
   return segment ? segment.status : 'UNKNOWN';
