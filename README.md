@@ -212,6 +212,7 @@ public/            webroot
   api/tempo.php     public: GET current tempo / POST a custom speed (duty cycle)
   api/ingest.php    DELL-only: write events (+ private visitor_seen updates)
   api/inbox.php     DELL-only: claim due postcards/news (+ visitor memory)
+  replay/           admin-only Soma replay workbench (see docs/dev-admin-ui-hosting.md)
   uploads/          re-encoded webp uploads (gitignored, created at runtime)
 lib/db.php          PDO factory + config loader
 lib/http.php        JSON response + auth helpers
@@ -224,12 +225,15 @@ lib/presence.php    cheap, throttled live-viewer presence (viewers table)
 lib/tempo.php       tempo duty-cycle decision (5%/30%/custom) + rate limiting
 lib/soma-history.php  validates and downsamples stored Soma history without interpolation
 lib/autobiographical_memory.php privacy, ranking, versioning and provenance persistence
+lib/replay_workbench.php admin-gated bridge to the Node replay engine (see public/replay/)
 config/config.sample.php   template; copy to config/config.php (gitignored)
 sql/schema.sql       MariaDB schema (events, postcards, queue state, visitors, news, rate limits, viewers, tempo, drawings)
 docs/autobiographical-memory.md memory architecture, limits and privacy boundaries
+docs/dev-admin-ui-hosting.md hosting/routing convention for CY admin/debug web UIs
 tests/postcard_queue_test.php  pure reply-tray admission checks
 tests/tempo_test.php  pure-logic tests for the tempo/presence rules (php tests/tempo_test.php)
 tests/soma_api_test.php  proves the browser API returns the runner snapshot unchanged
+tests/replay_workbench_test.php  asset-transform + real Node-subprocess-bridge checks (php tests/replay_workbench_test.php)
 runner/              the model runner (drives inmate 7734)
 ```
 
@@ -252,3 +256,13 @@ and `php_fastcgi unix//run/php/php8.5-fpm.sock`.
 `config/config.php` is not in git -- it must be created on the server
 directly (or deployed out-of-band) with real DB credentials and the
 `ingest_key` that DELL will also be configured with.
+
+### CY admin/debug web UIs
+
+Any future CY admin/debug/inspection web tool should be hosted the same way,
+under `cy.dabblelabs.uk`, not as an ad hoc `localhost:<port>` on whichever
+workstation is free -- see `docs/dev-admin-ui-hosting.md` for the convention
+and the Soma replay workbench (`public/replay/`) as the worked example. The
+replay workbench additionally needs `node` on PATH for PHP-FPM (or an
+explicit `replay_node_bin` absolute path in `config/config.php` -- see the
+comment in `config/config.sample.php`); nothing else on the site needs Node.
