@@ -329,13 +329,18 @@ export function generationHitTokenLimit(stats, opts = {}) {
 // whichever way `fn` settles. This is the ONLY place a generation timeout is
 // wired up - a call site opts in purely by passing timeoutMs.
 export async function withAbortTimeout(ac, timeoutMs, fn) {
-  const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
-    ? setTimeout(() => ac.abort(), timeoutMs) : null;
+  const cancelTimeout = startAbortTimeout(ac, timeoutMs);
   try {
     return await fn();
   } finally {
-    if (timeout) clearTimeout(timeout);
+    cancelTimeout();
   }
+}
+
+export function startAbortTimeout(ac, timeoutMs) {
+  const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? setTimeout(() => ac.abort(), timeoutMs) : null;
+  return () => { if (timeout) clearTimeout(timeout); };
 }
 
 // ---- config ---------------------------------------------------------------
@@ -2304,11 +2309,7 @@ async function main() {
     const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
       currentAbort = ac;
-      // A foreground streaming generation has no other ceiling: with no
-      // superseding event (a new postcard, a mode change) nothing else ever
-      // aborts a genuinely stuck provider request. Same shared timeout
-      // wrapper rawGenerate uses.
-      return withAbortTimeout(ac, timeoutMs, () => collectCandidateBody(candidatePrompt, { repair }, ac));
+      return collectCandidateBody(candidatePrompt, { repair }, ac);
     };
 
     const collectCandidateBody = async (candidatePrompt, { repair = false } = {}, ac) => {
@@ -2318,8 +2319,15 @@ async function main() {
       let candidate = '';
       let gen;
       let lease = null;
+      let hostLease = null;
+      let cancelTimeout = () => {};
+      let requestFinished = false;
       let transportResult = 'error';
-      const finishRequest = () => {
+      const finishRequest = async () => {
+        if (requestFinished) return;
+        requestFinished = true;
+        cancelTimeout();
+        if (hostLease) await hostLease.release();
         if (!lease) return;
         const endedAtMs = Date.now();
         inferenceTempoPacer.record(t0, endedAtMs);
@@ -2347,17 +2355,29 @@ async function main() {
         // was granted; recheck while holding the slot so another request cannot
         // slip into the gap. The coordinator remains IDLE until begin().
         await waitForInferenceTempo(ac.signal, purpose || mode);
+        if (typeof provider.acquireSharedLease === 'function') {
+          hostLease = await provider.acquireSharedLease({
+            purpose: purpose || mode,
+            signal: ac.signal,
+            onLost: () => ac.abort(),
+          });
+        }
+        const requestOpts = typeof provider.applySharedProfile === 'function'
+          ? provider.applySharedProfile(opts, hostLease) : opts;
+        // Queueing for the shared host is not inference time. Start the existing
+        // provider timeout only after this request owns Ollama.
+        cancelTimeout = startAbortTimeout(ac, timeoutMs);
         t0 = lease.begin();
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
-          opts,
+          opts: requestOpts,
           signal: ac.signal,
           purpose: purpose || mode,
         });
       } catch (err) {
         transportResult = ac.signal.aborted ? 'aborted' : 'error';
-        finishRequest();
+        await finishRequest();
         if (ac.signal.aborted) return { candidate, full: '', aborted: true, requestId: lease && lease.id };
         console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
         await sleep(2000);
@@ -2365,7 +2385,7 @@ async function main() {
       }
       if (!gen.ok) {
         transportResult = 'http-error';
-        finishRequest();
+        await finishRequest();
         console.warn(`[cy] provider ${provider.id} HTTP`, gen.status);
         await sleep(1000);
         return { candidate, full: '', error: true, requestId: lease.id };
@@ -2394,7 +2414,7 @@ async function main() {
         return { candidate, full: '', error: true, stats, ttftMs, requestId: lease.id };
       } finally {
         if (currentAbort === ac) currentAbort = null;
-        finishRequest();
+        await finishRequest();
       }
       if (streamRes && streamRes.aborted) {
         transportResult = 'aborted';
@@ -2518,18 +2538,28 @@ async function main() {
     else currentAbort = ac;
     const provider = activeProvider();
     let lease = null;
+    let hostLease = null;
     let requestResult = 'error';
     let requestStats = null;
     let outputChars = 0;
     try {
+      if (!background) await waitForInferenceTempo(ac.signal, purpose);
+      lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
+        provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
+      }), deferStart: true }, ac.signal);
+      if (!background) await waitForInferenceTempo(ac.signal, purpose);
+      if (typeof provider.acquireSharedLease === 'function') {
+        hostLease = await provider.acquireSharedLease({
+          purpose,
+          signal: ac.signal,
+          onLost: () => ac.abort(),
+        });
+      }
+      const requestOpts = typeof provider.applySharedProfile === 'function'
+        ? provider.applySharedProfile(opts, hostLease) : opts;
+      startedAtMs = lease.begin();
       return await withAbortTimeout(ac, timeoutMs, async () => {
-        if (!background) await waitForInferenceTempo(ac.signal, purpose);
-        lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
-          provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
-        }), deferStart: true }, ac.signal);
-        if (!background) await waitForInferenceTempo(ac.signal, purpose);
-        startedAtMs = lease.begin();
-        const out = await provider.rawGenerate({ system, prompt, opts, signal: ac.signal, purpose });
+        const out = await provider.rawGenerate({ system, prompt, opts: requestOpts, signal: ac.signal, purpose });
         requestStats = out.stats || null;
         outputChars = String(out.text || '').length;
         if (!out.ok) {
@@ -2561,6 +2591,7 @@ async function main() {
           ...inferenceStats(requestStats),
         });
       }
+      if (hostLease) await hostLease.release();
       if (signal) signal.removeEventListener('abort', relayAbort);
       if (background && startedAtMs !== null) {
         const endedAtMs = Date.now();

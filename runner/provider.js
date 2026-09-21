@@ -1,3 +1,5 @@
+import { applySharedOllamaProfile, createSharedOllamaClient } from './shared-ollama-lease.js';
+
 // provider.js - the switchable model provider abstraction.
 //
 // Generation is the ONLY thing that differs between models, so it is the only
@@ -253,6 +255,7 @@ function mapOptsToDeepSeek(opts, maxTokensDefault) {
 
 function makeOllama(config) {
   const url = () => config.ollamaUrl;
+  const sharedClient = createSharedOllamaClient(config.ollamaArbiterUrl);
   return {
     id: OLLAMA,
     costsMoney: false,
@@ -275,6 +278,12 @@ function makeOllama(config) {
     },
     available() {
       return true;
+    },
+    async acquireSharedLease({ purpose, signal, onLost }) {
+      return sharedClient ? sharedClient.acquire({ purpose, signal, onLost }) : null;
+    },
+    applySharedProfile(opts, lease) {
+      return applySharedOllamaProfile(opts, lease);
     },
     async openStream({ system, prompt, opts, signal, purpose }) {
       const model = localModelFor(config, purpose);

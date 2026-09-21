@@ -96,6 +96,14 @@ assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeout
   'the shared AutobiographicalMemoryRuntime generate callback applies the foreground timeout only when NOT background');
 ok('every known foreground call site is wired to FOREGROUND_INFERENCE_TIMEOUT_MS');
 
+assert.match(source,
+  /hostLease = await provider\.acquireSharedLease\([\s\S]{0,500}?cancelTimeout = startAbortTimeout\(ac, timeoutMs\)[\s\S]{0,300}?provider\.openStream/,
+  'stream timeout starts only after shared-host ownership is granted');
+assert.match(source,
+  /hostLease = await provider\.acquireSharedLease\([\s\S]{0,500}?startedAtMs = lease\.begin\(\)[\s\S]{0,200}?withAbortTimeout\(ac, timeoutMs/,
+  'raw timeout starts only after shared-host ownership is granted');
+ok('shared-host queueing is excluded from provider timeout accounting');
+
 // ---- 6. the background AWG call site is untouched (keeps its own timeout) ----
 assert.match(source, /timeoutMs: Math\.min\(AWG_TIMEOUT_MS, idleBudgetMs\)/,
   'AWG (background world generation) keeps its own pre-existing timeout, unchanged');
