@@ -28,6 +28,7 @@ import {
   initialVitals,
   loadVitals,
   saveVitals,
+  scheduleVitalsSave,
   tick,
   applyEvent,
   applyDeltas,
@@ -529,7 +530,25 @@ async function main() {
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
-  const emit = (ev) => client.enqueue(ev);
+  // Routine drift is checkpointed with bounded write-behind. Events that alter
+  // durable world/conversation continuity request the next five-second tick to
+  // use the immediate atomic path, preserving the pre-existing worst-case event
+  // exposure while avoiding full-state writes for every telemetry tick.
+  let urgentVitalsDirty = false;
+  const DURABLE_STATE_EVENT_KINDS = new Set([
+    'day',
+    'draw_saved',
+    'dream',
+    'fan_mail_in',
+    'postcard_deferred',
+    'postcard_in',
+    'postcard_out',
+    'world_object_record',
+  ]);
+  const emit = (ev) => {
+    if (ev && DURABLE_STATE_EVENT_KINDS.has(ev.kind)) urgentVitalsDirty = true;
+    client.enqueue(ev);
+  };
   let lastSomaDiagnosticAtMs = 0;
   const locationNow = Date.now();
   const locationClock = londonParts(new Date(locationNow));
@@ -3109,6 +3128,7 @@ async function main() {
       },
       { now: Date.now() },
     );
+    urgentVitalsDirty = true;
     emit({ kind: 'event', payload: { name: 'warden', amp: Number(a.toFixed(3)), text: notice.text } });
 
     const cognition = prepareSomaGeneration(soma, {
@@ -4100,10 +4120,21 @@ async function main() {
       lastTextMs = now;
     }
 
-    try {
-      await saveVitals(vitalsPath, vitals);
-    } catch (error) {
-      reportPersistenceError('periodic save', error);
+    if (urgentVitalsDirty) {
+      urgentVitalsDirty = false;
+      try {
+        await saveVitals(vitalsPath, vitals);
+      } catch (error) {
+        urgentVitalsDirty = true;
+        reportPersistenceError('urgent event save', error);
+      }
+    } else {
+      // Do not await routine write-behind. The persistence layer retains the
+      // newest state reference, coalesces ticks, and rejects this promise if the
+      // eventual atomic checkpoint fails.
+      void scheduleVitalsSave(vitalsPath, vitals).catch((error) => {
+        reportPersistenceError('deferred periodic save', error);
+      });
     }
   }, config.tickMs);
 

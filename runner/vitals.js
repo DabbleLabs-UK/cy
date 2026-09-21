@@ -15,6 +15,13 @@ const PERSISTENCE_FORMAT_VERSION = 1;
 const DEFAULT_SAVE_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAYS_MS = [100, 500];
 const RECOVERY_REFRESH_MS = 60_000;
+// The five-second simulation tick is much more frequent than the durability
+// requirement for continuously drifting, timestamp-reconciled state. Defer
+// routine checkpoints until state has either gone quiet or remained dirty for
+// ten minutes. Continuity-critical external events and shutdowns still use
+// saveVitals(), which flushes immediately.
+const DEFAULT_QUIET_FLUSH_MS = 30_000;
+const DEFAULT_MAX_CHECKPOINT_MS = 10 * 60_000;
 const RECOVERY_REQUIRED_CODE = 'CY_STATE_RECOVERY_REQUIRED';
 const INITIALIZATION_EVIDENCE = new Set([
   'bookkeeping.json',
@@ -488,10 +495,20 @@ class VitalsPersistence {
     this.recoveryRefreshMs = Number.isFinite(options.recoveryRefreshMs)
       ? Math.max(0, options.recoveryRefreshMs)
       : RECOVERY_REFRESH_MS;
+    this.quietFlushMs = Number.isFinite(options.quietFlushMs)
+      ? Math.max(0, options.quietFlushMs)
+      : DEFAULT_QUIET_FLUSH_MS;
+    this.maxCheckpointMs = Number.isFinite(options.maxCheckpointMs)
+      ? Math.max(1, options.maxCheckpointMs)
+      : DEFAULT_MAX_CHECKPOINT_MS;
     this.lastCommittedText = null;
+    this.lastCommittedBookkeepingText = null;
     this.previousExists = false;
     this.markerExists = false;
     this.pendingJob = null;
+    this.deferredJob = null;
+    this.deferredTimer = null;
+    this.dirtySinceMs = null;
     this.draining = false;
     this.status = {
       persistenceFormatVersion: PERSISTENCE_FORMAT_VERSION,
@@ -503,6 +520,14 @@ class VitalsPersistence {
       inProgress: false,
       pending: false,
       coalescedSaveCount: 0,
+      deferredSaveCount: 0,
+      skippedUnchangedSaveCount: 0,
+      stateWriteCount: 0,
+      bookkeepingWriteCount: 0,
+      bytesWritten: 0,
+      lastSerializationDurationMs: null,
+      dirtySince: null,
+      nextCheckpointDue: null,
       failedSaveCount: 0,
       lastError: null,
       startupRecoveryUsed: false,
@@ -511,17 +536,27 @@ class VitalsPersistence {
     };
   }
 
-  initialise({ committedText = null, previousExists = false, markerExists = false, recoveryTimestamp = null, firstInstall = false } = {}) {
-    this.lastCommittedText = committedText;
+  initialise({ committedText = null, committedBookkeepingText = null, previousExists = false, markerExists = false, recoveryTimestamp = null, firstInstall = false } = {}) {
+    // Compare semantic compact JSON, regardless of whitespace used by an older
+    // build. The next checkpoint therefore only writes when state actually
+    // differs, not merely because the on-disk formatting changed.
+    this.lastCommittedText = committedText === null
+      ? null
+      : JSON.stringify(JSON.parse(committedText));
+    this.lastCommittedBookkeepingText = committedBookkeepingText === null
+      ? null
+      : JSON.stringify(JSON.parse(committedBookkeepingText));
     this.previousExists = previousExists;
     this.markerExists = markerExists;
     this.status.recoverySnapshotTimestamp = recoveryTimestamp;
     this.status.firstInstall = firstInstall;
-    if (committedText !== null) this.status.stateSizeBytes = Buffer.byteLength(committedText, 'utf8');
+    if (this.lastCommittedText !== null) {
+      this.status.stateSizeBytes = Buffer.byteLength(this.lastCommittedText, 'utf8');
+    }
   }
 
   snapshot() {
-    return { ...this.status, pending: Boolean(this.pendingJob) };
+    return { ...this.status, pending: Boolean(this.pendingJob || this.deferredJob) };
   }
 
   markStartupRecovery(reason) {
@@ -530,26 +565,111 @@ class VitalsPersistence {
     this.status.lastValidationResult = 'recovered-from-vitals.previous.json';
   }
 
-  requestSave(soma, bookkeeping) {
+  serialize(soma, bookkeeping) {
+    const started = this.now();
     const persistedSoma = { ...soma, persistenceFormatVersion: PERSISTENCE_FORMAT_VERSION };
-    const somaText = JSON.stringify(persistedSoma, null, 2);
-    const bookkeepingText = JSON.stringify(bookkeeping, null, 2);
-    validateVitalsState(JSON.parse(somaText), { requireFormatVersion: true });
-    validateBookkeeping(JSON.parse(bookkeepingText));
+    validateVitalsState(persistedSoma, { requireFormatVersion: true });
+    validateBookkeeping(bookkeeping);
+    const somaText = JSON.stringify(persistedSoma);
+    const bookkeepingText = JSON.stringify(bookkeeping);
+    this.status.lastSerializationDurationMs = Math.max(0, this.now() - started);
+    return { somaText, bookkeepingText };
+  }
+
+  requestSave(soma, bookkeeping) {
+    const serialized = this.serialize(soma, bookkeeping);
+    const scheduled = this.takeDeferredJob();
 
     return new Promise((resolve, reject) => {
       const waiter = { resolve, reject };
+      const waiters = [...(scheduled ? scheduled.waiters : []), waiter];
       if (this.pendingJob) {
-        this.pendingJob.somaText = somaText;
-        this.pendingJob.bookkeepingText = bookkeepingText;
-        this.pendingJob.waiters.push(waiter);
+        this.pendingJob.somaText = serialized.somaText;
+        this.pendingJob.bookkeepingText = serialized.bookkeepingText;
+        this.pendingJob.waiters.push(...waiters);
         this.status.coalescedSaveCount++;
       } else {
-        this.pendingJob = { somaText, bookkeepingText, waiters: [waiter] };
+        this.pendingJob = { ...serialized, waiters };
       }
       this.status.pending = true;
       if (!this.draining) void this.drain();
     });
+  }
+
+  scheduleSave(soma, bookkeeping) {
+    // A new installation must establish both authoritative and recovery copies
+    // before write-behind is allowed.
+    if (this.lastCommittedText === null) return this.requestSave(soma, bookkeeping);
+    return new Promise((resolve, reject) => {
+      const now = this.now();
+      const waiter = { resolve, reject };
+      if (this.deferredJob) {
+        this.deferredJob.soma = soma;
+        this.deferredJob.bookkeeping = bookkeeping;
+        this.deferredJob.waiters.push(waiter);
+        this.status.coalescedSaveCount++;
+      } else {
+        this.deferredJob = { soma, bookkeeping, waiters: [waiter], lastRequestMs: now };
+        this.dirtySinceMs = now;
+      }
+      this.deferredJob.lastRequestMs = now;
+      this.status.deferredSaveCount++;
+      this.status.pending = true;
+      this.armDeferredTimer();
+    });
+  }
+
+  armDeferredTimer() {
+    if (!this.deferredJob) return;
+    if (this.deferredTimer) clearTimeout(this.deferredTimer);
+    const now = this.now();
+    const quietDue = this.deferredJob.lastRequestMs + this.quietFlushMs;
+    const maximumDue = (this.dirtySinceMs ?? now) + this.maxCheckpointMs;
+    const due = Math.min(quietDue, maximumDue);
+    this.status.dirtySince = new Date(this.dirtySinceMs ?? now).toISOString();
+    this.status.nextCheckpointDue = new Date(due).toISOString();
+    this.deferredTimer = setTimeout(() => {
+      this.deferredTimer = null;
+      // Callers hold the waiter promises that receive the failure. Consume the
+      // internal timer promise so a failed disk write is not reported twice as
+      // an unhandled rejection.
+      void this.flushDeferred().catch(() => {});
+    }, Math.max(0, due - now));
+  }
+
+  takeDeferredJob() {
+    if (!this.deferredJob) return null;
+    if (this.deferredTimer) clearTimeout(this.deferredTimer);
+    this.deferredTimer = null;
+    const job = this.deferredJob;
+    this.deferredJob = null;
+    this.dirtySinceMs = null;
+    this.status.dirtySince = null;
+    this.status.nextCheckpointDue = null;
+    return job;
+  }
+
+  async flushDeferred() {
+    const scheduled = this.takeDeferredJob();
+    if (!scheduled) return this.snapshot();
+    let serialized;
+    try {
+      serialized = this.serialize(scheduled.soma, scheduled.bookkeeping);
+    } catch (error) {
+      for (const waiter of scheduled.waiters) waiter.reject(error);
+      throw error;
+    }
+    if (this.pendingJob) {
+      this.pendingJob.somaText = serialized.somaText;
+      this.pendingJob.bookkeepingText = serialized.bookkeepingText;
+      this.pendingJob.waiters.push(...scheduled.waiters);
+      this.status.coalescedSaveCount++;
+    } else {
+      this.pendingJob = { ...serialized, waiters: scheduled.waiters };
+    }
+    this.status.pending = true;
+    if (!this.draining) void this.drain();
+    return this.snapshot();
   }
 
   async drain() {
@@ -562,7 +682,17 @@ class VitalsPersistence {
         this.pendingJob = null;
         this.status.pending = false;
         try {
-          await this.commitWithRetry(job);
+          // Establish recovery/authority metadata even when an imported current
+          // file is semantically unchanged.
+          const somaChanged = job.somaText !== this.lastCommittedText
+            || !this.previousExists
+            || !this.markerExists;
+          const bookkeepingChanged = job.bookkeepingText !== this.lastCommittedBookkeepingText;
+          if (!somaChanged && !bookkeepingChanged) {
+            this.status.skippedUnchangedSaveCount++;
+          } else {
+            await this.commitWithRetry({ ...job, somaChanged, bookkeepingChanged });
+          }
           for (const waiter of job.waiters) waiter.resolve(this.snapshot());
         } catch (error) {
           for (const waiter of job.waiters) waiter.reject(error);
@@ -571,7 +701,7 @@ class VitalsPersistence {
     } finally {
       this.draining = false;
       this.status.inProgress = false;
-      this.status.pending = Boolean(this.pendingJob);
+      this.status.pending = Boolean(this.pendingJob || this.deferredJob);
       if (this.pendingJob) void this.drain();
     }
   }
@@ -598,38 +728,48 @@ class VitalsPersistence {
 
   async commitOnce(job) {
     const started = this.now();
-    const recoveryAge = this.status.recoverySnapshotTimestamp
-      ? started - Date.parse(this.status.recoverySnapshotTimestamp)
-      : Infinity;
-    if (this.lastCommittedText !== null && (!this.previousExists || recoveryAge >= this.recoveryRefreshMs)) {
-      await atomicWriteText(
-        this.previousPath,
-        this.lastCommittedText,
-        (value) => validateVitalsState(value),
-      );
-      this.previousExists = true;
-      this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
-    }
+    let bytesWritten = 0;
+    let stateSizeBytes = this.status.stateSizeBytes;
+    if (job.somaChanged) {
+      const recoveryAge = this.status.recoverySnapshotTimestamp
+        ? started - Date.parse(this.status.recoverySnapshotTimestamp)
+        : Infinity;
+      if (this.lastCommittedText !== null && (!this.previousExists || recoveryAge >= this.recoveryRefreshMs)) {
+        bytesWritten += await atomicWriteText(
+          this.previousPath,
+          this.lastCommittedText,
+          (value) => validateVitalsState(value),
+        );
+        this.previousExists = true;
+        this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
+      }
 
-    const stateSizeBytes = await atomicWriteText(
-      this.path,
-      job.somaText,
-      (value) => validateVitalsState(value, { requireFormatVersion: true }),
-      { hooks: this.hooks },
-    );
-    this.lastCommittedText = job.somaText;
-
-    if (!this.previousExists) {
-      await atomicWriteText(
-        this.previousPath,
+      stateSizeBytes = await atomicWriteText(
+        this.path,
         job.somaText,
         (value) => validateVitalsState(value, { requireFormatVersion: true }),
+        { hooks: this.hooks },
       );
-      this.previousExists = true;
-      this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
+      bytesWritten += stateSizeBytes;
+      this.lastCommittedText = job.somaText;
+      this.status.stateWriteCount++;
+
+      if (!this.previousExists) {
+        bytesWritten += await atomicWriteText(
+          this.previousPath,
+          job.somaText,
+          (value) => validateVitalsState(value, { requireFormatVersion: true }),
+        );
+        this.previousExists = true;
+        this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
+      }
     }
 
-    await atomicWriteText(this.bookPath, job.bookkeepingText, validateBookkeeping);
+    if (job.bookkeepingChanged) {
+      bytesWritten += await atomicWriteText(this.bookPath, job.bookkeepingText, validateBookkeeping);
+      this.lastCommittedBookkeepingText = job.bookkeepingText;
+      this.status.bookkeepingWriteCount++;
+    }
     if (!this.markerExists) {
       await atomicWriteText(
         this.markerPath,
@@ -646,6 +786,7 @@ class VitalsPersistence {
     this.status.lastSuccessfulSave = new Date(completed).toISOString();
     this.status.lastSaveDurationMs = Math.max(0, completed - started);
     this.status.stateSizeBytes = stateSizeBytes;
+    this.status.bytesWritten += bytesWritten;
     this.status.lastValidationResult = 'valid';
     this.status.lastError = null;
     this.status.firstInstall = false;
@@ -725,10 +866,13 @@ export async function loadVitals(path, options = {}) {
   }
 
   let book = null;
+  let bookText = null;
   try {
-    book = JSON.parse(await readFile(bookPath, 'utf8'));
+    bookText = await readFile(bookPath, 'utf8');
+    book = JSON.parse(bookText);
   } catch {
     book = null;
+    bookText = null;
   }
 
   // One-time backup of the pre-split state file, before it is ever rewritten in
@@ -780,6 +924,7 @@ export async function loadVitals(path, options = {}) {
 
   persistence.initialise({
     committedText: rawText,
+    committedBookkeepingText: bookText,
     previousExists,
     markerExists,
     recoveryTimestamp: await recoveryTimestamp(previousPath),
@@ -802,4 +947,15 @@ export async function saveVitals(path, v) {
   const persistence = v && v[PERSISTENCE];
   if (!zones || !persistence) throw new Error('saveVitals requires state returned by loadVitals');
   return persistence.requestSave(zones.soma, zones.bookkeeping);
+}
+
+// Routine five-second ticks call this write-behind path. It keeps only the
+// newest in-memory state, resets a short quiet-period timer, and enforces a hard
+// maximum checkpoint age. Call saveVitals() for continuity-critical events and
+// shutdown.
+export function scheduleVitalsSave(path, v) {
+  const zones = v && v[ZONES];
+  const persistence = v && v[PERSISTENCE];
+  if (!zones || !persistence) throw new Error('scheduleVitalsSave requires state returned by loadVitals');
+  return persistence.scheduleSave(zones.soma, zones.bookkeeping);
 }

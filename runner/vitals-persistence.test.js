@@ -7,12 +7,14 @@ import {
   initialVitals,
   loadVitals,
   saveVitals,
+  scheduleVitalsSave,
   validateVitalsState,
   vitalsPersistenceStatus,
 } from './vitals.js';
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const validState = (extra = {}) => ({ ...initialVitals(), ...extra });
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function withTemp(prefix, fn) {
   const dir = await mkdtemp(join(tmpdir(), prefix));
@@ -268,6 +270,134 @@ await withTemp('cy-vitals-k-', async (_dir, path) => {
     worldSimulation: restarted.worldSimulation,
     instrumentalAgency: restarted.instrumentalAgency,
   }), expected);
+});
+
+// L. Once authority/recovery files exist, semantically unchanged state causes no
+// redundant full-state write.
+await withTemp('cy-vitals-l-', async (_dir, path) => {
+  let stateWrites = 0;
+  const vitals = await loadVitals(path, { persistence: {
+    hooks: {
+      beforeWrite: ({ targetPath }) => {
+        if (targetPath === path) stateWrites++;
+      },
+    },
+  } });
+  await saveVitals(path, vitals);
+  assert.equal(stateWrites, 1);
+  await saveVitals(path, vitals);
+  await saveVitals(path, vitals);
+  assert.equal(stateWrites, 1);
+  assert.equal(vitalsPersistenceStatus(vitals).skippedUnchangedSaveCount, 2);
+});
+
+// M. Rapid routine changes are coalesced into one checkpoint containing the
+// newest state.
+await withTemp('cy-vitals-m-', async (_dir, path) => {
+  let stateWrites = 0;
+  const vitals = await loadVitals(path, { persistence: {
+    quietFlushMs: 25,
+    maxCheckpointMs: 200,
+    hooks: {
+      beforeWrite: ({ targetPath }) => {
+        if (targetPath === path) stateWrites++;
+      },
+    },
+  } });
+  await saveVitals(path, vitals);
+  stateWrites = 0;
+  vitals.day = 2;
+  const one = scheduleVitalsSave(path, vitals);
+  vitals.day = 3;
+  const two = scheduleVitalsSave(path, vitals);
+  vitals.day = 4;
+  const three = scheduleVitalsSave(path, vitals);
+  await Promise.all([one, two, three]);
+  assert.equal(stateWrites, 1);
+  assert.equal((await diskJson(path)).day, 4);
+});
+
+// N. An urgent save absorbs pending routine changes and persists immediately.
+await withTemp('cy-vitals-n-', async (_dir, path) => {
+  let stateWrites = 0;
+  const vitals = await loadVitals(path, { persistence: {
+    quietFlushMs: 5_000,
+    maxCheckpointMs: 10_000,
+    hooks: {
+      beforeWrite: ({ targetPath }) => {
+        if (targetPath === path) stateWrites++;
+      },
+    },
+  } });
+  await saveVitals(path, vitals);
+  stateWrites = 0;
+  vitals.day = 5;
+  const deferred = scheduleVitalsSave(path, vitals);
+  vitals.day = 6;
+  const urgent = saveVitals(path, vitals);
+  await Promise.all([deferred, urgent]);
+  assert.equal(stateWrites, 1);
+  assert.equal((await diskJson(path)).day, 6);
+  assert.equal(vitalsPersistenceStatus(vitals).nextCheckpointDue, null);
+});
+
+// O. Continuous routine changes cannot postpone the hard checkpoint deadline.
+await withTemp('cy-vitals-o-', async (_dir, path) => {
+  let stateWrites = 0;
+  const vitals = await loadVitals(path, { persistence: {
+    quietFlushMs: 90,
+    maxCheckpointMs: 55,
+    hooks: {
+      beforeWrite: ({ targetPath }) => {
+        if (targetPath === path) stateWrites++;
+      },
+    },
+  } });
+  await saveVitals(path, vitals);
+  stateWrites = 0;
+  vitals.day = 7;
+  const saves = [scheduleVitalsSave(path, vitals)];
+  await delay(20);
+  vitals.day = 8;
+  saves.push(scheduleVitalsSave(path, vitals));
+  await delay(20);
+  vitals.day = 9;
+  saves.push(scheduleVitalsSave(path, vitals));
+  await Promise.all(saves);
+  assert.equal(stateWrites, 1);
+  assert.equal((await diskJson(path)).day, 9);
+});
+
+// P. A simulated crash before write-behind fires recovers the latest guaranteed
+// checkpoint; an explicit urgent flush then advances authority normally.
+await withTemp('cy-vitals-p-', async (_dir, path) => {
+  const vitals = await loadVitals(path, { persistence: {
+    quietFlushMs: 5_000,
+    maxCheckpointMs: 10_000,
+  } });
+  vitals.day = 10;
+  await saveVitals(path, vitals);
+  vitals.day = 11;
+  const deferred = scheduleVitalsSave(path, vitals);
+  const restartedBeforeDeferredFlush = await loadVitals(path);
+  assert.equal(restartedBeforeDeferredFlush.day, 10);
+  await saveVitals(path, vitals);
+  await deferred;
+  const restartedAfterGuaranteedFlush = await loadVitals(path);
+  assert.equal(restartedAfterGuaranteedFlush.day, 11);
+});
+
+// Q. Repeated unchanged operation creates no unbounded auxiliary files.
+await withTemp('cy-vitals-q-', async (dir, path) => {
+  const vitals = await loadVitals(path);
+  await saveVitals(path, vitals);
+  for (let i = 0; i < 20; i++) await saveVitals(path, vitals);
+  const names = await readdir(dir);
+  assert.deepEqual(
+    names.sort(),
+    ['bookkeeping.json', 'vitals.initialized.json', 'vitals.json', 'vitals.previous.json'].sort(),
+  );
+  assert.equal(vitalsPersistenceStatus(vitals).stateWriteCount, 1);
 });
 
 console.log('vitals-persistence.test.js: all checks passed');
