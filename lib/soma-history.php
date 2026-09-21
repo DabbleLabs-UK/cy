@@ -292,29 +292,87 @@ function captive_combined_soma_history_query(
             ORDER BY combined.ts ASC";
 }
 
+// Finds the single most recent (before) or earliest (after) qualifying
+// operational-Anxiety reading across the two storage generations, without
+// ever scanning more than a handful of rows regardless of total history size.
+//
+// The previous version wrapped both branches in a single derived table and
+// applied ORDER BY/LIMIT only to the OUTER query. Neither MySQL nor MariaDB
+// can push a LIMIT from an outer UNION query down into its member SELECTs, so
+// the optimizer had to materialize every legacy 'vitals' row on the matching
+// side of the comparison (unbounded - it grows with total history, not with
+// the requested window) and filesort the whole thing just to keep one row.
+// EXPLAIN showed this touching ~719K rows even for a 1H request.
+//
+// The fix: give EACH branch its own ORDER BY + LIMIT 1, wrapped in
+// parentheses so it scopes to that branch only. That lets each branch use its
+// existing covering index (idx_kind_ts / idx_vitals_history_schema_time) as a
+// direct indexed seek to the one qualifying row it contributes - "seek to the
+// last (or first) row where kind='vitals' AND ts < X", not "collect every
+// such row". The outer query then only ever compares AT MOST two candidate
+// rows (one per branch) and picks the correct one - the same semantics as
+// before (latest non-null reading before the window, or earliest non-null
+// reading at/after it, whichever storage generation actually has it), just
+// reached without materializing the legacy table. The non-null filter moves
+// into each branch's WHERE clause (rather than only the outer query) because
+// with a per-branch LIMIT 1 in place, a branch's single candidate must
+// already be non-null for the outer choice between branches to be correct -
+// this is required for the rewrite to preserve the original result, not an
+// incidental change; in practice every persisted vitals/vitals_history row
+// carries a resolved Anxiety status, so this defensive filter is not expected
+// to ever exclude a real row.
 function captive_operational_anxiety_boundary_query(bool $before): string
 {
     $operator = $before ? '<' : '>=';
     $direction = $before ? 'DESC' : 'ASC';
     return "SELECT boundary.ts, boundary.value
             FROM (
-                SELECT e.ts,
-                       JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$.soma.operationalAnxiety.status')) AS value
-                FROM events e FORCE INDEX (idx_kind_ts)
-                WHERE e.kind = 'vitals' AND e.ts $operator ?
-                  AND e.ts < COALESCE(
-                      (SELECT MIN(observed_at) FROM vitals_history),
-                      '9999-12-31 23:59:59.999'
-                  )
+                (SELECT e.ts,
+                        JSON_UNQUOTE(JSON_EXTRACT(e.payload, '$.soma.operationalAnxiety.status')) AS value
+                 FROM events e FORCE INDEX (idx_kind_ts)
+                 WHERE e.kind = 'vitals' AND e.ts $operator ?
+                   AND e.ts < COALESCE(
+                       (SELECT MIN(observed_at) FROM vitals_history),
+                       '9999-12-31 23:59:59.999'
+                   )
+                   AND JSON_EXTRACT(e.payload, '$.soma.operationalAnxiety.status') IS NOT NULL
+                 ORDER BY e.ts $direction
+                 LIMIT 1)
                 UNION ALL
-                SELECT h.observed_at AS ts,
-                       JSON_UNQUOTE(JSON_EXTRACT(h.payload, '$.anxiety')) AS value
-                FROM vitals_history h
-                WHERE h.schema_version = 1 AND h.observed_at $operator ?
+                (SELECT h.observed_at AS ts,
+                        JSON_UNQUOTE(JSON_EXTRACT(h.payload, '$.anxiety')) AS value
+                 FROM vitals_history h
+                 WHERE h.schema_version = 1 AND h.observed_at $operator ?
+                   AND JSON_EXTRACT(h.payload, '$.anxiety') IS NOT NULL
+                 ORDER BY h.observed_at $direction
+                 LIMIT 1)
             ) boundary
             WHERE boundary.value IS NOT NULL
             ORDER BY boundary.ts $direction
             LIMIT 1";
+}
+
+// Transitions within the requested window, for the operational-Anxiety
+// chart's step line. Reads occurred_at and the Anxiety status from the
+// generated/indexed operational_anxiety_status column (migration 021)
+// instead of JSON_EXTRACT-ing environment_events.record inline: that JSON
+// document averages ~650KB/row (the table is ~1GB across only ~2,500 rows),
+// so filtering on it directly forced MariaDB to read and parse the full
+// record of every row in the requested range just to keep one short status
+// string - measured at ~20-27s for a 7-day window alone. Reading the small
+// generated column via its own covering index (idx_environment_anxiety)
+// resolves the same rows without ever touching `record`. The column must be
+// STORED (see migration 021) - a VIRTUAL column read back through this same
+// covering index reproducibly returned NULL for every row on this MariaDB
+// version, verified by diffing this query's output against the pre-migration
+// inline JSON_EXTRACT query row-for-row before this was trusted in production.
+function captive_operational_anxiety_transition_query(): string
+{
+    return "SELECT occurred_at AS ts, operational_anxiety_status AS value
+            FROM environment_events FORCE INDEX (idx_environment_anxiety)
+            WHERE occurred_at >= ?
+              AND operational_anxiety_status IS NOT NULL
+            ORDER BY occurred_at ASC, event_id ASC";
 }
 
 function captive_circadian_normalize_hour(float $hours): float

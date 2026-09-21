@@ -70,14 +70,7 @@ try {
             $firstStmt->execute([$fromSql, $fromSql]);
             $rows = $firstStmt->fetchAll();
         }
-        $transitionStmt = $db->prepare(
-            "SELECT occurred_at AS ts,
-                    JSON_UNQUOTE(JSON_EXTRACT(record, '$.current_defensive_context.operationalAnxiety.status')) AS value
-             FROM environment_events FORCE INDEX (idx_environment_occurred)
-             WHERE occurred_at >= ?
-               AND JSON_EXTRACT(record, '$.current_defensive_context.operationalAnxiety.status') IS NOT NULL
-             ORDER BY occurred_at ASC, event_id ASC"
-        );
+        $transitionStmt = $db->prepare(captive_operational_anxiety_transition_query());
         $transitionStmt->execute([$fromSql]);
         $rows = array_merge($rows, $transitionStmt->fetchAll());
         usort($rows, static function (array $left, array $right): int {

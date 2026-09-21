@@ -55,8 +55,18 @@ CREATE TABLE environment_events (
     event_family VARCHAR(32) NOT NULL,
     record       JSON NOT NULL,
     created_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    -- Generated/indexed projection of one nested JSON field so the
+    -- operational-Anxiety history chart can filter/read it without touching
+    -- `record` (which can average hundreds of KB/row) - see migration 021.
+    -- Must be STORED: a VIRTUAL column read back via a covering index-only
+    -- scan reproducibly returned NULL on this MariaDB version.
+    operational_anxiety_status VARCHAR(32)
+        GENERATED ALWAYS AS (
+            JSON_UNQUOTE(JSON_EXTRACT(record, '$.current_defensive_context.operationalAnxiety.status'))
+        ) STORED,
     INDEX idx_environment_occurred (occurred_at),
-    INDEX idx_environment_type (event_type, occurred_at)
+    INDEX idx_environment_type (event_type, occurred_at),
+    INDEX idx_environment_anxiety (occurred_at, operational_anxiety_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- People who write to Cy. Keyed by a random visitor_id carried in a signed,

@@ -241,6 +241,36 @@ if (!str_contains($anxietyBoundary, 'FROM vitals_history h')
     fwrite(STDERR, "FAIL: Anxiety boundary query does not bridge legacy and compact storage\n");
     exit(1);
 }
+// Regression guard for the ~719K-row full-materialization timeout: each UNION
+// branch MUST carry its OWN ORDER BY + LIMIT 1 inside its own parentheses, not
+// only the outer query - that is what lets each branch resolve via a direct
+// indexed seek (idx_kind_ts / idx_vitals_history_schema_time) instead of
+// MySQL/MariaDB materializing and filesorting the whole legacy table before
+// the outer LIMIT can apply. A bare "FROM (\n  SELECT ... \n  UNION ALL"
+// (no per-branch ORDER BY/LIMIT before the UNION) is exactly the broken shape.
+foreach ([true, false] as $before) {
+    $direction = $before ? 'DESC' : 'ASC';
+    $query = captive_operational_anxiety_boundary_query($before);
+    if (!preg_match('/\(\s*SELECT\s+e\.ts,[\s\S]*?ORDER BY e\.ts ' . $direction . '\s+LIMIT 1\s*\)/', $query)) {
+        fwrite(STDERR, "FAIL: Anxiety boundary query (before=" . ($before ? 'true' : 'false')
+            . ") events branch is not independently ORDER BY/LIMIT 1 scoped - would re-cause the full-table-scan timeout\n");
+        exit(1);
+    }
+    if (!preg_match('/\(\s*SELECT\s+h\.observed_at[\s\S]*?ORDER BY h\.observed_at ' . $direction . '\s+LIMIT 1\s*\)/', $query)) {
+        fwrite(STDERR, "FAIL: Anxiety boundary query (before=" . ($before ? 'true' : 'false')
+            . ") vitals_history branch is not independently ORDER BY/LIMIT 1 scoped\n");
+        exit(1);
+    }
+    // The non-null filter must move INTO each branch's WHERE (required for the
+    // per-branch LIMIT 1 rewrite to preserve the original "latest/earliest
+    // NON-NULL reading" semantics - without it a branch's single candidate
+    // could be a null-value row, silently starving that source).
+    if (substr_count($query, "IS NOT NULL") < 2) {
+        fwrite(STDERR, "FAIL: Anxiety boundary query (before=" . ($before ? 'true' : 'false')
+            . ") does not filter non-null values inside BOTH branches\n");
+        exit(1);
+    }
+}
 $satietyQuery = captive_soma_history_query(
     '$.soma.physiologicalSatiety.headline.estimate',
     600,
