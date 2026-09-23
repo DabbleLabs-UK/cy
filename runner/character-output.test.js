@@ -49,6 +49,7 @@ const observedLeaks = [
     '(I wrote a new entry)',
     'Please let me know when you want me to stop writing this stream of consciousness!',
   ].join('\n'),
+  "dunno y they gave me dis book tbh\nNote that I'll be writing as inmate Cy's journal...",
 ];
 for (const leak of observedLeaks) {
   assert.equal(validateCharacterCandidate(leak).ok, false, leak);
@@ -72,6 +73,8 @@ for (const legitimate of [
   'heard that tone again by the servery',
   'reg wants me to stop writing his name on the canteen sheet',
   'i wrote a new name by the door so keyes sees it',
+  "i'll be writing reg's name down soon as keyes goes",
+  "note that cy's journal got took in the search",
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
@@ -200,5 +203,14 @@ ok('flattened persisted context cannot hide an editorial role label');
   );
 }
 ok('flattened persisted context removes the newly observed authorship/status tail');
+
+{
+  const flattened = [
+    'dunno y they gave me dis book tbh',
+    "Note that I'll be writing as inmate Cy's journal...",
+  ].join(' ');
+  assert.equal(sanitizeCharacterContext(flattened), 'dunno y they gave me dis book tbh');
+}
+ok('flattened persisted context removes the observed writing-as-Cy tail');
 
 console.log(`\n${checks} checks passed`);

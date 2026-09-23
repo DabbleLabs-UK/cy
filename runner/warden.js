@@ -225,6 +225,7 @@ const ASSISTANT_FRAME = [
   /\bi(?:\s+have|(?:'|\u2019)ve)\s+written\s+(?:a|the|this|your)\s+(?:new\s+)?(?:entry|response|text|passage)\b/i,
   /\(\s*i\s+(?:have\s+)?(?:wrote|written)\s+(?:a|the|this|your)\s+(?:new\s+)?(?:entry|response|text|passage)\s*\)/i,
   /\bi(?:'|\u2019)?ll\s+continue\s+with\s+(?:this|the|your)\s+(?:entry|response|text|passage)\b/i,
+  /\b(?:note\s+that\s+)?i(?:'|\u2019)?ll\s+be\s+writing\s+as\s+(?:inmate\s+)?cy(?:'s|\u2019s)?\b/i,
   /\bplease\s+let\s+me\s+know\s+when\s+you(?:'|\u2019)?re\s+ready\s+for\s+another\s+entry\b/i,
   /\bplease\s+let\s+me\s+know\s+when\s+you\s+(?:want|would\s+like)\s+me\s+to\s+stop\s+(?:writing|generating)\b/i,
   /^\s*i\s+think\s+you(?:'|\u2019)?re\s+ready\s*!/i,
