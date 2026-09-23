@@ -169,4 +169,16 @@ ok('live prompt context removes the newly observed moderator correction tail');
 }
 ok('live prompt context removes an isolated external notification tail');
 
+{
+  // context.jsonl stores a flattened stream: chunk boundaries are separated by
+  // spaces, not preserved newlines. The role label must still terminate context.
+  const flattened = [
+    'tea gone again |5:37:37| Note from moderator:',
+    'wot is daemon at now',
+    'You have a new message!',
+  ].join(' ');
+  assert.equal(sanitizeCharacterContext(flattened), 'tea gone again |5:37:37|');
+}
+ok('flattened persisted context cannot hide an editorial role label');
+
 console.log(`\n${checks} checks passed`);
