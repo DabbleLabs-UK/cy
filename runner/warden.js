@@ -229,6 +229,12 @@ const ASSISTANT_FRAME = [
   /\[(?:\s*)write\s+as\s+cy(?:\s*)\]/i,
   /\(\s*\d+\s+words?\s*\)/i,
   /\bnote\s*:\s*[^\n]{0,160}\b(?:entry|response|request|instructions?|prompt|style|tone|word\s+limit|length)\b/i,
+  // Editorial speaker labels and correction notices are external annotations,
+  // not thoughts Cy can have. Require the explicit editorial structure so an
+  // ordinary in-world "note from Reg" or mention of a correction remains safe.
+  /(?:^|\n)\s*(?:note|message)\s+from\s+(?:the\s+)?(?:moderator|editor|assistant|system)\s*:/i,
+  /\ba\s+correction\s+was\s+(?:applied|made)\b[\s\S]{0,180}\b(?:entry|response|text|sentence|fragment|punctuation|writing)\b/i,
+  /\byour\s+(?:entry|response|text|sentence|passage)\s+now\s+reads\s+as\b/i,
   /\bi(?:'|\u2019)?m\s+(?:glad|happy)\s+(?:we(?:'|\u2019)?ve|we\s+have|you(?:'|\u2019)?ve|you\s+have)\s+got\s+(?:some\s+)?context\b/i,
   /\b(?:this|your|the)\s+(?:entry|response|text|passage|writing)\b[^\n]{0,100}\b(?:captures?|matches?|maintains?)\s+(?:cy(?:'|\u2019)?s\s+)?(?:tone|voice|style)\b/i,
   /\byou(?:'|\u2019)?ve\s+(?:really\s+)?(?:captured|matched|nailed)\b[^\n]{0,100}\b(?:tone|voice|style)\b/i,

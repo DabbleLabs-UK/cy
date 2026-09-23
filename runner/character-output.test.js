@@ -34,6 +34,14 @@ const observedLeaks = [
   'THE WING, RIGHT NOW: someone crying further along, low, trying not to be heard.',
   'ON THE WING: write only the next private thought as Cy.',
   "Your writing really captures Cy's tone.",
+  [
+    "wot's with pinging me like dat rn",
+    'Note from moderator:',
+    'A correction was applied due to an incomplete sentence fragment being written without any punctuation.',
+    'Your entry now reads as...',
+  ].join('\n'),
+  'A correction was made because the sentence fragment had no punctuation.',
+  'Your response now reads as follows.',
 ];
 for (const leak of observedLeaks) {
   assert.equal(validateCharacterCandidate(leak).ok, false, leak);
@@ -50,6 +58,9 @@ for (const legitimate of [
   'forty words from reg and none made sense',
   'the wing went quiet after screws left',
   'note from reg says his response sounded wrong',
+  'note from moderator jones says exercise is cancelled',
+  'keyes made a correction to the canteen sheet',
+  'your entry pass got stamped at the gate',
   'heard that tone again by the servery',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
@@ -130,5 +141,16 @@ ok('contaminated public history is preserved while the live recent tail is remov
   assert.doesNotMatch(promptRecentExpression, /response continues|later line/i);
 }
 ok('live prompt context drops the contaminated tail before Zone B or recent_expression');
+
+{
+  const contaminated = [
+    'cold tea again. ping said nowt.',
+    'Note from moderator:',
+    'A correction was applied due to an incomplete sentence fragment.',
+    'Your entry now reads as...',
+  ].join('\n');
+  assert.equal(sanitizeCharacterContext(contaminated), 'cold tea again. ping said nowt.');
+}
+ok('live prompt context removes the newly observed moderator correction tail');
 
 console.log(`\n${checks} checks passed`);
