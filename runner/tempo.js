@@ -110,21 +110,53 @@ export class InferenceTempoPacer {
   }
 }
 
-// Background model work (memory formation/surfacing and ambient world work) must
-// obey the same deliberate quiet as visible prose. Without this gate a low tempo
-// merely made the journal look quiet while hidden inference consumed the entire
-// gap. This is scheduling only: it neither changes a model call nor claims that
-// hidden work is part of Cy's visible duty percentage.
+// Background model work must not indiscriminately fill deliberate quiet. Memory
+// formation/surfacing waits until the reservation ends. AWG is the single narrow
+// exception: the journal scheduler may offer it a one-shot token for the quiet
+// interval that was intentionally designed to host an ambient-world opportunity.
+// This is scheduling only; it neither changes model content nor treats hidden
+// work as part of Cy's visible duty percentage.
 export class BackgroundTempoGate {
   constructor() {
     this.notBeforeMs = 0;
+    this.awgReservationSequence = 0;
+    this.awgReservation = null;
   }
 
   reserveVisibleIdle(idleMs, nowMs) {
     const now = Number(nowMs) || 0;
     const until = now + Math.max(0, Number(idleMs) || 0);
     this.notBeforeMs = Math.max(this.notBeforeMs, until);
+    this.awgReservation = null;
     return this.notBeforeMs;
+  }
+
+  // A normal visible inference cycle deliberately creates a quiet interval.
+  // AWG may consume that same interval only when its caller explicitly offers
+  // this one-shot token. Other background work remains blocked by canStart().
+  // This keeps the quiet period as the scheduling boundary without making it
+  // self-contradictory for the one subsystem it was intended to host.
+  reserveVisibleIdleForAwg(idleMs, nowMs) {
+    const now = Number(nowMs) || 0;
+    const reservedUntilMs = this.reserveVisibleIdle(idleMs, now);
+    const reservation = Object.freeze({
+      kind: 'AWG_VISIBLE_IDLE',
+      id: ++this.awgReservationSequence,
+      offeredAtMs: now,
+      reservedUntilMs,
+    });
+    this.awgReservation = { ...reservation, claimed: false };
+    return reservation;
+  }
+
+  claimAwgReservation(reservation, nowMs) {
+    const now = Number(nowMs) || 0;
+    const active = this.awgReservation;
+    if (!reservation || reservation.kind !== 'AWG_VISIBLE_IDLE' || !active) return false;
+    if (reservation.id !== active.id || active.claimed) return false;
+    if (now < active.offeredAtMs || now >= active.reservedUntilMs) return false;
+    active.claimed = true;
+    return true;
   }
 
   recordBackgroundWork(startedAtMs, endedAtMs, speed) {
@@ -132,6 +164,7 @@ export class BackgroundTempoGate {
     const start = Math.min(Number(startedAtMs) || end, end);
     const until = end + tempoIdleMs(end - start, speed);
     this.notBeforeMs = Math.max(this.notBeforeMs, until);
+    this.awgReservation = null;
     return this.notBeforeMs;
   }
 
@@ -147,5 +180,6 @@ export class BackgroundTempoGate {
     // A user who explicitly speeds Cy up should not have to wait for an old
     // slower reservation. Lowering the speed preserves the existing quiet.
     if (clampSpeed(nextSpeed) > clampSpeed(previousSpeed)) this.notBeforeMs = 0;
+    if (clampSpeed(nextSpeed) !== clampSpeed(previousSpeed)) this.awgReservation = null;
   }
 }

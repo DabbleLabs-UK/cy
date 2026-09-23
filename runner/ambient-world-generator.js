@@ -69,7 +69,11 @@ export const INFERENCE_PRIORITIES = Object.freeze({
   AWG_BACKGROUND: 5,
 });
 export const AWG_MIN_IDLE_BUDGET_MS = 60000;
-export const AWG_TIMEOUT_MS = 120000;
+// DELL commonly spends 75-115 seconds evaluating a 3072-token prompt before
+// the first token. AWG may then need to produce and validate up to 420 tokens.
+// Five minutes is a hard ceiling, not a cadence: shouldRunAwg still admits at
+// most one attempt per 45-minute opportunity and higher-priority work aborts it.
+export const AWG_TIMEOUT_MS = 300000;
 export const AWG_RETRY_LIMIT = 0;
 export const AWG_MODEL_OPTIONS = Object.freeze({
   temperature: 0.65,

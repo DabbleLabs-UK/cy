@@ -616,8 +616,18 @@ async function main() {
   const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
   const inferenceDiagnosticPath = join(STATE_DIR, 'inference-requests.jsonl');
   const recentCompletedInference = [];
+  let activeInferencePurpose = null;
+  let activeInferenceRequestId = null;
   function recordInferenceDiagnostic(detail) {
     const record = { schema: 'cy.inference-request.v1', ...detail };
+    if (record.event === 'start') {
+      activeInferencePurpose = record.purpose || null;
+      activeInferenceRequestId = record.id || null;
+    } else if ((record.event === 'end' || record.event === 'cancelled')
+      && (!activeInferenceRequestId || record.id === activeInferenceRequestId)) {
+      activeInferencePurpose = null;
+      activeInferenceRequestId = null;
+    }
     if (record.event === 'end') {
       recentCompletedInference.push({ id: record.id, startedAtMs: Date.parse(record.started_at) || 0 });
       while (recentCompletedInference.length > 100) recentCompletedInference.shift();
@@ -2542,9 +2552,11 @@ async function main() {
   async function rawGenerate({
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
-    attempt = 'initial',
+    attempt = 'initial', admittedAwgSlot = false,
   }) {
     let startedAtMs = null;
+    const awgInReservedIdle = admittedAwgSlot && purpose === 'ambient_world_generation';
+    const coordinatorBackground = background || awgInReservedIdle;
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
     // prose does. Incoming postcards/notices still abort it through currentAbort.
@@ -2567,11 +2579,12 @@ async function main() {
     let requestStats = null;
     let outputChars = 0;
     try {
-      if (!background) await waitForInferenceTempo(ac.signal, purpose);
+      if (!background && !awgInReservedIdle) await waitForInferenceTempo(ac.signal, purpose);
       lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
-        provider, system, prompt, opts, purpose, attempt, background, transport: 'raw',
+        provider, system, prompt, opts, purpose, attempt,
+        background: coordinatorBackground, transport: 'raw',
       }), deferStart: true }, ac.signal);
-      if (!background) await waitForInferenceTempo(ac.signal, purpose);
+      if (!background && !awgInReservedIdle) await waitForInferenceTempo(ac.signal, purpose);
       if (typeof provider.acquireSharedLease === 'function') {
         hostLease = await provider.acquireSharedLease({
           purpose,
@@ -4075,7 +4088,13 @@ async function main() {
     // (clearing the fed-back context) done automatically. Runs on this independent
     // timer so it fires even if the generation loop itself is hung.
     const stalled = failedCyclesSinceEmit >= STALL_CYCLES;
-    const hung = inferPhase !== 'idle' && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
+    // AWG emits no handwriting tokens while it works, so the waking-prose
+    // no-token watchdog is not a valid liveness test for that request class.
+    // AWG has its own finite provider timeout and remains interruptible by all
+    // higher-priority inbound work through currentAbort.
+    const proseInferenceBusy = inferPhase !== 'idle'
+      && activeInferencePurpose !== 'ambient_world_generation';
+    const hung = proseInferenceBusy && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
     if (
       running &&
       !client.paused &&
@@ -4256,20 +4275,22 @@ async function main() {
     }
   }, POWER_SAMPLE_MS);
 
-  async function runAwgDuringIdle(idleBudgetMs) {
-    if (!backgroundTempoGate.canStart(Date.now())) {
-      return { status: 'SKIPPED', reason: 'TEMPO_RESERVED' };
-    }
+  async function runAwgDuringIdle(idleBudgetMs, awgReservation = null) {
+    const nowMs = Date.now();
     const memoryPriorityPending = autobiographicalMemory
       ? autobiographicalMemory.hasPriorityWork() : false;
     const eligibility = shouldRunAwg(vitals.worldSimulation, {
-      nowMs: Date.now(),
+      nowMs,
       idleBudgetMs,
       pendingHigherPriority: pendingPostcards.length > 0 || pendingWarden.length > 0 || client.paused,
       memoryFormationBacklog: memoryPriorityPending ? 1 : 0,
       inferenceBusy: inferPhase !== 'idle',
     });
     if (!eligibility.run) return { status: 'SKIPPED', reason: eligibility.reason };
+    if (!backgroundTempoGate.claimAwgReservation(awgReservation, nowMs)) {
+      return { status: 'SKIPPED', reason: 'TEMPO_RESERVED' };
+    }
+    console.log(`[cy-awg] opportunity admitted idle_ms=${Math.round(idleBudgetMs)} timeout_ms=${AWG_TIMEOUT_MS}`);
     const context = buildBrokerContext(CONTEXT_CONSUMERS.AWG, {
       generationRef: `awg-context:${Date.now()}`,
       fallback: '',
@@ -4292,8 +4313,12 @@ async function main() {
         opts: options(vitals, config.threads, 'journal', call.options),
         purpose: call.purpose,
         accountingMode: 'ambient_world_generation',
-        timeoutMs: Math.min(AWG_TIMEOUT_MS, idleBudgetMs),
+        // The reservation admits the request; it is not a kill timer. Real DELL
+        // prompt evaluation can exceed the remaining visible idle interval. The
+        // normal inference pacer charges any overrun before the next visible call.
+        timeoutMs: AWG_TIMEOUT_MS,
         attempt: 'ambient-world-candidate',
+        admittedAwgSlot: true,
       }),
     });
     vitals.worldSimulation = result.state;
@@ -4361,12 +4386,12 @@ async function main() {
   // AWG is permitted only when the caller explicitly marks a normal waking
   // throttle interval as spare capacity. Dream, failure-backoff and chosen
   // silence intervals never start background world inference.
-  async function idleSilently(ms, { breakOnTempo = false, allowAwg = false } = {}) {
+  async function idleSilently(ms, { breakOnTempo = false, awgReservation = null } = {}) {
     const end = Date.now() + ms;
     const startingTempoEpoch = tempoEpoch;
-    if (allowAwg) {
+    if (awgReservation) {
       try {
-        await runAwgDuringIdle(Math.max(0, end - Date.now()));
+        await runAwgDuringIdle(Math.max(0, end - Date.now()), awgReservation);
       } catch (error) {
         console.error(`[cy] AWG failed safely: ${error && error.message || error}`);
       }
@@ -4392,7 +4417,7 @@ async function main() {
     }
     backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
     await recordOutcome('throttled');
-    await idleSilently(idleMs, { breakOnTempo: true, allowAwg: false });
+    await idleSilently(idleMs, { breakOnTempo: true });
     return { busyMs, idleMs };
   }
 
@@ -4685,7 +4710,9 @@ async function main() {
           currentMode = 'exercise';
           client.kick();
         }
-        await idleSilently(65_000, { allowAwg: true });
+        // Exercise polling is intentionally short and interruptible. It is not
+        // an AWG provider budget; normal journal-created quiet owns AWG cadence.
+        await idleSilently(65_000);
         continue;
       }
       if (pendingPostcards.length) {
@@ -5135,9 +5162,9 @@ async function main() {
       if (completedAttempt && idleMs > 0) {
         if (failureBackoff > 0) await logBackoff(nonEmittingStreak, failureBackoff);
         recordTempoDiagnostic(burstStart, idleMs, idleReason, true);
-        backgroundTempoGate.reserveVisibleIdle(idleMs, Date.now());
+        const awgReservation = backgroundTempoGate.reserveVisibleIdleForAwg(idleMs, Date.now());
         await recordOutcome('throttled');
-        await idleSilently(idleMs, { breakOnTempo: true, allowAwg: true });
+        await idleSilently(idleMs, { breakOnTempo: true, awgReservation });
       } else if (produced) {
         recordTempoDiagnostic(burstStart, 0, 'full-tempo', false);
         await sleep(150); // preserve the small breather at full local tempo

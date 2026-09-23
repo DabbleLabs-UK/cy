@@ -35,16 +35,16 @@ test('foreground overtakes queued background work', async () => {
   const coordinator = new InferenceCoordinator();
   const owner = await coordinator.acquire({ purpose: 'owner' });
   const order = [];
-  const backgroundPromise = coordinator.acquire({ purpose: 'memory', background: true })
-    .then((lease) => { order.push('background'); return lease; });
-  const foregroundPromise = coordinator.acquire({ purpose: 'journal', background: false })
-    .then((lease) => { order.push('foreground'); return lease; });
+  const backgroundPromise = coordinator.acquire({ purpose: 'ambient_world_generation', background: true })
+    .then((lease) => { order.push('awg'); return lease; });
+  const foregroundPromise = coordinator.acquire({ purpose: 'postcard', background: false })
+    .then((lease) => { order.push('postcard'); return lease; });
   owner.finish();
   const foreground = await foregroundPromise;
-  assert.deepEqual(order, ['foreground']);
+  assert.deepEqual(order, ['postcard']);
   foreground.finish();
   const background = await backgroundPromise;
-  assert.deepEqual(order, ['foreground', 'background']);
+  assert.deepEqual(order, ['postcard', 'awg']);
   background.finish();
 });
 

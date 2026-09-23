@@ -54,6 +54,17 @@ assert.equal(gate.reserveVisibleIdle(visibleIdle, gateNow), gateNow + visibleIdl
 assert.equal(gate.canStart(gateNow + visibleIdle - 1), false,
   'background inference cannot fill a visible tempo quiet period');
 assert.equal(gate.canStart(gateNow + visibleIdle), true);
+const admittedGate = new BackgroundTempoGate();
+const awgReservation = admittedGate.reserveVisibleIdleForAwg(visibleIdle, gateNow);
+assert.equal(admittedGate.canStart(gateNow), false,
+  'ordinary background work remains blocked during the reserved quiet');
+assert.equal(admittedGate.claimAwgReservation(awgReservation, gateNow), true,
+  'the explicitly offered AWG slot can use the quiet period that created it');
+assert.equal(admittedGate.claimAwgReservation(awgReservation, gateNow), false,
+  'an AWG reservation is one-shot and cannot create a retry storm');
+const expiredReservation = admittedGate.reserveVisibleIdleForAwg(visibleIdle, gateNow);
+assert.equal(admittedGate.claimAwgReservation(expiredReservation, gateNow + visibleIdle), false,
+  'an expired quiet reservation cannot start late background work');
 const backgroundStarted = gateNow + visibleIdle;
 const backgroundEnded = backgroundStarted + 10000;
 assert.equal(gate.recordBackgroundWork(backgroundStarted, backgroundEnded, 31),
@@ -69,7 +80,7 @@ assert.equal(gate.canStart(gateNow), false,
   'slowing down does not let queued background work burst through existing quiet');
 
 const runSource = await readFile(new URL('./run.js', import.meta.url), 'utf8');
-assert.match(runSource, /idleSilently\(idleMs, \{ breakOnTempo: true, allowAwg: true \}\)/,
+assert.match(runSource, /idleSilently\(idleMs, \{ breakOnTempo: true, awgReservation \}\)/,
   'a tempo change interrupts a long duty-cycle wait and that wait alone offers spare AWG capacity');
 assert.match(runSource, /if \(nextIdleTempoSpeed !== idleTempoSpeed\) \{[\s\S]*?tempoEpoch\+\+;/,
   'only a real speed change interrupts the current duty-cycle wait');
@@ -81,8 +92,14 @@ assert.match(runSource, /backgroundTempoGate\.reserveVisibleIdle\(idleMs, Date\.
   'visible tempo quiet is reserved before background inference can use it');
 assert.match(runSource, /canRunBackground: \(kind\) => inferPhase === 'idle'[\s\S]*?inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) <= 0[\s\S]*?backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
   'memory background work respects per-request pacing and the tempo reservation');
-assert.match(runSource, /reason: 'TEMPO_RESERVED'/,
-  'ambient world work cannot consume a reserved tempo quiet period');
+assert.match(runSource, /backgroundTempoGate\.claimAwgReservation\(awgReservation, nowMs\)/,
+  'only an explicitly offered one-shot reservation admits AWG into visible tempo quiet');
+assert.match(runSource, /if \(!background && !awgInReservedIdle\) await waitForInferenceTempo/,
+  'an admitted AWG slot does not wait out the same tempo reservation a second time');
+assert.match(runSource, /background: coordinatorBackground, transport: 'raw'/,
+  'admitted AWG work remains lower priority in the serialized inference coordinator');
+assert.match(runSource, /activeInferencePurpose !== 'ambient_world_generation'/,
+  'the foreground no-token watchdog cannot silently shorten the finite AWG provider budget');
 assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, endedAtMs, client\.tempo\.speed\)/,
   'each background model call earns its own tempo quiet');
 assert.match(runSource, /const cycleInferenceStart = Date\.now\(\);[\s\S]*?chooseExpressiveAction\(/,
@@ -91,7 +108,7 @@ assert.match(runSource, /const burstStart = cycleInferenceStart;/,
   'action-selection inference is included in the measured visible burst');
 assert.match(runSource, /waitForInferenceTempo\(ac\.signal, purpose \|\| mode\)[\s\S]*?inferenceCoordinator\.acquire/,
   'streaming requests pay inter-request tempo before taking the provider slot');
-assert.match(runSource, /if \(!background\) await waitForInferenceTempo\(ac\.signal, purpose\)[\s\S]*?inferenceCoordinator\.acquire/,
+assert.match(runSource, /if \(!background && !awgInReservedIdle\) await waitForInferenceTempo\(ac\.signal, purpose\)[\s\S]*?inferenceCoordinator\.acquire/,
   'foreground non-streaming requests pay inter-request tempo before taking the provider slot');
 assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining/,
   'the cycle tail charges only the final request remainder, not the whole multi-call wall time');
@@ -111,7 +128,7 @@ assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoP
   'rejected, repeated, empty, and failed completed attempts retain the final request tempo quiet');
 assert.match(runSource, /const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0[\s\S]*?BACKOFF_BASE_MS/s,
   'all providers receive bounded backoff after a genuine non-emitting failure');
-assert.match(runSource, /if \(completedAttempt && idleMs > 0\) \{[\s\S]*?await idleSilently\(idleMs, \{ breakOnTempo: true, allowAwg: true \}\);/,
+assert.match(runSource, /if \(completedAttempt && idleMs > 0\) \{[\s\S]*?reserveVisibleIdleForAwg\(idleMs, Date\.now\(\)\)[\s\S]*?await idleSilently\(idleMs, \{ breakOnTempo: true, awgReservation \}\);/,
   'completed local attempts are paced before another model call can begin');
 assert.doesNotMatch(runSource, /const metered = !activeProvider\(\)\.local;/,
   'local Ollama failures are no longer exempt from failure pacing');

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   AWG_CADENCE_MS,
   AWG_MIN_IDLE_BUDGET_MS,
+  AWG_TIMEOUT_MS,
   AWG_SCHEMA,
   applyAwgCandidate,
   awgEventToEnvironment,
@@ -13,6 +14,13 @@ import {
   shouldRunAwg,
   validateAwgCandidate,
 } from './ambient-world-generator.js';
+
+test('scheduling budget covers realistic slow local inference without changing cadence', () => {
+  assert.equal(AWG_CADENCE_MS, 45 * 60 * 1000);
+  assert.equal(AWG_TIMEOUT_MS, 5 * 60 * 1000);
+  assert.ok(AWG_TIMEOUT_MS > 65_000,
+    'the former exercise-poll budget cannot abort AWG before realistic DELL first-token latency');
+});
 
 const NOW = Date.parse('2026-09-12T12:00:00.000Z');
 
@@ -182,6 +190,12 @@ test('M: AWG failure returns safely and leaves authoritative state unchanged', a
   assert.equal(result.status, 'FAILED');
   assert.deepEqual(result.state.threads, before.threads);
   assert.deepEqual(result.state.recentAccepted, before.recentAccepted);
+  assert.equal(result.state.lastRunAt, new Date(NOW).toISOString(),
+    'a failed attempt records its slot so the 45-minute cadence provides backoff');
+  assert.equal(shouldRunAwg(result.state, {
+    nowMs: NOW + 1000,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+  }).reason, 'CADENCE', 'a failed attempt cannot retry on the next journal quiet');
 });
 
 test('N: AWG never runs ahead of higher-priority work', () => {

@@ -104,11 +104,11 @@ assert.match(source,
   'raw timeout starts only after shared-host ownership is granted');
 ok('shared-host queueing is excluded from provider timeout accounting');
 
-// ---- 6. the background AWG call site is untouched (keeps its own timeout) ----
-assert.match(source, /timeoutMs: Math\.min\(AWG_TIMEOUT_MS, idleBudgetMs\)/,
-  'AWG (background world generation) keeps its own pre-existing timeout, unchanged');
-assert.doesNotMatch(source, /Math\.min\(AWG_TIMEOUT_MS, idleBudgetMs\)[\s\S]{0,40}FOREGROUND_INFERENCE_TIMEOUT_MS/,
+// ---- 6. AWG keeps a finite purpose-specific provider timeout ----
+assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeoutMs: AWG_TIMEOUT_MS,[\s\S]{0,160}?admittedAwgSlot: true/,
+  'AWG receives its finite background timeout after explicit reserved-slot admission');
+assert.doesNotMatch(source, /timeoutMs: AWG_TIMEOUT_MS[\s\S]{0,40}FOREGROUND_INFERENCE_TIMEOUT_MS/,
   'AWG is never given the foreground timeout in addition to its own');
-ok('background AWG call site is unchanged (keeps Math.min(AWG_TIMEOUT_MS, idleBudgetMs), not the foreground constant)');
+ok('background AWG call site uses its own finite provider timeout, not the foreground constant');
 
 console.log(`\nforeground-timeout.test.js: all ${n} checks passed`);
