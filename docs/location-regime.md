@@ -3,7 +3,7 @@
 ## Status and authority
 
 `runner/location-regime.js` is the authoritative factual state machine for Cy's
-physical location. Its state is stored inside the atomic `vitals.json` envelope.
+physical location. Its state is stored inside the atomic sectioned-state checkpoint.
 It does not infer emotion, subjective experience, biological state, or prose.
 
 Locations are `CELL`, `EXERCISE_YARD`, and the transient

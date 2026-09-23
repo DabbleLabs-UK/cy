@@ -8,11 +8,10 @@ import {
   loadVitals,
   saveVitals,
   scheduleVitalsSave,
-  validateVitalsState,
   vitalsPersistenceStatus,
 } from './vitals.js';
+import { sectionedStorePaths } from './sectioned-state-store.js';
 
-const clone = (value) => JSON.parse(JSON.stringify(value));
 const validState = (extra = {}) => ({ ...initialVitals(), ...extra });
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -33,85 +32,72 @@ async function diskJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
-async function assertNoTempFiles(dir) {
-  const names = await readdir(dir);
-  assert.equal(names.some((name) => name.endsWith('.tmp')), false, 'temporary files are cleaned up');
+async function allNames(dir, prefix = '') {
+  const names = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) names.push(...await allNames(join(dir, entry.name), relative));
+    else names.push(relative);
+  }
+  return names.sort();
 }
 
-// A. A normal save replaces the authoritative file and retains one prior snapshot.
+async function assertNoTempFiles(dir) {
+  assert.equal((await allNames(dir)).some((name) => name.endsWith('.tmp')), false);
+}
+
+const largeEpisodes = (count = 320) => Array.from({ length: count }, (_, index) => ({
+  id: `memory-${index}`,
+  text: `episode ${index} ${'x'.repeat(120)}`,
+  activation: index / count,
+}));
+
+// A. A legacy monolith migrates without mutation and remains as a preserved fallback.
 await withTemp('cy-vitals-a-', async (dir, path) => {
-  const original = validState({ day: 7 });
+  const original = validState({
+    day: 7,
+    cognition: { memory: { episodes: largeEpisodes(80), nextId: 81 } },
+  });
   await seed(path, original);
   const vitals = await loadVitals(path);
-  vitals.day = 8;
   await saveVitals(path, vitals);
-  const current = await diskJson(path);
-  const previous = await diskJson(join(dir, 'vitals.previous.json'));
-  assert.equal(current.day, 8);
-  assert.equal(current.persistenceFormatVersion, 1);
-  assert.equal(previous.day, 7);
-  assert.equal(vitalsPersistenceStatus(vitals).lastValidationResult, 'valid');
-  await assertNoTempFiles(dir);
+  assert.deepEqual(await diskJson(path), original, 'legacy monolith remains untouched');
+  const restarted = await loadVitals(path);
+  assert.equal(restarted.day, 7);
+  assert.deepEqual(restarted.cognition, original.cognition);
+  const paths = sectionedStorePaths(path);
+  assert.equal((await diskJson(paths.currentManifest)).storageFormatVersion, 2);
+  assert.equal((await diskJson(paths.previousManifest)).storageFormatVersion, 2);
+  assert.equal((await diskJson(join(dir, 'vitals.initialized.json'))).persistenceFormatVersion, 1);
+  assert.equal(vitalsPersistenceStatus(restarted).storageFormatVersion, 2);
 });
 
-// B. A partial temporary write followed by an I/O failure never touches authority.
+// B. Failure before the first manifest replacement leaves the legacy authority intact.
 await withTemp('cy-vitals-b-', async (dir, path) => {
   const original = validState({ day: 9 });
   await seed(path, original);
+  const currentManifest = sectionedStorePaths(path).currentManifest;
   const vitals = await loadVitals(path, { persistence: {
     maxAttempts: 1,
     retryDelaysMs: [],
     hooks: {
-      beforeWrite: ({ targetPath, text }) => targetPath === path ? { text: text.slice(0, 41) } : undefined,
+      beforeWrite: ({ targetPath, text }) => targetPath === currentManifest
+        ? { text: text.slice(0, 41) }
+        : undefined,
       afterWrite: ({ targetPath }) => {
-        if (targetPath === path) throw new Error('injected mid-write failure');
+        if (targetPath === currentManifest) throw new Error('injected manifest write failure');
       },
     },
   } });
   vitals.day = 10;
-  await assert.rejects(() => saveVitals(path, vitals), /injected mid-write failure/);
+  await assert.rejects(() => saveVitals(path, vitals), /injected manifest write failure/);
   assert.deepEqual(await diskJson(path), original);
+  assert.equal((await loadVitals(path)).day, 9);
   await assertNoTempFiles(dir);
 });
 
-// C. A closed but truncated candidate fails parse/validation before replacement.
+// C. Invalid legacy authority is preserved and recovered from legacy previous state.
 await withTemp('cy-vitals-c-', async (dir, path) => {
-  const original = validState({ day: 11 });
-  await seed(path, original);
-  const vitals = await loadVitals(path, { persistence: {
-    maxAttempts: 1,
-    retryDelaysMs: [],
-    hooks: {
-      beforeWrite: ({ targetPath, text }) => targetPath === path ? { text: text.slice(0, 73) } : undefined,
-    },
-  } });
-  vitals.day = 12;
-  await assert.rejects(() => saveVitals(path, vitals), SyntaxError);
-  assert.deepEqual(await diskJson(path), original);
-  await assertNoTempFiles(dir);
-});
-
-// C2. A failure immediately before replacement leaves authority intact.
-await withTemp('cy-vitals-c2-', async (dir, path) => {
-  const original = validState({ day: 12 });
-  await seed(path, original);
-  const vitals = await loadVitals(path, { persistence: {
-    maxAttempts: 1,
-    retryDelaysMs: [],
-    hooks: {
-      beforeRename: ({ targetPath }) => {
-        if (targetPath === path) throw new Error('injected replacement failure');
-      },
-    },
-  } });
-  vitals.day = 13;
-  await assert.rejects(() => saveVitals(path, vitals), /injected replacement failure/);
-  assert.deepEqual(await diskJson(path), original);
-  await assertNoTempFiles(dir);
-});
-
-// D. Invalid authority is preserved for forensics and recovered from validated previous state.
-await withTemp('cy-vitals-d-', async (dir, path) => {
   const previous = validState({ day: 13, cognition: { memory: { episodes: [{ id: 'kept' }] } } });
   await writeFile(path, '{"physical":');
   await seed(join(dir, 'vitals.previous.json'), previous);
@@ -119,242 +105,178 @@ await withTemp('cy-vitals-d-', async (dir, path) => {
   assert.equal(vitals.day, 13);
   assert.deepEqual(vitals.cognition.memory.episodes, [{ id: 'kept' }]);
   assert.equal(vitalsPersistenceStatus(vitals).startupRecoveryUsed, true);
-  assert.deepEqual(await diskJson(path), previous);
   assert.equal(await readFile(join(dir, 'vitals.corrupt.json'), 'utf8'), '{"physical":');
 });
 
-// E. Two invalid copies fail closed. The invalid authority is not replaced by defaults.
-await withTemp('cy-vitals-e-', async (dir, path) => {
+// D. Two invalid legacy copies still fail closed.
+await withTemp('cy-vitals-d-', async (dir, path) => {
   await writeFile(path, '{bad authority');
   await writeFile(join(dir, 'vitals.previous.json'), '{bad previous');
-  await assert.rejects(
-    () => loadVitals(path),
-    (error) => error && error.code === 'CY_STATE_RECOVERY_REQUIRED',
-  );
+  await assert.rejects(() => loadVitals(path), (error) => error && error.code === 'CY_STATE_RECOVERY_REQUIRED');
   assert.equal(await readFile(path, 'utf8'), '{bad authority');
 });
 
-// F. An actually empty installation may initialise once and then carries a marker and recovery copy.
-await withTemp('cy-vitals-f-', async (dir, path) => {
+// E. A fresh installation creates coherent current and previous V2 generations.
+await withTemp('cy-vitals-e-', async (_dir, path) => {
   const vitals = await loadVitals(path);
   assert.equal(vitalsPersistenceStatus(vitals).firstInstall, true);
   await saveVitals(path, vitals);
-  validateVitalsState(await diskJson(path), { requireFormatVersion: true });
-  validateVitalsState(await diskJson(join(dir, 'vitals.previous.json')), { requireFormatVersion: true });
-  assert.equal((await diskJson(join(dir, 'vitals.initialized.json'))).persistenceFormatVersion, 1);
   const restarted = await loadVitals(path);
+  assert.equal(restarted.day, 1);
   assert.equal(vitalsPersistenceStatus(restarted).firstInstall, false);
+  const paths = sectionedStorePaths(path);
+  assert.deepEqual(await diskJson(paths.currentManifest), await diskJson(paths.previousManifest));
 });
 
-// F2. Missing state in a directory with continuity evidence is not a first install.
-await withTemp('cy-vitals-f2-', async (dir, path) => {
+// F. Existing continuity evidence without any valid state is never treated as a fresh install.
+await withTemp('cy-vitals-f-', async (dir, path) => {
   await writeFile(join(dir, 'context.jsonl'), '{"s":"existing continuity"}\n');
-  await assert.rejects(
-    () => loadVitals(path),
-    (error) => error && error.code === 'CY_STATE_RECOVERY_REQUIRED',
-  );
+  await assert.rejects(() => loadVitals(path), (error) => error && error.code === 'CY_STATE_RECOVERY_REQUIRED');
 });
 
-// G. Overlapping requests serialize and coalesce, leaving the newest requested state on disk.
+// G. Overlapping urgent saves coalesce and leave the newest coherent generation.
 await withTemp('cy-vitals-g-', async (_dir, path) => {
-  await seed(path, validState({ day: 20 }));
-  let releaseFirst;
-  let firstReachedRename;
-  const firstAtRename = new Promise((resolve) => { firstReachedRename = resolve; });
-  const release = new Promise((resolve) => { releaseFirst = resolve; });
-  let renameVisits = 0;
-  const vitals = await loadVitals(path, { persistence: {
-    recoveryRefreshMs: 60_000,
-    hooks: {
-      beforeRename: async ({ targetPath }) => {
-        if (targetPath !== path || renameVisits++ !== 0) return;
-        firstReachedRename();
-        await release;
-      },
-    },
-  } });
+  const vitals = await loadVitals(path);
+  await saveVitals(path, vitals);
   vitals.day = 21;
-  const firstSave = saveVitals(path, vitals);
-  await firstAtRename;
+  const one = saveVitals(path, vitals);
   vitals.day = 22;
-  const secondSave = saveVitals(path, vitals);
+  const two = saveVitals(path, vitals);
   vitals.day = 23;
-  const thirdSave = saveVitals(path, vitals);
-  releaseFirst();
-  await Promise.all([firstSave, secondSave, thirdSave]);
-  assert.equal((await diskJson(path)).day, 23);
+  const three = saveVitals(path, vitals);
+  await Promise.all([one, two, three]);
+  assert.equal((await loadVitals(path)).day, 23);
   assert.ok(vitalsPersistenceStatus(vitals).coalescedSaveCount >= 1);
 });
 
-// H. A write-open failure is bounded and retains the last good authority.
-await withTemp('cy-vitals-h-', async (dir, path) => {
-  const original = validState({ day: 23 });
-  await seed(path, original);
-  const vitals = await loadVitals(path, { persistence: {
-    maxAttempts: 2,
-    retryDelaysMs: [0],
-    hooks: {
-      beforeWrite: ({ targetPath }) => {
-        if (targetPath === path) throw new Error('injected disk write error');
-      },
-    },
-  } });
-  vitals.day = 24;
-  await assert.rejects(() => saveVitals(path, vitals), /injected disk write error/);
-  assert.deepEqual(await diskJson(path), original);
-  assert.equal(vitalsPersistenceStatus(vitals).failedSaveCount, 1);
-  await assertNoTempFiles(dir);
-});
-
-// I. The real failure scale is covered: a state just over 13 MiB round-trips intact.
-await withTemp('cy-vitals-i-', async (_dir, path) => {
+// H. A state above 13 MiB round-trips without placing the whole state in a manifest.
+await withTemp('cy-vitals-h-', async (_dir, path) => {
   const vitals = await loadVitals(path);
   const payload = 'x'.repeat(13 * 1024 * 1024 + 257);
   vitals.cognition = { memory: { largePayload: payload } };
   await saveVitals(path, vitals);
-  const bytes = Buffer.byteLength(await readFile(path, 'utf8'), 'utf8');
-  assert.ok(bytes > 13 * 1024 * 1024);
-  const restarted = await loadVitals(path);
-  assert.equal(restarted.cognition.memory.largePayload.length, payload.length);
+  const manifestBytes = Buffer.byteLength(await readFile(sectionedStorePaths(path).currentManifest, 'utf8'));
+  assert.ok(manifestBytes < 100 * 1024);
+  assert.equal((await loadVitals(path)).cognition.memory.largePayload.length, payload.length);
 });
 
-// J. Numeric and nested Soma state survives an exact JSON round trip.
-await withTemp('cy-vitals-j-', async (_dir, path) => {
+// I. Every durable state category survives a logical round trip.
+await withTemp('cy-vitals-i-', async (_dir, path) => {
   const vitals = await loadVitals(path);
   vitals.day = 31;
   vitals.physical.pain = 0.123456789;
   vitals.mental.anxiety = 0.987654321;
   vitals.cognition = {
-    prediction: { error: 0.625, history: [0, 0.25, 1] },
-    experienced: { metrics: { anxiety: { value: 63.25, contributions: [{ source: 'event-1', delta: 4.5 }] } } },
+    memory: { episodes: [{ id: 'memory-1', text: 'eight by four', privateSenderKey: 'sender-7' }] },
+    threatLearning: { pairs: { search: { alpha: 3, beta: 2 } }, history: [{ id: 'threat-1' }] },
+    learnedControllability: { pairs: { search: { controllable: 0.4 } }, history: [{ id: 'control-1' }] },
+    feeding: { records: [{ eventId: 'meal-1', intake: 'full' }] },
+    sleepHomeostasis: { processS: 0.4421, observations: [{ asleep: true, at: 1234 }] },
+    somaticNociceptive: { injuries: [{ id: 'injury-1', active: true }] },
+    socialContact: { episodes: [{ id: 'social-1', kind: 'contact' }] },
+    attention: { target: 'door', salience: 0.7 },
   };
-  const expected = clone({
+  vitals.dreamPool = [{ id: 'dream-1', fragments: ['door', 'number'] }];
+  vitals.worldSimulation = { version: 4, opportunities: [{ id: 'association-1', status: 'OPEN' }] };
+  vitals.locationRegime = { location: 'cell', regime: 'night' };
+  vitals.instrumentalAgency = { open: [{ id: 'choice-1', actions: ['engage', 'withdraw'] }] };
+  vitals.recentOpeners = ['one', 'two'];
+  const expected = JSON.parse(JSON.stringify({
     day: vitals.day,
     physical: vitals.physical,
     mental: vitals.mental,
     cognition: vitals.cognition,
-  });
+    dreamPool: vitals.dreamPool,
+    worldSimulation: vitals.worldSimulation,
+    locationRegime: vitals.locationRegime,
+    instrumentalAgency: vitals.instrumentalAgency,
+    recentOpeners: vitals.recentOpeners,
+  }));
   await saveVitals(path, vitals);
   const restarted = await loadVitals(path);
-  assert.deepEqual(clone({
+  assert.deepEqual(JSON.parse(JSON.stringify({
     day: restarted.day,
     physical: restarted.physical,
     mental: restarted.mental,
     cognition: restarted.cognition,
-  }), expected);
-});
-
-// K. Memory, dream, world and Soma collections are opaque payloads and are not reset or pruned.
-await withTemp('cy-vitals-k-', async (_dir, path) => {
-  const vitals = await loadVitals(path);
-  vitals.cognition = {
-    memory: { episodes: [{ id: 'memory-1', text: 'eight by four', privateSenderKey: 'sender-7' }] },
-    feeding: { records: [{ eventId: 'meal-1', intake: 'full' }] },
-    sleepHomeostasis: { processS: 0.4421, observations: [{ asleep: true, at: 1234 }] },
-    somaticNociceptive: { injuries: [{ id: 'injury-1', active: true }] },
-  };
-  vitals.dreamPool = [{ id: 'dream-1', fragments: ['door', 'number'] }];
-  vitals.worldSimulation = { version: 4, opportunities: [{ id: 'association-1', status: 'OPEN' }] };
-  vitals.instrumentalAgency = { open: [{ id: 'choice-1', actions: ['engage', 'withdraw'] }] };
-  const expected = clone({
-    cognition: vitals.cognition,
-    dreamPool: vitals.dreamPool,
-    worldSimulation: vitals.worldSimulation,
-    instrumentalAgency: vitals.instrumentalAgency,
-  });
-  await saveVitals(path, vitals);
-  const restarted = await loadVitals(path);
-  assert.deepEqual(clone({
-    cognition: restarted.cognition,
     dreamPool: restarted.dreamPool,
     worldSimulation: restarted.worldSimulation,
+    locationRegime: restarted.locationRegime,
     instrumentalAgency: restarted.instrumentalAgency,
-  }), expected);
+    recentOpeners: restarted.recentOpeners,
+  })), expected);
 });
 
-// L. Once authority/recovery files exist, semantically unchanged state causes no
-// redundant full-state write.
-await withTemp('cy-vitals-l-', async (_dir, path) => {
-  let stateWrites = 0;
+// J. Unchanged state produces no section or manifest rewrites.
+await withTemp('cy-vitals-j-', async (_dir, path) => {
+  let writes = 0;
   const vitals = await loadVitals(path, { persistence: {
-    hooks: {
-      beforeWrite: ({ targetPath }) => {
-        if (targetPath === path) stateWrites++;
-      },
-    },
+    hooks: { beforeWrite: () => { writes++; } },
   } });
   await saveVitals(path, vitals);
-  assert.equal(stateWrites, 1);
+  const afterFirst = writes;
   await saveVitals(path, vitals);
   await saveVitals(path, vitals);
-  assert.equal(stateWrites, 1);
+  assert.equal(writes, afterFirst);
   assert.equal(vitalsPersistenceStatus(vitals).skippedUnchangedSaveCount, 2);
 });
 
-// M. Rapid routine changes are coalesced into one checkpoint containing the
-// newest state.
-await withTemp('cy-vitals-m-', async (_dir, path) => {
-  let stateWrites = 0;
-  const vitals = await loadVitals(path, { persistence: {
-    quietFlushMs: 25,
-    maxCheckpointMs: 200,
-    hooks: {
-      beforeWrite: ({ targetPath }) => {
-        if (targetPath === path) stateWrites++;
-      },
-    },
-  } });
+// K. Changing one tiny inline field rewrites only the layout index and manifests.
+await withTemp('cy-vitals-k-', async (_dir, path) => {
+  const vitals = await loadVitals(path);
+  vitals.cognition = { memory: { episodes: largeEpisodes() } };
   await saveVitals(path, vitals);
-  stateWrites = 0;
+  const before = vitalsPersistenceStatus(vitals).sectionWriteCount;
   vitals.day = 2;
-  const one = scheduleVitalsSave(path, vitals);
-  vitals.day = 3;
-  const two = scheduleVitalsSave(path, vitals);
-  vitals.day = 4;
-  const three = scheduleVitalsSave(path, vitals);
-  await Promise.all([one, two, three]);
-  assert.equal(stateWrites, 1);
-  assert.equal((await diskJson(path)).day, 4);
+  await saveVitals(path, vitals);
+  const status = vitalsPersistenceStatus(vitals);
+  assert.equal(status.sectionWriteCount, before + 1);
+  assert.equal(status.lastChangedSectionCount, 1);
+  assert.ok(status.lastChangedSectionBytes < 100 * 1024);
+  assert.ok(status.lastManifestSizeBytes < 2 * 1024);
+  assert.equal((await loadVitals(path)).cognition.memory.episodes.length, 320);
 });
 
-// N. An urgent save absorbs pending routine changes and persists immediately.
-await withTemp('cy-vitals-n-', async (_dir, path) => {
-  let stateWrites = 0;
-  const vitals = await loadVitals(path, { persistence: {
-    quietFlushMs: 5_000,
-    maxCheckpointMs: 10_000,
-    hooks: {
-      beforeWrite: ({ targetPath }) => {
-        if (targetPath === path) stateWrites++;
-      },
-    },
-  } });
+// L. Editing one item in a large array rewrites only its local bounded chunks.
+await withTemp('cy-vitals-l-', async (_dir, path) => {
+  const vitals = await loadVitals(path);
+  vitals.cognition = { memory: { episodes: largeEpisodes() } };
   await saveVitals(path, vitals);
-  stateWrites = 0;
-  vitals.day = 5;
-  const deferred = scheduleVitalsSave(path, vitals);
-  vitals.day = 6;
-  const urgent = saveVitals(path, vitals);
-  await Promise.all([deferred, urgent]);
-  assert.equal(stateWrites, 1);
-  assert.equal((await diskJson(path)).day, 6);
-  assert.equal(vitalsPersistenceStatus(vitals).nextCheckpointDue, null);
+  vitals.cognition.memory.episodes[17].text = 'changed';
+  await saveVitals(path, vitals);
+  const status = vitalsPersistenceStatus(vitals);
+  assert.ok(status.lastChangedSectionCount <= 3);
+  assert.ok(status.lastChangedSectionBytes < 96 * 1024);
+  assert.equal((await loadVitals(path)).cognition.memory.episodes[17].text, 'changed');
 });
 
-// O. Continuous routine changes cannot postpone the hard checkpoint deadline.
-await withTemp('cy-vitals-o-', async (_dir, path) => {
-  let stateWrites = 0;
-  const vitals = await loadVitals(path, { persistence: {
-    quietFlushMs: 90,
-    maxCheckpointMs: 55,
-    hooks: {
-      beforeWrite: ({ targetPath }) => {
-        if (targetPath === path) stateWrites++;
-      },
-    },
-  } });
+// L2. Sliding a bounded history rewrites its edge chunks, not every stable item.
+await withTemp('cy-vitals-l2-', async (_dir, path) => {
+  const vitals = await loadVitals(path);
+  vitals.cognition = { experienced: { history: largeEpisodes(2_000) } };
   await saveVitals(path, vitals);
-  stateWrites = 0;
+  vitals.cognition.experienced.history.shift();
+  vitals.cognition.experienced.history.push({
+    id: 'memory-new',
+    text: `new episode ${'z'.repeat(120)}`,
+    activation: 1,
+  });
+  await saveVitals(path, vitals);
+  const status = vitalsPersistenceStatus(vitals);
+  assert.ok(status.lastChangedSectionCount <= 6, `changed ${status.lastChangedSectionCount} chunks`);
+  assert.ok(status.lastChangedSectionBytes < 160 * 1024);
+  const restarted = await loadVitals(path);
+  assert.equal(restarted.cognition.experienced.history.length, 2_000);
+  assert.equal(restarted.cognition.experienced.history.at(-1).id, 'memory-new');
+});
+
+// M. Continuous routine changes still coalesce at the hard checkpoint deadline.
+await withTemp('cy-vitals-m-', async (_dir, path) => {
+  // Keep a generous gap between the mutation timers and hard deadline so a
+  // loaded CI host cannot let the deadline overtake the test's setup timers.
+  const vitals = await loadVitals(path, { persistence: { quietFlushMs: 1_000, maxCheckpointMs: 500 } });
+  await saveVitals(path, vitals);
+  const before = vitalsPersistenceStatus(vitals).stateWriteCount;
   vitals.day = 7;
   const saves = [scheduleVitalsSave(path, vitals)];
   await delay(20);
@@ -364,40 +286,142 @@ await withTemp('cy-vitals-o-', async (_dir, path) => {
   vitals.day = 9;
   saves.push(scheduleVitalsSave(path, vitals));
   await Promise.all(saves);
-  assert.equal(stateWrites, 1);
-  assert.equal((await diskJson(path)).day, 9);
+  assert.equal(vitalsPersistenceStatus(vitals).stateWriteCount, before + 1);
+  assert.equal((await loadVitals(path)).day, 9);
 });
 
-// P. A simulated crash before write-behind fires recovers the latest guaranteed
-// checkpoint; an explicit urgent flush then advances authority normally.
-await withTemp('cy-vitals-p-', async (_dir, path) => {
-  const vitals = await loadVitals(path, { persistence: {
-    quietFlushMs: 5_000,
-    maxCheckpointMs: 10_000,
-  } });
-  vitals.day = 10;
+// N. An urgent save absorbs pending routine state and commits it immediately.
+await withTemp('cy-vitals-n-', async (_dir, path) => {
+  const vitals = await loadVitals(path, { persistence: { quietFlushMs: 5_000, maxCheckpointMs: 10_000 } });
   await saveVitals(path, vitals);
-  vitals.day = 11;
+  vitals.day = 10;
   const deferred = scheduleVitalsSave(path, vitals);
-  const restartedBeforeDeferredFlush = await loadVitals(path);
-  assert.equal(restartedBeforeDeferredFlush.day, 10);
+  vitals.day = 11;
+  const urgent = saveVitals(path, vitals);
+  await Promise.all([deferred, urgent]);
+  assert.equal((await loadVitals(path)).day, 11);
+  assert.equal(vitalsPersistenceStatus(vitals).nextCheckpointDue, null);
+});
+
+// O. A crash before write-behind fires returns the latest guaranteed checkpoint.
+await withTemp('cy-vitals-o-', async (_dir, path) => {
+  const vitals = await loadVitals(path, { persistence: { quietFlushMs: 5_000, maxCheckpointMs: 10_000 } });
+  vitals.day = 12;
+  await saveVitals(path, vitals);
+  vitals.day = 13;
+  const deferred = scheduleVitalsSave(path, vitals);
+  assert.equal((await loadVitals(path)).day, 12);
   await saveVitals(path, vitals);
   await deferred;
-  const restartedAfterGuaranteedFlush = await loadVitals(path);
-  assert.equal(restartedAfterGuaranteedFlush.day, 11);
+  assert.equal((await loadVitals(path)).day, 13);
 });
 
-// Q. Repeated unchanged operation creates no unbounded auxiliary files.
-await withTemp('cy-vitals-q-', async (dir, path) => {
+// P. Corrupt current manifest recovers one coherent previous generation.
+await withTemp('cy-vitals-p-', async (_dir, path) => {
   const vitals = await loadVitals(path);
+  vitals.day = 14;
   await saveVitals(path, vitals);
-  for (let i = 0; i < 20; i++) await saveVitals(path, vitals);
-  const names = await readdir(dir);
-  assert.deepEqual(
-    names.sort(),
-    ['bookkeeping.json', 'vitals.initialized.json', 'vitals.json', 'vitals.previous.json'].sort(),
-  );
-  assert.equal(vitalsPersistenceStatus(vitals).stateWriteCount, 1);
+  vitals.day = 15;
+  await saveVitals(path, vitals);
+  await writeFile(sectionedStorePaths(path).currentManifest, '{broken');
+  const recovered = await loadVitals(path);
+  assert.equal(recovered.day, 14);
+  assert.equal(vitalsPersistenceStatus(recovered).startupRecoveryUsed, true);
+});
+
+// Q. Fault before any changed section leaves the prior generation authoritative.
+await withTemp('cy-vitals-q-', async (_dir, path) => {
+  const first = await loadVitals(path);
+  first.day = 16;
+  await saveVitals(path, first);
+  const vitals = await loadVitals(path, { persistence: {
+    maxAttempts: 1,
+    hooks: { beforeSectionWrite: () => { throw new Error('before first section'); } },
+  } });
+  vitals.cognition = { memory: { largePayload: 'a'.repeat(10_000) } };
+  await assert.rejects(() => saveVitals(path, vitals), /before first section/);
+  assert.equal((await loadVitals(path)).day, 16);
+});
+
+// R. Fault midway through changed sections cannot create a mixed generation.
+await withTemp('cy-vitals-r-', async (_dir, path) => {
+  const first = await loadVitals(path);
+  first.day = 17;
+  await saveVitals(path, first);
+  const vitals = await loadVitals(path, { persistence: {
+    maxAttempts: 1,
+    hooks: { beforeSectionWrite: ({ index }) => { if (index === 1) throw new Error('mid sections'); } },
+  } });
+  vitals.cognition = {
+    memory: { largePayload: 'a'.repeat(10_000) },
+    threatLearning: { largePayload: 'b'.repeat(10_000) },
+  };
+  await assert.rejects(() => saveVitals(path, vitals), /mid sections/);
+  assert.equal((await loadVitals(path)).day, 17);
+});
+
+// S. Fault after sections but before manifest commit leaves the prior generation authoritative.
+await withTemp('cy-vitals-s-', async (_dir, path) => {
+  const first = await loadVitals(path);
+  first.day = 18;
+  await saveVitals(path, first);
+  const vitals = await loadVitals(path, { persistence: {
+    maxAttempts: 1,
+    hooks: { beforeManifestCommit: () => { throw new Error('before manifest'); } },
+  } });
+  vitals.day = 19;
+  vitals.cognition = { memory: { largePayload: 'c'.repeat(10_000) } };
+  await assert.rejects(() => saveVitals(path, vitals), /before manifest/);
+  assert.equal((await loadVitals(path)).day, 18);
+});
+
+// T. Fault after manifest commit still recovers the new coherent generation.
+await withTemp('cy-vitals-t-', async (_dir, path) => {
+  const first = await loadVitals(path);
+  first.day = 20;
+  await saveVitals(path, first);
+  const vitals = await loadVitals(path, { persistence: {
+    maxAttempts: 1,
+    hooks: { afterManifestCommit: () => { throw new Error('after manifest'); } },
+  } });
+  vitals.day = 21;
+  await assert.rejects(() => saveVitals(path, vitals), /after manifest/);
+  assert.equal((await loadVitals(path)).day, 21);
+});
+
+// U. Fault during cleanup cannot invalidate the newly committed generation.
+await withTemp('cy-vitals-u-', async (_dir, path) => {
+  const first = await loadVitals(path);
+  first.cognition = { memory: { largePayload: 'first'.repeat(3_000) } };
+  await saveVitals(path, first);
+  first.cognition.memory.largePayload = 'second'.repeat(3_000);
+  await saveVitals(path, first);
+  const vitals = await loadVitals(path, { persistence: {
+    maxAttempts: 1,
+    hooks: { beforeCleanupDelete: () => { throw new Error('cleanup interrupted'); } },
+  } });
+  vitals.day = 22;
+  vitals.cognition.memory.largePayload = 'third'.repeat(3_000);
+  await assert.rejects(() => saveVitals(path, vitals), /cleanup interrupted/);
+  const restarted = await loadVitals(path);
+  assert.equal(restarted.day, 22);
+  assert.equal(restarted.cognition.memory.largePayload, 'third'.repeat(3_000));
+});
+
+// V. Repeated successful operation retains only current and previous section data.
+await withTemp('cy-vitals-v-', async (dir, path) => {
+  const vitals = await loadVitals(path);
+  vitals.cognition = { memory: { largePayload: 'seed'.repeat(3_000) } };
+  await saveVitals(path, vitals);
+  for (let i = 0; i < 20; i++) {
+    vitals.day = 30 + i;
+    vitals.cognition.memory.largePayload = `${i}`.repeat(12_000);
+    await saveVitals(path, vitals);
+  }
+  const names = await readdir(sectionedStorePaths(path).sections);
+  assert.ok(names.length <= 4, `expected bounded section files, found ${names.length}`);
+  assert.equal((await loadVitals(path)).day, 49);
+  await assertNoTempFiles(dir);
 });
 
 console.log('vitals-persistence.test.js: all checks passed');

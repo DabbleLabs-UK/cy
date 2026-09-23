@@ -2,14 +2,19 @@
 //
 // Every physical/mental default, drift, event delta, derived-state coefficient
 // and brain-region weight here is ARBITRARY / HEURISTIC and LEGACY.
-// A single mutable state object is ticked every 5s and persisted to
-// state/vitals.json. Physical and mental scalars are all 0..1. Everything
+// A single mutable state object is ticked every 5s and persisted through the
+// sectioned state store under state/vitals-v2/. Physical and mental scalars are
+// all 0..1. Everything
 // derived (heart rate, old brain-region activations) is computed on demand.
 // These scalar mappings are legacy placeholders. Implemented cognition lives
 // in the nested `cognition` state managed by soma.js.
 
 import { readFile, mkdir, copyFile, access, open, rename, unlink, readdir, stat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import {
+  SECTIONED_STORAGE_FORMAT_VERSION,
+  SectionedStateStore,
+} from './sectioned-state-store.js';
 
 const PERSISTENCE_FORMAT_VERSION = 1;
 const DEFAULT_SAVE_ATTEMPTS = 3;
@@ -381,8 +386,8 @@ export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
 //                   `cognition` object. The zone name predates soma.js.
 //   - signals     : derived outputs (currently `derived`), recomputed every
 //                   tick, read-only downstream, NEVER persisted.
-//   - bookkeeping : render/prompt scaffolding. Persisted separately to
-//                   state/bookkeeping.json; never read by a state circuit.
+//   - bookkeeping : render/prompt scaffolding. Persisted as its own section in
+//                   the coherent V2 checkpoint; never read by a state circuit.
 //
 // For this build the split is INTERNAL only: loadVitals returns a proxy that
 // exposes every old flat path (vitals.mental.anxiety, vitals.derived.numbness,
@@ -486,6 +491,7 @@ class VitalsPersistence {
     this.markerPath = join(dirname(path), 'vitals.initialized.json');
     this.hooks = options.hooks || null;
     this.now = typeof options.now === 'function' ? options.now : Date.now;
+    this.sectioned = new SectionedStateStore(path, { hooks: this.hooks, now: this.now });
     this.maxAttempts = Number.isInteger(options.maxAttempts)
       ? Math.max(1, options.maxAttempts)
       : DEFAULT_SAVE_ATTEMPTS;
@@ -512,6 +518,7 @@ class VitalsPersistence {
     this.draining = false;
     this.status = {
       persistenceFormatVersion: PERSISTENCE_FORMAT_VERSION,
+      storageFormatVersion: SECTIONED_STORAGE_FORMAT_VERSION,
       lastSuccessfulSave: null,
       lastSaveDurationMs: null,
       stateSizeBytes: null,
@@ -524,6 +531,13 @@ class VitalsPersistence {
       skippedUnchangedSaveCount: 0,
       stateWriteCount: 0,
       bookkeepingWriteCount: 0,
+      sectionWriteCount: 0,
+      manifestWriteCount: 0,
+      lastChangedSectionCount: 0,
+      lastChangedSectionBytes: 0,
+      lastManifestSizeBytes: null,
+      largestWriteBytes: 0,
+      retainedGenerationBytes: null,
       bytesWritten: 0,
       lastSerializationDurationMs: null,
       dirtySince: null,
@@ -562,7 +576,7 @@ class VitalsPersistence {
   markStartupRecovery(reason) {
     this.status.startupRecoveryUsed = true;
     this.status.startupRecoveryReason = reason;
-    this.status.lastValidationResult = 'recovered-from-vitals.previous.json';
+    this.status.lastValidationResult = 'recovered-from-previous-checkpoint';
   }
 
   serialize(soma, bookkeeping) {
@@ -685,6 +699,7 @@ class VitalsPersistence {
           // Establish recovery/authority metadata even when an imported current
           // file is semantically unchanged.
           const somaChanged = job.somaText !== this.lastCommittedText
+            || this.sectioned.currentManifest === null
             || !this.previousExists
             || !this.markerExists;
           const bookkeepingChanged = job.bookkeepingText !== this.lastCommittedBookkeepingText;
@@ -730,45 +745,28 @@ class VitalsPersistence {
     const started = this.now();
     let bytesWritten = 0;
     let stateSizeBytes = this.status.stateSizeBytes;
-    if (job.somaChanged) {
-      const recoveryAge = this.status.recoverySnapshotTimestamp
-        ? started - Date.parse(this.status.recoverySnapshotTimestamp)
-        : Infinity;
-      if (this.lastCommittedText !== null && (!this.previousExists || recoveryAge >= this.recoveryRefreshMs)) {
-        bytesWritten += await atomicWriteText(
-          this.previousPath,
-          this.lastCommittedText,
-          (value) => validateVitalsState(value),
-        );
-        this.previousExists = true;
-        this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
-      }
-
-      stateSizeBytes = await atomicWriteText(
-        this.path,
-        job.somaText,
-        (value) => validateVitalsState(value, { requireFormatVersion: true }),
-        { hooks: this.hooks },
-      );
-      bytesWritten += stateSizeBytes;
+    if (job.somaChanged || job.bookkeepingChanged) {
+      const state = JSON.parse(job.somaText);
+      const bookkeeping = JSON.parse(job.bookkeepingText);
+      const result = await this.sectioned.commit(state, bookkeeping, {
+        validateState: (value) => validateVitalsState(value, { requireFormatVersion: true }),
+        validateBookkeeping,
+      });
+      bytesWritten += result.bytesWritten;
+      stateSizeBytes = result.stateSizeBytes;
       this.lastCommittedText = job.somaText;
-      this.status.stateWriteCount++;
-
-      if (!this.previousExists) {
-        bytesWritten += await atomicWriteText(
-          this.previousPath,
-          job.somaText,
-          (value) => validateVitalsState(value, { requireFormatVersion: true }),
-        );
-        this.previousExists = true;
-        this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
-      }
-    }
-
-    if (job.bookkeepingChanged) {
-      bytesWritten += await atomicWriteText(this.bookPath, job.bookkeepingText, validateBookkeeping);
       this.lastCommittedBookkeepingText = job.bookkeepingText;
-      this.status.bookkeepingWriteCount++;
+      this.previousExists = true;
+      this.status.recoverySnapshotTimestamp = new Date(this.now()).toISOString();
+      this.status.stateWriteCount++;
+      if (job.bookkeepingChanged) this.status.bookkeepingWriteCount++;
+      this.status.sectionWriteCount += result.sectionWriteCount;
+      this.status.manifestWriteCount += 2;
+      this.status.lastChangedSectionCount = result.sectionWriteCount;
+      this.status.lastChangedSectionBytes = result.changedSectionBytes;
+      this.status.lastManifestSizeBytes = result.manifestSizeBytes;
+      this.status.largestWriteBytes = Math.max(this.status.largestWriteBytes, result.largestWriteBytes);
+      this.status.retainedGenerationBytes = (await this.sectioned.diskUsage()).bytes;
     }
     if (!this.markerExists) {
       await atomicWriteText(
@@ -817,18 +815,41 @@ export async function loadVitals(path, options = {}) {
 
   let raw = null;
   let rawText = null;
+  let book = null;
+  let bookText = null;
   let loadIssue = null;
+  let loadedSectioned = false;
+  const sectioned = await persistence.sectioned.load({
+    validateState: (value) => validateVitalsState(value, { requireFormatVersion: true }),
+    validateBookkeeping,
+  });
+  if (sectioned.state !== null) {
+    raw = sectioned.state;
+    rawText = JSON.stringify(sectioned.state);
+    book = sectioned.bookkeeping;
+    bookText = JSON.stringify(sectioned.bookkeeping);
+    loadedSectioned = true;
+    if (sectioned.source === 'previous') {
+      persistence.markStartupRecovery(
+        `sectioned current generation was unavailable; ${sectioned.errors.join('; ') || 'previous generation selected'}`,
+      );
+    }
+  } else if (sectioned.evidence) {
+    loadIssue = `sectioned state unavailable: ${sectioned.errors.join('; ') || 'no valid manifest'}`;
+  }
+
   const authorityExists = await fileExists(path);
   const previousExists = await fileExists(previousPath);
   const markerExists = await fileExists(persistence.markerPath);
 
-  if (authorityExists) {
+  if (raw === null && authorityExists) {
     try {
       const parsed = await parseValidated(path, (value) => validateVitalsState(value));
       raw = parsed.value;
       rawText = parsed.text;
     } catch (error) {
-      loadIssue = `persisted vitals failed validation: ${error && error.message ? error.message : 'invalid JSON'}`;
+      const legacyIssue = `persisted vitals failed validation: ${error && error.message ? error.message : 'invalid JSON'}`;
+      loadIssue = loadIssue ? `${loadIssue}; ${legacyIssue}` : legacyIssue;
       await preserveCorruptState(path);
     }
   }
@@ -848,6 +869,8 @@ export async function loadVitals(path, options = {}) {
           authorityExists,
           previousExists,
           authorityError: loadIssue,
+          sectionedEvidence: sectioned.evidence,
+          sectionedErrors: sectioned.errors,
           recoveryError: recoveryError && recoveryError.message ? recoveryError.message : String(recoveryError),
         },
       );
@@ -856,29 +879,35 @@ export async function loadVitals(path, options = {}) {
 
   let firstInstall = false;
   if (raw === null) {
-    if (markerExists || await stateDirectoryHasEvidence(path)) {
+    if (sectioned.evidence || markerExists || await stateDirectoryHasEvidence(path)) {
       throw new StateRecoveryRequiredError(
         'Cy state is missing from an existing installation; refusing to create defaults over prior history',
-        { authorityExists: false, previousExists: false, markerExists },
+        {
+          authorityExists: false,
+          previousExists: false,
+          markerExists,
+          sectionedEvidence: sectioned.evidence,
+          sectionedErrors: sectioned.errors,
+        },
       );
     }
     firstInstall = true;
   }
 
-  let book = null;
-  let bookText = null;
-  try {
-    bookText = await readFile(bookPath, 'utf8');
-    book = JSON.parse(bookText);
-  } catch {
-    book = null;
-    bookText = null;
+  if (!loadedSectioned) {
+    try {
+      bookText = await readFile(bookPath, 'utf8');
+      book = JSON.parse(bookText);
+    } catch {
+      book = null;
+      bookText = null;
+    }
   }
 
-  // One-time backup of the pre-split state file, before it is ever rewritten in
-  // the new (soma-only) shape. Detected by the presence of a field that moves
-  // zone or stops being persisted; guarded so we back up exactly once.
-  if (raw && ('derived' in raw || 'recentOpeners' in raw || 'introspectPrev' in raw)) {
+  // One-time backup of an older pre-split monolithic state file. Detected by
+  // the presence of a field that moved zone or stopped being persisted;
+  // guarded so the migration backup is created exactly once.
+  if (!loadedSectioned && raw && ('derived' in raw || 'recentOpeners' in raw || 'introspectPrev' in raw)) {
     const bak = path + '.pre-soma.bak';
     if (!(await fileExists(bak))) {
       try {
@@ -909,8 +938,9 @@ export async function loadVitals(path, options = {}) {
   for (const [k, v] of Object.entries(merged)) {
     zones[zoneFor(k)][k] = v;
   }
-  // A dedicated bookkeeping.json (written by this build) is authoritative for
-  // bookkeeping fields over whatever an old vitals.json happened to carry.
+  // Sectioned bookkeeping is authoritative when V2 loaded. During legacy
+  // migration, a dedicated bookkeeping.json remains authoritative over fields
+  // carried by an old vitals.json.
   if (book && typeof book === 'object') Object.assign(bookkeeping, book);
 
   // `derived` is a signal: recomputable, never authoritative on disk. When we
@@ -925,9 +955,13 @@ export async function loadVitals(path, options = {}) {
   persistence.initialise({
     committedText: rawText,
     committedBookkeepingText: bookText,
-    previousExists,
+    previousExists: loadedSectioned
+      ? await fileExists(persistence.sectioned.paths.previousManifest)
+      : previousExists,
     markerExists,
-    recoveryTimestamp: await recoveryTimestamp(previousPath),
+    recoveryTimestamp: await recoveryTimestamp(
+      loadedSectioned ? persistence.sectioned.paths.previousManifest : previousPath,
+    ),
     firstInstall,
   });
   return makeVitals(soma, signals, bookkeeping, loadIssue, persistence);

@@ -469,7 +469,7 @@ async function main() {
   const startupPersistence = vitalsPersistenceStatus(vitals);
   if (startupPersistence && startupPersistence.startupRecoveryUsed) {
     console.error(
-      `[cy] STATE RECOVERY: restored vitals.json from validated vitals.previous.json; reason=${startupPersistence.startupRecoveryReason}`,
+      `[cy] STATE RECOVERY: restored the previous validated state checkpoint; reason=${startupPersistence.startupRecoveryReason}`,
     );
   }
   let lastPersistenceErrorLogMs = 0;

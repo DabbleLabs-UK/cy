@@ -195,7 +195,11 @@ test('F: atomic persistence retains the latest AWG world mutation during overlap
     await Promise.all([saveOne, saveTwo]);
     const restarted = await loadVitals(path);
     assert.equal(restarted.worldSimulation.objects[0].status, 'DELIVERED');
-    assert.equal(JSON.parse(await readFile(path, 'utf8')).worldSimulation.objects[0].status, 'DELIVERED');
+    assert.equal(
+      (await loadVitals(path)).worldSimulation.objects[0].status,
+      'DELIVERED',
+      'the committed sectioned checkpoint is authoritative after restart',
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

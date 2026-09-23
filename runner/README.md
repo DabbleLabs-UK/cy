@@ -395,7 +395,18 @@ Soma circuits.
   and confirming the parser/geometry, with NO writes to the site (in-memory
   dryRun config; never touches `config.json`).
 
-`state/` (gitignored) holds runtime files: `vitals.json`, `power.json`,
+`state/` (gitignored) holds runtime files. Crash-safe current state is stored in
+`vitals-v2/` as content-addressed sections plus `current.json` and
+`previous.json` manifests. Legacy `vitals.json` and `vitals.previous.json` are
+retained after a verified migration rather than rewritten. A checkpoint writes
+only new or changed immutable sections, then atomically switches the tiny
+current manifest; the prior manifest remains a coherent rollback generation.
+Startup never mixes sections from different manifests, verifies section hashes,
+and falls back to the previous generation if the current one is invalid.
+Temporary files and sections older than the two retained generations are
+cleaned without weakening either committed generation.
+
+Other state includes `power.json`,
 `context.jsonl`, `events.jsonl` (dryRun), `queue.jsonl` (offline retry),
 `blocked.log`, `prompts.log` (when `logPrompts`).
 

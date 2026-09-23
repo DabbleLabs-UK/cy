@@ -1029,7 +1029,8 @@ export function somaSnapshot(state) {
 // lifetime. Public live vitals update every few seconds, so they contain only
 // current state plus small recent windows. The server stores chart scalars in
 // a separate one-minute projection; canonical meaningful events remain in
-// environment_events and the complete Soma state remains in vitals.json.
+// environment_events and the complete Soma state remains in the crash-safe
+// sectioned persistence store.
 export const SOMA_LIVE_SNAPSHOT_LIMITS = Object.freeze({
   anxietyConcerns: 0,
   defensiveContexts: 4,
