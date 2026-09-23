@@ -141,6 +141,7 @@ import {
   narrationHits,
   repeatsWithinBurst,
   sanitize,
+  sanitizeCharacterContext,
   stateNotationHits,
   stripAssistantContaminatedTail,
   stripScaffold,
@@ -1316,9 +1317,13 @@ async function main() {
       { now: Date.now() },
     );
   }
-  const contextText = () => contextBuf;
+  const contextText = () => sanitizeCharacterContext(contextBuf);
   async function appendContext(chunk) {
-    contextBuf += chunk;
+    // Re-apply the same boundary at the persistence edge. Full candidates have
+    // already passed validation, but this prevents a legacy or future missed
+    // meta tail from being fed back into both Zone B and recent_expression.
+    contextBuf = sanitizeCharacterContext(contextBuf);
+    contextBuf += sanitizeCharacterContext(chunk);
     if (contextBuf.length > CONTEXT_HARD) {
       const removed = contextBuf.length - CONTEXT_SOFT;
       contextBuf = contextBuf.slice(-CONTEXT_SOFT); // rare, large trim
@@ -5245,7 +5250,7 @@ async function loadContext(path) {
         }
       })
       .join('');
-    const cleaned = stripAssistantContaminatedTail(stripScaffold(sanitize(text)));
+    const cleaned = sanitizeCharacterContext(text);
     // Persist the cleaned bounded context immediately. Historical public events
     // remain untouched, but a crash before the next accepted burst cannot reload
     // the same assistant/meta tail again.

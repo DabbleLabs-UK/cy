@@ -216,6 +216,24 @@ const ASSISTANT_FRAME = [
   /(?:^|\n)\s*here\s+is\s+(?:a|an|the|my)\s+(?:rewritten|rephrased|response|version|attempt|continuation|answer)\b/i,
   /\|re-?write\|/i,
   /(?:^|\n)\s*(?:OPENERS|LENGTH)\s*:/i,
+  // Structural meta-writing frames observed in production on 22-23 September.
+  // These match a writing artifact plus an editorial/evaluative action, rather
+  // than banning ordinary words such as "note", "tone", "response" or "ready".
+  /\bthe\s+inmate\s+(?:has\s+)?(?:continued|started|finished)\s+writing\b/i,
+  /\bthe\s+(?:response|entry|text|passage)\s+(?:continues?|has\s+continued|focuses|is\s+(?:still\s+)?focused|captures?|maintains?|follows?)\b/i,
+  /\bi(?:\s+have|(?:'|\u2019)ve)\s+(?:continued|started|finished)\s+writing\b[\s\S]{0,180}\b(?:cy|inmate|entry|style|tone)\b/i,
+  /\bi(?:\s+have|(?:'|\u2019)ve)\s+written\s+(?:a|the|this|your)\s+(?:new\s+)?(?:entry|response|text|passage)\b/i,
+  /\bi(?:'|\u2019)?ll\s+continue\s+with\s+(?:this|the|your)\s+(?:entry|response|text|passage)\b/i,
+  /\bplease\s+let\s+me\s+know\s+when\s+you(?:'|\u2019)?re\s+ready\s+for\s+another\s+entry\b/i,
+  /^\s*i\s+think\s+you(?:'|\u2019)?re\s+ready\s*!/i,
+  /\[(?:\s*)write\s+as\s+cy(?:\s*)\]/i,
+  /\(\s*\d+\s+words?\s*\)/i,
+  /\bnote\s*:\s*[^\n]{0,160}\b(?:entry|response|request|instructions?|prompt|style|tone|word\s+limit|length)\b/i,
+  /\bi(?:'|\u2019)?m\s+(?:glad|happy)\s+(?:we(?:'|\u2019)?ve|we\s+have|you(?:'|\u2019)?ve|you\s+have)\s+got\s+(?:some\s+)?context\b/i,
+  /\b(?:this|your|the)\s+(?:entry|response|text|passage|writing)\b[^\n]{0,100}\b(?:captures?|matches?|maintains?)\s+(?:cy(?:'|\u2019)?s\s+)?(?:tone|voice|style)\b/i,
+  /\byou(?:'|\u2019)?ve\s+(?:really\s+)?(?:captured|matched|nailed)\b[^\n]{0,100}\b(?:tone|voice|style)\b/i,
+  // Prompt headings are instructions supplied to the model, never Cy prose.
+  /(?:^|\n)\s*(?:THE WING, RIGHT NOW|ON THE WING)\s*:/i,
 ];
 
 function assistantFrameMatches(s) {
@@ -256,6 +274,15 @@ export function stripAssistantContaminatedTail(s) {
   const text = s || '';
   const first = assistantFrameMatches(text)[0];
   return first ? text.slice(0, first.index).trimEnd() : text;
+}
+
+// Apply the character boundary whenever recent prose is read for a new prompt,
+// not only once during startup. This keeps an already-published historical event
+// untouched while preventing any missed meta tail from becoming self-reinforcing
+// Zone B / recent_expression context.
+export function sanitizeCharacterContext(s) {
+  const safePrefix = stripAssistantContaminatedTail(sanitize(String(s || '')));
+  return stripScaffold(safePrefix).trimEnd();
 }
 
 // STATE-NOTATION LEAK. The compressed vitals notation from the volatile prompt

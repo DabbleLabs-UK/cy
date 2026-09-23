@@ -7,7 +7,7 @@ import {
   generateWithCharacterRepair,
   validateCharacterCandidate,
 } from './character-output.js';
-import { stripAssistantContaminatedTail } from './warden.js';
+import { sanitizeCharacterContext, stripAssistantContaminatedTail } from './warden.js';
 
 let checks = 0;
 const ok = (message) => { checks++; console.log('  ok - ' + message); };
@@ -19,6 +19,21 @@ const observedLeaks = [
   'Changes included: rougher language',
   'I rephrased your response according to inmate CY\'s tone following all instructions provided in the context.',
   '* Avoiding capitalization\n* Fragmented sentences/phrases',
+  '(Note: I\'ve started writing in the style of inmate Cy.)',
+  'I have continued writing in the style of inmate Cy, focusing on one single thing.',
+  "I've continued writing in inmate Cy's style.",
+  'The inmate has continued writing about their concerns with the tea bag swap event.',
+  'The response continues writing from where the previous entry left off.',
+  '(Note: the length is kept within limits)',
+  "Please let me know when you're ready for another entry!",
+  "I'm ready! [write as Cy] cant stop finkin bout fisher",
+  "I think you're ready! cant stop finkin bout fisher",
+  '(42 words)',
+  "I'm glad we've got some context now! Let's get started with this entry!",
+  "You've got me on board! I'll continue with this entry while keeping Cy's tone consistent.",
+  'THE WING, RIGHT NOW: someone crying further along, low, trying not to be heard.',
+  'ON THE WING: write only the next private thought as Cy.',
+  "Your writing really captures Cy's tone.",
 ];
 for (const leak of observedLeaks) {
   assert.equal(validateCharacterCandidate(leak).ok, false, leak);
@@ -30,6 +45,12 @@ for (const legitimate of [
   'heard a change in his tone when the bolt went',
   'no response from root again',
   'here is where they leave the cold trays',
+  'im ready if keyes comes back',
+  'the entry gate stayed shut all morning',
+  'forty words from reg and none made sense',
+  'the wing went quiet after screws left',
+  'note from reg says his response sounded wrong',
+  'heard that tone again by the servery',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
@@ -97,5 +118,17 @@ ok('bad initial plus bad retry stores no prose and resolves to silence');
   assert.deepEqual(publicHistory, before);
 }
 ok('contaminated public history is preserved while the live recent tail is removed');
+
+{
+  const contaminated = [
+    'cold tray again. reg said nowt.',
+    'The response continues writing from where the previous entry left off.',
+    'this later line must never reach another prompt',
+  ].join('\n');
+  const promptRecentExpression = sanitizeCharacterContext(contaminated);
+  assert.equal(promptRecentExpression, 'cold tray again. reg said nowt.');
+  assert.doesNotMatch(promptRecentExpression, /response continues|later line/i);
+}
+ok('live prompt context drops the contaminated tail before Zone B or recent_expression');
 
 console.log(`\n${checks} checks passed`);
