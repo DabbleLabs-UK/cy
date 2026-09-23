@@ -7,6 +7,7 @@ import {
   generateWithCharacterRepair,
   validateCharacterCandidate,
 } from './character-output.js';
+import { ZONE_A } from './prompt.js';
 import { sanitizeCharacterContext, stripAssistantContaminatedTail } from './warden.js';
 
 let checks = 0;
@@ -42,6 +43,7 @@ const observedLeaks = [
   ].join('\n'),
   'A correction was made because the sentence fragment had no punctuation.',
   'Your response now reads as follows.',
+  'w8in fer dat tea tbh\nYou have a new message!',
 ];
 for (const leak of observedLeaks) {
   assert.equal(validateCharacterCandidate(leak).ok, false, leak);
@@ -61,11 +63,16 @@ for (const legitimate of [
   'note from moderator jones says exercise is cancelled',
   'keyes made a correction to the canteen sheet',
   'your entry pass got stamped at the gate',
+  'keyes said you have a new message from reg',
   'heard that tone again by the servery',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
 ok('ordinary prison uses of note, change, tone, response and here is remain valid');
+
+assert.match(ZONE_A, /Output only Cy's words/);
+assert.match(ZONE_A, /Never add labels, notifications, editorial notes,\s+corrections/);
+ok('the primary waking prompt forbids external annotations around Cy prose');
 
 const originalPrompt = [
   '<GROUNDED_SOMA>sleep pressure live</GROUNDED_SOMA>',
@@ -152,5 +159,14 @@ ok('live prompt context drops the contaminated tail before Zone B or recent_expr
   assert.equal(sanitizeCharacterContext(contaminated), 'cold tea again. ping said nowt.');
 }
 ok('live prompt context removes the newly observed moderator correction tail');
+
+{
+  const contaminated = [
+    'cold tea again. ping said nowt.',
+    'You have a new message!',
+  ].join('\n');
+  assert.equal(sanitizeCharacterContext(contaminated), 'cold tea again. ping said nowt.');
+}
+ok('live prompt context removes an isolated external notification tail');
 
 console.log(`\n${checks} checks passed`);
