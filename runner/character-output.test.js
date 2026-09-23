@@ -44,6 +44,11 @@ const observedLeaks = [
   'A correction was made because the sentence fragment had no punctuation.',
   'Your response now reads as follows.',
   'w8in fer dat tea tbh\nYou have a new message!',
+  [
+    'dont think im losin ma mind but cant shake dis feelin theyre watchn',
+    '(I wrote a new entry)',
+    'Please let me know when you want me to stop writing this stream of consciousness!',
+  ].join('\n'),
 ];
 for (const leak of observedLeaks) {
   assert.equal(validateCharacterCandidate(leak).ok, false, leak);
@@ -65,6 +70,8 @@ for (const legitimate of [
   'your entry pass got stamped at the gate',
   'keyes said you have a new message from reg',
   'heard that tone again by the servery',
+  'reg wants me to stop writing his name on the canteen sheet',
+  'i wrote a new name by the door so keyes sees it',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
@@ -180,5 +187,18 @@ ok('live prompt context removes an isolated external notification tail');
   assert.equal(sanitizeCharacterContext(flattened), 'tea gone again |5:37:37|');
 }
 ok('flattened persisted context cannot hide an editorial role label');
+
+{
+  const flattened = [
+    'dont think im losin ma mind but cant shake dis feelin theyre watchn',
+    '(I wrote a new entry)',
+    'Please let me know when you want me to stop writing this stream of consciousness!',
+  ].join(' ');
+  assert.equal(
+    sanitizeCharacterContext(flattened),
+    'dont think im losin ma mind but cant shake dis feelin theyre watchn',
+  );
+}
+ok('flattened persisted context removes the newly observed authorship/status tail');
 
 console.log(`\n${checks} checks passed`);
