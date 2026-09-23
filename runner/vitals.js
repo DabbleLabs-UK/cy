@@ -611,9 +611,11 @@ class VitalsPersistence {
   }
 
   scheduleSave(soma, bookkeeping) {
-    // A new installation must establish both authoritative and recovery copies
-    // before write-behind is allowed.
-    if (this.lastCommittedText === null) return this.requestSave(soma, bookkeeping);
+    // A new installation or a legacy-format startup must establish both
+    // authoritative and recovery V2 manifests before write-behind is allowed.
+    if (this.lastCommittedText === null || this.sectioned.currentManifest === null) {
+      return this.requestSave(soma, bookkeeping);
+    }
     return new Promise((resolve, reject) => {
       const now = this.now();
       const waiter = { resolve, reject };

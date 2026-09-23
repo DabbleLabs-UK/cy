@@ -72,6 +72,18 @@ await withTemp('cy-vitals-a-', async (dir, path) => {
   assert.equal(vitalsPersistenceStatus(restarted).storageFormatVersion, 2);
 });
 
+// A2. The first routine save after a legacy startup migrates immediately.
+await withTemp('cy-vitals-a2-', async (dir, path) => {
+  const original = validState({ day: 8 });
+  await seed(path, original);
+  const vitals = await loadVitals(path);
+  await scheduleVitalsSave(path, vitals);
+  const paths = sectionedStorePaths(path);
+  assert.equal((await diskJson(paths.currentManifest)).storageFormatVersion, 2);
+  assert.equal((await diskJson(paths.previousManifest)).storageFormatVersion, 2);
+  assert.deepEqual(await diskJson(path), original, 'legacy monolith remains untouched');
+});
+
 // B. Failure before the first manifest replacement leaves the legacy authority intact.
 await withTemp('cy-vitals-b-', async (dir, path) => {
   const original = validState({ day: 9 });
