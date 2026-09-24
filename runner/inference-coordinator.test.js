@@ -91,3 +91,13 @@ test('a deferred owner remains idle until provider work actually begins', async 
   assert.equal(end.duration_ms, 200);
   assert.equal(phases.at(-1), 'idle');
 });
+
+test('abort reason survives into inference end telemetry', async () => {
+  const events = [];
+  const coordinator = new InferenceCoordinator({ onEvent: (event) => events.push(event) });
+  const lease = await coordinator.acquire({ purpose: 'ambient_world_generation', background: true });
+  lease.finish({ result: 'aborted', abort_reason: 'POSTCARD' });
+  const end = events.find((event) => event.event === 'end');
+  assert.equal(end.result, 'aborted');
+  assert.equal(end.abort_reason, 'POSTCARD');
+});

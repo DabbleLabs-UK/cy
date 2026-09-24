@@ -190,6 +190,12 @@ import {
 import { AutobiographicalMemoryRuntime } from './memory-runtime.js';
 import { InferenceCoordinator } from './inference-coordinator.js';
 import {
+  GenerationCancellationRegistry,
+  abortWithReason,
+  cancellationError,
+  cancellationReason,
+} from './inference-cancellation.js';
+import {
   CONTEXT_CONSUMERS,
   createContextItem,
   inspectContextPacket,
@@ -341,7 +347,7 @@ export async function withAbortTimeout(ac, timeoutMs, fn) {
 
 export function startAbortTimeout(ac, timeoutMs) {
   const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
-    ? setTimeout(() => ac.abort(), timeoutMs) : null;
+    ? setTimeout(() => abortWithReason(ac, 'TIMEOUT'), timeoutMs) : null;
   return () => { if (timeout) clearTimeout(timeout); };
 }
 
@@ -1685,7 +1691,7 @@ async function main() {
   // ---- shared loop state ----
   let running = true;
   let currentMode = 'journal';
-  let currentAbort = null; // AbortController for the in-flight foreground generation
+  const generationCancellation = new GenerationCancellationRegistry();
   let currentMemoryAbort = null; // separate, preemptible background memory call
   let tokenCount = 0; // tokens this vitals-tick window (broca)
   let brocaLevel = 0; // decaying live-output level driving the Broca readout
@@ -2042,7 +2048,7 @@ async function main() {
       burstAssistantFrameDetected = true;
       burstStopped = true;
       await logAssistantFrameDiscard(cleaned, mode);
-      if (currentAbort) currentAbort.abort();
+      generationCancellation.abort('visible', 'ASSISTANT_FRAME');
       return;
     }
     const nHits = narrationHits(cleaned); // log narration/assistant-frame drops
@@ -2093,7 +2099,7 @@ async function main() {
     if (!burstAllowRepeat && repeatsWithinBurst(chunk, burstEmitted)) {
       burstStopped = true;
       await logWithinBurstRepeat(chunk, mode);
-      if (currentAbort) currentAbort.abort();
+      generationCancellation.abort('visible', 'WITHIN_BURST_REPEAT');
       return;
     }
     // Provisional appraisal, drives and experienced-state values do not alter
@@ -2141,7 +2147,8 @@ async function main() {
     const provider = activeProvider();
     const screenRefusal = provider.screensContent; // DeepSeek: hold+screen the opening
     const ac = new AbortController();
-    currentAbort = ac;
+    generationCancellation.abort('awg', 'FOREGROUND_INFERENCE');
+    generationCancellation.register('visible', ac, { purpose: purpose || mode });
     const buffer = warden.newBuffer();
     const PRIME_CHARS = 100;
     let full = '';
@@ -2182,20 +2189,20 @@ async function main() {
       const cleaned = stripScaffold(sanitize(head));
       if (screenRefusal && cleaned.trim() && looksLikeRefusal(cleaned)) {
         refused = true;
-        ac.abort();
+        abortWithReason(ac, 'REFUSAL');
         return;
       }
       if (cleaned.trim() && looksLikeAssistantFrame(cleaned)) {
         assistantFrame = true;
         wardenBlocksInGen++;
         await logAssistantFrameDiscard(head, mode);
-        ac.abort();
+        abortWithReason(ac, 'ASSISTANT_FRAME');
         return;
       }
       if (contextTail && cleaned.trim() && isRepeat(cleaned, contextTail)) {
         repeat = true;
         await logHoldbackDiscard(head, mode); // the held opening is thrown away here
-        ac.abort();
+        abortWithReason(ac, 'REPEAT');
         return;
       }
       for (const chunk of buffer.push(head)) await onChunk(chunk, mode);
@@ -2268,7 +2275,7 @@ async function main() {
       console.warn('[cy] stream error:', err.message);
       return { full, error: true };
     } finally {
-      if (currentAbort === ac) currentAbort = null;
+      generationCancellation.clear('visible', ac);
       setInfer('idle'); // generation has stopped (ended, aborted or errored)
     }
     // aborted mid-stream (an inbound postcard/notice cut the generation at once)
@@ -2325,6 +2332,7 @@ async function main() {
     // Visible prose is foreground work. Stop any lower-priority memory job before
     // waiting for the provider slot so a postcard, warden reply or journal turn
     // cannot sit behind hidden inference.
+    generationCancellation.abort('awg', 'FOREGROUND_INFERENCE');
     if (autobiographicalMemory) {
       autobiographicalMemory.interruptBackground('foreground');
       currentMemoryAbort = null;
@@ -2342,7 +2350,7 @@ async function main() {
 
     const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
-      currentAbort = ac;
+      generationCancellation.register('visible', ac, { purpose: purpose || mode });
       return collectCandidateBody(candidatePrompt, { repair }, ac);
     };
 
@@ -2360,6 +2368,7 @@ async function main() {
       const finishRequest = async () => {
         if (requestFinished) return;
         requestFinished = true;
+        generationCancellation.clear('visible', ac);
         cancelTimeout();
         if (hostLease) await hostLease.release();
         if (!lease) return;
@@ -2369,6 +2378,8 @@ async function main() {
           result: transportResult,
           ttft_ms: ttftMs,
           output_chars: candidate.length,
+          ...(transportResult === 'aborted'
+            ? { abort_reason: cancellationReason(ac.signal) } : {}),
           ...inferenceStats(stats),
         });
       };
@@ -2393,7 +2404,7 @@ async function main() {
           hostLease = await provider.acquireSharedLease({
             purpose: purpose || mode,
             signal: ac.signal,
-            onLost: () => ac.abort(),
+            onLost: () => abortWithReason(ac, 'LEASE_LOSS'),
           });
         }
         const requestOpts = typeof provider.applySharedProfile === 'function'
@@ -2412,7 +2423,15 @@ async function main() {
       } catch (err) {
         transportResult = ac.signal.aborted ? 'aborted' : 'error';
         await finishRequest();
-        if (ac.signal.aborted) return { candidate, full: '', aborted: true, requestId: lease && lease.id };
+        if (ac.signal.aborted) {
+          return {
+            candidate,
+            full: '',
+            aborted: true,
+            abortReason: cancellationReason(ac.signal),
+            requestId: lease && lease.id,
+          };
+        }
         console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
         await sleep(2000);
         return { candidate, full: '', error: true, requestId: lease && lease.id };
@@ -2443,16 +2462,33 @@ async function main() {
           ? 'aborted' : (candidate.trim() ? 'candidate' : 'empty');
       } catch (err) {
         transportResult = ac.signal.aborted ? 'aborted' : 'error';
-        if (ac.signal.aborted) return { candidate, full: '', aborted: true, stats, ttftMs, requestId: lease.id };
+        if (ac.signal.aborted) {
+          return {
+            candidate,
+            full: '',
+            aborted: true,
+            abortReason: cancellationReason(ac.signal),
+            stats,
+            ttftMs,
+            requestId: lease.id,
+          };
+        }
         console.warn('[cy] stream error:', err.message);
         return { candidate, full: '', error: true, stats, ttftMs, requestId: lease.id };
       } finally {
-        if (currentAbort === ac) currentAbort = null;
         await finishRequest();
       }
       if (streamRes && streamRes.aborted) {
         transportResult = 'aborted';
-        return { candidate, full: '', aborted: true, stats, ttftMs, requestId: lease.id };
+        return {
+          candidate,
+          full: '',
+          aborted: true,
+          abortReason: cancellationReason(ac.signal),
+          stats,
+          ttftMs,
+          requestId: lease.id,
+        };
       }
       const cleaned = stripScaffold(sanitize(candidate));
       if (provider.screensContent && cleaned.trim() && looksLikeRefusal(cleaned)) {
@@ -2548,7 +2584,7 @@ async function main() {
 
   // A one-shot, non-streaming generation whose text is NOT emitted chunk by
   // chunk (used for the drawing DSL, which must never reach the pen as prose).
-  // Wired to currentAbort so an inbound postcard/notice can cut it short.
+  // Wired to a purpose-specific cancellation slot so only appropriate work cuts it short.
   async function rawGenerate({
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
@@ -2557,21 +2593,25 @@ async function main() {
     let startedAtMs = null;
     const awgInReservedIdle = admittedAwgSlot && purpose === 'ambient_world_generation';
     const coordinatorBackground = background || awgInReservedIdle;
+    const cancellationScope = awgInReservedIdle ? 'awg' : (background ? null : 'visible');
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
-    // prose does. Incoming postcards/notices still abort it through currentAbort.
+    // prose does. Higher-priority work aborts its dedicated AWG slot explicitly.
+    if (!background && purpose !== 'ambient_world_generation') {
+      generationCancellation.abort('awg', 'FOREGROUND_INFERENCE');
+    }
     if (!background && purpose !== 'ambient_world_generation' && autobiographicalMemory) {
       autobiographicalMemory.interruptBackground('foreground');
       currentMemoryAbort = null;
     }
     const ac = new AbortController();
-    const relayAbort = () => ac.abort();
+    const relayAbort = () => abortWithReason(ac, cancellationReason(signal, 'EXTERNAL_ABORT'));
     if (signal) {
-      if (signal.aborted) ac.abort();
+      if (signal.aborted) relayAbort();
       else signal.addEventListener('abort', relayAbort, { once: true });
     }
     if (background) currentMemoryAbort = ac;
-    else currentAbort = ac;
+    else if (cancellationScope) generationCancellation.register(cancellationScope, ac, { purpose });
     const provider = activeProvider();
     let lease = null;
     let hostLease = null;
@@ -2589,7 +2629,7 @@ async function main() {
         hostLease = await provider.acquireSharedLease({
           purpose,
           signal: ac.signal,
-          onLost: () => ac.abort(),
+          onLost: () => abortWithReason(ac, 'LEASE_LOSS'),
         });
       }
       const requestOpts = typeof provider.applySharedProfile === 'function'
@@ -2603,6 +2643,7 @@ async function main() {
         outputChars = String(out.text || '').length;
         if (!out.ok) {
           requestResult = ac.signal.aborted ? 'aborted' : 'http-error';
+          if (awgInReservedIdle && ac.signal.aborted) throw cancellationError(ac.signal);
           if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
           return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
         }
@@ -2617,6 +2658,7 @@ async function main() {
       });
     } catch (error) {
       requestResult = ac.signal.aborted ? 'aborted' : 'error';
+      if (awgInReservedIdle && ac.signal.aborted) throw cancellationError(ac.signal);
       if (background) throw error;
       return returnMeta
         ? { ok: false, text: '', stats: null, model: provider.model, error: String(error && error.message || error) }
@@ -2627,6 +2669,8 @@ async function main() {
         lease.finish({
           result: requestResult,
           output_chars: outputChars,
+          ...(requestResult === 'aborted'
+            ? { abort_reason: cancellationReason(ac.signal) } : {}),
           ...inferenceStats(requestStats),
         });
       }
@@ -2644,8 +2688,8 @@ async function main() {
         if (currentMemoryAbort === ac) {
           currentMemoryAbort = null;
         }
-      } else if (currentAbort === ac) {
-        currentAbort = null;
+      } else if (cancellationScope) {
+        generationCancellation.clear(cancellationScope, ac);
       }
     }
   }
@@ -3353,6 +3397,7 @@ async function main() {
   // ---- inbox: postcards interrupt; news just colours the state ----
   client.onInbox = (data) => {
     let interrupt = false;
+    let interruptReason = 'INTERACTIVE_INBOX';
     // Fan mail has been accepted and retained by the prison, but it is not a
     // promise of immediate access to Cy. Screen it, archive it in the public
     // chronology, and leave the model uninterrupted. If the server later promotes
@@ -3402,6 +3447,7 @@ async function main() {
         }
       }
       interrupt = true;
+      interruptReason = 'POSTCARD';
     }
     for (const n of data.news || []) {
       fireEvent('news_arrives', { headline: n.headline || null });
@@ -3411,8 +3457,9 @@ async function main() {
       if (!w || !w.text) continue;
       pendingWarden.push(w);
       interrupt = true;
+      interruptReason = 'WARDEN';
     }
-    if (interrupt && currentAbort) currentAbort.abort(); // cut the current thought mid-word
+    if (interrupt) generationCancellation.abortAll(interruptReason);
   };
 
   // ---- operator pause: interrupt the in-flight burst and acknowledge at once ----
@@ -3431,7 +3478,7 @@ async function main() {
       currentMode = 'paused';
       client.kick(); // priority flush: the admin control is waiting on this
     }
-    if (currentAbort) currentAbort.abort(); // cut the burst mid-word, exactly like a postcard
+    generationCancellation.abortAll('PAUSE');
   };
   client.onResume = () => {
     if (currentMode !== 'paused') return;
@@ -3478,7 +3525,7 @@ async function main() {
     );
     emit({ kind: 'event', payload: { name: 'provider', from, to: id, model: target.model } });
     client.kick(); // priority flush: the admin control is waiting on this
-    if (currentAbort) currentAbort.abort(); // clean cut; the next burst uses the new provider
+    generationCancellation.abortAll('PROVIDER_CHANGE');
   };
 
   // The EFFECTIVE sleep state: the clock-based lights-out window (isAsleep) is the
@@ -3573,7 +3620,7 @@ async function main() {
     }, { now });
     emit({ kind: 'event', payload: { name: 'regime', from, to } });
     client.kick(); // priority flush: the admin control is waiting on this
-    if (currentAbort) currentAbort.abort(); // cut the burst; the loop re-decides asleep now
+    generationCancellation.abortAll('REGIME_CHANGE');
   };
 
   // Fire a named event: capture the legacy diagnostic amplification before the
@@ -3825,9 +3872,9 @@ async function main() {
     } else {
       // barely moves the needle awake - a small startle, no more
       applyDeltas(vitals, { agitation: +0.015 }, 1);
-      mid = Math.random() < 0.5 && !!currentAbort;
+      mid = Math.random() < 0.5 && generationCancellation.has('visible');
       wingNoiseCue = { line, mid, wake: false, until: now + 3 * 60 * 1000 };
-      if (mid && currentAbort) currentAbort.abort(); // cut across the thought mid-word
+      if (mid) generationCancellation.abort('visible', 'WING_NOISE_MID');
     }
     emit({ kind: 'event', payload: { name: 'wing_noise', line, asleep, mid } });
   }
@@ -4097,7 +4144,7 @@ async function main() {
     // AWG emits no handwriting tokens while it works, so the waking-prose
     // no-token watchdog is not a valid liveness test for that request class.
     // AWG has its own finite provider timeout and remains interruptible by all
-    // higher-priority inbound work through currentAbort.
+    // higher-priority inbound work through the purpose-aware cancellation registry.
     const proseInferenceBusy = inferPhase !== 'idle'
       && activeInferencePurpose !== 'ambient_world_generation';
     const hung = proseInferenceBusy && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
@@ -4143,7 +4190,7 @@ async function main() {
       } catch {
         /* never crash on watchdog logging */
       }
-      if (currentAbort) currentAbort.abort(); // break any wedged in-flight generation
+      generationCancellation.abort('visible', 'WATCHDOG');
       watchdogStep++; // next fire (if the stall persists) escalates one rung
       failedCyclesSinceEmit = 0; // fresh window: rebuild to STALL_CYCLES before firing again
       inferBusySinceMs = now; // reset the hung clock so the abort itself does not re-trip it
@@ -5191,7 +5238,7 @@ async function main() {
     shuttingDown = true;
     running = false;
     console.log('\n[cy] shutting down - flushing...');
-    if (currentAbort) currentAbort.abort();
+    generationCancellation.abortAll('SHUTDOWN');
     if (autobiographicalMemory) autobiographicalMemory.stop();
     clearInterval(tickTimer);
     clearInterval(hostTimer);

@@ -5,6 +5,7 @@
 // pacing before any proposal may become authoritative world state.
 
 import { CAST, OFFICERS } from './cast.js';
+import { cancellationReason, isInferenceCancellation } from './inference-cancellation.js';
 
 export const AWG_SCHEMA = 'cy.ambient-world-candidate';
 export const AWG_SCHEMA_VERSION = 1;
@@ -841,12 +842,21 @@ export async function runAmbientWorldCycle({
     applied.state.recentRuns = [...applied.state.recentRuns, run].slice(-AWG_RECENT_RUN_LIMIT);
     return { status: 'ACCEPTED', validation, applied, run, state: applied.state, latencyMs: Math.max(0, clock() - started) };
   } catch (error) {
+    const cancelled = isInferenceCancellation(error);
+    const abortReason = cancelled ? cancellationReason(error) : null;
     const run = {
-      runId, ranAt, candidateType: 'FAILED', candidateOutput: candidate || proposal,
-      validationStatus: 'FAILED', rejectionReason: clean(error && error.message, 300),
+      runId, ranAt, candidateType: cancelled ? 'CANCELLED' : 'FAILED', candidateOutput: candidate || proposal,
+      validationStatus: cancelled ? 'NOT_RUN' : 'FAILED',
+      rejectionReason: cancelled ? `ABORTED/${abortReason}` : clean(error && error.message, 300),
       createdWorldEventIds: [], threadChanges: [], modelLatencyMs: Math.max(0, clock() - started), validationLatencyMs: 0,
     };
     stateWithRun.recentRuns = [...stateWithRun.recentRuns, run].slice(-AWG_RECENT_RUN_LIMIT);
-    return { status: 'FAILED', error: run.rejectionReason, run, state: stateWithRun, latencyMs: Math.max(0, clock() - started) };
+    return {
+      status: cancelled ? 'CANCELLED' : 'FAILED',
+      error: run.rejectionReason,
+      run,
+      state: stateWithRun,
+      latencyMs: Math.max(0, clock() - started),
+    };
   }
 }

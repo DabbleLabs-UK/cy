@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { InferenceCancellationError } from './inference-cancellation.js';
+
 import {
   AWG_CADENCE_MS,
   AWG_MIN_IDLE_BUDGET_MS,
@@ -345,6 +347,40 @@ test('M: AWG failure returns safely and leaves authoritative state unchanged', a
     nowMs: NOW + 1000,
     idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
   }).reason, 'CADENCE', 'a failed attempt cannot retry on the next journal quiet');
+});
+
+test('M1: cancelled AWG is not parsed or reported as an empty candidate', async () => {
+  let clockMs = 0;
+  const result = await runAmbientWorldCycle({
+    state: null,
+    nowMs: NOW,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    clock: () => clockMs += 5,
+    generate: async () => { throw new InferenceCancellationError('POSTCARD'); },
+  });
+  assert.equal(result.status, 'CANCELLED');
+  assert.equal(result.run.candidateType, 'CANCELLED');
+  assert.equal(result.run.validationStatus, 'NOT_RUN');
+  assert.equal(result.run.rejectionReason, 'ABORTED/POSTCARD');
+  assert.equal(result.run.validationLatencyMs, 0);
+  assert.equal(result.state.lastRunAt, new Date(NOW).toISOString());
+  assert.equal(shouldRunAwg(result.state, {
+    nowMs: NOW + 1000,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+  }).reason, 'CADENCE', 'a cancelled attempt retains ordinary AWG backoff');
+});
+
+test('M2: a normal empty AWG response remains an EMPTY_CANDIDATE failure', async () => {
+  const result = await runAmbientWorldCycle({
+    state: null,
+    nowMs: NOW,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    generate: async () => '',
+  });
+  assert.equal(result.status, 'FAILED');
+  assert.equal(result.run.candidateType, 'FAILED');
+  assert.equal(result.run.validationStatus, 'FAILED');
+  assert.equal(result.run.rejectionReason, 'EMPTY_CANDIDATE');
 });
 
 test('N: AWG never runs ahead of higher-priority work', () => {

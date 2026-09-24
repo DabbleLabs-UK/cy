@@ -15,6 +15,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { withAbortTimeout } from './run.js';
+import { cancellationReason } from './inference-cancellation.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -36,6 +37,7 @@ await (async () => {
   // the wrapper itself never settles (fn never settles) - only the abort side effect fires
   await new Promise((resolve) => setTimeout(resolve, 60));
   assert.equal(aborted, true, 'a request stuck longer than timeoutMs is aborted');
+  assert.equal(cancellationReason(ac.signal), 'TIMEOUT');
   ok('foreground timeout propagation: a genuinely stuck request is aborted after timeoutMs');
   void p; // intentionally left pending, matches the real caller: the abort makes fn's own promise reject/settle
 })();
@@ -110,5 +112,32 @@ assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeout
 assert.doesNotMatch(source, /timeoutMs: AWG_TIMEOUT_MS[\s\S]{0,40}FOREGROUND_INFERENCE_TIMEOUT_MS/,
   'AWG is never given the foreground timeout in addition to its own');
 ok('background AWG call site uses its own finite provider timeout, not the foreground constant');
+
+assert.match(source,
+  /mid = Math\.random\(\) < 0\.5 && generationCancellation\.has\('visible'\)[\s\S]{0,180}?generationCancellation\.abort\('visible', 'WING_NOISE_MID'\)/,
+  'wing noise targets visible prose only');
+assert.match(source,
+  /if \(interrupt\) generationCancellation\.abortAll\(interruptReason\)/,
+  'postcard and warden work can still preempt AWG');
+assert.match(source,
+  /async function streamGenerate[\s\S]{0,700}?generationCancellation\.abort\('awg', 'FOREGROUND_INFERENCE'\)/,
+  'foreground prose can preempt active AWG work');
+for (const cause of ['PAUSE', 'SHUTDOWN', 'PROVIDER_CHANGE']) {
+  assert.match(source, new RegExp(`generationCancellation\\.abortAll\\('${cause}'\\)`),
+    `${cause} still cancels active AWG work`);
+}
+assert.match(source,
+  /onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\)/,
+  'shared lease loss cancels the owning request with a reason');
+assert.match(source,
+  /const cancellationScope = awgInReservedIdle \? 'awg'[\s\S]{0,1000}?generationCancellation\.register\(cancellationScope, ac, \{ purpose \}\)/,
+  'an admitted AWG request owns a separate cancellation scope');
+assert.match(source,
+  /abort_reason: cancellationReason\(ac\.signal\)/,
+  'inference telemetry preserves the structured abort reason');
+assert.match(source,
+  /if \(awgInReservedIdle && ac\.signal\.aborted\) throw cancellationError\(ac\.signal\)/,
+  'AWG cancellation bypasses candidate parsing');
+ok('AWG and visible prose use purpose-aware, reason-tagged cancellation paths');
 
 console.log(`\nforeground-timeout.test.js: all ${n} checks passed`);

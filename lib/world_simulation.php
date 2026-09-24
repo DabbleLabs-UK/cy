@@ -79,7 +79,7 @@ function captive_context_inspection_validate(array $payload): array
 function captive_awg_run_validate(array $payload): array
 {
     $status = captive_required_text($payload, 'validationStatus', 24);
-    if (!in_array($status, ['ACCEPTED', 'ACCEPTED_NO_EVENT', 'REJECTED', 'FAILED'], true)) {
+    if (!in_array($status, ['ACCEPTED', 'ACCEPTED_NO_EVENT', 'REJECTED', 'FAILED', 'NOT_RUN'], true)) {
         throw new InvalidArgumentException('invalid AWG validation status');
     }
     return [

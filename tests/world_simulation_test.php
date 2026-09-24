@@ -43,6 +43,20 @@ $run = captive_awg_run_validate([
 check_world_simulation($run['validation_status'] === 'ACCEPTED_NO_EVENT', 'AWG run status was not preserved');
 check_world_simulation($run['total_latency_ms'] === 102, 'AWG latency was not preserved');
 
+$cancelledRun = captive_awg_run_validate([
+    'runId' => 'awg-run:cancelled',
+    'ranAt' => '2026-09-12T12:05:00.000Z',
+    'candidateType' => 'CANCELLED',
+    'contextPacketSummary' => [],
+    'candidateOutput' => null,
+    'validationStatus' => 'NOT_RUN',
+    'rejectionReason' => 'ABORTED/POSTCARD',
+    'createdWorldEventIds' => [],
+    'threadChanges' => [],
+]);
+check_world_simulation($cancelledRun['validation_status'] === 'NOT_RUN', 'cancelled AWG must record that validation did not run');
+check_world_simulation($cancelledRun['rejection_reason'] === 'ABORTED/POSTCARD', 'AWG cancellation reason was not preserved');
+
 $thread = captive_world_thread_validate([
     'id' => 'thread:test-note',
     'type' => 'note_delivery',
