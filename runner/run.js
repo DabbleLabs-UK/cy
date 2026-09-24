@@ -2552,7 +2552,7 @@ async function main() {
   async function rawGenerate({
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
-    attempt = 'initial', admittedAwgSlot = false,
+    attempt = 'initial', admittedAwgSlot = false, format = null,
   }) {
     let startedAtMs = null;
     const awgInReservedIdle = admittedAwgSlot && purpose === 'ambient_world_generation';
@@ -2596,7 +2596,9 @@ async function main() {
         ? provider.applySharedProfile(opts, hostLease) : opts;
       startedAtMs = lease.begin();
       return await withAbortTimeout(ac, timeoutMs, async () => {
-        const out = await provider.rawGenerate({ system, prompt, opts: requestOpts, signal: ac.signal, purpose });
+        const out = await provider.rawGenerate({
+          system, prompt, opts: requestOpts, signal: ac.signal, purpose, format,
+        });
         requestStats = out.stats || null;
         outputChars = String(out.text || '').length;
         if (!out.ok) {
@@ -2718,7 +2720,11 @@ async function main() {
       if (!visible) continue;
       add({
         id: `event:${event.id}`, sourceId: event.id, section: 'recent_events',
-        provenanceClass: event.cyObserved ? 'OBSERVED BY CY' : 'WORLD FACT',
+        // The same authoritative environment record is a WORLD FACT to the AWG
+        // even when Cy also observed it. Labelling it only OBSERVED BY CY made
+        // the AWG policy discard every such recent event.
+        provenanceClass: forAwg ? 'WORLD FACT'
+          : event.cyObserved ? 'OBSERVED BY CY' : 'WORLD FACT',
         knowledgeScope: forAwg ? 'WORLD_KNOWS' : 'CY_OBSERVED',
         privacyScope: forAwg ? 'WORLD_SIMULATION' : 'INTERNAL_ONLY',
         priority: 60,
@@ -4310,6 +4316,7 @@ async function main() {
       generate: (call) => rawGenerate({
         system: call.system,
         prompt: call.prompt,
+        format: call.format,
         opts: options(vitals, config.threads, 'journal', call.options),
         purpose: call.purpose,
         accountingMode: 'ambient_world_generation',

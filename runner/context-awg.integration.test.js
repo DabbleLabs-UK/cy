@@ -54,6 +54,31 @@ function candidate({ cyObserved = true } = {}) {
   };
 }
 
+function candidateProposal(value) {
+  return {
+    decision: value.decision,
+    eventFamily: value.eventFamily,
+    participants: value.participants,
+    objective: value.objective,
+    objects: value.objects.map((object) => ({
+      id: null,
+      type: object.type,
+      ownerId: object.ownerId,
+      holderId: object.holderId,
+      status: object.status,
+    })),
+    observations: value.observations,
+    informationClaims: value.informationClaims,
+    resolved: value.resolved,
+    thread: {
+      action: value.thread.action,
+      id: null,
+      type: value.thread.type,
+      summary: value.thread.summary,
+    },
+  };
+}
+
 function memoryClient(overrides = {}) {
   return {
     async enqueueMemorySource() { return { queued: true, depth: 1 }; },
@@ -78,14 +103,16 @@ async function accepted(value = candidate()) {
     contextRendering: '<SHARED_CONTEXT consumer="AWG"></SHARED_CONTEXT>',
     nowMs: NOW,
     idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    currentLocation: 'landing',
+    plausibleCastIds: ['reg', 'daemon'],
     makeId: (prefix) => `${prefix}-integration`,
-    generate: async () => JSON.stringify(value),
+    generate: async () => JSON.stringify(candidateProposal(value)),
   });
 }
 
 test('A: foreground work blocks AWG while an overdue cycle gets a fairness slot beside queued formation', async () => {
   let calls = 0;
-  const generate = async () => { calls += 1; return JSON.stringify(candidate()); };
+  const generate = async () => { calls += 1; return JSON.stringify(candidateProposal(candidate())); };
   const journal = await runAmbientWorldCycle({
     state: null, nowMs: NOW, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
     pendingHigherPriority: true, generate,
@@ -93,6 +120,7 @@ test('A: foreground work blocks AWG while an overdue cycle gets a fairness slot 
   const memory = await runAmbientWorldCycle({
     state: null, nowMs: NOW, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
     memoryFormationBacklog: 1, generate,
+    currentLocation: 'landing', plausibleCastIds: ['reg', 'daemon'],
   });
   assert.equal(journal.status, 'SKIPPED');
   assert.equal(memory.status, 'ACCEPTED');

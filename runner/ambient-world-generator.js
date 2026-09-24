@@ -186,37 +186,187 @@ export function isAwgDue(stateValue, nowMs = Date.now()) {
   return lastRun == null || nowMs - lastRun >= AWG_CADENCE_MS;
 }
 
-export function buildAwgCall(contextRendering, { currentLocation = null, plausibleCastIds = [] } = {}) {
+function proposalCastIds(plausibleCastIds = []) {
+  const supplied = [...new Set((plausibleCastIds || []).map(id).filter(Boolean))]
+    .filter((castId) => KNOWN_CAST_IDS.has(castId));
+  return [...new Set(['cy', ...supplied])].filter((castId) => castId !== 'cy:7734');
+}
+
+function nullableEnum(values) {
+  return { enum: [null, ...values] };
+}
+
+export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {}) {
+  const state = reconcileWorldSimulationState(stateValue);
+  const castIds = proposalCastIds(plausibleCastIds);
+  const otherCastIds = castIds.filter((castId) => castId !== 'cy');
+  const threadIds = state.threads.filter((thread) => thread.state === 'OPEN').map((thread) => thread.id);
+  const objectIds = state.objects.map((object) => object.id);
+  const textOrNull = { type: ['string', 'null'] };
+  const objective = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['eventType', 'summary'],
+    properties: {
+      eventType: { type: 'string', pattern: '^[a-z][a-z0-9_]{1,63}$' },
+      summary: { type: 'string', minLength: 1, maxLength: 800 },
+    },
+  };
+  const eventProposal = {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'decision', 'eventFamily', 'participants', 'objective', 'objects',
+      'observations', 'informationClaims', 'resolved', 'thread',
+    ],
+    properties: {
+      decision: { const: 'EVENT' },
+      eventFamily: { type: 'string', enum: AWG_EVENT_FAMILIES },
+      participants: {
+        type: 'array', minItems: 1, maxItems: 6, uniqueItems: true,
+        items: { type: 'string', enum: castIds },
+      },
+      objective,
+      objects: {
+        type: 'array', maxItems: 4,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'type', 'ownerId', 'holderId', 'status'],
+          properties: {
+            id: nullableEnum(objectIds),
+            type: { type: 'string', enum: AWG_OBJECT_TYPES },
+            ownerId: nullableEnum(castIds),
+            holderId: nullableEnum(castIds),
+            status: { type: 'string', enum: AWG_OBJECT_STATUSES },
+          },
+        },
+      },
+      observations: {
+        type: 'array', minItems: 1, maxItems: 8,
+        items: {
+          oneOf: [
+            {
+              type: 'object', additionalProperties: false,
+              required: ['observerId', 'access', 'summary'],
+              properties: {
+                observerId: { const: 'world' },
+                access: { const: 'WORLD_ONLY' },
+                summary: { type: 'string', minLength: 1, maxLength: 800 },
+              },
+            },
+            {
+              type: 'object', additionalProperties: false,
+              required: ['observerId', 'access', 'summary'],
+              properties: {
+                observerId: { const: 'cy' },
+                access: {
+                  type: 'string',
+                  enum: ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'],
+                },
+                summary: { type: 'string', minLength: 1, maxLength: 800 },
+              },
+            },
+            ...(otherCastIds.length ? [{
+              type: 'object', additionalProperties: false,
+              required: ['observerId', 'access', 'summary'],
+              properties: {
+                observerId: { type: 'string', enum: otherCastIds },
+                access: { const: 'CAST_ONLY' },
+                summary: { type: 'string', minLength: 1, maxLength: 800 },
+              },
+            }] : []),
+          ],
+        },
+      },
+      informationClaims: {
+        type: 'array', maxItems: 6,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['speakerId', 'content', 'truthStatus'],
+          properties: {
+            speakerId: { type: 'string', enum: castIds },
+            content: { type: 'string', minLength: 1, maxLength: 800 },
+            truthStatus: { type: 'string', enum: AWG_TRUTH_STATUS },
+          },
+        },
+      },
+      resolved: { type: 'boolean' },
+      thread: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['action', 'id', 'type', 'summary'],
+        properties: {
+          action: { type: 'string', enum: ['NONE', 'OPEN'] },
+          id: { const: null },
+          type: textOrNull,
+          summary: textOrNull,
+        },
+      },
+    },
+  };
+  return {
+    oneOf: [
+      {
+        type: 'object', additionalProperties: false,
+        required: ['decision'],
+        properties: { decision: { const: 'NO_EVENT' } },
+      },
+      eventProposal,
+      ...(threadIds.length ? [(() => {
+        const continuation = clone(eventProposal);
+        continuation.properties.decision = { const: 'CONTINUATION' };
+        continuation.properties.thread.properties.action = { type: 'string', enum: ['UPDATE', 'RESOLVE'] };
+        continuation.properties.thread.properties.id = { type: 'string', enum: threadIds };
+        return continuation;
+      })()] : []),
+    ],
+  };
+}
+
+export function buildAwgCall(contextRendering, {
+  state = null, currentLocation = null, plausibleCastIds = [],
+} = {}) {
+  const worldState = reconcileWorldSimulationState(state);
+  const castIds = proposalCastIds(plausibleCastIds);
+  const openThreadIds = worldState.threads
+    .filter((thread) => thread.state === 'OPEN').map((thread) => thread.id);
+  const objectIds = worldState.objects.map((object) => object.id);
   const system = [
     'You are the Ambient World Generator for HMP ThinkPad.',
     'You are a narrative world-simulation content generator, not Cy, Soma, memory or a narrator.',
     'Propose exactly one structured candidate event, one continuation, or NO_EVENT.',
-    'Use only known cast IDs and known locations supplied below. New cast generation is disabled.',
+    'Select only from the supplied canonical IDs. New cast generation is disabled.',
+    'Do not invent timestamps, locations, thread IDs, event IDs, object IDs, provenance or visibility flags.',
     'Use NOTE or MESSAGE as the canonical concept; do not force American prison slang.',
     'Do not assign emotions, Soma values, appraisal magnitudes or brain activation.',
     'A rumour claim is message content and must carry a truthStatus; it is not world truth.',
     'Return one JSON object only. Do not include reasoning or prose outside the object.',
   ].join('\n');
-  const schema = {
-    schema: AWG_SCHEMA,
-    version: AWG_SCHEMA_VERSION,
-    decision: 'NO_EVENT | EVENT | CONTINUATION',
-    eventFamily: AWG_EVENT_FAMILIES.join(' | '),
-    participants: ['known cast id'],
-    location: AWG_KNOWN_LOCATIONS.join(' | '),
-    occurredAt: 'ISO-8601 timestamp',
-    objective: { eventType: 'short machine label', summary: 'objective occurrence only' },
-    objects: [{ id: 'required stable object id', type: 'note | message | permitted_item | contraband_item', ownerId: 'known cast id or null', holderId: 'known cast id or null', location: 'known location', status: 'ACTIVE | MISSING | CONFISCATED | DELIVERED' }],
-    observations: [{ observerId: 'known cast id, or world for WORLD_ONLY', access: AWG_OBSERVATION_ACCESS.join(' | '), summary: 'only what this observer could perceive' }],
-    informationClaims: [{ speakerId: 'known cast id', content: 'reported claim', truthStatus: AWG_TRUTH_STATUS.join(' | ') }],
-    resolved: false,
-    thread: { action: 'NONE | OPEN | UPDATE | RESOLVE', id: 'existing id for update/resolve', type: 'short label', summary: 'open causal question', nextEligibleAt: 'ISO timestamp or null' },
-    continuationOf: { threadId: 'existing thread id', eventIds: ['existing event id'] },
-    publicTimeline: { eligible: false, text: 'Cy-accessible bracketed trace or null' },
-  };
   return {
     system,
-    prompt: `${clean(contextRendering, 12000)}\n\nCURRENT CY LOCATION: ${clean(currentLocation) || 'unknown'}\nCAST PLAUSIBLE AT CURRENT LOCATION: ${(plausibleCastIds || []).map(id).filter(Boolean).join(', ') || 'none supplied'}\nKNOWN CAST IDS: ${[...KNOWN_CAST_IDS].join(', ')}\nKNOWN LOCATIONS: ${AWG_KNOWN_LOCATIONS.join(', ')}\nOUTPUT SCHEMA:\n${JSON.stringify(schema)}`,
+    prompt: [
+      clean(contextRendering, 12000),
+      '',
+      'OUTPUT CONTRACT:',
+      '- Labels such as [C1] and [C2] are context citations, never cast or observer IDs.',
+      `- The event location is fixed by code as ${clean(currentLocation) || 'unknown'}; do not output a location.`,
+      '- Code assigns the event timestamp and all new machine IDs; do not output them.',
+      `- Allowed participant, observer and claim-speaker IDs: ${castIds.join(', ') || 'none'}.`,
+      `- Existing open thread IDs: ${openThreadIds.join(', ') || 'none'}.`,
+      `- Existing object IDs: ${objectIds.join(', ') || 'none'}. Use null to create a new object.`,
+      '- CONTINUATION is allowed only when selecting an existing open thread ID; code derives its event references.',
+      '- EVENT may use thread action NONE or OPEN. OPEN must use id null; code assigns its ID.',
+      '- Every EVENT or CONTINUATION needs at least one concrete observation stating who perceived what.',
+      '- Use observerId world only with WORLD_ONLY; cy only with CY_*; other cast only with CAST_ONLY.',
+      '- Include every acting or speaking cast member in participants.',
+      '- Code derives public visibility from valid Cy observations; do not output visibility or timeline text.',
+      '- eventType must be a lowercase snake_case machine label. objective.summary must state only what occurred.',
+      '- If the supplied facts do not ground a valid event, return exactly {"decision":"NO_EVENT"}.',
+      '- Return only JSON matching the enforced output schema.',
+    ].join('\n'),
+    format: buildAwgProposalFormat(worldState, { plausibleCastIds }),
     options: { ...AWG_MODEL_OPTIONS },
     purpose: 'ambient_world_generation',
   };
@@ -229,6 +379,124 @@ export function parseAwgCandidate(raw) {
   const end = source.lastIndexOf('}');
   if (start < 0 || end < start) throw new Error('NO_JSON_OBJECT');
   return JSON.parse(source.slice(start, end + 1));
+}
+
+function assertProposalKeys(value, allowed, label) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`INVALID_${label}`);
+  }
+  const unexpected = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unexpected.length) throw new Error(`FORBIDDEN_${label}_FIELD:${unexpected.join(',')}`);
+}
+
+function requireArray(value, label) {
+  if (!Array.isArray(value)) throw new Error(`INVALID_${label}`);
+  return value;
+}
+
+export function materialiseAwgProposal(proposalValue, stateValue, {
+  nowMs = Date.now(), currentLocation = null, plausibleCastIds = [], makeId,
+} = {}) {
+  const proposal = clone(proposalValue);
+  if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) {
+    throw new Error('INVALID_PROPOSAL');
+  }
+  const decision = clean(proposal.decision).toUpperCase();
+  if (!['NO_EVENT', 'EVENT', 'CONTINUATION'].includes(decision)) throw new Error('INVALID_DECISION');
+  if (decision === 'NO_EVENT') {
+    assertProposalKeys(proposal, new Set(['decision']), 'PROPOSAL');
+    return { schema: AWG_SCHEMA, version: AWG_SCHEMA_VERSION, decision };
+  }
+  assertProposalKeys(proposal, new Set([
+    'decision', 'eventFamily', 'participants', 'objective', 'objects',
+    'observations', 'informationClaims', 'resolved', 'thread',
+  ]), 'PROPOSAL');
+  if (!AWG_KNOWN_LOCATIONS.includes(clean(currentLocation))) throw new Error('UNKNOWN_LOCATION');
+  const state = reconcileWorldSimulationState(stateValue);
+  const allowedCast = new Set(proposalCastIds(plausibleCastIds));
+  const participants = requireArray(proposal.participants, 'PARTICIPANTS').map(id);
+  if (!participants.length || participants.some((castId) => !allowedCast.has(castId))) {
+    throw new Error('UNKNOWN_CAST_ID');
+  }
+  if (!AWG_EVENT_FAMILIES.includes(clean(proposal.eventFamily).toUpperCase())) {
+    throw new Error('INVALID_EVENT_FAMILY');
+  }
+  assertProposalKeys(proposal.objective, new Set(['eventType', 'summary']), 'OBJECTIVE');
+  const eventType = clean(proposal.objective.eventType, 80);
+  if (!/^[a-z][a-z0-9_]{1,63}$/.test(eventType) || !clean(proposal.objective.summary)) {
+    throw new Error('INVALID_OBJECTIVE');
+  }
+  const observations = requireArray(proposal.observations, 'OBSERVATIONS');
+  if (!observations.length) throw new Error('OBSERVABILITY_REQUIRED');
+  for (const observation of observations) {
+    assertProposalKeys(observation, new Set(['observerId', 'access', 'summary']), 'OBSERVATION');
+    const observerId = id(observation.observerId);
+    if (observerId !== 'world' && !allowedCast.has(observerId)) throw new Error('UNKNOWN_OBSERVER');
+  }
+  const claims = requireArray(proposal.informationClaims, 'INFORMATION_CLAIMS');
+  for (const claim of claims) {
+    assertProposalKeys(claim, new Set(['speakerId', 'content', 'truthStatus']), 'INFORMATION_CLAIM');
+    if (!allowedCast.has(id(claim.speakerId))) throw new Error('UNKNOWN_CLAIM_SPEAKER');
+  }
+  const objects = requireArray(proposal.objects, 'OBJECTS').map((object) => {
+    assertProposalKeys(object, new Set(['id', 'type', 'ownerId', 'holderId', 'status']), 'OBJECT');
+    const objectId = object.id == null ? null : id(object.id);
+    if (objectId && !state.objects.some((entry) => entry.id === objectId)) {
+      throw new Error('INVALID_OBJECT_REFERENCE');
+    }
+    return {
+      id: objectId || id((makeId || ((prefix) => `${prefix}:${nowMs}`))('object')),
+      type: clean(object.type).toLowerCase(),
+      ownerId: object.ownerId == null ? null : id(object.ownerId),
+      holderId: object.holderId == null ? null : id(object.holderId),
+      location: clean(currentLocation),
+      status: clean(object.status).toUpperCase(),
+    };
+  });
+  assertProposalKeys(proposal.thread, new Set(['action', 'id', 'type', 'summary']), 'THREAD');
+  const threadAction = clean(proposal.thread.action).toUpperCase();
+  const threadId = proposal.thread.id == null ? null : id(proposal.thread.id);
+  const openThread = threadId
+    ? state.threads.find((thread) => thread.id === threadId && thread.state === 'OPEN') : null;
+  if (decision === 'CONTINUATION') {
+    if (!openThread || !['UPDATE', 'RESOLVE'].includes(threadAction)) {
+      throw new Error('INVALID_THREAD_REFERENCE');
+    }
+  } else if (!['NONE', 'OPEN'].includes(threadAction) || threadId) {
+    throw new Error('INVALID_THREAD_REFERENCE');
+  }
+  const cyObservation = observations.find((observation) => id(observation.observerId) === 'cy'
+    && ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER']
+      .includes(clean(observation.access).toUpperCase()));
+  const publicText = cyObservation ? `[${clean(cyObservation.summary, 796)}]` : null;
+  const nextEligibleAt = ['OPEN', 'UPDATE'].includes(threadAction)
+    ? new Date(nowMs + AWG_MIN_EVENT_SPACING_MS).toISOString() : null;
+  return {
+    schema: AWG_SCHEMA,
+    version: AWG_SCHEMA_VERSION,
+    decision,
+    eventFamily: clean(proposal.eventFamily).toUpperCase(),
+    participants,
+    location: clean(currentLocation),
+    occurredAt: new Date(nowMs).toISOString(),
+    objective: { eventType, summary: clean(proposal.objective.summary, 800) },
+    objects,
+    observations: clone(observations),
+    informationClaims: clone(claims),
+    resolved: !!proposal.resolved,
+    thread: {
+      action: threadAction,
+      id: threadId,
+      type: proposal.thread.type == null ? null : clean(proposal.thread.type, 80),
+      summary: proposal.thread.summary == null ? null : clean(proposal.thread.summary, 800),
+      nextEligibleAt,
+    },
+    continuationOf: decision === 'CONTINUATION' ? {
+      threadId: openThread.id,
+      eventIds: [...(openThread.sourceEventIds || [])],
+    } : null,
+    publicTimeline: { eligible: !!publicText, text: publicText },
+  };
 }
 
 function validateObservation(observation, errors) {
@@ -528,11 +796,16 @@ export async function runAmbientWorldCycle({
   const stateWithRun = clone(original);
   stateWithRun.lastRunAt = ranAt;
   let candidate = null;
+  let proposal = null;
   try {
     if (typeof generate !== 'function') throw new Error('PROVIDER_UNAVAILABLE');
-    candidate = parseAwgCandidate(await generate(buildAwgCall(contextRendering, {
-      currentLocation, plausibleCastIds,
-    })));
+    const call = buildAwgCall(contextRendering, {
+      state: stateWithRun, currentLocation, plausibleCastIds,
+    });
+    proposal = parseAwgCandidate(await generate(call));
+    candidate = materialiseAwgProposal(proposal, stateWithRun, {
+      nowMs, currentLocation, plausibleCastIds, makeId,
+    });
     const validationStarted = clock();
     const validation = validateAwgCandidate(candidate, stateWithRun, {
       nowMs, currentLocation, plausibleCastIds,
@@ -569,7 +842,7 @@ export async function runAmbientWorldCycle({
     return { status: 'ACCEPTED', validation, applied, run, state: applied.state, latencyMs: Math.max(0, clock() - started) };
   } catch (error) {
     const run = {
-      runId, ranAt, candidateType: 'FAILED', candidateOutput: candidate,
+      runId, ranAt, candidateType: 'FAILED', candidateOutput: candidate || proposal,
       validationStatus: 'FAILED', rejectionReason: clean(error && error.message, 300),
       createdWorldEventIds: [], threadChanges: [], modelLatencyMs: Math.max(0, clock() - started), validationLatencyMs: 0,
     };

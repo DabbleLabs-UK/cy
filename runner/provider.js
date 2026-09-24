@@ -296,12 +296,15 @@ function makeOllama(config) {
       if (!res.ok || !res.body) return { ok: false, status: res.status };
       return { ok: true, status: 200, reader: res.body.getReader(), model };
     },
-    async rawGenerate({ system, prompt, opts, signal, purpose }) {
+    async rawGenerate({ system, prompt, opts, signal, purpose, format = null }) {
       const model = localModelFor(config, purpose);
       const res = await fetch(`${url()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, system, prompt, options: opts, keep_alive: -1, stream: false }),
+        body: JSON.stringify({
+          model, system, prompt, options: opts, keep_alive: -1, stream: false,
+          ...(format ? { format } : {}),
+        }),
         signal,
       });
       if (!res.ok) return { ok: false, status: res.status, text: '' };
@@ -362,7 +365,7 @@ function makeDeepSeek(config, key) {
         model: ds.model,
       };
     },
-    async rawGenerate({ system, prompt, opts, signal }) {
+    async rawGenerate({ system, prompt, opts, signal, format = null }) {
       const res = await fetch(`${apiBase}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -370,6 +373,7 @@ function makeDeepSeek(config, key) {
           model: ds.model,
           messages: messages(system, prompt),
           stream: false,
+          ...(format ? { response_format: { type: 'json_object' } } : {}),
           ...mapOptsToDeepSeek(opts, ds.maxTokens),
         }),
         signal,

@@ -8,6 +8,10 @@ import {
   AWG_SCHEMA,
   applyAwgCandidate,
   awgEventToEnvironment,
+  buildAwgCall,
+  buildAwgProposalFormat,
+  materialiseAwgProposal,
+  parseAwgCandidate,
   reconcileWorldSimulationState,
   runAmbientWorldCycle,
   isAwgDue,
@@ -44,6 +48,149 @@ function candidate(overrides = {}) {
     ...overrides,
   };
 }
+
+function proposal(overrides = {}) {
+  return {
+    decision: 'EVENT',
+    eventFamily: 'MESSAGE_PASSING',
+    participants: ['reg', 'cy'],
+    objective: { eventType: 'note_passed', summary: 'Reg passed a folded note to Cy.' },
+    objects: [{ id: null, type: 'note', ownerId: 'reg', holderId: 'cy', status: 'ACTIVE' }],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Reg put a folded note into Cy hand.' }],
+    informationClaims: [],
+    resolved: false,
+    thread: { action: 'OPEN', id: null, type: 'NOTE_AWAITING_DELIVERY', summary: 'The note has not reached Daemon.' },
+    ...overrides,
+  };
+}
+
+test('production proposal contract keeps machine-owned fields out of model output', () => {
+  const call = buildAwgCall('<SHARED_CONTEXT>[WORLD FACT] [C2] context</SHARED_CONTEXT>', {
+    state: null,
+    currentLocation: 'cell',
+    plausibleCastIds: ['reg', 'bill'],
+  });
+  assert.ok(call.format && Array.isArray(call.format.oneOf));
+  const eventFormat = call.format.oneOf[1];
+  assert.equal(call.format.oneOf[0].properties.decision.const, 'NO_EVENT');
+  assert.equal(eventFormat.properties.decision.const, 'EVENT');
+  assert.deepEqual(eventFormat.properties.thread.properties.action.enum, ['NONE', 'OPEN']);
+  assert.equal(eventFormat.properties.thread.properties.id.const, null);
+  assert.deepEqual(eventFormat.properties.participants.items.enum, ['cy', 'reg', 'bill']);
+  for (const forbidden of ['occurredAt', 'location', 'schema', 'version', 'continuationOf']) {
+    assert.equal(Object.hasOwn(eventFormat.properties, forbidden), false);
+  }
+  const observationBranches = eventFormat.properties.observations.items.oneOf;
+  assert.equal(observationBranches[0].properties.observerId.const, 'world');
+  assert.equal(observationBranches[0].properties.access.const, 'WORLD_ONLY');
+  assert.equal(observationBranches[1].properties.observerId.const, 'cy');
+  assert.equal(observationBranches[1].properties.access.enum.includes('WORLD_ONLY'), false);
+  assert.deepEqual(observationBranches[2].properties.observerId.enum, ['reg', 'bill']);
+  assert.equal(observationBranches[2].properties.access.const, 'CAST_ONLY');
+  assert.equal(Object.hasOwn(eventFormat.properties, 'publicTimelineText'), false);
+  assert.match(call.prompt, /\[C1\].*never cast or observer IDs/i);
+});
+
+test('real C2-style cast leak cannot pass proposal materialisation', () => {
+  assert.throws(() => materialiseAwgProposal(proposal({ participants: ['C2'] }), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg', 'bill'],
+  }), /UNKNOWN_CAST_ID/);
+});
+
+test('timestamps, location and new IDs are assigned by code rather than the model', () => {
+  const value = materialiseAwgProposal(proposal(), null, {
+    nowMs: NOW,
+    currentLocation: 'cell',
+    plausibleCastIds: ['reg', 'bill'],
+    makeId: (prefix) => `${prefix}-deterministic`,
+  });
+  assert.equal(value.occurredAt, new Date(NOW).toISOString());
+  assert.equal(value.location, 'cell');
+  assert.equal(value.objects[0].id, 'object-deterministic');
+  assert.equal(value.thread.id, null);
+  assert.equal(value.continuationOf, null);
+  assert.throws(() => materialiseAwgProposal({ ...proposal(), occurredAt: new Date(NOW).toISOString() }, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'],
+  }), /FORBIDDEN_PROPOSAL_FIELD:occurredAt/);
+});
+
+test('continuation and object references are selected only from supplied state', () => {
+  const state = reconcileWorldSimulationState({
+    threads: [{ id: 'thread-known', state: 'OPEN', sourceEventIds: ['world-known'] }],
+    objects: [{ id: 'object-known', type: 'note', ownerId: 'reg', holderId: null, location: 'cell', status: 'ACTIVE' }],
+  });
+  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'] });
+  const eventFormat = format.oneOf[1];
+  const continuationFormat = format.oneOf[2];
+  assert.equal(eventFormat.properties.thread.properties.id.const, null);
+  assert.deepEqual(eventFormat.properties.objects.items.properties.id.enum, [null, 'object-known']);
+  assert.equal(continuationFormat.properties.decision.const, 'CONTINUATION');
+  assert.deepEqual(continuationFormat.properties.thread.properties.action.enum, ['UPDATE', 'RESOLVE']);
+  assert.deepEqual(continuationFormat.properties.thread.properties.id.enum, ['thread-known']);
+  const continued = materialiseAwgProposal(proposal({
+    decision: 'CONTINUATION',
+    objects: [{ id: 'object-known', type: 'note', ownerId: 'reg', holderId: 'cy', status: 'DELIVERED' }],
+    thread: { action: 'RESOLVE', id: 'thread-known', type: 'NOTE', summary: 'The note arrived.' },
+  }), state, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] });
+  assert.deepEqual(continued.continuationOf, { threadId: 'thread-known', eventIds: ['world-known'] });
+  assert.throws(() => materialiseAwgProposal(proposal({
+    objects: [{ id: 'invented-object', type: 'note', ownerId: 'reg', holderId: 'cy', status: 'ACTIVE' }],
+  }), state, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] }), /INVALID_OBJECT_REFERENCE/);
+});
+
+test('observation and public-knowledge boundaries stay strict', () => {
+  assert.throws(() => materialiseAwgProposal(proposal({ observations: [] }), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'],
+  }), /OBSERVABILITY_REQUIRED/);
+  const worldOnly = materialiseAwgProposal(proposal({
+    participants: ['reg'],
+    observations: [{ observerId: 'reg', access: 'CAST_ONLY', summary: 'Reg hid the note.' }],
+  }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] });
+  assert.equal(worldOnly.publicTimeline.eligible, false);
+  const leaked = {
+    ...worldOnly,
+    publicTimeline: { eligible: true, text: '[Cy sees the hidden note]' },
+  };
+  const validation = validateAwgCandidate(leaked, null, { nowMs: NOW, currentLocation: 'cell' });
+  assert.ok(validation.errors.includes('PUBLIC_TIMELINE_KNOWLEDGE_LEAK'));
+});
+
+test('malformed JSON remains a clean hard failure', () => {
+  assert.throws(() => parseAwgCandidate('{"decision":"EVENT"'), /JSON|NO_JSON_OBJECT/);
+});
+
+test('real post-fix production rejection shapes cannot cross the proposal boundary', () => {
+  const noReferences = buildAwgProposalFormat(null, { plausibleCastIds: ['bill'] }).oneOf[1];
+  assert.equal(noReferences.properties.decision.const, 'EVENT');
+  assert.equal(noReferences.properties.thread.properties.id.const, null);
+  assert.deepEqual(noReferences.properties.objects.items.properties.id.enum, [null]);
+
+  assert.throws(() => materialiseAwgProposal(proposal({
+    participants: ['C2'],
+    observations: [{ observerId: 'C2', access: 'CY_DIRECT', summary: 'overheard activity' }],
+  }), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill'],
+  }), /UNKNOWN_CAST_ID/);
+
+  assert.throws(() => materialiseAwgProposal(proposal({
+    decision: 'CONTINUATION',
+    participants: ['cy'],
+    objects: [],
+    observations: [],
+    thread: { action: 'UPDATE', id: null, type: null, summary: null },
+  }), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill'],
+  }), /OBSERVABILITY_REQUIRED|INVALID_THREAD_REFERENCE/);
+
+  assert.throws(() => materialiseAwgProposal(proposal({
+    participants: ['bill'],
+    objective: { type: 'message passing', summary: 'Bill says Daemon is watching.' },
+    objects: [],
+    observations: [],
+  }), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill'],
+  }), /FORBIDDEN_OBJECTIVE_FIELD:type/);
+});
 
 test('A: valid ambient event is accepted', () => {
   const result = validateAwgCandidate(candidate(), null, { nowMs: NOW });
@@ -120,7 +267,9 @@ test('I: NO_EVENT does not mutate world state', async () => {
   const before = reconcileWorldSimulationState({ threads: [{ id: 't', state: 'OPEN' }] });
   const result = await runAmbientWorldCycle({
     state: before, nowMs: NOW, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
-    generate: async () => JSON.stringify({ schema: AWG_SCHEMA, version: 1, decision: 'NO_EVENT' }),
+    generate: async () => JSON.stringify({
+      decision: 'NO_EVENT',
+    }),
     makeId: (prefix) => `${prefix}-1`,
   });
   assert.equal(result.status, 'NO_EVENT');

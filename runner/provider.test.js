@@ -5,7 +5,9 @@
 //   node runner/provider.test.js
 
 import assert from 'node:assert/strict';
-import { computeCost, looksLikeRefusal, deepseekToNdjsonReader, localModelFor } from './provider.js';
+import {
+  computeCost, looksLikeRefusal, deepseekToNdjsonReader, localModelFor, makeProviders,
+} from './provider.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -26,6 +28,29 @@ const FX = 0.79;
   assert.equal(localModelFor(cfg, 'dream'), 'primary-8b');
   assert.equal(localModelFor({ model: 'only-model' }, 'postcard'), 'only-model');
   ok('local model routes split postcard/drawing work and safely fall back to the primary model');
+}
+
+// ---- 0b. structured output is passed only when a caller asks for it ------------
+{
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (_url, options) => {
+    requests.push(JSON.parse(options.body));
+    return { ok: true, async json() { return { response: '{}' }; } };
+  };
+  try {
+    const provider = makeProviders({
+      ollamaUrl: 'http://ollama.invalid', model: 'test-model', ollamaArbiterUrl: null,
+    }).ollama;
+    const schema = { type: 'object', additionalProperties: false, properties: {} };
+    await provider.rawGenerate({ system: 's', prompt: 'p', opts: {}, purpose: 'ambient_world_generation', format: schema });
+    await provider.rawGenerate({ system: 's', prompt: 'p', opts: {}, purpose: 'drawing' });
+    assert.deepEqual(requests[0].format, schema);
+    assert.equal(Object.hasOwn(requests[1], 'format'), false);
+    ok('Ollama receives JSON schema only for explicitly structured calls');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 // ---- 1. computeCost: reported cache split, per-million pricing, GBP via FX ----
