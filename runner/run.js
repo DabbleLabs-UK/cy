@@ -207,6 +207,7 @@ import {
   isAwgDue,
   reconcileWorldSimulationState,
   runAmbientWorldCycle,
+  selectAwgGenerationFacts,
   shouldRunAwg,
 } from './ambient-world-generator.js';
 import {
@@ -2708,6 +2709,13 @@ async function main() {
     mins = londonParts().mins,
   } = {}) {
     const forAwg = consumer === CONTEXT_CONSUMERS.AWG;
+    const awgLocation = forAwg ? locationContextId(vitals.locationRegime.current.id) : null;
+    const awgPlausibleCast = forAwg ? plausibleCastAtLocation(vitals.locationRegime.current.id) : [];
+    const awgFacts = forAwg ? selectAwgGenerationFacts(vitals.worldSimulation, {
+      plausibleCastIds: awgPlausibleCast.map((entry) => entry.key),
+      currentLocation: awgLocation,
+      nowMs: Date.now(),
+    }) : null;
     const items = [];
     const add = (value) => {
       try { items.push(createContextItem(value)); } catch { /* invalid source is inspectably absent */ }
@@ -2728,17 +2736,15 @@ async function main() {
         privacyScope: 'WORLD_SIMULATION', mandatory: true, priority: 100,
         content: 'HMP ThinkPad is a British digital prison. Cy is inmate 7734. Prison-world history is immutable. Real visitors can enter only through the external postcard system.',
       });
-      for (const entry of [...CAST, ...OFFICERS]) {
-        const plausible = plausibleCastAtLocation(vitals.locationRegime.current.id)
-          .some((item) => item.key === entry.key);
+      for (const entry of awgPlausibleCast) {
         add({
           id: `world-canon:cast:${entry.key}`, sourceId: `world-canon:cast:${entry.key}`,
           section: 'cast_context', provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS',
           privacyScope: 'WORLD_SIMULATION', priority: 90,
-          content: `${entry.key}: ${entry.name} - ${entry.blurb} Currently plausible at Cy's location: ${plausible ? 'yes' : 'no'}.`,
+          content: `${entry.key}: ${entry.name} - ${entry.blurb} Currently plausible at Cy's location: yes.`,
         });
       }
-      for (const thread of vitals.worldSimulation.threads.filter((entry) => entry.state === 'OPEN')) {
+      for (const thread of awgFacts.threads) {
         add({
           id: `thread:${thread.id}`, sourceId: `thread:${thread.id}`, section: 'unresolved_threads',
           provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS', privacyScope: 'WORLD_SIMULATION',
@@ -2746,7 +2752,7 @@ async function main() {
           content: `Open thread ${thread.id}: ${thread.type}. ${thread.summary}. Source events: ${(thread.sourceEventIds || []).join(', ') || 'none recorded'}. Next eligible: ${thread.nextEligibleAt || 'unscheduled'}.`,
         });
       }
-      for (const object of vitals.worldSimulation.objects.slice(-20)) {
+      for (const object of awgFacts.objects) {
         add({
           id: `object:${object.id}`, sourceId: `object:${object.id}`, section: 'persistent_objects',
           provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS', privacyScope: 'WORLD_SIMULATION',
@@ -2755,10 +2761,10 @@ async function main() {
         });
       }
     }
-    const recentEvents = [
-      ...(forAwg ? vitals.worldSimulation.recentAccepted || [] : []),
-      ...recentWorldHistory,
-    ];
+    // Recent episodes are supplied to AWG exactly once by buildAwgCall as
+    // explicit negative examples. Rendering them here as ordinary WORLD FACTS
+    // made duplicate material look like creative source context.
+    const recentEvents = forAwg ? [] : recentWorldHistory;
     for (const event of recentEvents) {
       const visible = forAwg || event.cyObserved;
       if (!visible) continue;

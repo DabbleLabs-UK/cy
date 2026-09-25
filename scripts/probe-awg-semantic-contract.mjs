@@ -10,9 +10,11 @@ import { dirname, join, resolve } from 'node:path';
 
 import {
   buildAwgCall,
+  findNextAwgEligibility,
   materialiseAwgProposal,
   parseAwgCandidate,
   reconcileWorldSimulationState,
+  selectAwgGenerationFacts,
   validateAwgCandidate,
 } from '../runner/ambient-world-generator.js';
 import { CAST, OFFICERS } from '../runner/cast.js';
@@ -41,7 +43,16 @@ const plausibleCastIds = [
     : CAST),
   ...OFFICERS,
 ].map((entry) => entry.key);
-const now = Date.now();
+const capturedAt = Date.now();
+
+const frozenOpportunity = findNextAwgEligibility(state, { fromMs: capturedAt });
+if (frozenOpportunity.eligibleAt == null) {
+  throw new Error('NO_ELIGIBLE_FROZEN_AWG_OPPORTUNITY_WITHIN_24H');
+}
+const probeNow = frozenOpportunity.eligibleAt;
+const generationFacts = selectAwgGenerationFacts(state, {
+  plausibleCastIds, currentLocation: location, nowMs: probeNow,
+});
 
 function item(value) {
   return createContextItem({
@@ -60,47 +71,39 @@ const contextItems = [item({
   content: 'HMP ThinkPad is a British digital prison. Cy is inmate 7734. Prison-world history is immutable.',
 })];
 
-for (const entry of [...CAST, ...OFFICERS]) {
+for (const entry of [...CAST, ...OFFICERS].filter((item) => plausibleCastIds.includes(item.key))) {
   contextItems.push(item({
     id: `probe:cast:${entry.key}`, sourceId: `probe:cast:${entry.key}`,
     section: 'cast_context', priority: 90,
     content: `${entry.key}: ${entry.name} - ${entry.blurb}`,
   }));
 }
-for (const thread of state.threads.filter((entry) => entry.state === 'OPEN')) {
+for (const thread of generationFacts.threads) {
   contextItems.push(item({
     id: `probe:thread:${thread.id}`, sourceId: `probe:thread:${thread.id}`,
     section: 'unresolved_threads', priority: 85,
     content: `Open thread ${thread.id}: ${thread.type}. ${thread.summary}. Source events: ${(thread.sourceEventIds || []).join(', ') || 'none recorded'}.`,
   }));
 }
-for (const object of state.objects.slice(-20)) {
+for (const object of generationFacts.objects) {
   contextItems.push(item({
     id: `probe:object:${object.id}`, sourceId: `probe:object:${object.id}`,
     section: 'persistent_objects', priority: 70,
     content: `Object ${object.id}: ${object.type}; owner ${object.ownerId || 'unknown'}; holder ${object.holderId || 'none known'}; location ${object.location}; status ${object.status}.`,
   }));
 }
-for (const event of state.recentAccepted) {
-  contextItems.push(item({
-    id: `probe:event:${event.id}`, sourceId: `probe:event:${event.id}`,
-    section: 'recent_events', priority: 60,
-    content: `${event.occurredAt}: ${event.summary} at ${event.location}.`,
-  }));
-}
-
 const packet = buildContextPacket({
   consumer: CONTEXT_CONSUMERS.AWG,
   items: contextItems,
-  generatedAt: new Date(now).toISOString(),
-  generationRef: `awg-semantic-probe:${now}`,
+  generatedAt: new Date(probeNow).toISOString(),
+  generationRef: `awg-semantic-probe:${probeNow}`,
 });
 const contextRendering = renderContextPacket(packet);
 const recentEvents = [
   ...state.recentAccepted,
   ...(Array.isArray(vitals.ledger) ? vitals.ledger.slice(-24) : []).map((entry, index) => ({
     id: `ledger:${index}`,
-    timestamp: entry.ts || new Date(now).toISOString(),
+    timestamp: entry.ts || new Date(capturedAt).toISOString(),
     summary: incidentLine(entry),
     participants: [],
   })),
@@ -109,7 +112,7 @@ const provider = makeProviders(config).ollama;
 const results = [];
 
 for (let index = 0; index < count; index++) {
-  const attemptNow = Date.now();
+  const attemptNow = probeNow;
   const call = buildAwgCall(contextRendering, {
     state, currentLocation: location, plausibleCastIds, recentEvents, nowMs: attemptNow,
   });
@@ -169,11 +172,17 @@ for (let index = 0; index < count; index++) {
 console.log(JSON.stringify({
   classification: 'NON_PUBLISHING_AWG_SEMANTIC_CONTRACT_PROBE',
   stateSource: dirname(statePath),
+  capturedAt: new Date(capturedAt).toISOString(),
+  frozenEligibleAt: new Date(probeNow).toISOString(),
+  frozenEligibility: frozenOpportunity.eligibility,
   currentLocation: location,
   plausibleCastIds,
   recentEventCount: recentEvents.length,
-  continuableThreadIds: state.threads.filter((item) => item.state === 'OPEN')
-    .map((item) => item.id),
+  continuableThreadIds: generationFacts.threads.map((item) => item.id),
+  excludedOpenThreadIds: state.threads.filter((item) => item.state === 'OPEN'
+    && !generationFacts.threads.some((thread) => thread.id === item.id)).map((item) => item.id),
+  generationObjectIds: generationFacts.objects.map((item) => item.id),
+  generationContextSections: packet.sections.map((section) => section.id),
   generated: results.filter((item) => item.generated).length,
   parsed: results.filter((item) => item.parsed).length,
   schemaPassed: results.filter((item) => item.schemaPassed).length,

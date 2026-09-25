@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { InferenceCancellationError } from './inference-cancellation.js';
@@ -12,10 +13,12 @@ import {
   awgEventToEnvironment,
   buildAwgCall,
   buildAwgProposalFormat,
+  findNextAwgEligibility,
   materialiseAwgProposal,
   parseAwgCandidate,
   reconcileWorldSimulationState,
   runAmbientWorldCycle,
+  selectAwgGenerationFacts,
   isAwgDue,
   shouldRunAwg,
   validateAwgCandidate,
@@ -198,6 +201,45 @@ test('generation exposes only currently viable continuation branches', () => {
   assert.deepEqual([...new Set(continuationIds)], ['thread-ready']);
 });
 
+test('generation facts exclude stale threads, implausible cast and off-location objects', () => {
+  const state = reconcileWorldSimulationState({
+    threads: [
+      {
+        id: 'thread-current', type: 'MESSAGE_PASSING', state: 'OPEN', participants: ['fisher'],
+        sourceEventIds: ['world-current'], nextEligibleAt: null,
+      },
+      {
+        id: 'thread-legacy', type: 'transfer_request_thread', state: 'OPEN', participants: ['fisher'],
+        sourceEventIds: ['world-legacy'], nextEligibleAt: null,
+      },
+      {
+        id: 'thread-wrong-cast', type: 'SOCIAL_REQUEST', state: 'OPEN', participants: ['daemon'],
+        sourceEventIds: ['world-wrong-cast'], nextEligibleAt: null,
+      },
+    ],
+    objects: [
+      { id: 'object-cell', type: 'note', location: 'cell', status: 'ACTIVE' },
+      { id: 'object-yard', type: 'note', location: 'exercise_yard', status: 'ACTIVE' },
+    ],
+  });
+  const facts = selectAwgGenerationFacts(state, {
+    plausibleCastIds: ['fisher'], currentLocation: 'cell', nowMs: NOW,
+  });
+  assert.deepEqual(facts.participantIds, ['cy', 'fisher']);
+  assert.deepEqual(facts.threads.map((item) => item.id), ['thread-current']);
+  assert.deepEqual(facts.objects.map((item) => item.id), ['object-cell']);
+});
+
+test('production AWG context uses selected facts and keeps recent episodes exclusion-only', async () => {
+  const runSource = await readFile(new URL('./run.js', import.meta.url), 'utf8');
+  assert.match(runSource, /const awgFacts = forAwg \? selectAwgGenerationFacts/);
+  assert.match(runSource, /for \(const thread of awgFacts\.threads\)/);
+  assert.match(runSource, /for \(const object of awgFacts\.objects\)/);
+  assert.match(runSource, /const recentEvents = forAwg \? \[\] : recentWorldHistory/);
+  assert.doesNotMatch(runSource,
+    /for \(const thread of vitals\.worldSimulation\.threads\.filter\(\(entry\) => entry\.state === 'OPEN'\)\)/);
+});
+
 test('generation does not expose ambiguous legacy thread types as continuations', () => {
   const state = reconcileWorldSimulationState({
     threads: [{
@@ -211,6 +253,23 @@ test('generation does not expose ambiguous legacy thread types as continuations'
   assert.equal(format.oneOf.some((branch) => (
     branch.properties?.decision?.const === 'CONTINUATION'
   )), false);
+});
+
+test('frozen probes advance to a normally eligible opportunity without changing pacing rules', () => {
+  const state = reconcileWorldSimulationState({
+    lastRunAt: new Date(NOW).toISOString(),
+    lastAcceptedAt: new Date(NOW).toISOString(),
+    recentAccepted: [{
+      id: 'world-current', occurredAt: new Date(NOW).toISOString(), signature: 'current event',
+    }],
+  });
+  const opportunity = findNextAwgEligibility(state, { fromMs: NOW + 1000 });
+  assert.equal(opportunity.eligibleAt, NOW + AWG_CADENCE_MS);
+  assert.equal(opportunity.eligibility.run, true);
+  assert.equal(shouldRunAwg(state, {
+    nowMs: opportunity.eligibleAt,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+  }).run, true);
 });
 
 test('generation exposes only object references already at the authoritative location', () => {

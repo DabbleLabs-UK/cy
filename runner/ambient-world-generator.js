@@ -270,6 +270,32 @@ export function shouldRunAwg(stateValue, {
   };
 }
 
+export function findNextAwgEligibility(stateValue, {
+  fromMs = Date.now(),
+  maxLookaheadMs = 24 * 60 * 60 * 1000,
+  stepMs = 60 * 1000,
+} = {}) {
+  const state = reconcileWorldSimulationState(stateValue);
+  const lastRunMs = isoMs(state.lastRunAt);
+  const lastAcceptedMs = isoMs(state.lastAcceptedAt);
+  let eligibleAt = fromMs;
+  if (lastRunMs != null) eligibleAt = Math.max(eligibleAt, lastRunMs + AWG_CADENCE_MS);
+  if (lastAcceptedMs != null) {
+    eligibleAt = Math.max(eligibleAt, lastAcceptedMs + AWG_MIN_EVENT_SPACING_MS);
+  }
+  const deadline = fromMs + Math.max(0, maxLookaheadMs);
+  const increment = Math.max(1, stepMs);
+  while (eligibleAt <= deadline) {
+    const eligibility = shouldRunAwg(state, {
+      nowMs: eligibleAt,
+      idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    });
+    if (eligibility.run) return { eligibleAt, eligibility };
+    eligibleAt += increment;
+  }
+  return { eligibleAt: null, eligibility: { run: false, reason: 'LOOKAHEAD_EXHAUSTED' } };
+}
+
 export function isAwgDue(stateValue, nowMs = Date.now()) {
   const state = reconcileWorldSimulationState(stateValue);
   const lastRun = isoMs(state.lastRunAt);
@@ -308,6 +334,21 @@ function compatibleAwgObjects(state, currentLocation) {
   return state.objects.filter((object) => !location || clean(object.location) === location);
 }
 
+export function selectAwgGenerationFacts(stateValue, {
+  plausibleCastIds = [], currentLocation = null, nowMs = Date.now(),
+} = {}) {
+  const state = reconcileWorldSimulationState(stateValue);
+  const participantIds = proposalCastIds(plausibleCastIds);
+  return {
+    participantIds,
+    threads: clone(continuableAwgThreads(state, {
+      allowedParticipantIds: participantIds,
+      nowMs,
+    })),
+    objects: clone(compatibleAwgObjects(state, currentLocation)),
+  };
+}
+
 function epistemicProposalBranches(proposal, otherCastIds) {
   const observed = clone(proposal);
   observed.properties.participants.contains = { const: 'cy' };
@@ -337,9 +378,12 @@ export function buildAwgProposalFormat(stateValue, {
   plausibleCastIds = [], currentLocation = null, nowMs = Date.now(),
 } = {}) {
   const state = reconcileWorldSimulationState(stateValue);
-  const castIds = proposalCastIds(plausibleCastIds);
+  const generationFacts = selectAwgGenerationFacts(state, {
+    plausibleCastIds, currentLocation, nowMs,
+  });
+  const castIds = generationFacts.participantIds;
   const otherCastIds = castIds.filter((castId) => castId !== 'cy');
-  const objectIds = compatibleAwgObjects(state, currentLocation).map((object) => object.id);
+  const objectIds = generationFacts.objects.map((object) => object.id);
   const objective = {
     type: 'object',
     additionalProperties: false,
@@ -454,7 +498,7 @@ export function buildAwgProposalFormat(stateValue, {
     }
   }
   const continuationBranches = [];
-  for (const thread of continuableAwgThreads(state, { allowedParticipantIds: castIds, nowMs })) {
+  for (const thread of generationFacts.threads) {
     const continuation = clone(eventProposal);
     continuation.properties.decision = { const: 'CONTINUATION' };
     const compatibleFamilies = compatibleThreadFamilies(thread);
@@ -500,9 +544,12 @@ export function buildAwgCall(contextRendering, {
   state = null, currentLocation = null, plausibleCastIds = [], recentEvents = [], nowMs = Date.now(),
 } = {}) {
   const worldState = reconcileWorldSimulationState(state);
-  const castIds = proposalCastIds(plausibleCastIds);
-  const openThreads = continuableAwgThreads(worldState, { allowedParticipantIds: castIds, nowMs });
-  const compatibleObjects = compatibleAwgObjects(worldState, currentLocation);
+  const generationFacts = selectAwgGenerationFacts(worldState, {
+    plausibleCastIds, currentLocation, nowMs,
+  });
+  const castIds = generationFacts.participantIds;
+  const openThreads = generationFacts.threads;
+  const compatibleObjects = generationFacts.objects;
   const recent = [...worldState.recentAccepted, ...(Array.isArray(recentEvents) ? recentEvents : [])]
     .filter((event) => {
       const at = isoMs(event && (event.timestamp || event.occurredAt));
