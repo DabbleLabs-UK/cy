@@ -198,6 +198,21 @@ test('generation exposes only currently viable continuation branches', () => {
   assert.deepEqual([...new Set(continuationIds)], ['thread-ready']);
 });
 
+test('generation does not expose ambiguous legacy thread types as continuations', () => {
+  const state = reconcileWorldSimulationState({
+    threads: [{
+      id: 'thread-legacy-transfer', type: 'transfer_request_thread', state: 'OPEN',
+      participants: ['cy', 'fisher'], sourceEventIds: ['world-legacy-transfer'], nextEligibleAt: null,
+    }],
+  });
+  const format = buildAwgProposalFormat(state, {
+    plausibleCastIds: ['fisher'], currentLocation: 'exercise_yard', nowMs: NOW,
+  });
+  assert.equal(format.oneOf.some((branch) => (
+    branch.properties?.decision?.const === 'CONTINUATION'
+  )), false);
+});
+
 test('generation exposes only object references already at the authoritative location', () => {
   const state = reconcileWorldSimulationState({
     objects: [

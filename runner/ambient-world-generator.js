@@ -299,12 +299,8 @@ function continuableAwgThreads(state, { allowedParticipantIds = [], nowMs = Date
 }
 
 function compatibleThreadFamilies(thread) {
-  const threadTokens = semanticTokens(thread && thread.type);
-  const ignored = new Set(['activity', 'event', 'request', 'thread']);
-  return AWG_EVENT_FAMILIES.filter((family) => (
-    [...semanticTokens(family)].filter((token) => !ignored.has(token))
-      .some((token) => threadTokens.has(token))
-  ));
+  const threadType = clean(thread && thread.type).toUpperCase();
+  return AWG_EVENT_FAMILIES.includes(threadType) ? [threadType] : [];
 }
 
 function compatibleAwgObjects(state, currentLocation) {
