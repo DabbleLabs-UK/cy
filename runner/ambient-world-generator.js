@@ -286,13 +286,50 @@ function nullableEnum(values) {
   return { enum: [null, ...values] };
 }
 
-export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {}) {
+function continuableAwgThreads(state, { allowedParticipantIds = [], nowMs = Date.now() } = {}) {
+  const allowed = new Set((allowedParticipantIds || []).map(id).filter(Boolean));
+  return state.threads.filter((thread) => {
+    if (thread.state !== 'OPEN' || !id(thread.id) || !clean(thread.type)) return false;
+    if (!Array.isArray(thread.sourceEventIds) || !thread.sourceEventIds.some((eventId) => id(eventId))) return false;
+    const nextEligibleMs = isoMs(thread.nextEligibleAt);
+    if (nextEligibleMs != null && nextEligibleMs > nowMs) return false;
+    const participants = Array.isArray(thread.participants) ? thread.participants.map(id).filter(Boolean) : [];
+    return !participants.length || participants.some((participant) => allowed.has(participant));
+  });
+}
+
+function epistemicProposalBranches(proposal, otherCastIds) {
+  const observed = clone(proposal);
+  observed.properties.participants.contains = { const: 'cy' };
+  observed.properties.observations.items = {
+    type: 'object', additionalProperties: false,
+    required: ['observerId', 'access', 'summary'],
+    properties: {
+      observerId: { const: 'cy' },
+      access: {
+        type: 'string',
+        enum: ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'],
+      },
+      summary: { type: 'string', minLength: 1, maxLength: 800 },
+    },
+  };
+  if (!otherCastIds.length) return [observed];
+  const worldOnly = clone(proposal);
+  worldOnly.properties.participants.items.enum = otherCastIds;
+  worldOnly.properties.observations.items.oneOf = [
+    proposal.properties.observations.items.oneOf[0],
+    ...proposal.properties.observations.items.oneOf.slice(2),
+  ];
+  return [observed, worldOnly];
+}
+
+export function buildAwgProposalFormat(stateValue, {
+  plausibleCastIds = [], nowMs = Date.now(),
+} = {}) {
   const state = reconcileWorldSimulationState(stateValue);
   const castIds = proposalCastIds(plausibleCastIds);
   const otherCastIds = castIds.filter((castId) => castId !== 'cy');
-  const threadIds = state.threads.filter((thread) => thread.state === 'OPEN').map((thread) => thread.id);
   const objectIds = state.objects.map((object) => object.id);
-  const textOrNull = { type: ['string', 'null'] };
   const objective = {
     type: 'object',
     additionalProperties: false,
@@ -307,7 +344,7 @@ export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {
     additionalProperties: false,
     required: [
       'decision', 'eventFamily', 'participants', 'objective', 'objects',
-      'observations', 'informationClaims', 'resolved', 'thread',
+      'observations', 'informationClaims', 'thread',
     ],
     properties: {
       decision: { const: 'EVENT' },
@@ -382,41 +419,56 @@ export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {
           },
         },
       },
-      resolved: { type: 'boolean' },
       thread: {
         type: 'object',
         additionalProperties: false,
-        required: ['action', 'id', 'type', 'summary'],
+        required: ['action', 'id', 'summary'],
         properties: {
-          action: { type: 'string', enum: ['NONE', 'OPEN'] },
+          action: { const: 'NONE' },
           id: { const: null },
-          type: textOrNull,
-          summary: textOrNull,
+          summary: { const: null },
         },
       },
     },
   };
-  const observedProposal = clone(eventProposal);
-  observedProposal.properties.observations.items = {
-    type: 'object', additionalProperties: false,
-    required: ['observerId', 'access', 'summary'],
-    properties: {
-      observerId: { const: 'cy' },
-      access: {
-        type: 'string',
-        enum: ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'],
-      },
-      summary: { type: 'string', minLength: 1, maxLength: 800 },
-    },
-  };
-  const worldOnlyProposal = clone(eventProposal);
-  worldOnlyProposal.properties.participants.items.enum = otherCastIds;
-  worldOnlyProposal.properties.observations.items.oneOf = [
-    eventProposal.properties.observations.items.oneOf[0],
-    ...eventProposal.properties.observations.items.oneOf.slice(2),
-  ];
-  const proposalBranches = [observedProposal];
-  if (otherCastIds.length) proposalBranches.push(worldOnlyProposal);
+  const eventBranches = epistemicProposalBranches(eventProposal, otherCastIds);
+  if (state.threads.filter((thread) => thread.state === 'OPEN').length < AWG_MAX_OPEN_THREADS) {
+    for (const eventFamily of AWG_EVENT_FAMILIES) {
+      const openThreadProposal = clone(eventProposal);
+      openThreadProposal.properties.eventFamily = { const: eventFamily };
+      openThreadProposal.properties.thread.properties.action = { const: 'OPEN' };
+      openThreadProposal.properties.thread.properties.summary = {
+        type: 'string', minLength: 1, maxLength: 800,
+      };
+      eventBranches.push(...epistemicProposalBranches(openThreadProposal, otherCastIds));
+    }
+  }
+  const continuationBranches = [];
+  for (const thread of continuableAwgThreads(state, { allowedParticipantIds: castIds, nowMs })) {
+    const continuation = clone(eventProposal);
+    continuation.properties.decision = { const: 'CONTINUATION' };
+    continuation.properties.thread.properties.action = { type: 'string', enum: ['UPDATE', 'RESOLVE'] };
+    continuation.properties.thread.properties.id = { const: thread.id };
+    continuation.properties.thread.properties.summary = {
+      type: 'string', minLength: 1, maxLength: 800,
+    };
+    const threadParticipants = Array.isArray(thread.participants) ? thread.participants.map(id) : [];
+    const branches = epistemicProposalBranches(continuation, otherCastIds);
+    continuationBranches.push(...branches.filter((branch) => {
+      const allowed = new Set(branch.properties.participants.items.enum || []);
+      return !threadParticipants.length || threadParticipants.some((participant) => allowed.has(participant));
+    }).map((branch) => {
+      if (!threadParticipants.length) return branch;
+      const allowed = new Set(branch.properties.participants.items.enum || []);
+      const eligibleThreadParticipants = threadParticipants.filter((participant) => allowed.has(participant));
+      const observed = branch.properties.observations.items.properties?.observerId?.const === 'cy';
+      branch.properties.participants.items.enum = observed
+        ? [...new Set(['cy', ...eligibleThreadParticipants])]
+        : eligibleThreadParticipants;
+      branch.properties.participants.minItems = observed && !eligibleThreadParticipants.includes('cy') ? 2 : 1;
+      return branch;
+    }));
+  }
   return {
     oneOf: [
       {
@@ -424,26 +476,39 @@ export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {
         required: ['decision'],
         properties: { decision: { const: 'NO_EVENT' } },
       },
-      ...proposalBranches,
-      ...(threadIds.length ? proposalBranches.map((proposal) => {
-        const continuation = clone(proposal);
-        continuation.properties.decision = { const: 'CONTINUATION' };
-        continuation.properties.thread.properties.action = { type: 'string', enum: ['UPDATE', 'RESOLVE'] };
-        continuation.properties.thread.properties.id = { type: 'string', enum: threadIds };
-        return continuation;
-      }) : []),
+      ...eventBranches,
+      ...continuationBranches,
     ],
   };
 }
 
 export function buildAwgCall(contextRendering, {
-  state = null, currentLocation = null, plausibleCastIds = [],
+  state = null, currentLocation = null, plausibleCastIds = [], recentEvents = [], nowMs = Date.now(),
 } = {}) {
   const worldState = reconcileWorldSimulationState(state);
   const castIds = proposalCastIds(plausibleCastIds);
-  const openThreadIds = worldState.threads
-    .filter((thread) => thread.state === 'OPEN').map((thread) => thread.id);
+  const openThreads = continuableAwgThreads(worldState, { allowedParticipantIds: castIds, nowMs });
   const objectIds = worldState.objects.map((object) => object.id);
+  const recent = [...worldState.recentAccepted, ...(Array.isArray(recentEvents) ? recentEvents : [])]
+    .filter((event) => {
+      const at = isoMs(event && (event.timestamp || event.occurredAt));
+      return at != null && nowMs - at >= 0 && nowMs - at <= AWG_DEDUPE_WINDOW_MS;
+    })
+    .filter((event, index, all) => all.findIndex((item) => (
+      id(item && item.id) && id(item.id) === id(event && event.id)
+    ) || normaliseSummary(item && (item.summary || item.objective && item.objective.summary))
+      === normaliseSummary(event && (event.summary || event.objective && event.objective.summary))) === index)
+    .slice(-32);
+  const recentConstraint = recent.length
+    ? recent.map((event, index) => {
+      const participants = Array.isArray(event.participants) && event.participants.length
+        ? ` [${event.participants.map(id).filter(Boolean).join(',')}]` : '';
+      return `${index + 1}. ${clean(event.summary || event.objective && event.objective.summary, 180)}${participants}`;
+    }).join('\n')
+    : 'none';
+  const threadConstraint = openThreads.length
+    ? openThreads.map((thread) => `${thread.id}: type=${thread.type}; participants=${(thread.participants || []).join(',') || 'unspecified'}; summary=${clean(thread.summary, 180)}`).join('\n')
+    : 'none';
   const system = [
     'You are the Ambient World Generator for HMP ThinkPad.',
     'You are a narrative world-simulation content generator, not Cy, Soma, memory or a narrator.',
@@ -465,17 +530,21 @@ export function buildAwgCall(contextRendering, {
       `- The event location is fixed by code as ${clean(currentLocation) || 'unknown'}; do not output a location.`,
       '- Code assigns the event timestamp and all new machine IDs; do not output them.',
       `- Allowed participant, observer and claim-speaker IDs: ${castIds.join(', ') || 'none'}.`,
-      `- Existing open thread IDs: ${openThreadIds.join(', ') || 'none'}.`,
+      '- CONTINUABLE THREADS (the only legal continuation choices):',
+      threadConstraint,
       `- Existing object IDs: ${objectIds.join(', ') || 'none'}. Use null to create a new object.`,
-      '- CONTINUATION is allowed only when selecting an existing open thread ID; code derives its event references.',
-      '- EVENT may use thread action NONE or OPEN. OPEN must use id null; code assigns its ID.',
+      '- RECENT EPISODES (do not repeat or paraphrase the same participants and core action):',
+      recentConstraint,
+      '- CONTINUATION is allowed only through one supplied thread branch; code supplies its authoritative type and event references.',
+      '- For EVENT, use thread action NONE unless the event creates a concrete unresolved consequence that later events can continue.',
+      '- Code derives resolved state from thread action and derives thread type from event family/current thread. Do not output either field.',
       '- Every EVENT or CONTINUATION needs at least one concrete observation stating who perceived what.',
       '- Choose one epistemic branch: OBSERVED uses only a cy/CY_* observation; WORLD_ONLY excludes cy from both participants and observations.',
       '- Use observerId world only with WORLD_ONLY; cy only with CY_*; other cast only with CAST_ONLY.',
       '- Include every acting, speaking or cast-observing person in participants.',
       '- If Cy participates directly, include a truthful CY_* observation; WORLD_ONLY means Cy did not participate or perceive it.',
       '- A new object owner and holder must be participants. A DELIVERED message needs actual content in informationClaims.',
-      '- OPEN and UPDATE mean unresolved; RESOLVE means resolved. Thread type must describe this event family.',
+      '- OPEN and UPDATE mean unresolved; RESOLVE means resolved.',
       `- The episode happens at ${clean(currentLocation) || 'the supplied location'}; do not describe it as happening in a different place.`,
       '- Do not repeat a near-identical recent episode merely with paraphrased wording.',
       '- Code derives public visibility from valid Cy observations; do not output visibility or timeline text.',
@@ -483,7 +552,7 @@ export function buildAwgCall(contextRendering, {
       '- If the supplied facts do not ground a valid event, return exactly {"decision":"NO_EVENT"}.',
       '- Return only JSON matching the enforced output schema.',
     ].join('\n'),
-    format: buildAwgProposalFormat(worldState, { plausibleCastIds }),
+    format: buildAwgProposalFormat(worldState, { plausibleCastIds, nowMs }),
     options: { ...AWG_MODEL_OPTIONS },
     purpose: 'ambient_world_generation',
   };
@@ -526,7 +595,7 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
   }
   assertProposalKeys(proposal, new Set([
     'decision', 'eventFamily', 'participants', 'objective', 'objects',
-    'observations', 'informationClaims', 'resolved', 'thread',
+    'observations', 'informationClaims', 'thread',
   ]), 'PROPOSAL');
   if (!AWG_KNOWN_LOCATIONS.includes(clean(currentLocation))) throw new Error('UNKNOWN_LOCATION');
   const state = reconcileWorldSimulationState(stateValue);
@@ -570,7 +639,7 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
       status: clean(object.status).toUpperCase(),
     };
   });
-  assertProposalKeys(proposal.thread, new Set(['action', 'id', 'type', 'summary']), 'THREAD');
+  assertProposalKeys(proposal.thread, new Set(['action', 'id', 'summary']), 'THREAD');
   const threadAction = clean(proposal.thread.action).toUpperCase();
   const threadId = proposal.thread.id == null ? null : id(proposal.thread.id);
   const openThread = threadId
@@ -600,11 +669,12 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
     objects,
     observations: clone(observations),
     informationClaims: clone(claims),
-    resolved: !!proposal.resolved,
+    resolved: ['NONE', 'RESOLVE'].includes(threadAction),
     thread: {
       action: threadAction,
       id: threadId,
-      type: proposal.thread.type == null ? null : clean(proposal.thread.type, 80),
+      type: openThread ? clean(openThread.type, 80)
+        : threadAction === 'OPEN' ? clean(proposal.eventFamily).toUpperCase() : null,
       summary: proposal.thread.summary == null ? null : clean(proposal.thread.summary, 800),
       nextEligibleAt,
     },
@@ -993,7 +1063,7 @@ export async function runAmbientWorldCycle({
   try {
     if (typeof generate !== 'function') throw new Error('PROVIDER_UNAVAILABLE');
     const call = buildAwgCall(contextRendering, {
-      state: stateWithRun, currentLocation, plausibleCastIds,
+      state: stateWithRun, currentLocation, plausibleCastIds, recentEvents, nowMs,
     });
     proposal = parseAwgCandidate(await generate(call));
     candidate = materialiseAwgProposal(proposal, stateWithRun, {

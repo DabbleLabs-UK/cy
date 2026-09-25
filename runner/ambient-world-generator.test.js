@@ -60,8 +60,7 @@ function proposal(overrides = {}) {
     objects: [{ id: null, type: 'note', ownerId: 'reg', holderId: 'cy', status: 'ACTIVE' }],
     observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Reg put a folded note into Cy hand.' }],
     informationClaims: [],
-    resolved: false,
-    thread: { action: 'OPEN', id: null, type: 'NOTE_AWAITING_DELIVERY', summary: 'The note has not reached Daemon.' },
+    thread: { action: 'OPEN', id: null, summary: 'The note has not reached Daemon.' },
     ...overrides,
   };
 }
@@ -77,12 +76,16 @@ test('production proposal contract keeps machine-owned fields out of model outpu
   const worldOnlyFormat = call.format.oneOf[2];
   assert.equal(call.format.oneOf[0].properties.decision.const, 'NO_EVENT');
   assert.equal(eventFormat.properties.decision.const, 'EVENT');
-  assert.deepEqual(eventFormat.properties.thread.properties.action.enum, ['NONE', 'OPEN']);
+  assert.equal(eventFormat.properties.thread.properties.action.const, 'NONE');
   assert.equal(eventFormat.properties.thread.properties.id.const, null);
+  assert.equal(eventFormat.properties.thread.properties.summary.const, null);
   assert.deepEqual(eventFormat.properties.participants.items.enum, ['cy', 'reg', 'bill']);
+  assert.equal(eventFormat.properties.participants.contains.const, 'cy');
   for (const forbidden of ['occurredAt', 'location', 'schema', 'version', 'continuationOf']) {
     assert.equal(Object.hasOwn(eventFormat.properties, forbidden), false);
   }
+  assert.equal(Object.hasOwn(eventFormat.properties, 'resolved'), false);
+  assert.equal(Object.hasOwn(eventFormat.properties.thread.properties, 'type'), false);
   assert.equal(eventFormat.properties.observations.items.properties.observerId.const, 'cy');
   assert.equal(eventFormat.properties.observations.items.properties.access.enum.includes('WORLD_ONLY'), false);
   assert.deepEqual(worldOnlyFormat.properties.participants.items.enum, ['reg', 'bill']);
@@ -93,6 +96,13 @@ test('production proposal contract keeps machine-owned fields out of model outpu
   assert.equal(worldObservationBranches[1].properties.access.const, 'CAST_ONLY');
   assert.equal(Object.hasOwn(eventFormat.properties, 'publicTimelineText'), false);
   assert.match(call.prompt, /\[C1\].*never cast or observer IDs/i);
+  const openThreadFormat = call.format.oneOf.find((branch) => (
+    branch.properties?.thread?.properties?.action?.const === 'OPEN'
+      && branch.properties?.eventFamily?.const === 'MESSAGE_PASSING'
+      && branch.properties?.observations?.items?.properties?.observerId?.const === 'cy'
+  ));
+  assert.ok(openThreadFormat);
+  assert.equal(openThreadFormat.properties.thread.properties.summary.minLength, 1);
 });
 
 test('real C2-style cast leak cannot pass proposal materialisation', () => {
@@ -120,26 +130,111 @@ test('timestamps, location and new IDs are assigned by code rather than the mode
 
 test('continuation and object references are selected only from supplied state', () => {
   const state = reconcileWorldSimulationState({
-    threads: [{ id: 'thread-known', state: 'OPEN', sourceEventIds: ['world-known'] }],
+    threads: [{
+      id: 'thread-known', type: 'MESSAGE_PASSING', state: 'OPEN', participants: ['reg'],
+      sourceEventIds: ['world-known'], nextEligibleAt: null,
+    }],
     objects: [{ id: 'object-known', type: 'note', ownerId: 'reg', holderId: null, location: 'cell', status: 'ACTIVE' }],
   });
-  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'] });
+  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'], nowMs: NOW });
   const eventFormat = format.oneOf[1];
-  const continuationFormat = format.oneOf[3];
+  const continuationFormat = format.oneOf.find((branch) => (
+    branch.properties?.decision?.const === 'CONTINUATION'
+      && branch.properties?.thread?.properties?.id?.const === 'thread-known'
+      && branch.properties?.observations?.items?.properties?.observerId?.const === 'cy'
+  ));
   assert.equal(eventFormat.properties.thread.properties.id.const, null);
   assert.deepEqual(eventFormat.properties.objects.items.properties.id.enum, [null, 'object-known']);
   assert.equal(continuationFormat.properties.decision.const, 'CONTINUATION');
   assert.deepEqual(continuationFormat.properties.thread.properties.action.enum, ['UPDATE', 'RESOLVE']);
-  assert.deepEqual(continuationFormat.properties.thread.properties.id.enum, ['thread-known']);
+  assert.equal(continuationFormat.properties.thread.properties.id.const, 'thread-known');
+  assert.equal(Object.hasOwn(continuationFormat.properties.thread.properties, 'type'), false);
+  assert.deepEqual(continuationFormat.properties.participants.items.enum, ['cy', 'reg']);
+  assert.equal(continuationFormat.properties.participants.minItems, 2);
   const continued = materialiseAwgProposal(proposal({
     decision: 'CONTINUATION',
     objects: [{ id: 'object-known', type: 'note', ownerId: 'reg', holderId: 'cy', status: 'DELIVERED' }],
-    thread: { action: 'RESOLVE', id: 'thread-known', type: 'NOTE', summary: 'The note arrived.' },
+    informationClaims: [{ speakerId: 'reg', content: 'The note arrived.', truthStatus: 'TRUE' }],
+    thread: { action: 'RESOLVE', id: 'thread-known', summary: 'The note arrived.' },
   }), state, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] });
   assert.deepEqual(continued.continuationOf, { threadId: 'thread-known', eventIds: ['world-known'] });
+  assert.equal(continued.thread.type, 'MESSAGE_PASSING');
+  assert.equal(continued.resolved, true);
   assert.throws(() => materialiseAwgProposal(proposal({
     objects: [{ id: 'invented-object', type: 'note', ownerId: 'reg', holderId: 'cy', status: 'ACTIVE' }],
   }), state, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] }), /INVALID_OBJECT_REFERENCE/);
+});
+
+test('generation exposes only currently viable continuation branches', () => {
+  const state = reconcileWorldSimulationState({
+    threads: [
+      {
+        id: 'thread-ready', type: 'MESSAGE_PASSING', state: 'OPEN', participants: ['reg'],
+        sourceEventIds: ['world-ready'], nextEligibleAt: null,
+      },
+      {
+        id: 'thread-future', type: 'OBJECT_TRANSFER', state: 'OPEN', participants: ['reg'],
+        sourceEventIds: ['world-future'], nextEligibleAt: new Date(NOW + 60_000).toISOString(),
+      },
+      {
+        id: 'thread-no-source', type: 'SOCIAL_REQUEST', state: 'OPEN', participants: ['reg'],
+        sourceEventIds: [], nextEligibleAt: null,
+      },
+      {
+        id: 'thread-wrong-cast', type: 'RUMOUR', state: 'OPEN', participants: ['daemon'],
+        sourceEventIds: ['world-daemon'], nextEligibleAt: null,
+      },
+    ],
+  });
+  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'], nowMs: NOW });
+  const continuationIds = format.oneOf
+    .filter((branch) => branch.properties?.decision?.const === 'CONTINUATION')
+    .map((branch) => branch.properties.thread.properties.id.const);
+  assert.deepEqual([...new Set(continuationIds)], ['thread-ready']);
+});
+
+test('generation cannot propose another open thread once the contract limit is reached', () => {
+  const state = reconcileWorldSimulationState({
+    threads: Array.from({ length: 8 }, (_, index) => ({
+      id: `thread-${index}`, type: 'MESSAGE_PASSING', state: 'OPEN', participants: ['reg'],
+      sourceEventIds: [`world-${index}`], nextEligibleAt: null,
+    })),
+  });
+  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'], nowMs: NOW });
+  assert.equal(format.oneOf.some((branch) => (
+    branch.properties?.thread?.properties?.action?.const === 'OPEN'
+  )), false);
+});
+
+test('recent episodes are explicit generation constraints as well as validator input', () => {
+  const recentSummary = 'Bill asked Cy if he was all right and waited for an answer';
+  const call = buildAwgCall('<SHARED_CONTEXT></SHARED_CONTEXT>', {
+    state: null,
+    currentLocation: 'cell',
+    plausibleCastIds: ['bill'],
+    nowMs: NOW,
+    recentEvents: [{
+      id: 'event-bill-check-in', timestamp: new Date(NOW - 60_000).toISOString(),
+      summary: recentSummary, participants: ['bill', 'cy'],
+    }],
+  });
+  assert.match(call.prompt, /RECENT EPISODES/);
+  assert.match(call.prompt, new RegExp(recentSummary));
+  assert.match(call.prompt, /do not repeat or paraphrase/i);
+});
+
+test('materialisation derives thread type and resolution without changing semantic intent', () => {
+  const opened = materialiseAwgProposal(proposal(), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'],
+  });
+  assert.equal(opened.thread.type, 'MESSAGE_PASSING');
+  assert.equal(opened.resolved, false);
+
+  const noThread = materialiseAwgProposal(proposal({
+    thread: { action: 'NONE', id: null, summary: null },
+  }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] });
+  assert.equal(noThread.thread.type, null);
+  assert.equal(noThread.resolved, true);
 });
 
 test('observation and public-knowledge boundaries stay strict', () => {
@@ -181,7 +276,7 @@ test('real post-fix production rejection shapes cannot cross the proposal bounda
     participants: ['cy'],
     objects: [],
     observations: [],
-    thread: { action: 'UPDATE', id: null, type: null, summary: null },
+    thread: { action: 'UPDATE', id: null, summary: null },
   }), null, {
     nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill'],
   }), /OBSERVABILITY_REQUIRED|INVALID_THREAD_REFERENCE/);
@@ -392,6 +487,7 @@ test('real accepted Bill well-being candidate now fails awareness and recent nea
 });
 
 test('the production cycle supplies recent template events to semantic deduplication', async () => {
+  let suppliedPrompt = '';
   const result = await runAmbientWorldCycle({
     state: null,
     nowMs: NOW,
@@ -402,19 +498,22 @@ test('the production cycle supplies recent template events to semantic deduplica
       id: 'env-template-check-in', timestamp: new Date(NOW - 44 * 60 * 1000).toISOString(),
       summary: 'Bill asked Cy if he was all right and waited for an answer', participants: ['bill'],
     }],
-    generate: async () => JSON.stringify(proposal({
-      eventFamily: 'WING_ACTIVITY',
-      participants: ['cy', 'bill'],
-      objective: { eventType: 'conversation', summary: "Bill asks about Cy's well-being and waits for an answer." },
-      objects: [],
-      observations: [{ observerId: 'world', access: 'WORLD_ONLY', summary: 'Cy remained silent; Bill waited, then left.' }],
-      resolved: true,
-      thread: { action: 'NONE', id: null, type: null, summary: null },
-    })),
+    generate: async (call) => {
+      suppliedPrompt = call.prompt;
+      return JSON.stringify(proposal({
+        eventFamily: 'WING_ACTIVITY',
+        participants: ['cy', 'bill'],
+        objective: { eventType: 'conversation', summary: "Bill asks about Cy's well-being and waits for an answer." },
+        objects: [],
+        observations: [{ observerId: 'world', access: 'WORLD_ONLY', summary: 'Cy remained silent; Bill waited, then left.' }],
+        thread: { action: 'NONE', id: null, summary: null },
+      }));
+    },
   });
   assert.equal(result.status, 'REJECTED');
   assert.ok(result.validation.errors.includes('RECENT_NEAR_DUPLICATE'));
   assert.deepEqual(result.run.createdWorldEventIds, []);
+  assert.match(suppliedPrompt, /Bill asked Cy if he was all right and waited for an answer/);
 });
 
 test('real accepted Fisher conversation candidate now fails thread and delivered-message coherence', () => {

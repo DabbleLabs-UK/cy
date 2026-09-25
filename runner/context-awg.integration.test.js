@@ -69,11 +69,9 @@ function candidateProposal(value) {
     })),
     observations: value.observations,
     informationClaims: value.informationClaims,
-    resolved: value.resolved,
     thread: {
       action: value.thread.action,
       id: null,
-      type: value.thread.type,
       summary: value.thread.summary,
     },
   };

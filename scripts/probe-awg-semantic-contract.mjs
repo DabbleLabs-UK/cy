@@ -35,7 +35,12 @@ const vitals = await loadVitals(statePath);
 const state = reconcileWorldSimulationState(vitals.worldSimulation);
 const location = locationContextId(vitals.locationRegime && vitals.locationRegime.current
   && vitals.locationRegime.current.id) || 'cell';
-const plausibleCastIds = [...CAST, ...OFFICERS].map((entry) => entry.key);
+const plausibleCastIds = [
+  ...(location === 'exercise_yard'
+    ? CAST.filter((entry) => !['root', 'daemon'].includes(entry.key))
+    : CAST),
+  ...OFFICERS,
+].map((entry) => entry.key);
 const now = Date.now();
 
 function item(value) {
@@ -93,7 +98,7 @@ const packet = buildContextPacket({
 const contextRendering = renderContextPacket(packet);
 const recentEvents = [
   ...state.recentAccepted,
-  ...(Array.isArray(vitals.ledger) ? vitals.ledger : []).map((entry, index) => ({
+  ...(Array.isArray(vitals.ledger) ? vitals.ledger.slice(-24) : []).map((entry, index) => ({
     id: `ledger:${index}`,
     timestamp: entry.ts || new Date(now).toISOString(),
     summary: incidentLine(entry),
@@ -104,13 +109,17 @@ const provider = makeProviders(config).ollama;
 const results = [];
 
 for (let index = 0; index < count; index++) {
-  const call = buildAwgCall(contextRendering, { state, currentLocation: location, plausibleCastIds });
+  const attemptNow = Date.now();
+  const call = buildAwgCall(contextRendering, {
+    state, currentLocation: location, plausibleCastIds, recentEvents, nowMs: attemptNow,
+  });
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort('PROBE_TIMEOUT'), 5 * 60 * 1000);
   let lease = null;
   const result = {
     probe: index + 1, generated: false, parsed: false, schemaPassed: false,
     semanticPassed: false, decision: null, epistemicClass: null, rejectionReasons: [],
+    proposal: null, candidateSummary: null, participants: [], thread: null, objects: [],
   };
   try {
     lease = await provider.acquireSharedLease({ purpose: 'ambient_world_generation_probe', signal: abort.signal });
@@ -126,18 +135,23 @@ for (let index = 0; index < count; index++) {
     result.generated = true;
     const proposal = parseAwgCandidate(response.text);
     result.parsed = true;
+    result.proposal = proposal;
     const candidate = materialiseAwgProposal(proposal, state, {
-      nowMs: Date.now(), currentLocation: location, plausibleCastIds,
+      nowMs: attemptNow, currentLocation: location, plausibleCastIds,
       makeId: (prefix) => `${prefix}-probe-${randomUUID()}`,
     });
     result.schemaPassed = true;
     result.decision = candidate.decision;
+    result.candidateSummary = candidate.objective?.summary || null;
+    result.participants = candidate.participants || [];
+    result.thread = candidate.thread || null;
+    result.objects = candidate.objects || [];
     if (candidate.decision === 'NO_EVENT') {
       result.semanticPassed = true;
       result.epistemicClass = 'NO_EVENT';
     } else {
       const validation = validateAwgCandidate(candidate, state, {
-        nowMs: Date.now(), currentLocation: location, plausibleCastIds, recentEvents,
+        nowMs: attemptNow, currentLocation: location, plausibleCastIds, recentEvents,
       });
       result.semanticPassed = validation.valid;
       result.epistemicClass = validation.cyObserved ? 'OBSERVED' : 'WORLD_ONLY';
@@ -155,6 +169,11 @@ for (let index = 0; index < count; index++) {
 console.log(JSON.stringify({
   classification: 'NON_PUBLISHING_AWG_SEMANTIC_CONTRACT_PROBE',
   stateSource: dirname(statePath),
+  currentLocation: location,
+  plausibleCastIds,
+  recentEventCount: recentEvents.length,
+  continuableThreadIds: state.threads.filter((item) => item.state === 'OPEN')
+    .map((item) => item.id),
   generated: results.filter((item) => item.generated).length,
   parsed: results.filter((item) => item.parsed).length,
   schemaPassed: results.filter((item) => item.schemaPassed).length,
