@@ -396,6 +396,27 @@ export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {
       },
     },
   };
+  const observedProposal = clone(eventProposal);
+  observedProposal.properties.observations.items = {
+    type: 'object', additionalProperties: false,
+    required: ['observerId', 'access', 'summary'],
+    properties: {
+      observerId: { const: 'cy' },
+      access: {
+        type: 'string',
+        enum: ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'],
+      },
+      summary: { type: 'string', minLength: 1, maxLength: 800 },
+    },
+  };
+  const worldOnlyProposal = clone(eventProposal);
+  worldOnlyProposal.properties.participants.items.enum = otherCastIds;
+  worldOnlyProposal.properties.observations.items.oneOf = [
+    eventProposal.properties.observations.items.oneOf[0],
+    ...eventProposal.properties.observations.items.oneOf.slice(2),
+  ];
+  const proposalBranches = [observedProposal];
+  if (otherCastIds.length) proposalBranches.push(worldOnlyProposal);
   return {
     oneOf: [
       {
@@ -403,14 +424,14 @@ export function buildAwgProposalFormat(stateValue, { plausibleCastIds = [] } = {
         required: ['decision'],
         properties: { decision: { const: 'NO_EVENT' } },
       },
-      eventProposal,
-      ...(threadIds.length ? [(() => {
-        const continuation = clone(eventProposal);
+      ...proposalBranches,
+      ...(threadIds.length ? proposalBranches.map((proposal) => {
+        const continuation = clone(proposal);
         continuation.properties.decision = { const: 'CONTINUATION' };
         continuation.properties.thread.properties.action = { type: 'string', enum: ['UPDATE', 'RESOLVE'] };
         continuation.properties.thread.properties.id = { type: 'string', enum: threadIds };
         return continuation;
-      })()] : []),
+      }) : []),
     ],
   };
 }
@@ -449,6 +470,7 @@ export function buildAwgCall(contextRendering, {
       '- CONTINUATION is allowed only when selecting an existing open thread ID; code derives its event references.',
       '- EVENT may use thread action NONE or OPEN. OPEN must use id null; code assigns its ID.',
       '- Every EVENT or CONTINUATION needs at least one concrete observation stating who perceived what.',
+      '- Choose one epistemic branch: OBSERVED uses only a cy/CY_* observation; WORLD_ONLY excludes cy from both participants and observations.',
       '- Use observerId world only with WORLD_ONLY; cy only with CY_*; other cast only with CAST_ONLY.',
       '- Include every acting, speaking or cast-observing person in participants.',
       '- If Cy participates directly, include a truthful CY_* observation; WORLD_ONLY means Cy did not participate or perceive it.',
@@ -700,6 +722,7 @@ export function validateAwgCandidate(candidateValue, stateValue, {
       if (!['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'].includes(access)) {
         errors.push('CY_OBSERVATION_ACCESS_MISMATCH');
       }
+      if (!participantSet.has(observerId)) errors.push('OBSERVER_NOT_PARTICIPANT');
     } else if (observerId !== 'world') {
       if (access !== 'CAST_ONLY') errors.push('CAST_OBSERVATION_ACCESS_MISMATCH');
       if (!participantSet.has(observerId)) errors.push('OBSERVER_NOT_PARTICIPANT');

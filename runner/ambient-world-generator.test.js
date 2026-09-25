@@ -74,6 +74,7 @@ test('production proposal contract keeps machine-owned fields out of model outpu
   });
   assert.ok(call.format && Array.isArray(call.format.oneOf));
   const eventFormat = call.format.oneOf[1];
+  const worldOnlyFormat = call.format.oneOf[2];
   assert.equal(call.format.oneOf[0].properties.decision.const, 'NO_EVENT');
   assert.equal(eventFormat.properties.decision.const, 'EVENT');
   assert.deepEqual(eventFormat.properties.thread.properties.action.enum, ['NONE', 'OPEN']);
@@ -82,13 +83,14 @@ test('production proposal contract keeps machine-owned fields out of model outpu
   for (const forbidden of ['occurredAt', 'location', 'schema', 'version', 'continuationOf']) {
     assert.equal(Object.hasOwn(eventFormat.properties, forbidden), false);
   }
-  const observationBranches = eventFormat.properties.observations.items.oneOf;
-  assert.equal(observationBranches[0].properties.observerId.const, 'world');
-  assert.equal(observationBranches[0].properties.access.const, 'WORLD_ONLY');
-  assert.equal(observationBranches[1].properties.observerId.const, 'cy');
-  assert.equal(observationBranches[1].properties.access.enum.includes('WORLD_ONLY'), false);
-  assert.deepEqual(observationBranches[2].properties.observerId.enum, ['reg', 'bill']);
-  assert.equal(observationBranches[2].properties.access.const, 'CAST_ONLY');
+  assert.equal(eventFormat.properties.observations.items.properties.observerId.const, 'cy');
+  assert.equal(eventFormat.properties.observations.items.properties.access.enum.includes('WORLD_ONLY'), false);
+  assert.deepEqual(worldOnlyFormat.properties.participants.items.enum, ['reg', 'bill']);
+  const worldObservationBranches = worldOnlyFormat.properties.observations.items.oneOf;
+  assert.equal(worldObservationBranches[0].properties.observerId.const, 'world');
+  assert.equal(worldObservationBranches[0].properties.access.const, 'WORLD_ONLY');
+  assert.deepEqual(worldObservationBranches[1].properties.observerId.enum, ['reg', 'bill']);
+  assert.equal(worldObservationBranches[1].properties.access.const, 'CAST_ONLY');
   assert.equal(Object.hasOwn(eventFormat.properties, 'publicTimelineText'), false);
   assert.match(call.prompt, /\[C1\].*never cast or observer IDs/i);
 });
@@ -123,7 +125,7 @@ test('continuation and object references are selected only from supplied state',
   });
   const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'] });
   const eventFormat = format.oneOf[1];
-  const continuationFormat = format.oneOf[2];
+  const continuationFormat = format.oneOf[3];
   assert.equal(eventFormat.properties.thread.properties.id.const, null);
   assert.deepEqual(eventFormat.properties.objects.items.properties.id.enum, [null, 'object-known']);
   assert.equal(continuationFormat.properties.decision.const, 'CONTINUATION');
@@ -335,6 +337,14 @@ test('L: object consistency rejects a confiscated object becoming active', () =>
     objects: [candidate().objects[0], { ...candidate().objects[0], location: 'cell' }],
   }), null, { nowMs: NOW });
   assert.ok(duplicateObject.errors.includes('DUPLICATE_OBJECT_ID'));
+});
+
+test('a Cy observation requires Cy to be an explicit participant', () => {
+  const result = validateAwgCandidate(candidate({
+    participants: ['reg'],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Cy saw Reg place the note down.' }],
+  }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'] });
+  assert.ok(result.errors.includes('OBSERVER_NOT_PARTICIPANT'));
 });
 
 test('real accepted key-transfer candidate now fails role and new-object coherence', () => {
