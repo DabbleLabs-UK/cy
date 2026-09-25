@@ -136,7 +136,9 @@ test('continuation and object references are selected only from supplied state',
     }],
     objects: [{ id: 'object-known', type: 'note', ownerId: 'reg', holderId: null, location: 'cell', status: 'ACTIVE' }],
   });
-  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'], nowMs: NOW });
+  const format = buildAwgProposalFormat(state, {
+    plausibleCastIds: ['reg'], currentLocation: 'cell', nowMs: NOW,
+  });
   const eventFormat = format.oneOf[1];
   const continuationFormat = format.oneOf.find((branch) => (
     branch.properties?.decision?.const === 'CONTINUATION'
@@ -149,6 +151,7 @@ test('continuation and object references are selected only from supplied state',
   assert.deepEqual(continuationFormat.properties.thread.properties.action.enum, ['UPDATE', 'RESOLVE']);
   assert.equal(continuationFormat.properties.thread.properties.id.const, 'thread-known');
   assert.equal(Object.hasOwn(continuationFormat.properties.thread.properties, 'type'), false);
+  assert.equal(continuationFormat.properties.eventFamily.const, 'MESSAGE_PASSING');
   assert.deepEqual(continuationFormat.properties.participants.items.enum, ['cy', 'reg']);
   assert.equal(continuationFormat.properties.participants.minItems, 2);
   const continued = materialiseAwgProposal(proposal({
@@ -186,11 +189,26 @@ test('generation exposes only currently viable continuation branches', () => {
       },
     ],
   });
-  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'], nowMs: NOW });
+  const format = buildAwgProposalFormat(state, {
+    plausibleCastIds: ['reg'], currentLocation: 'cell', nowMs: NOW,
+  });
   const continuationIds = format.oneOf
     .filter((branch) => branch.properties?.decision?.const === 'CONTINUATION')
     .map((branch) => branch.properties.thread.properties.id.const);
   assert.deepEqual([...new Set(continuationIds)], ['thread-ready']);
+});
+
+test('generation exposes only object references already at the authoritative location', () => {
+  const state = reconcileWorldSimulationState({
+    objects: [
+      { id: 'object-cell', type: 'note', ownerId: 'reg', holderId: null, location: 'cell', status: 'ACTIVE' },
+      { id: 'object-yard', type: 'note', ownerId: 'bill', holderId: null, location: 'exercise_yard', status: 'ACTIVE' },
+    ],
+  });
+  const format = buildAwgProposalFormat(state, {
+    plausibleCastIds: ['reg', 'bill'], currentLocation: 'exercise_yard', nowMs: NOW,
+  });
+  assert.deepEqual(format.oneOf[1].properties.objects.items.properties.id.enum, [null, 'object-yard']);
 });
 
 test('generation cannot propose another open thread once the contract limit is reached', () => {
@@ -200,7 +218,9 @@ test('generation cannot propose another open thread once the contract limit is r
       sourceEventIds: [`world-${index}`], nextEligibleAt: null,
     })),
   });
-  const format = buildAwgProposalFormat(state, { plausibleCastIds: ['reg'], nowMs: NOW });
+  const format = buildAwgProposalFormat(state, {
+    plausibleCastIds: ['reg'], currentLocation: 'cell', nowMs: NOW,
+  });
   assert.equal(format.oneOf.some((branch) => (
     branch.properties?.thread?.properties?.action?.const === 'OPEN'
   )), false);
@@ -218,9 +238,10 @@ test('recent episodes are explicit generation constraints as well as validator i
       summary: recentSummary, participants: ['bill', 'cy'],
     }],
   });
-  assert.match(call.prompt, /RECENT EPISODES/);
+  assert.match(call.prompt, /RECENT EPISODE EXCLUSIONS/);
   assert.match(call.prompt, new RegExp(recentSummary));
-  assert.match(call.prompt, /do not repeat or paraphrase/i);
+  assert.match(call.prompt, /forbidden repetitions, not story seeds/i);
+  assert.match(call.prompt, /return NO_EVENT instead/i);
 });
 
 test('materialisation derives thread type and resolution without changing semantic intent', () => {
