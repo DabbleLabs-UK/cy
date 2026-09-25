@@ -115,6 +115,94 @@ function normaliseSummary(value) {
   return clean(value, 800).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function machineLabel(value, max = 64) {
+  return clean(value, 160)
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+    .slice(0, max) || null;
+}
+
+const CAST_ID_BY_LABEL = new Map([
+  ['cy', 'cy'], ['cy 7734', 'cy'], ['inmate 7734', 'cy'],
+  ...[...CAST, ...OFFICERS].flatMap((entry) => {
+    const values = [[entry.key, entry.key], [entry.name.toLowerCase(), entry.key]];
+    const surname = entry.name.toLowerCase().replace(/^(?:mr|miss|mrs|ms|dr)\s+/, '');
+    if (surname !== entry.name.toLowerCase()) values.push([surname, entry.key]);
+    return values;
+  }),
+]);
+
+function canonicalCastId(value) {
+  const supplied = id(value).toLowerCase();
+  if (KNOWN_CAST_IDS.has(supplied)) return supplied === 'cy:7734' ? 'cy' : supplied;
+  const label = normaliseSummary(value);
+  return CAST_ID_BY_LABEL.get(label) || null;
+}
+
+function fallbackActionClass(event) {
+  const source = normaliseSummary(event && (event.summary
+    || event.objective && event.objective.summary));
+  if (!source) return 'UNCLASSIFIED';
+  if (/\b(?:hand|pass|deliver)\w*\b.*\b(?:message|note)\b|\b(?:message|note)\b.*\b(?:hand|pass|deliver)\w*\b/.test(source)) {
+    return 'HAND_MESSAGE';
+  }
+  if (/\b(?:ask|check)\w*\b.*\b(?:wellbeing|well being|all right|okay|ok)\b/.test(source)) return 'WELLBEING_CHECK';
+  if (/\bno eggs?\b/.test(source)) return 'NO_EGGS';
+  if (/\b(?:cold|stone cold)\b.*\btea\b|\btea\b.*\b(?:cold|stone cold)\b/.test(source)) return 'COLD_TEA';
+  if (/\bsearch\w*\b/.test(source)) return 'CELL_SEARCH';
+  if (/\boverhear\w*\b|\btalking low\b/.test(source)) return 'OVERHEARD_ACTIVITY';
+  if (/\bnoise\b|\bshout\w*\b/.test(source)) return 'WING_NOISE';
+  return 'UNCLASSIFIED';
+}
+
+function recentEventSignature(event) {
+  const participants = [...new Set((Array.isArray(event && event.participants)
+    ? event.participants : []).map(canonicalCastId).filter(Boolean))];
+  const actor = canonicalCastId(event && (event.actorId || event.actor_id || event.actor));
+  const target = canonicalCastId(event && (event.targetId || event.target_id || event.target));
+  if (actor && !participants.includes(actor)) participants.push(actor);
+  if (target && !participants.includes(target)) participants.push(target);
+  const eventFamily = machineLabel(event && (event.eventFamily || event.event_family || event.family));
+  const structuredAction = machineLabel(event && (event.actionClass || event.action_class
+    || event.eventType || event.event_type || event.archetypeId || event.archetype_id
+    || event.sub || event.verb));
+  const objectClasses = [...new Set([
+    ...(Array.isArray(event && event.objects) ? event.objects.map((object) => object && object.type) : []),
+    event && (event.objectClass || event.object_class || event.objectType || event.object_type),
+    eventFamily === 'MESSAGE_PASSING' ? 'message' : null,
+  ].map((value) => machineLabel(value)).filter(Boolean))];
+  const threadType = machineLabel(event && (event.threadType || event.thread_type
+    || event.thread && event.thread.type));
+  const signature = {
+    event_family: eventFamily,
+    action_class: structuredAction || fallbackActionClass(event),
+    participants,
+    actor,
+    target,
+    object_classes: objectClasses,
+    location: machineLabel(event && event.location),
+    thread_type: threadType,
+  };
+  return Object.fromEntries(Object.entries(signature).filter(([, value]) => (
+    Array.isArray(value) ? value.length > 0 : value != null
+  )));
+}
+
+export function buildAwgDuplicateExclusionSignatures(recentEvents) {
+  const signatures = (Array.isArray(recentEvents) ? recentEvents : [])
+    .map(recentEventSignature)
+    .filter((signature) => Object.keys(signature).length > 0);
+  const seen = new Set();
+  return signatures.filter((signature) => {
+    const key = JSON.stringify(signature);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const SEMANTIC_STOP_WORDS = new Set([
   'a', 'an', 'and', 'at', 'be', 'for', 'from', 'had', 'has', 'have', 'he', 'her',
   'him', 'his', 'in', 'is', 'it', 'its', 'of', 'on', 'or', 'she', 'that', 'the',
@@ -560,12 +648,9 @@ export function buildAwgCall(contextRendering, {
     ) || normaliseSummary(item && (item.summary || item.objective && item.objective.summary))
       === normaliseSummary(event && (event.summary || event.objective && event.objective.summary))) === index)
     .slice(-32);
-  const recentConstraint = recent.length
-    ? recent.map((event, index) => {
-      const participants = Array.isArray(event.participants) && event.participants.length
-        ? ` [${event.participants.map(id).filter(Boolean).join(',')}]` : '';
-      return `${index + 1}. ${clean(event.summary || event.objective && event.objective.summary, 180)}${participants}`;
-    }).join('\n')
+  const duplicateExclusionSignatures = buildAwgDuplicateExclusionSignatures(recent);
+  const recentConstraint = duplicateExclusionSignatures.length
+    ? JSON.stringify(duplicateExclusionSignatures)
     : 'none';
   const threadConstraint = openThreads.length
     ? openThreads.map((thread) => `${thread.id}: family=${compatibleThreadFamilies(thread).join('|')}; type=${thread.type}; participants=${(thread.participants || []).join(',') || 'unspecified'}; summary=${clean(thread.summary, 180)}`).join('\n')
@@ -615,9 +700,11 @@ export function buildAwgCall(contextRendering, {
       `- Do not name or imply another location (${otherLocations.join(', ') || 'none'}).`,
       '- Code derives public visibility from valid Cy observations; do not output visibility or timeline text.',
       '- eventType must be a lowercase snake_case machine label. objective.summary must state only what occurred.',
-      '- RECENT EPISODE EXCLUSIONS follow. They are forbidden repetitions, not story seeds:',
+      '- RECENT EVENT SIGNATURES TO AVOID follow. They contain no narrative source text:',
       recentConstraint,
-      '- Do not repeat or paraphrase any excluded episode with the same people and core action. Return NO_EVENT instead.',
+      '- Avoid only the same recent combination of action class, participants, object class, location and thread type.',
+      '- Familiar people remain usable for different actions; familiar actions remain usable with materially different participants or objects.',
+      '- These signatures are duplicate guidance only. Do not expand them into prose or treat them as event ideas. Return NO_EVENT rather than copying one.',
       '- If the supplied facts do not ground a valid event, return exactly {"decision":"NO_EVENT"}.',
       '- Return only JSON matching the enforced output schema.',
     ].join('\n'),

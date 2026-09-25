@@ -981,8 +981,13 @@ async function main() {
       id: event.id,
       timestamp: event.timestamp,
       summary: summary || worldWithDescription.context.description || eventType,
+      eventFamily: event.event_family,
+      eventType: event.event_type,
+      archetypeId: event.archetype_id,
       location: event.world.context.location || null,
       participants: event.world.context.associated_entities || [],
+      actorId: event.world.participants.actor || null,
+      targetId: event.world.participants.target || null,
       cyObserved,
       dreamEligible,
     });

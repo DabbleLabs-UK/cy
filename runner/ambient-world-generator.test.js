@@ -12,6 +12,7 @@ import {
   applyAwgCandidate,
   awgEventToEnvironment,
   buildAwgCall,
+  buildAwgDuplicateExclusionSignatures,
   buildAwgProposalFormat,
   findNextAwgEligibility,
   materialiseAwgProposal,
@@ -300,7 +301,7 @@ test('generation cannot propose another open thread once the contract limit is r
   )), false);
 });
 
-test('recent episodes are explicit generation constraints as well as validator input', () => {
+test('recent episodes become compact signatures without narrative negative-example priming', () => {
   const recentSummary = 'Bill asked Cy if he was all right and waited for an answer';
   const call = buildAwgCall('<SHARED_CONTEXT></SHARED_CONTEXT>', {
     state: null,
@@ -312,10 +313,41 @@ test('recent episodes are explicit generation constraints as well as validator i
       summary: recentSummary, participants: ['bill', 'cy'],
     }],
   });
-  assert.match(call.prompt, /RECENT EPISODE EXCLUSIONS/);
-  assert.match(call.prompt, new RegExp(recentSummary));
-  assert.match(call.prompt, /forbidden repetitions, not story seeds/i);
-  assert.match(call.prompt, /return NO_EVENT instead/i);
+  assert.match(call.prompt, /RECENT EVENT SIGNATURES TO AVOID/);
+  assert.match(call.prompt, /"action_class":"WELLBEING_CHECK"/);
+  assert.match(call.prompt, /"participants":\["bill","cy"\]/);
+  assert.doesNotMatch(call.prompt, new RegExp(recentSummary));
+  assert.doesNotMatch(call.prompt, /waited for an answer/i);
+  assert.match(call.prompt, /Return NO_EVENT rather than copying one/i);
+});
+
+test('structured recent fields take precedence and preserve legitimate recurrence boundaries', () => {
+  const signatures = buildAwgDuplicateExclusionSignatures([{
+    summary: 'Fisher handed Cy a message containing vivid words that must stay private.',
+    eventFamily: 'MESSAGE_PASSING', eventType: 'message_handed',
+    participants: ['fisher', 'cy'], location: 'cell',
+    objects: [{ type: 'message' }], threadType: 'MESSAGE_PASSING',
+  }, {
+    summary: 'Fisher spoke to Cy about an unrelated matter.',
+    eventFamily: 'SOCIAL_REQUEST', eventType: 'conversation_started',
+    participants: ['fisher', 'cy'], location: 'cell',
+  }, {
+    summary: 'Bill handed Cy a message.',
+    eventFamily: 'MESSAGE_PASSING', eventType: 'message_handed',
+    participants: ['bill', 'cy'], location: 'cell', objects: [{ type: 'message' }],
+  }]);
+  assert.deepEqual(signatures, [{
+    event_family: 'MESSAGE_PASSING', action_class: 'MESSAGE_HANDED',
+    participants: ['fisher', 'cy'], object_classes: ['MESSAGE'], location: 'CELL',
+    thread_type: 'MESSAGE_PASSING',
+  }, {
+    event_family: 'SOCIAL_REQUEST', action_class: 'CONVERSATION_STARTED',
+    participants: ['fisher', 'cy'], location: 'CELL',
+  }, {
+    event_family: 'MESSAGE_PASSING', action_class: 'MESSAGE_HANDED',
+    participants: ['bill', 'cy'], object_classes: ['MESSAGE'], location: 'CELL',
+  }]);
+  assert.doesNotMatch(JSON.stringify(signatures), /vivid|private|unrelated matter/i);
 });
 
 test('materialisation derives thread type and resolution without changing semantic intent', () => {
@@ -608,7 +640,8 @@ test('the production cycle supplies recent template events to semantic deduplica
   assert.equal(result.status, 'REJECTED');
   assert.ok(result.validation.errors.includes('RECENT_NEAR_DUPLICATE'));
   assert.deepEqual(result.run.createdWorldEventIds, []);
-  assert.match(suppliedPrompt, /Bill asked Cy if he was all right and waited for an answer/);
+  assert.match(suppliedPrompt, /"action_class":"WELLBEING_CHECK"/);
+  assert.doesNotMatch(suppliedPrompt, /Bill asked Cy if he was all right and waited for an answer/);
 });
 
 test('real accepted Fisher conversation candidate now fails thread and delivered-message coherence', () => {

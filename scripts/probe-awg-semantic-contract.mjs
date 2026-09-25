@@ -10,6 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import {
   buildAwgCall,
+  buildAwgDuplicateExclusionSignatures,
   findNextAwgEligibility,
   materialiseAwgProposal,
   parseAwgCandidate,
@@ -106,8 +107,12 @@ const recentEvents = [
     timestamp: entry.ts || new Date(capturedAt).toISOString(),
     summary: incidentLine(entry),
     participants: [],
+    actor: entry.actor || null,
+    actionClass: entry.sub || entry.verb || null,
+    threadType: entry.threadKind || null,
   })),
 ];
+const duplicateExclusionSignatures = buildAwgDuplicateExclusionSignatures(recentEvents);
 const provider = makeProviders(config).ollama;
 const results = [];
 
@@ -178,6 +183,7 @@ console.log(JSON.stringify({
   currentLocation: location,
   plausibleCastIds,
   recentEventCount: recentEvents.length,
+  duplicateExclusionSignatures,
   continuableThreadIds: generationFacts.threads.map((item) => item.id),
   excludedOpenThreadIds: state.threads.filter((item) => item.state === 'OPEN'
     && !generationFacts.threads.some((thread) => thread.id === item.id)).map((item) => item.id),
