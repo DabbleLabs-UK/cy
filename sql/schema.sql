@@ -415,6 +415,7 @@ CREATE TABLE world_objects (
     holder_id VARCHAR(80) NULL,
     location VARCHAR(80) NOT NULL,
     status VARCHAR(24) NOT NULL,
+    message_state JSON NULL,
     visibility JSON NOT NULL,
     source_event_id VARCHAR(160) NOT NULL,
     created_at DATETIME(3) NOT NULL,

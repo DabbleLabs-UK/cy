@@ -54,11 +54,13 @@ try {
 
     $objects = $db->query(
         'SELECT object_id, object_type, owner_id, holder_id, location, status,
-                visibility, source_event_id, created_at, updated_at
+                message_state, visibility, source_event_id, created_at, updated_at
          FROM world_objects ORDER BY updated_at DESC LIMIT 30'
     )->fetchAll();
     foreach ($objects as &$object) {
         $object['visibility'] = json_decode((string)$object['visibility'], true);
+        $object['message_state'] = $object['message_state'] === null
+            ? null : json_decode((string)$object['message_state'], true);
     }
     unset($object);
 

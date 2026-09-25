@@ -131,6 +131,8 @@ function captive_world_object_validate(array $payload): array
         'holder_id' => captive_optional_text($payload, 'holderId', 80),
         'location' => captive_required_text($payload, 'location', 80),
         'status' => captive_required_text($payload, 'status', 24),
+        'message_state' => isset($payload['message']) && is_array($payload['message'])
+            ? $payload['message'] : null,
         'visibility' => captive_json_array($payload['visibility'] ?? [], 'visibility'),
         'source_event_id' => captive_required_text($payload, 'sourceEventId', 160),
         'updated_at' => captive_required_text($payload, 'updatedAt', 40),

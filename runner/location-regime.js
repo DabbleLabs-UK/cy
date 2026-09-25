@@ -355,7 +355,10 @@ export function startCellSearchEpisode(stateValue, {
   const at = new Date(nowMs).toISOString();
   const cyPresent = state.current.id === LOCATIONS.CELL;
   const existing = (Array.isArray(objects) ? objects : []).find((object) =>
-    object && object.status === 'ACTIVE' && object.location === 'cell'
+    object && (object.status === 'ACTIVE'
+      || (object.type === 'message' && object.status === 'DELIVERED'
+        && !['RESOLVED', 'RETIRED'].includes(object.message && object.message.lifecycleState)))
+      && object.location === 'cell'
       && ['cy', 'cy:7734'].includes(object.holderId || object.ownerId));
   state.searchEpisode = {
     id, status: 'ACTIVE', stage: 'INITIATED', stage_entered_at: at,

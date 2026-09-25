@@ -85,6 +85,33 @@ $object = captive_world_object_validate([
 ]);
 check_world_simulation($object['holder_id'] === 'cy', 'world object holder was not preserved');
 
+$messageObject = captive_world_object_validate([
+    'id' => 'object:test-message',
+    'type' => 'message',
+    'ownerId' => 'fisher',
+    'holderId' => 'cy',
+    'location' => 'cell',
+    'status' => 'DELIVERED',
+    'message' => [
+        'schema' => 'cy.message-object-state',
+        'version' => 1,
+        'senderId' => 'fisher',
+        'recipientId' => 'cy',
+        'content' => 'Association is cancelled.',
+        'receiptObservedByCy' => true,
+        'readState' => 'UNREAD',
+        'lifecycleState' => 'DELIVERED',
+        'sourceEventIds' => ['world:test-message'],
+    ],
+    'visibility' => [['observerId' => 'cy', 'access' => 'CY_DIRECT']],
+    'sourceEventId' => 'world:test-message',
+    'updatedAt' => '2026-09-12T12:00:00.000Z',
+]);
+check_world_simulation(
+    $messageObject['message_state']['lifecycleState'] === 'DELIVERED',
+    'message lifecycle state was not preserved'
+);
+
 $rejected = false;
 try {
     captive_context_inspection_validate([
@@ -111,6 +138,11 @@ $migration = file_get_contents(__DIR__ . '/../sql/016_context_broker_awg.sql');
 foreach (['context_broker_inspections', 'ambient_world_runs', 'world_threads', 'world_objects'] as $table) {
     check_world_simulation(str_contains($migration, "CREATE TABLE $table"), "migration is missing $table");
 }
+$messageMigration = file_get_contents(__DIR__ . '/../sql/022_message_object_lifecycle.sql');
+check_world_simulation(
+    str_contains($messageMigration, 'ADD COLUMN message_state JSON NULL'),
+    'message lifecycle migration must be additive and nullable for legacy rows'
+);
 
 if ($failures !== []) {
     fwrite(STDERR, implode("\n", $failures) . "\n");

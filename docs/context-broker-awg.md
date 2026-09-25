@@ -132,12 +132,12 @@ All limits below are newly introduced by this handoff.
 
 ### ENGINEERING WORLD PACING
 
-- Candidate/state schema versions 1.
+- Candidate schema version 1; world-state schema version 2.
 - Opportunity cadence 45 minutes; minimum accepted-event spacing 30 minutes.
 - Sliding event window 6 hours; maximum 4 accepted AWG events in that window.
 - Maximum 8 open threads; persisted state retains up to 24 total recent thread records so resolved continuity is not immediately lost.
 - Duplicate-summary window 24 hours.
-- Recent accepted world-event context/state limit 12; recent AWG run state limit 20; persistent object state limit 100; AWG prompt adapter considers the latest 20 objects.
+- Recent accepted world-event context/state limit 12; recent AWG run state limit 20. Durable object state is not truncated by count. AWG receives only objects at the authoritative location; resolved/retired lifecycle-aware messages remain durable but leave current generation context.
 - Candidate occurrence time may be at most 5 minutes in the future and 24 hours in the past.
 
 ### ENGINEERING INFERENCE SCHEDULING

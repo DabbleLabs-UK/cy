@@ -105,6 +105,24 @@ test('present cell search follows restart-safe stages and finds only existing ob
   assert.equal(result.state.searchEpisode.status, 'COMPLETE');
 });
 
+test('cell search sees current delivered messages but ignores resolved message history', () => {
+  const currentMessage = {
+    id: 'object-message-current', type: 'message', status: 'DELIVERED',
+    location: 'cell', holderId: 'cy', ownerId: 'fisher',
+    message: { lifecycleState: 'DELIVERED' },
+  };
+  const current = startCellSearchEpisode(cell(), { nowMs: AT, objects: [currentMessage] });
+  assert.equal(current.state.searchEpisode.object_id, currentMessage.id);
+
+  const resolvedMessage = {
+    ...currentMessage,
+    id: 'object-message-resolved',
+    message: { lifecycleState: 'RESOLVED' },
+  };
+  const resolved = startCellSearchEpisode(cell(), { nowMs: AT, objects: [resolvedMessage] });
+  assert.equal(resolved.state.searchEpisode.object_id, null);
+});
+
 test('offscreen search with no recorded object does not fabricate property or Cy knowledge', () => {
   const yard = reconcileRegimeLocation(cell(), { nowMs: AT, date: DAY, minutes: 14 * 60 + 30 }).state;
   let result = startCellSearchEpisode(yard, { nowMs: AT, objects: [] });

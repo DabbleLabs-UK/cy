@@ -662,7 +662,7 @@ test('real accepted Fisher conversation candidate now fails thread and delivered
   }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'] });
   assert.ok(result.errors.includes('RESOLVED_EVENT_OPENS_THREAD'));
   assert.ok(result.errors.includes('THREAD_TYPE_CONTRADICTION'));
-  assert.ok(result.errors.includes('DELIVERED_MESSAGE_CONTENT_REQUIRED'));
+  assert.ok(result.errors.includes('MESSAGE_ACTION_REQUIRED'));
   assert.ok(result.errors.includes('CY_PARTICIPANT_WITHOUT_OBSERVATION'));
 });
 

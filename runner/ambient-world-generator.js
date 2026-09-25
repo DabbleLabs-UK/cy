@@ -6,11 +6,19 @@
 
 import { CAST, OFFICERS } from './cast.js';
 import { cancellationReason, isInferenceCancellation } from './inference-cancellation.js';
+import {
+  deriveMessageState,
+  isAllowedMessageTransition,
+  isCurrentMessageObject,
+  isMeaningfulMessageContent,
+  messageStatusForAction,
+  normaliseMessageState,
+} from './message-object-lifecycle.js';
 
 export const AWG_SCHEMA = 'cy.ambient-world-candidate';
 export const AWG_SCHEMA_VERSION = 1;
 export const WORLD_SIMULATION_SCHEMA = 'cy.ambient-world-state';
-export const WORLD_SIMULATION_VERSION = 1;
+export const WORLD_SIMULATION_VERSION = 2;
 
 export const AWG_EVENT_FAMILIES = Object.freeze([
   'MESSAGE_PASSING',
@@ -43,7 +51,7 @@ export const AWG_OBJECT_TYPES = Object.freeze([
 ]);
 
 export const AWG_OBJECT_STATUSES = Object.freeze([
-  'ACTIVE', 'MISSING', 'CONFISCATED', 'DELIVERED',
+  'ACTIVE', 'MISSING', 'CONFISCATED', 'DELIVERED', 'RETIRED',
 ]);
 
 export const AWG_KNOWN_LOCATIONS = Object.freeze([
@@ -88,7 +96,7 @@ const FORBIDDEN_KEYS = new Set([
   'appraisal', 'appraisalmagnitude', 'emotion', 'emotionscore',
   'emotionalmagnitude', 'brainactivation', 'anxiety', 'arousal', 'stress',
   'pain', 'hunger', 'fatigue', 'loneliness', 'anger', 'rumination',
-  'rewritehistory', 'deleteevent', 'mutateevent', 'visitorid', 'senderid',
+  'rewritehistory', 'deleteevent', 'mutateevent', 'visitorid',
 ]);
 
 const KNOWN_CAST_IDS = new Set(['cy', 'cy:7734', ...CAST.map((item) => item.key), ...OFFICERS.map((item) => item.key)]);
@@ -322,13 +330,18 @@ function candidateEventCountInWindow(state, nowMs) {
 
 export function reconcileWorldSimulationState(saved) {
   const source = saved && typeof saved === 'object' ? saved : {};
+  const objects = Array.isArray(source.objects) ? clone(source.objects).map((object) => {
+    const message = normaliseMessageState(object && object.message);
+    return message ? { ...object, message } : object;
+  }) : [];
   return {
     schema: WORLD_SIMULATION_SCHEMA,
     version: WORLD_SIMULATION_VERSION,
     lastRunAt: clean(source.lastRunAt) || null,
     lastAcceptedAt: clean(source.lastAcceptedAt) || null,
     threads: Array.isArray(source.threads) ? clone(source.threads).slice(-AWG_MAX_OPEN_THREADS * 3) : [],
-    objects: Array.isArray(source.objects) ? clone(source.objects).slice(-100) : [],
+    // Objects are durable world state. Do not silently discard old objects by count.
+    objects,
     recentAccepted: Array.isArray(source.recentAccepted) ? clone(source.recentAccepted).slice(-AWG_RECENT_EVENT_LIMIT) : [],
     recentRuns: Array.isArray(source.recentRuns) ? clone(source.recentRuns).slice(-AWG_RECENT_RUN_LIMIT) : [],
   };
@@ -419,7 +432,9 @@ function compatibleThreadFamilies(thread) {
 
 function compatibleAwgObjects(state, currentLocation) {
   const location = clean(currentLocation);
-  return state.objects.filter((object) => !location || clean(object.location) === location);
+  return state.objects.filter((object) => (
+    (!location || clean(object.location) === location) && isCurrentMessageObject(object)
+  ));
 }
 
 export function selectAwgGenerationFacts(stateValue, {
@@ -501,13 +516,28 @@ export function buildAwgProposalFormat(stateValue, {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['id', 'type', 'ownerId', 'holderId', 'status'],
+          required: ['id', 'type', 'ownerId', 'holderId', 'status', 'messageAction'],
           properties: {
             id: nullableEnum(objectIds),
             type: { type: 'string', enum: AWG_OBJECT_TYPES },
             ownerId: nullableEnum(castIds),
             holderId: nullableEnum(castIds),
-            status: { type: 'string', enum: AWG_OBJECT_STATUSES },
+            status: { enum: [null, ...AWG_OBJECT_STATUSES.filter((status) => status !== 'RETIRED')] },
+            messageAction: {
+              oneOf: [
+                { type: 'null' },
+                {
+                  type: 'object', additionalProperties: false,
+                  required: ['action', 'senderId', 'recipientId', 'contentClaimIndex'],
+                  properties: {
+                    action: { type: 'string', enum: ['CREATE', 'DELIVER', 'READ', 'RESOLVE', 'RETIRE'] },
+                    senderId: { type: 'string', enum: castIds },
+                    recipientId: { type: 'string', enum: castIds },
+                    contentClaimIndex: { type: ['integer', 'null'], minimum: 0, maximum: 5 },
+                  },
+                },
+              ],
+            },
           },
         },
       },
@@ -656,7 +686,13 @@ export function buildAwgCall(contextRendering, {
     ? openThreads.map((thread) => `${thread.id}: family=${compatibleThreadFamilies(thread).join('|')}; type=${thread.type}; participants=${(thread.participants || []).join(',') || 'unspecified'}; summary=${clean(thread.summary, 180)}`).join('\n')
     : 'none';
   const objectConstraint = compatibleObjects.length
-    ? compatibleObjects.map((object) => `${object.id}: type=${object.type}; owner=${object.ownerId || 'none'}; holder=${object.holderId || 'none'}; status=${object.status}`).join('\n')
+    ? compatibleObjects.map((object) => {
+      const message = normaliseMessageState(object.message);
+      const lifecycle = message
+        ? `; message_state=${message.lifecycleState}; sender=${message.senderId}; recipient=${message.recipientId}; read=${message.readState}; thread=${message.threadId || 'none'}`
+        : '';
+      return `${object.id}: type=${object.type}; owner=${object.ownerId || 'none'}; holder=${object.holderId || 'none'}; status=${object.status}${lifecycle}`;
+    }).join('\n')
     : 'none';
   const otherLocations = AWG_KNOWN_LOCATIONS.filter((location) => location !== clean(currentLocation));
   const system = [
@@ -691,10 +727,15 @@ export function buildAwgCall(contextRendering, {
       '- Every EVENT or CONTINUATION needs at least one concrete observation stating who perceived what.',
       '- Choose one epistemic branch: OBSERVED uses only a cy/CY_* observation; WORLD_ONLY excludes cy from both participants and observations.',
       '- Use observerId world only with WORLD_ONLY; cy only with CY_*; other cast only with CAST_ONLY.',
-      '- Include every actor, speaker, observer, object owner and object holder in participants.',
+      '- Include every actor, speaker, observer and active object owner/holder in participants.',
+      '- Exception: a WORLD_ONLY message delivery may set recipient/holder cy without making Cy a participant or implying awareness.',
       '- If Cy participates directly, include a truthful CY_* observation; WORLD_ONLY means Cy did not participate or perceive it.',
       '- Spoken conversation is not a message object. Leave objects empty unless a concrete persistent physical item is created, moved or changed.',
-      '- For a new object use id null. Its owner and holder must be participants. A DELIVERED message object needs actual content in informationClaims.',
+      '- For non-message objects set messageAction null and provide status. For messages set status null; code derives physical status from messageAction.',
+      '- A messageAction names sender, recipient and a contentClaimIndex. CREATE or DELIVER may create a genuinely new physical message with id null.',
+      '- DELIVER requires meaningful content. READ, RESOLVE and RETIRE must reference an existing message ID and normally advance it rather than create another object.',
+      '- Holder=cy does not by itself mean Cy observed receipt or knows the contents. Observation access establishes knowledge separately.',
+      '- A DELIVER observation may establish receipt but must not reveal the bound content. Use READ for grounded content access.',
       '- OPEN and UPDATE mean unresolved; RESOLVE means resolved.',
       `- The episode happens at ${clean(currentLocation) || 'the supplied location'}; do not describe it as happening in a different place.`,
       `- Do not name or imply another location (${otherLocations.join(', ') || 'none'}).`,
@@ -781,18 +822,37 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
     if (!allowedCast.has(id(claim.speakerId))) throw new Error('UNKNOWN_CLAIM_SPEAKER');
   }
   const objects = requireArray(proposal.objects, 'OBJECTS').map((object) => {
-    assertProposalKeys(object, new Set(['id', 'type', 'ownerId', 'holderId', 'status']), 'OBJECT');
+    assertProposalKeys(object, new Set([
+      'id', 'type', 'ownerId', 'holderId', 'status', 'messageAction',
+    ]), 'OBJECT');
     const objectId = object.id == null ? null : id(object.id);
     if (objectId && !state.objects.some((entry) => entry.id === objectId)) {
       throw new Error('INVALID_OBJECT_REFERENCE');
     }
+    const type = clean(object.type).toLowerCase();
+    let messageAction = null;
+    if (object.messageAction != null) {
+      assertProposalKeys(object.messageAction, new Set([
+        'action', 'senderId', 'recipientId', 'contentClaimIndex',
+      ]), 'MESSAGE_ACTION');
+      messageAction = {
+        action: clean(object.messageAction.action).toUpperCase(),
+        senderId: id(object.messageAction.senderId),
+        recipientId: id(object.messageAction.recipientId),
+        contentClaimIndex: Number.isInteger(object.messageAction.contentClaimIndex)
+          ? object.messageAction.contentClaimIndex : null,
+      };
+    }
     return {
       id: objectId || id((makeId || ((prefix) => `${prefix}:${nowMs}`))('object')),
-      type: clean(object.type).toLowerCase(),
+      type,
       ownerId: object.ownerId == null ? null : id(object.ownerId),
       holderId: object.holderId == null ? null : id(object.holderId),
       location: clean(currentLocation),
-      status: clean(object.status).toUpperCase(),
+      status: type === 'message'
+        ? messageStatusForAction(messageAction && messageAction.action)
+        : clean(object.status).toUpperCase(),
+      messageAction,
     };
   });
   assertProposalKeys(proposal.thread, new Set(['action', 'id', 'summary']), 'THREAD');
@@ -870,11 +930,96 @@ function validateObject(object, state, errors, {
   if (!AWG_KNOWN_LOCATIONS.includes(clean(object.location))) errors.push('UNKNOWN_OBJECT_LOCATION');
   if (!AWG_OBJECT_STATUSES.includes(clean(object.status).toUpperCase())) errors.push('INVALID_OBJECT_STATUS');
   const existing = state.objects.find((item) => item.id === objectId);
+  const isMessage = clean(object.type).toLowerCase() === 'message';
+  const transition = object.messageAction;
+  const action = clean(transition && transition.action).toUpperCase();
+  const cyObservation = (candidate && candidate.observations || []).find((observation) => (
+    id(observation && observation.observerId) === 'cy'
+  ));
+
+  if (isMessage) {
+    if (!transition || typeof transition !== 'object') {
+      errors.push('MESSAGE_ACTION_REQUIRED');
+    } else {
+      const senderId = id(transition.senderId);
+      const recipientId = id(transition.recipientId);
+      const contentIndex = Number.isInteger(transition.contentClaimIndex)
+        ? transition.contentClaimIndex : null;
+      const contentClaim = contentIndex == null ? null : claims[contentIndex];
+      const previous = normaliseMessageState(existing && existing.message);
+      if (existing && !previous) errors.push('LEGACY_MESSAGE_OBJECT_REQUIRES_RECONCILIATION');
+      if (!isAllowedMessageTransition(previous, action)) errors.push('INVALID_MESSAGE_TRANSITION');
+      const physicalMessageMeaning = /message|note|letter|deliver|hand|pass|read|resolve|retire/i.test(
+        `${candidate && candidate.eventFamily || ''} ${candidate && candidate.objective && candidate.objective.eventType || ''} ${candidate && candidate.objective && candidate.objective.summary || ''}`,
+      );
+      if (!existing && !physicalMessageMeaning) errors.push('SPURIOUS_MESSAGE_OBJECT_CREATION');
+      if (!KNOWN_CAST_IDS.has(senderId)) errors.push('UNKNOWN_MESSAGE_SENDER');
+      if (!KNOWN_CAST_IDS.has(recipientId)) errors.push('UNKNOWN_MESSAGE_RECIPIENT');
+      if (['CREATE', 'DELIVER'].includes(action) && !participants.has(senderId)) {
+        errors.push('MESSAGE_SENDER_NOT_PARTICIPANT');
+      }
+      if (id(object.ownerId) !== senderId) errors.push('MESSAGE_OWNER_SENDER_MISMATCH');
+      if (action === 'CREATE' && id(object.holderId) !== senderId) {
+        errors.push('CREATED_MESSAGE_HOLDER_SENDER_MISMATCH');
+      }
+      if (['DELIVER', 'READ', 'RESOLVE'].includes(action)
+        && id(object.holderId) !== recipientId) {
+        errors.push('MESSAGE_HOLDER_RECIPIENT_MISMATCH');
+      }
+      if (['CREATE', 'DELIVER'].includes(action)) {
+        if (contentIndex == null || !contentClaim
+          || !isMeaningfulMessageContent(contentClaim.content)) {
+          errors.push('MESSAGE_CONTENT_REQUIRED');
+        }
+        if (contentClaim && id(contentClaim.speakerId) !== senderId) {
+          errors.push('MESSAGE_CONTENT_SENDER_MISMATCH');
+        }
+      } else if (contentIndex != null) {
+        errors.push('MESSAGE_CONTENT_REPLACEMENT_FORBIDDEN');
+      }
+      if (existing && previous) {
+        if (previous.senderId !== senderId) errors.push('MESSAGE_SENDER_CONTRADICTION');
+        if (previous.recipientId !== recipientId) errors.push('MESSAGE_RECIPIENT_CONTRADICTION');
+        const continuationThreadId = id(candidate && candidate.continuationOf
+          && candidate.continuationOf.threadId);
+        if (continuationThreadId && previous.threadId
+          && continuationThreadId !== previous.threadId) {
+          errors.push('MESSAGE_THREAD_CONTRADICTION');
+        }
+      }
+      if (action === 'READ') {
+        const access = clean(cyObservation && cyObservation.access).toUpperCase();
+        if (recipientId === 'cy' && !['CY_DIRECT', 'CY_LEARNS_LATER'].includes(access)) {
+          errors.push('MESSAGE_READ_WITHOUT_OBSERVATION');
+        }
+      } else if (recipientId === 'cy' && cyObservation && contentClaim) {
+        const overlap = tokenOverlap(cyObservation.summary, contentClaim.content);
+        if (normaliseSummary(cyObservation.summary).includes(normaliseSummary(contentClaim.content))
+          || (overlap.shared >= 3 && overlap.coefficient >= 0.66)) {
+          errors.push('MESSAGE_CONTENT_KNOWLEDGE_WITHOUT_READ');
+        }
+      }
+      if (candidate && candidate.decision === 'CONTINUATION' && !existing) {
+        const continuationThreadId = id(candidate.continuationOf && candidate.continuationOf.threadId);
+        const existingForThread = state.objects.find((item) => {
+          const message = normaliseMessageState(item && item.message);
+          return message && message.threadId === continuationThreadId && isCurrentMessageObject(item);
+        });
+        if (existingForThread) errors.push('MESSAGE_CONTINUATION_MUST_UPDATE_EXISTING');
+      }
+    }
+  } else if (transition != null) {
+    errors.push('MESSAGE_ACTION_ON_NON_MESSAGE');
+  }
   if (!existing) {
     if (object.ownerId != null && !participants.has(id(object.ownerId))) {
       errors.push('OBJECT_OWNER_NOT_PARTICIPANT');
     }
-    if (object.holderId != null && !participants.has(id(object.holderId))) {
+    // WORLD_ONLY delivery may move a physical message to Cy without implying
+    // that Cy perceived receipt. Knowledge is carried by observations instead.
+    const worldOnlyDeliveryToCy = isMessage && action === 'DELIVER'
+      && id(object.holderId) === 'cy' && !(candidate && candidate.participants || []).includes('cy');
+    if (object.holderId != null && !participants.has(id(object.holderId)) && !worldOnlyDeliveryToCy) {
       errors.push('OBJECT_HOLDER_NOT_PARTICIPANT');
     }
   } else {
@@ -894,17 +1039,6 @@ function validateObject(object, state, errors, {
   }
   if (clean(object.status).toUpperCase() === 'DELIVERED' && object.holderId == null) {
     errors.push('DELIVERED_OBJECT_HOLDER_REQUIRED');
-  }
-  if (clean(object.type).toLowerCase() === 'message'
-    && clean(object.status).toUpperCase() === 'DELIVERED') {
-    const hasCurrentContent = claims.some((claim) => clean(claim && claim.content));
-    const referencesContent = candidate && candidate.decision === 'CONTINUATION'
-      && Array.isArray(candidate.continuationOf && candidate.continuationOf.eventIds)
-      && candidate.continuationOf.eventIds.some((eventId) => state.recentAccepted.some((event) => (
-        event.id === eventId && Array.isArray(event.informationClaims)
-          && event.informationClaims.some((claim) => clean(claim && claim.content))
-      )));
-    if (!hasCurrentContent && !referencesContent) errors.push('DELIVERED_MESSAGE_CONTENT_REQUIRED');
   }
   if (existing && existing.status === 'CONFISCATED' && clean(object.status).toUpperCase() === 'ACTIVE') {
     errors.push('OBJECT_STATE_CONTRADICTION');
@@ -1087,6 +1221,24 @@ export function applyAwgCandidate(stateValue, validation, {
   const state = reconcileWorldSimulationState(stateValue);
   const candidate = validation.candidate;
   const eventId = id(makeId('world'));
+  const messageObject = (candidate.objects || []).find((object) => object.type === 'message');
+  const messageAction = messageObject && messageObject.messageAction;
+  const boundMessageClaimIndex = Number.isInteger(messageAction && messageAction.contentClaimIndex)
+    ? messageAction.contentClaimIndex : null;
+  const messageIsRead = clean(messageAction && messageAction.action).toUpperCase() === 'READ';
+  const existingMessageObject = messageObject
+    ? state.objects.find((object) => object.id === messageObject.id) : null;
+  const previousMessage = normaliseMessageState(existingMessageObject && existingMessageObject.message);
+  const observedInformationClaims = (candidate.informationClaims || []).filter((claim, index) => (
+    boundMessageClaimIndex == null || index !== boundMessageClaimIndex || messageIsRead
+  ));
+  if (messageIsRead && previousMessage && previousMessage.content) {
+    observedInformationClaims.push({
+      speakerId: previousMessage.senderId,
+      content: previousMessage.content,
+      truthStatus: previousMessage.contentTruthStatus,
+    });
+  }
   const event = {
     id: eventId,
     occurredAt: candidate.occurredAt,
@@ -1098,11 +1250,17 @@ export function applyAwgCandidate(stateValue, validation, {
     location: candidate.location,
     observations: clone(candidate.observations),
     informationClaims: clone(candidate.informationClaims || []),
+    observedInformationClaims: clone(observedInformationClaims),
     resolved: !!candidate.resolved,
     sourceThreadId: id(candidate.continuationOf && candidate.continuationOf.threadId) || null,
+    actorId: id(messageAction && (['CREATE', 'DELIVER'].includes(clean(messageAction.action).toUpperCase())
+      ? messageAction.senderId : messageAction.recipientId)) || candidate.participants[0] || null,
+    targetId: id(messageAction && (['CREATE', 'DELIVER'].includes(clean(messageAction.action).toUpperCase())
+      ? messageAction.recipientId : messageAction.senderId)) || candidate.participants[1] || null,
   };
   const changes = [];
   const action = clean(candidate.thread && candidate.thread.action).toUpperCase() || 'NONE';
+  let affectedThreadId = event.sourceThreadId;
   if (action === 'OPEN') {
     const thread = {
       id: id(candidate.thread.id) || id(makeId('thread')),
@@ -1118,9 +1276,11 @@ export function applyAwgCandidate(stateValue, validation, {
       visibility: clone(candidate.observations),
     };
     state.threads.push(thread);
+    affectedThreadId = thread.id;
     changes.push({ action: 'OPEN', threadId: thread.id });
   } else if (['UPDATE', 'RESOLVE'].includes(action)) {
     const threadId = id(candidate.thread.id || (candidate.continuationOf && candidate.continuationOf.threadId));
+    affectedThreadId = threadId;
     const thread = state.threads.find((item) => item.id === threadId);
     if (thread) {
       thread.updatedAt = acceptedAt;
@@ -1137,13 +1297,26 @@ export function applyAwgCandidate(stateValue, validation, {
   for (const object of Array.isArray(candidate.objects) ? candidate.objects : []) {
     const objectId = id(object.id) || id(makeId('object'));
     const existing = state.objects.find((item) => item.id === objectId);
+    const isMessage = clean(object.type).toLowerCase() === 'message';
+    const message = isMessage ? deriveMessageState({
+      existingMessage: existing && existing.message,
+      transition: object.messageAction,
+      claims: candidate.informationClaims || [],
+      eventId,
+      threadId: affectedThreadId || normaliseMessageState(existing && existing.message)?.threadId,
+      cyObservation: validation.cyObservation,
+      acceptedAt,
+    }) : null;
     const value = {
       id: objectId,
       type: clean(object.type, 80),
       ownerId: object.ownerId == null ? null : id(object.ownerId),
       holderId: object.holderId == null ? null : id(object.holderId),
       location: clean(object.location),
-      status: clean(object.status).toUpperCase(),
+      status: isMessage
+        ? messageStatusForAction(object.messageAction && object.messageAction.action, existing && existing.status)
+        : clean(object.status).toUpperCase(),
+      ...(isMessage ? { message } : {}),
       visibility: clone(candidate.observations),
       sourceEventId: existing ? existing.sourceEventId : eventId,
       updatedAt: acceptedAt,
@@ -1166,7 +1339,7 @@ export function awgEventToEnvironment(result) {
     eventType: event.eventType,
     summary: result.cyObserved && observation ? clean(observation.summary, 800) : null,
     world: {
-      participants: { actor: event.participants[0] || null, target: event.participants[1] || null, relationship_ref: null },
+      participants: { actor: event.actorId || null, target: event.targetId || null, relationship_ref: null },
       context: {
         location: event.location,
         description: event.summary,
@@ -1181,7 +1354,7 @@ export function awgEventToEnvironment(result) {
       certainty: observation.access === 'CY_PARTIAL_HEARD' ? 'uncertain' : 'certain',
       observed_facts: {
         event_family: event.eventFamily,
-        information_claims: clone(event.informationClaims),
+        information_claims: clone(event.observedInformationClaims || []),
       },
     } : { modality: 'none', certainty: 'unknown', observed_facts: {} },
     publicTimeline: result.cyObserved && result.validationCandidate?.publicTimeline?.eligible

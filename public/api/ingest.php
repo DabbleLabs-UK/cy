@@ -110,12 +110,13 @@ try {
     $worldObjectUpsert = $db->prepare(
         'INSERT INTO world_objects
             (object_id, object_type, owner_id, holder_id, location, status,
-             visibility, source_event_id, created_at, updated_at)
+             message_state, visibility, source_event_id, created_at, updated_at)
          VALUES
             (:object_id, :object_type, :owner_id, :holder_id, :location, :status,
-             :visibility, :source_event_id, :created_at, :updated_at)
+             :message_state, :visibility, :source_event_id, :created_at, :updated_at)
          ON DUPLICATE KEY UPDATE object_type = VALUES(object_type), owner_id = VALUES(owner_id),
              holder_id = VALUES(holder_id), location = VALUES(location), status = VALUES(status),
+             message_state = VALUES(message_state),
              visibility = VALUES(visibility), source_event_id = VALUES(source_event_id),
              updated_at = VALUES(updated_at)'
     );
@@ -257,6 +258,8 @@ try {
                 ':object_id' => $record['id'], ':object_type' => $record['type'],
                 ':owner_id' => $record['owner_id'], ':holder_id' => $record['holder_id'],
                 ':location' => $record['location'], ':status' => $record['status'],
+                ':message_state' => $record['message_state'] === null
+                    ? null : json_encode($record['message_state']),
                 ':visibility' => json_encode($record['visibility']), ':source_event_id' => $record['source_event_id'],
                 ':created_at' => $updated, ':updated_at' => $updated,
             ]);

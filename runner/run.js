@@ -210,6 +210,7 @@ import {
   selectAwgGenerationFacts,
   shouldRunAwg,
 } from './ambient-world-generator.js';
+import { normaliseMessageState } from './message-object-lifecycle.js';
 import {
   reconcileInstrumentalAgencyState,
   openInstrumentalOpportunity,
@@ -2758,11 +2759,15 @@ async function main() {
         });
       }
       for (const object of awgFacts.objects) {
+        const message = normaliseMessageState(object.message);
+        const messageFacts = message
+          ? ` Message lifecycle ${message.lifecycleState}; sender ${message.senderId}; recipient ${message.recipientId}; receipt observed by Cy ${message.receiptObservedByCy ? 'yes' : 'no'}; read state ${message.readState}; thread ${message.threadId || 'none'}; content ${message.content || 'none'}.`
+          : '';
         add({
           id: `object:${object.id}`, sourceId: `object:${object.id}`, section: 'persistent_objects',
           provenanceClass: 'WORLD FACT', knowledgeScope: 'WORLD_KNOWS', privacyScope: 'WORLD_SIMULATION',
           priority: 70,
-          content: `Object ${object.id}: ${object.type}; owner ${object.ownerId || 'unknown'}; holder ${object.holderId || 'none known'}; location ${object.location}; status ${object.status}.`,
+          content: `Object ${object.id}: ${object.type}; owner ${object.ownerId || 'unknown'}; holder ${object.holderId || 'none known'}; location ${object.location}; status ${object.status}.${messageFacts}`,
         });
       }
     }
