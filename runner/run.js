@@ -4359,6 +4359,7 @@ async function main() {
       inferenceBusy: inferPhase !== 'idle',
       currentLocation: locationContextId(vitals.locationRegime.current.id),
       plausibleCastIds: plausibleCastAtLocation(vitals.locationRegime.current.id).map((item) => item.key),
+      recentEvents: recentWorldHistory,
       makeId: (prefix) => `${prefix}-${randomUUID()}`,
       generate: (call) => rawGenerate({
         system: call.system,

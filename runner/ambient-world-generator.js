@@ -115,6 +115,95 @@ function normaliseSummary(value) {
   return clean(value, 800).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+const SEMANTIC_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'at', 'be', 'for', 'from', 'had', 'has', 'have', 'he', 'her',
+  'him', 'his', 'in', 'is', 'it', 'its', 'of', 'on', 'or', 'she', 'that', 'the',
+  'their', 'them', 'then', 'they', 'this', 'to', 'was', 'were', 'with',
+]);
+
+function semanticTokens(value) {
+  const source = normaliseSummary(value)
+    .replace(/\ball right\b|\bwell being\b|\bwellbeing\b/g, ' wellbeing ');
+  return new Set(source.split(' ').filter(Boolean).map((token) => {
+    if (/^(ask|asks|asked|asking)$/.test(token)) return 'ask';
+    if (/^(wait|waits|waited|waiting)$/.test(token)) return 'wait';
+    if (/^(pass|passes|passed|passing)$/.test(token)) return 'pass';
+    if (/^(deliver|delivers|delivered|delivering|delivery)$/.test(token)) return 'deliver';
+    if (/^(talk|talks|talked|talking|conversation|conversations)$/.test(token)) return 'conversation';
+    const suffix = token.match(/(?:ing|ed|es|s)$/i);
+    return suffix && token.length - suffix[0].length >= 4
+      ? token.slice(0, -suffix[0].length) : token;
+  }).filter((token) => token.length > 1 && !SEMANTIC_STOP_WORDS.has(token)));
+}
+
+function tokenOverlap(leftValue, rightValue) {
+  const left = semanticTokens(leftValue);
+  const right = semanticTokens(rightValue);
+  if (!left.size || !right.size) return { shared: 0, coefficient: 0 };
+  const shared = [...left].filter((token) => right.has(token)).length;
+  return { shared, coefficient: shared / Math.min(left.size, right.size) };
+}
+
+const LOCATION_CUES = Object.freeze({
+  cell: [/\b(?:in|inside|at|into) (?:cy'?s |the )?cell\b/i],
+  landing: [/\b(?:on|at|along) the landing\b/i],
+  wing: [/\b(?:on|at|along|down) the wing\b/i, /\bby the gate\b/i],
+  association: [/\b(?:at|on|during) association\b/i, /\b(?:in|at) the queue\b/i],
+  servery: [/\b(?:at|in|by) the servery\b/i],
+  canteen: [/\b(?:at|in|by) the canteen\b/i],
+  exercise_yard: [/\b(?:in|at|on) the (?:exercise )?yard\b/i],
+  chapel: [/\b(?:in|at) the chapel\b/i],
+  workshop: [/\b(?:in|at) the workshop\b/i],
+  library: [/\b(?:in|at) the library\b/i],
+  healthcare: [/\b(?:in|at) healthcare\b/i],
+  visits: [/\b(?:in|at) visits\b/i],
+  officer_desk: [/\b(?:in|at|by) the (?:officer'?s? )?desk\b/i],
+  corridor: [/\b(?:in|at|along|down) the corridor\b/i],
+});
+
+function explicitLocationContradictions(candidate, authoritativeLocation) {
+  const current = clean(authoritativeLocation);
+  if (!current || !LOCATION_CUES[current]) return [];
+  const learnsLater = (candidate.observations || []).some((observation) => (
+    id(observation && observation.observerId) === 'cy'
+      && clean(observation && observation.access).toUpperCase() === 'CY_LEARNS_LATER'
+  ));
+  if (learnsLater || clean(candidate.eventFamily).toUpperCase() === 'RUMOUR') return [];
+  const texts = [candidate.objective && candidate.objective.summary]
+    .concat((candidate.observations || []).map((observation) => observation && observation.summary))
+    .map((value) => clean(value, 800)).filter(Boolean);
+  const found = [];
+  for (const [location, patterns] of Object.entries(LOCATION_CUES)) {
+    if (location === current) continue;
+    if (texts.some((text) => patterns.some((pattern) => pattern.test(text)))) found.push(location);
+  }
+  return found;
+}
+
+function threadSemanticallyMatches(candidate) {
+  const threadType = clean(candidate.thread && candidate.thread.type);
+  if (!threadType) return false;
+  const eventMeaning = `${candidate.eventFamily || ''} ${candidate.objective && candidate.objective.eventType || ''} ${candidate.objective && candidate.objective.summary || ''}`;
+  const ignored = new Set(['activity', 'event', 'request', 'thread']);
+  const eventTokens = [...semanticTokens(eventMeaning)].filter((token) => !ignored.has(token));
+  const threadTokens = semanticTokens(threadType);
+  return eventTokens.some((token) => threadTokens.has(token));
+}
+
+function isRecentNearDuplicate(candidate, recentEvents, nowMs) {
+  const participants = new Set((candidate.participants || []).map(id).filter(Boolean));
+  const candidateText = candidate.objective && candidate.objective.summary;
+  return (Array.isArray(recentEvents) ? recentEvents : []).some((event) => {
+    const at = isoMs(event && (event.timestamp || event.occurredAt));
+    if (at == null || nowMs - at < 0 || nowMs - at > AWG_DEDUPE_WINDOW_MS) return false;
+    const recentParticipants = (event.participants || []).map(id).filter(Boolean);
+    const participantOverlap = recentParticipants.some((participant) => participants.has(participant));
+    const similarity = tokenOverlap(candidateText, event.summary || event.objective && event.objective.summary);
+    return similarity.shared >= 4 && similarity.coefficient >= 0.66
+      && (participantOverlap || recentParticipants.length === 0);
+  });
+}
+
 function collectForbidden(value, path = 'candidate', found = []) {
   if (!value || typeof value !== 'object') return found;
   for (const [key, child] of Object.entries(value)) {
@@ -361,7 +450,12 @@ export function buildAwgCall(contextRendering, {
       '- EVENT may use thread action NONE or OPEN. OPEN must use id null; code assigns its ID.',
       '- Every EVENT or CONTINUATION needs at least one concrete observation stating who perceived what.',
       '- Use observerId world only with WORLD_ONLY; cy only with CY_*; other cast only with CAST_ONLY.',
-      '- Include every acting or speaking cast member in participants.',
+      '- Include every acting, speaking or cast-observing person in participants.',
+      '- If Cy participates directly, include a truthful CY_* observation; WORLD_ONLY means Cy did not participate or perceive it.',
+      '- A new object owner and holder must be participants. A DELIVERED message needs actual content in informationClaims.',
+      '- OPEN and UPDATE mean unresolved; RESOLVE means resolved. Thread type must describe this event family.',
+      `- The episode happens at ${clean(currentLocation) || 'the supplied location'}; do not describe it as happening in a different place.`,
+      '- Do not repeat a near-identical recent episode merely with paraphrased wording.',
       '- Code derives public visibility from valid Cy observations; do not output visibility or timeline text.',
       '- eventType must be a lowercase snake_case machine label. objective.summary must state only what occurred.',
       '- If the supplied facts do not ground a valid event, return exactly {"decision":"NO_EVENT"}.',
@@ -513,7 +607,9 @@ function validateObservation(observation, errors) {
   if (!clean(observation.summary)) errors.push('EMPTY_OBSERVATION_SUMMARY');
 }
 
-function validateObject(object, state, errors) {
+function validateObject(object, state, errors, {
+  participants = new Set(), claims = [], candidate = null,
+} = {}) {
   if (!object || typeof object !== 'object') {
     errors.push('INVALID_OBJECT');
     return;
@@ -526,13 +622,49 @@ function validateObject(object, state, errors) {
   if (!AWG_KNOWN_LOCATIONS.includes(clean(object.location))) errors.push('UNKNOWN_OBJECT_LOCATION');
   if (!AWG_OBJECT_STATUSES.includes(clean(object.status).toUpperCase())) errors.push('INVALID_OBJECT_STATUS');
   const existing = state.objects.find((item) => item.id === objectId);
+  if (!existing) {
+    if (object.ownerId != null && !participants.has(id(object.ownerId))) {
+      errors.push('OBJECT_OWNER_NOT_PARTICIPANT');
+    }
+    if (object.holderId != null && !participants.has(id(object.holderId))) {
+      errors.push('OBJECT_HOLDER_NOT_PARTICIPANT');
+    }
+  } else {
+    if (clean(existing.type).toLowerCase() !== clean(object.type).toLowerCase()) {
+      errors.push('OBJECT_TYPE_CONTRADICTION');
+    }
+    if (id(existing.ownerId) !== id(object.ownerId)) errors.push('OBJECT_OWNER_CONTRADICTION');
+    if (id(existing.holderId) !== id(object.holderId) && object.holderId != null
+      && !participants.has(id(object.holderId))) {
+      errors.push('OBJECT_HOLDER_NOT_PARTICIPANT');
+    }
+    const changedLocation = clean(existing.location) !== clean(object.location);
+    const transferMeaning = /transfer|pass|deliver|hand|take|confiscat|find|bring|receive/i.test(
+      `${candidate && candidate.eventFamily || ''} ${candidate && candidate.objective && candidate.objective.eventType || ''} ${candidate && candidate.objective && candidate.objective.summary || ''}`,
+    );
+    if (changedLocation && !transferMeaning) errors.push('OBJECT_LOCATION_CONTRADICTION');
+  }
+  if (clean(object.status).toUpperCase() === 'DELIVERED' && object.holderId == null) {
+    errors.push('DELIVERED_OBJECT_HOLDER_REQUIRED');
+  }
+  if (clean(object.type).toLowerCase() === 'message'
+    && clean(object.status).toUpperCase() === 'DELIVERED') {
+    const hasCurrentContent = claims.some((claim) => clean(claim && claim.content));
+    const referencesContent = candidate && candidate.decision === 'CONTINUATION'
+      && Array.isArray(candidate.continuationOf && candidate.continuationOf.eventIds)
+      && candidate.continuationOf.eventIds.some((eventId) => state.recentAccepted.some((event) => (
+        event.id === eventId && Array.isArray(event.informationClaims)
+          && event.informationClaims.some((claim) => clean(claim && claim.content))
+      )));
+    if (!hasCurrentContent && !referencesContent) errors.push('DELIVERED_MESSAGE_CONTENT_REQUIRED');
+  }
   if (existing && existing.status === 'CONFISCATED' && clean(object.status).toUpperCase() === 'ACTIVE') {
     errors.push('OBJECT_STATE_CONTRADICTION');
   }
 }
 
 export function validateAwgCandidate(candidateValue, stateValue, {
-  nowMs = Date.now(), currentLocation = null, plausibleCastIds = [],
+  nowMs = Date.now(), currentLocation = null, plausibleCastIds = [], recentEvents = [],
 } = {}) {
   const candidate = candidateValue && typeof candidateValue === 'object' ? clone(candidateValue) : null;
   const state = reconcileWorldSimulationState(stateValue);
@@ -560,10 +692,25 @@ export function validateAwgCandidate(candidateValue, stateValue, {
   const observations = Array.isArray(candidate.observations) ? candidate.observations : [];
   if (!observations.length) errors.push('OBSERVABILITY_REQUIRED');
   observations.forEach((observation) => validateObservation(observation, errors));
+  const participantSet = new Set(participants);
+  observations.forEach((observation) => {
+    const observerId = id(observation && observation.observerId);
+    const access = clean(observation && observation.access).toUpperCase();
+    if (['cy', 'cy:7734'].includes(observerId)) {
+      if (!['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'].includes(access)) {
+        errors.push('CY_OBSERVATION_ACCESS_MISMATCH');
+      }
+    } else if (observerId !== 'world') {
+      if (access !== 'CAST_ONLY') errors.push('CAST_OBSERVATION_ACCESS_MISMATCH');
+      if (!participantSet.has(observerId)) errors.push('OBSERVER_NOT_PARTICIPANT');
+    }
+  });
 
   const claims = Array.isArray(candidate.informationClaims) ? candidate.informationClaims : [];
   claims.forEach((claim) => {
-    if (!KNOWN_CAST_IDS.has(id(claim && claim.speakerId))) errors.push('UNKNOWN_CLAIM_SPEAKER');
+    const speakerId = id(claim && claim.speakerId);
+    if (!KNOWN_CAST_IDS.has(speakerId)) errors.push('UNKNOWN_CLAIM_SPEAKER');
+    else if (!participantSet.has(speakerId)) errors.push('SPEAKER_NOT_PARTICIPANT');
     if (!clean(claim && claim.content)) errors.push('EMPTY_INFORMATION_CLAIM');
     if (!AWG_TRUTH_STATUS.includes(clean(claim && claim.truthStatus).toUpperCase())) errors.push('INVALID_TRUTH_STATUS');
   });
@@ -574,24 +721,38 @@ export function validateAwgCandidate(candidateValue, stateValue, {
   if (decision === 'CONTINUATION') {
     const thread = state.threads.find((item) => item.id === continuationThreadId && item.state === 'OPEN');
     if (!thread) errors.push('INVALID_THREAD_REFERENCE');
+    if (id(candidate.thread && candidate.thread.id) !== continuationThreadId) {
+      errors.push('CONTINUATION_THREAD_MISMATCH');
+    }
+    if (thread && clean(candidate.thread && candidate.thread.type)
+      && clean(candidate.thread.type).toLowerCase() !== clean(thread.type).toLowerCase()) {
+      errors.push('THREAD_TYPE_CONTRADICTION');
+    }
     const refs = Array.isArray(candidate.continuationOf && candidate.continuationOf.eventIds)
       ? candidate.continuationOf.eventIds.map(id) : [];
-    const knownEventIds = new Set([
-      ...state.recentAccepted.map((item) => item.id),
-      ...state.threads.flatMap((item) => item.sourceEventIds || []),
-    ]);
-    if (!refs.length || refs.some((ref) => !knownEventIds.has(ref))) errors.push('INVALID_EVENT_REFERENCE');
+    const threadEventIds = new Set(thread && Array.isArray(thread.sourceEventIds) ? thread.sourceEventIds : []);
+    if (!refs.length || refs.some((ref) => !threadEventIds.has(ref))) errors.push('INVALID_EVENT_REFERENCE');
+    if (thread && Array.isArray(thread.participants) && thread.participants.length
+      && !thread.participants.some((participant) => participantSet.has(id(participant)))) {
+      errors.push('THREAD_PARTICIPANT_MISMATCH');
+    }
   }
   if (['UPDATE', 'RESOLVE'].includes(threadAction)) {
     const threadId = id(candidate.thread && candidate.thread.id);
     if (!state.threads.some((item) => item.id === threadId && item.state === 'OPEN')) errors.push('INVALID_THREAD_REFERENCE');
   }
+  if (threadAction === 'OPEN' && candidate.resolved === true) errors.push('RESOLVED_EVENT_OPENS_THREAD');
+  if (threadAction === 'UPDATE' && candidate.resolved === true) errors.push('RESOLVED_EVENT_LEAVES_THREAD_OPEN');
+  if (threadAction === 'RESOLVE' && candidate.resolved !== true) errors.push('THREAD_RESOLUTION_STATE_MISMATCH');
+  if (threadAction === 'OPEN' && !threadSemanticallyMatches(candidate)) errors.push('THREAD_TYPE_CONTRADICTION');
   if (threadAction === 'OPEN' && state.threads.filter((item) => item.state === 'OPEN').length >= AWG_MAX_OPEN_THREADS) {
     errors.push('OPEN_THREAD_LIMIT');
   }
 
   const objects = Array.isArray(candidate.objects) ? candidate.objects : [];
-  objects.forEach((object) => validateObject(object, state, errors));
+  objects.forEach((object) => validateObject(object, state, errors, {
+    participants: participantSet, claims, candidate,
+  }));
   const objectIds = objects.map((object) => id(object && object.id)).filter(Boolean);
   if (new Set(objectIds).size !== objectIds.length) errors.push('DUPLICATE_OBJECT_ID');
 
@@ -610,11 +771,15 @@ export function validateAwgCandidate(candidateValue, stateValue, {
     return at != null && nowMs - at <= AWG_DEDUPE_WINDOW_MS && event.signature === signature;
   });
   if (signature && duplicate) errors.push('DUPLICATE_EVENT');
+  if (isRecentNearDuplicate(candidate, recentEvents, nowMs)) errors.push('RECENT_NEAR_DUPLICATE');
 
   const cyObservation = observations.find((observation) => id(observation.observerId) === 'cy'
     || id(observation.observerId) === 'cy:7734');
   const cyAccess = cyObservation ? clean(cyObservation.access).toUpperCase() : null;
   const cyObserved = ['CY_DIRECT', 'CY_PARTIAL_HEARD', 'CY_LEARNS_LATER'].includes(cyAccess);
+  if (!cyObserved && participants.some((participant) => ['cy', 'cy:7734'].includes(participant))) {
+    errors.push('CY_PARTICIPANT_WITHOUT_OBSERVATION');
+  }
   const current = clean(currentLocation);
   if (cyObserved && current && clean(candidate.location) !== current && cyAccess !== 'CY_LEARNS_LATER') {
     errors.push('IMPOSSIBLE_CY_LOCATION');
@@ -629,6 +794,9 @@ export function validateAwgCandidate(candidateValue, stateValue, {
   if (current === 'exercise_yard' && cyObserved
     && /journal|drawing|draw|sleep|cell_search/.test(objectiveType)) {
     errors.push('IMPOSSIBLE_ACTIVITY_AT_LOCATION');
+  }
+  if (explicitLocationContradictions(candidate, candidate.location).length) {
+    errors.push('OBJECTIVE_LOCATION_CONTRADICTION');
   }
   if (candidate.publicTimeline && candidate.publicTimeline.eligible && !cyObserved) errors.push('PUBLIC_TIMELINE_KNOWLEDGE_LEAK');
   if (candidate.publicTimeline && candidate.publicTimeline.eligible && !clean(candidate.publicTimeline.text)) {
@@ -784,6 +952,7 @@ export async function runAmbientWorldCycle({
   inferenceBusy = false,
   currentLocation = null,
   plausibleCastIds = [],
+  recentEvents = [],
   clock = () => performance.now(),
 } = {}) {
   const original = reconcileWorldSimulationState(stateValue);
@@ -809,7 +978,7 @@ export async function runAmbientWorldCycle({
     });
     const validationStarted = clock();
     const validation = validateAwgCandidate(candidate, stateWithRun, {
-      nowMs, currentLocation, plausibleCastIds,
+      nowMs, currentLocation, plausibleCastIds, recentEvents,
     });
     const validationLatencyMs = Math.max(0, clock() - validationStarted);
     if (!validation.valid) {

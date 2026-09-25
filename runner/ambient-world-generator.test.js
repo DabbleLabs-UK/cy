@@ -233,8 +233,10 @@ test('E: emotional or Soma assignment is rejected', () => {
 test('F: rumour content remains a separately labelled claim', () => {
   const value = candidate({
     eventFamily: 'RUMOUR',
+    participants: ['reg', 'daemon', 'cy'],
     objective: { eventType: 'rumour_repeated', summary: 'Daemon told Cy a claim about Mr Proctor.' },
     informationClaims: [{ speakerId: 'daemon', content: 'Mr Proctor will be transferred tomorrow.', truthStatus: 'UNKNOWN' }],
+    thread: { action: 'NONE', id: null, type: null, summary: null, nextEligibleAt: null },
   });
   const result = validateAwgCandidate(value, null, { nowMs: NOW });
   assert.equal(result.valid, true);
@@ -245,6 +247,8 @@ test('F: rumour content remains a separately labelled claim', () => {
 test('G: world-only event creates no Cy observation or public trace', () => {
   const value = candidate({
     participants: ['reg', 'daemon'],
+    objective: { eventType: 'note_passed', summary: 'Reg passed a folded note to Daemon on the landing.' },
+    objects: [{ id: 'object-note-1', type: 'note', ownerId: 'reg', holderId: 'daemon', location: 'landing', status: 'ACTIVE' }],
     observations: [{ observerId: 'reg', access: 'CAST_ONLY', summary: 'Reg passed a note to Daemon.' }],
     publicTimeline: { eligible: false, text: null },
   });
@@ -300,6 +304,7 @@ test('J: an existing thread can continue', () => {
   const continuation = candidate({
     decision: 'CONTINUATION',
     occurredAt: new Date(later).toISOString(),
+    resolved: true,
     objective: { eventType: 'note_questioned', summary: 'Daemon asked Cy whether the note reached him.' },
     objects: [{ id: 'object-note-1', type: 'note', ownerId: 'reg', holderId: 'cy', location: 'landing', status: 'ACTIVE' }],
     thread: { action: 'RESOLVE', id: 'thread-note-1', type: 'NOTE_AWAITING_DELIVERY', summary: 'Daemon asked about the missing note.', nextEligibleAt: null },
@@ -330,6 +335,146 @@ test('L: object consistency rejects a confiscated object becoming active', () =>
     objects: [candidate().objects[0], { ...candidate().objects[0], location: 'cell' }],
   }), null, { nowMs: NOW });
   assert.ok(duplicateObject.errors.includes('DUPLICATE_OBJECT_ID'));
+});
+
+test('real accepted key-transfer candidate now fails role and new-object coherence', () => {
+  const result = validateAwgCandidate(candidate({
+    eventFamily: 'OBJECT_TRANSFER',
+    participants: ['cy', 'bill'],
+    location: 'cell',
+    objective: { eventType: 'transfer_request', summary: 'Cy requested key transfer' },
+    objects: [{
+      id: 'object-key-message', type: 'message', ownerId: 'fisher', holderId: 'cy',
+      location: 'cell', status: 'DELIVERED',
+    }],
+    observations: [{ observerId: 'cy', access: 'CY_PARTIAL_HEARD', summary: "heard a voice claim 'keys not signed back in'" }],
+    informationClaims: [{ speakerId: 'bailey', content: 'keys not signed back in', truthStatus: 'UNKNOWN' }],
+    resolved: false,
+    thread: { action: 'OPEN', id: null, type: 'transfer_request_thread', summary: 'New transfer request thread opened.', nextEligibleAt: null },
+    publicTimeline: { eligible: true, text: "[heard a voice claim 'keys not signed back in']" },
+  }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill', 'bailey', 'fisher'] });
+  assert.ok(result.errors.includes('SPEAKER_NOT_PARTICIPANT'));
+  assert.ok(result.errors.includes('OBJECT_OWNER_NOT_PARTICIPANT'));
+});
+
+test('real accepted Bill well-being candidate now fails awareness and recent near-duplicate checks', () => {
+  const result = validateAwgCandidate(candidate({
+    eventFamily: 'WING_ACTIVITY',
+    participants: ['cy', 'bill'],
+    location: 'cell',
+    objective: { eventType: 'conversation', summary: "Bill asks about Cy's well-being and waits for an answer." },
+    objects: [],
+    observations: [{ observerId: 'world', access: 'WORLD_ONLY', summary: 'Cy remained silent; Bill waited, then left without an answer.' }],
+    resolved: true,
+    thread: { action: 'NONE', id: null, type: 'conversation_thread', summary: '', nextEligibleAt: null },
+    publicTimeline: { eligible: false, text: null },
+  }), null, {
+    nowMs: NOW,
+    currentLocation: 'cell',
+    plausibleCastIds: ['bill'],
+    recentEvents: [{
+      id: 'env-template-check-in', timestamp: new Date(NOW - 44 * 60 * 1000).toISOString(),
+      summary: 'Bill asked Cy if he was all right and waited for an answer', participants: ['bill'],
+    }],
+  });
+  assert.ok(result.errors.includes('CY_PARTICIPANT_WITHOUT_OBSERVATION'));
+  assert.ok(result.errors.includes('RECENT_NEAR_DUPLICATE'));
+});
+
+test('the production cycle supplies recent template events to semantic deduplication', async () => {
+  const result = await runAmbientWorldCycle({
+    state: null,
+    nowMs: NOW,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    currentLocation: 'cell',
+    plausibleCastIds: ['bill'],
+    recentEvents: [{
+      id: 'env-template-check-in', timestamp: new Date(NOW - 44 * 60 * 1000).toISOString(),
+      summary: 'Bill asked Cy if he was all right and waited for an answer', participants: ['bill'],
+    }],
+    generate: async () => JSON.stringify(proposal({
+      eventFamily: 'WING_ACTIVITY',
+      participants: ['cy', 'bill'],
+      objective: { eventType: 'conversation', summary: "Bill asks about Cy's well-being and waits for an answer." },
+      objects: [],
+      observations: [{ observerId: 'world', access: 'WORLD_ONLY', summary: 'Cy remained silent; Bill waited, then left.' }],
+      resolved: true,
+      thread: { action: 'NONE', id: null, type: null, summary: null },
+    })),
+  });
+  assert.equal(result.status, 'REJECTED');
+  assert.ok(result.validation.errors.includes('RECENT_NEAR_DUPLICATE'));
+  assert.deepEqual(result.run.createdWorldEventIds, []);
+});
+
+test('real accepted Fisher conversation candidate now fails thread and delivered-message coherence', () => {
+  const result = validateAwgCandidate(candidate({
+    eventFamily: 'SOCIAL_REQUEST',
+    participants: ['cy', 'fisher'],
+    location: 'cell',
+    objective: { eventType: 'social_request', summary: 'Fisher asks to discuss past conversations' },
+    objects: [{
+      id: 'object-empty-message', type: 'message', ownerId: 'fisher', holderId: 'cy',
+      location: 'cell', status: 'DELIVERED',
+    }],
+    observations: [{ observerId: 'world', access: 'WORLD_ONLY', summary: 'Fisher approaches and starts a conversation' }],
+    informationClaims: [],
+    resolved: true,
+    thread: { action: 'OPEN', id: null, type: 'transfer_request_thread', summary: 'Request to discuss past conversations', nextEligibleAt: null },
+    publicTimeline: { eligible: false, text: null },
+  }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'] });
+  assert.ok(result.errors.includes('RESOLVED_EVENT_OPENS_THREAD'));
+  assert.ok(result.errors.includes('THREAD_TYPE_CONTRADICTION'));
+  assert.ok(result.errors.includes('DELIVERED_MESSAGE_CONTENT_REQUIRED'));
+  assert.ok(result.errors.includes('CY_PARTICIPANT_WITHOUT_OBSERVATION'));
+});
+
+test('real accepted tea-bag candidate now fails authoritative-location coherence', () => {
+  const result = validateAwgCandidate(candidate({
+    eventFamily: 'MESSAGE_PASSING',
+    participants: ['cy', 'fisher'],
+    location: 'cell',
+    objective: { eventType: 'message_passing', summary: 'Fisher passed Cy a tea bag in the queue' },
+    objects: [],
+    observations: [{ observerId: 'world', access: 'WORLD_ONLY', summary: 'A message is being passed between cy and fisher at association.' }],
+    resolved: true,
+    thread: { action: 'NONE', id: null, type: null, summary: null, nextEligibleAt: null },
+    publicTimeline: { eligible: false, text: null },
+  }), null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'] });
+  assert.ok(result.errors.includes('OBJECTIVE_LOCATION_CONTRADICTION'));
+  assert.ok(result.errors.includes('CY_PARTICIPANT_WITHOUT_OBSERVATION'));
+});
+
+test('legitimate observed and world-only episodes retain distinct knowledge paths', () => {
+  const observed = validateAwgCandidate(candidate(), null, {
+    nowMs: NOW, currentLocation: 'landing', plausibleCastIds: ['reg'],
+  });
+  assert.equal(observed.valid, true);
+
+  const worldOnlyValue = candidate({
+    eventFamily: 'OFFICER_ACTIVITY',
+    participants: ['proctor'],
+    location: 'cell',
+    objective: { eventType: 'cell_search_initiated', summary: 'Mr Proctor began a search in the empty cell.' },
+    objects: [],
+    observations: [{ observerId: 'proctor', access: 'CAST_ONLY', summary: 'Mr Proctor entered the empty cell.' }],
+    informationClaims: [],
+    resolved: true,
+    thread: { action: 'NONE', id: null, type: null, summary: null, nextEligibleAt: null },
+    publicTimeline: { eligible: false, text: null },
+  });
+  const worldOnly = validateAwgCandidate(worldOnlyValue, null, {
+    nowMs: NOW, currentLocation: 'exercise_yard', plausibleCastIds: ['reg'],
+  });
+  assert.equal(worldOnly.valid, true);
+  const applied = applyAwgCandidate(null, worldOnly, {
+    makeId: (prefix) => `${prefix}-world-only`, acceptedAt: worldOnlyValue.occurredAt,
+  });
+  applied.validationCandidate = worldOnly.candidate;
+  const environment = awgEventToEnvironment(applied);
+  assert.equal(environment.summary, null);
+  assert.deepEqual(environment.observation, { modality: 'none', certainty: 'unknown', observed_facts: {} });
+  assert.equal(environment.publicTimeline, null);
 });
 
 test('M: AWG failure returns safely and leaves authoritative state unchanged', async () => {
