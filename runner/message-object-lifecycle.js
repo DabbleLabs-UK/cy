@@ -61,6 +61,8 @@ export function normaliseMessageState(value) {
         ? value.contentRef.claimIndex : null,
     }
     : null;
+  const reconciliation = clean(value.reconciliation, 80).toUpperCase() || null;
+  const mergedIntoObjectId = id(value.mergedIntoObjectId) || null;
   return {
     schema: MESSAGE_OBJECT_SCHEMA,
     version: MESSAGE_OBJECT_VERSION,
@@ -77,6 +79,8 @@ export function normaliseMessageState(value) {
     retiredAt: clean(value.retiredAt, 40) || null,
     sourceEventIds: [...new Set((Array.isArray(value.sourceEventIds) ? value.sourceEventIds : [])
       .map(id).filter(Boolean))],
+    ...(reconciliation ? { reconciliation } : {}),
+    ...(mergedIntoObjectId ? { mergedIntoObjectId } : {}),
   };
 }
 
@@ -84,7 +88,12 @@ export function isCurrentMessageObject(object) {
   if (!object || String(object.type || '').toLowerCase() !== 'message') return true;
   const message = normaliseMessageState(object.message);
   // Legacy messages remain visible until an explicit, reviewed reconciliation.
-  if (!message) return true;
+  // An explicit terminal lifecycle marker is already a reviewed non-current
+  // decision even if an older record lacks newer schema fields.
+  if (!message) {
+    const lifecycleState = clean(object.message && object.message.lifecycleState).toUpperCase();
+    return !['RESOLVED', 'RETIRED'].includes(lifecycleState);
+  }
   return !['RESOLVED', 'RETIRED'].includes(message.lifecycleState);
 }
 

@@ -121,6 +121,21 @@ test('cell search sees current delivered messages but ignores resolved message h
   };
   const resolved = startCellSearchEpisode(cell(), { nowMs: AT, objects: [resolvedMessage] });
   assert.equal(resolved.state.searchEpisode.object_id, null);
+
+  const retiredMessage = {
+    ...currentMessage,
+    id: 'object-message-retired',
+    status: 'RETIRED',
+    message: { lifecycleState: 'RETIRED' },
+  };
+  const retired = startCellSearchEpisode(cell(), { nowMs: AT, objects: [retiredMessage] });
+  assert.equal(retired.state.searchEpisode.object_id, null);
+
+  const mixed = startCellSearchEpisode(cell(), {
+    nowMs: AT,
+    objects: [retiredMessage, currentMessage],
+  });
+  assert.equal(mixed.state.searchEpisode.object_id, currentMessage.id);
 });
 
 test('offscreen search with no recorded object does not fabricate property or Cy knowledge', () => {

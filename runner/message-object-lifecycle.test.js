@@ -12,6 +12,7 @@ import {
 import { FISHER_MESSAGE_OBJECT_FIXTURES } from './fixtures/fisher-message-objects-20260925.js';
 import {
   isCurrentMessageObject,
+  normaliseMessageState,
   planLegacyMessageReconciliation,
 } from './message-object-lifecycle.js';
 
@@ -246,4 +247,18 @@ test('the five production Fisher artifacts receive deterministic non-mutating re
   assert.equal(plans[4].proposedMessage.content,
     FISHER_MESSAGE_OBJECT_FIXTURES[2].candidate.informationClaims[0].content);
   assert.equal(JSON.stringify(FISHER_MESSAGE_OBJECT_FIXTURES), before, 'dry run must not mutate production fixtures');
+});
+
+test('reconciliation and merge provenance survive message normalization', () => {
+  const normalized = normaliseMessageState({
+    schema: 'cy.message-object-state', version: 1,
+    senderId: 'fisher', recipientId: 'cy', content: null,
+    contentTruthStatus: 'UNKNOWN', contentRef: null,
+    receiptObservedByCy: true, readState: 'UNREAD', lifecycleState: 'RETIRED',
+    threadId: 'thread-message', resolvedAt: null,
+    retiredAt: '2026-09-25T20:48:36.799Z', sourceEventIds: ['world-source'],
+    reconciliation: 'MERGED_INTO_EXISTING', mergedIntoObjectId: 'object-survivor',
+  });
+  assert.equal(normalized.reconciliation, 'MERGED_INTO_EXISTING');
+  assert.equal(normalized.mergedIntoObjectId, 'object-survivor');
 });

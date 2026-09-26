@@ -21,6 +21,16 @@ import { basename, dirname, join } from 'node:path';
 
 export const SECTIONED_STORAGE_FORMAT_VERSION = 2;
 export const SECTIONED_STORE_DIRECTORY = 'vitals-v2';
+export const STATE_CHECKPOINT_CONFLICT_CODE = 'CY_STATE_CHECKPOINT_CONFLICT';
+
+export class StateCheckpointConflictError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'StateCheckpointConflictError';
+    this.code = STATE_CHECKPOINT_CONFLICT_CODE;
+    this.details = details;
+  }
+}
 
 const INLINE_LIMIT_BYTES = 2 * 1024;
 const ARRAY_MAX_CHUNK_BYTES = 32 * 1024;
@@ -426,10 +436,17 @@ export class SectionedStateStore {
     this.currentManifestText = null;
     this.currentManifest = null;
     this.loadedFrom = null;
+    this.expectedCurrentManifest = { exists: false, text: null };
   }
 
   async load({ validateState, validateBookkeeping }) {
-    const evidence = await fileExists(this.paths.currentManifest)
+    const currentExists = await fileExists(this.paths.currentManifest);
+    let currentText = null;
+    if (currentExists) {
+      try { currentText = await readFile(this.paths.currentManifest, 'utf8'); } catch { /* validated below */ }
+    }
+    this.expectedCurrentManifest = { exists: currentExists, text: currentText };
+    const evidence = currentExists
       || await fileExists(this.paths.previousManifest)
       || await fileExists(this.paths.sections);
     const errors = [];
@@ -453,6 +470,26 @@ export class SectionedStateStore {
       }
     }
     return { state: null, bookkeeping: null, manifest: null, manifestText: null, source: null, evidence, errors };
+  }
+
+  async assertCurrentManifestUnchanged() {
+    const exists = await fileExists(this.paths.currentManifest);
+    let text = null;
+    if (exists) {
+      try { text = await readFile(this.paths.currentManifest, 'utf8'); } catch { /* mismatch below */ }
+    }
+    const expected = this.expectedCurrentManifest;
+    if (exists !== expected.exists || text !== expected.text) {
+      let actualGeneration = null;
+      try { actualGeneration = text ? JSON.parse(text).generation || null : null; } catch { /* invalid is still a conflict */ }
+      throw new StateCheckpointConflictError(
+        'state checkpoint changed after this process loaded it; refusing to overwrite newer state',
+        {
+          expectedGeneration: this.currentManifest && this.currentManifest.generation || null,
+          actualGeneration,
+        },
+      );
+    }
   }
 
   async writeBlob(blob, index, total) {
@@ -510,6 +547,11 @@ export class SectionedStateStore {
       }
     }
 
+    // A deployment/reconciliation process may have committed a newer coherent
+    // generation while this process still held an older in-memory state. Never
+    // let that stale writer silently resurrect retired world objects or threads.
+    await this.assertCurrentManifestUnchanged();
+
     await mkdir(this.paths.root, { recursive: true });
     const priorManifestText = this.currentManifestText;
     if (priorManifestText) {
@@ -540,6 +582,7 @@ export class SectionedStateStore {
     this.currentManifestText = built.manifestText;
     this.currentManifest = built.manifest;
     this.loadedFrom = 'current';
+    this.expectedCurrentManifest = { exists: true, text: built.manifestText };
     if (!priorManifestText) {
       bytesWritten += await atomicWriteJson(
         this.paths.previousManifest,

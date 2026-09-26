@@ -436,4 +436,36 @@ await withTemp('cy-vitals-v-', async (dir, path) => {
   await assertNoTempFiles(dir);
 });
 
+// W. A stale process cannot overwrite a newer externally committed checkpoint.
+await withTemp('cy-vitals-w-', async (_dir, path) => {
+  const runner = await loadVitals(path, { persistence: { maxAttempts: 1 } });
+  runner.day = 50;
+  await saveVitals(path, runner);
+
+  const reconciler = await loadVitals(path, { persistence: { maxAttempts: 1 } });
+  reconciler.worldSimulation = {
+    objects: [{
+      id: 'message-retired', type: 'message', status: 'RETIRED',
+      message: { lifecycleState: 'RETIRED' },
+    }],
+    threads: [{ id: 'thread-resolved', state: 'RESOLVED' }],
+  };
+  await saveVitals(path, reconciler);
+
+  runner.day = 51;
+  runner.worldSimulation = {
+    objects: [{ id: 'message-retired', type: 'message', status: 'DELIVERED' }],
+    threads: [{ id: 'thread-resolved', state: 'OPEN' }],
+  };
+  await assert.rejects(
+    () => saveVitals(path, runner),
+    (error) => error && error.code === 'CY_STATE_CHECKPOINT_CONFLICT',
+  );
+
+  const restarted = await loadVitals(path);
+  assert.equal(restarted.day, 50);
+  assert.equal(restarted.worldSimulation.objects[0].status, 'RETIRED');
+  assert.equal(restarted.worldSimulation.threads[0].state, 'RESOLVED');
+});
+
 console.log('vitals-persistence.test.js: all checks passed');

@@ -13,6 +13,7 @@ import { readFile, mkdir, copyFile, access, open, rename, unlink, readdir, stat 
 import { basename, dirname, join } from 'node:path';
 import {
   SECTIONED_STORAGE_FORMAT_VERSION,
+  STATE_CHECKPOINT_CONFLICT_CODE,
   SectionedStateStore,
 } from './sectioned-state-store.js';
 
@@ -733,6 +734,7 @@ class VitalsPersistence {
         lastError = error;
         this.status.lastValidationResult = 'save-failed';
         this.status.lastError = error && error.message ? error.message : String(error);
+        if (error && error.code === STATE_CHECKPOINT_CONFLICT_CODE) break;
         if (attempt < this.maxAttempts) {
           const delay = this.retryDelaysMs[Math.min(attempt - 1, this.retryDelaysMs.length - 1)] || 0;
           if (delay > 0) await sleep(delay);

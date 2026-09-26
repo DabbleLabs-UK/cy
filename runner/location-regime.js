@@ -4,6 +4,7 @@
 // facts only: no affect, appraisal, prose or psychological action selection.
 
 import { EXERCISE_REGIME } from './environment.js';
+import { isCurrentMessageObject } from './message-object-lifecycle.js';
 
 export const LOCATION_REGIME_SCHEMA = 'cy.location-regime';
 export const LOCATION_REGIME_VERSION = 1;
@@ -357,7 +358,7 @@ export function startCellSearchEpisode(stateValue, {
   const existing = (Array.isArray(objects) ? objects : []).find((object) =>
     object && (object.status === 'ACTIVE'
       || (object.type === 'message' && object.status === 'DELIVERED'
-        && !['RESOLVED', 'RETIRED'].includes(object.message && object.message.lifecycleState)))
+        && isCurrentMessageObject(object)))
       && object.location === 'cell'
       && ['cy', 'cy:7734'].includes(object.holderId || object.ownerId));
   state.searchEpisode = {
