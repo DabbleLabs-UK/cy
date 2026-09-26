@@ -2636,7 +2636,10 @@ async function main() {
         hostLease = await provider.acquireSharedLease({
           purpose,
           signal: ac.signal,
-          onLost: () => abortWithReason(ac, 'LEASE_LOSS'),
+          onLost: (reason) => abortWithReason(ac, reason || 'LEASE_LOSS'),
+          // Only AWG's reserved-idle slot yields to interactive Feddit traffic
+          // mid-request. CY's own foreground/background work is unaffected.
+          preemptible: awgInReservedIdle,
         });
       }
       const requestOpts = typeof provider.applySharedProfile === 'function'

@@ -30,28 +30,10 @@ const FX = 0.79;
   ok('local model routes split postcard/drawing work and safely fall back to the primary model');
 }
 
-// ---- 0b. structured output is passed only when a caller asks for it ------------
-{
-  const originalFetch = globalThis.fetch;
-  const requests = [];
-  globalThis.fetch = async (_url, options) => {
-    requests.push(JSON.parse(options.body));
-    return { ok: true, async json() { return { response: '{}' }; } };
-  };
-  try {
-    const provider = makeProviders({
-      ollamaUrl: 'http://ollama.invalid', model: 'test-model', ollamaArbiterUrl: null,
-    }).ollama;
-    const schema = { type: 'object', additionalProperties: false, properties: {} };
-    await provider.rawGenerate({ system: 's', prompt: 'p', opts: {}, purpose: 'ambient_world_generation', format: schema });
-    await provider.rawGenerate({ system: 's', prompt: 'p', opts: {}, purpose: 'drawing' });
-    assert.deepEqual(requests[0].format, schema);
-    assert.equal(Object.hasOwn(requests[1], 'format'), false);
-    ok('Ollama receives JSON schema only for explicitly structured calls');
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-}
+// Ollama's rawGenerate posts via node:http, not the globally-mockable fetch (see
+// ollama-raw-transport.test.js for why), so "structured output is passed only
+// when a caller asks for it" is verified there instead, against a real loopback
+// server - it can no longer be tested here without touching the network layer.
 
 // ---- 1. computeCost: reported cache split, per-million pricing, GBP via FX ----
 {

@@ -27,7 +27,7 @@ import {
 
 test('scheduling budget covers realistic slow local inference without changing cadence', () => {
   assert.equal(AWG_CADENCE_MS, 45 * 60 * 1000);
-  assert.equal(AWG_TIMEOUT_MS, 5 * 60 * 1000);
+  assert.equal(AWG_TIMEOUT_MS, 7 * 60 * 1000);
   assert.ok(AWG_TIMEOUT_MS > 65_000,
     'the former exercise-poll budget cannot abort AWG before realistic DELL first-token latency');
 });
@@ -750,6 +750,34 @@ test('M1: cancelled AWG is not parsed or reported as an empty candidate', async 
     nowMs: NOW + 1000,
     idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
   }).reason, 'CADENCE', 'a cancelled attempt retains ordinary AWG backoff');
+});
+
+test('AWG preempted for interactive Feddit traffic is cancelled cleanly, publishing no partial state', async () => {
+  const existingObjects = [{ id: 'object-known', type: 'note', ownerId: 'reg', holderId: null, location: 'cell', status: 'ACTIVE' }];
+  const existingThreads = [{ id: 'thread-known', type: 'MESSAGE_PASSING', state: 'OPEN', participants: ['reg'], sourceEventIds: ['world-known'], nextEligibleAt: null }];
+  const result = await runAmbientWorldCycle({
+    state: { objects: existingObjects, threads: existingThreads },
+    nowMs: NOW,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    generate: async () => { throw new InferenceCancellationError('LEASE_PREEMPTED'); },
+  });
+  assert.equal(result.status, 'CANCELLED');
+  assert.equal(result.run.candidateType, 'CANCELLED');
+  assert.equal(result.run.validationStatus, 'NOT_RUN');
+  assert.equal(result.run.rejectionReason, 'ABORTED/LEASE_PREEMPTED',
+    'the cancellation reason is preserved and distinguishable from a plain timeout or other abort cause');
+  assert.equal(result.run.createdWorldEventIds.length, 0, 'a preempted attempt creates no world events');
+  assert.equal(result.run.threadChanges.length, 0, 'a preempted attempt makes no thread changes');
+  assert.deepEqual(result.state.objects, existingObjects, 'pre-existing world objects are untouched');
+  assert.deepEqual(
+    result.state.threads.map((t) => ({ id: t.id, state: t.state })),
+    existingThreads.map((t) => ({ id: t.id, state: t.state })),
+    'pre-existing thread state is untouched',
+  );
+  assert.equal(shouldRunAwg(result.state, {
+    nowMs: NOW + 1000,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+  }).reason, 'CADENCE', 'a preempted attempt uses ordinary AWG backoff, not a special retry path');
 });
 
 test('M2: a normal empty AWG response remains an EMPTY_CANDIDATE failure', async () => {

@@ -28,9 +28,60 @@ import { applySharedOllamaProfile, createSharedOllamaClient } from './shared-oll
 
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { request as httpRequest } from 'node:http';
 
 export const OLLAMA = 'ollama';
 export const DEEPSEEK = 'deepseek';
+
+// Node's global fetch (undici) enforces its own ~300s headers-timeout entirely
+// independent of any AbortSignal/timeoutMs the caller supplies - it fires even
+// when the caller's own timeout is set higher, well before the caller's logic
+// ever gets a chance to matter. AWG's raw, non-streamed generate call can
+// legitimately need longer than that on slow local hardware (see
+// AWG_TIMEOUT_MS), so it posts via plain node:http instead of fetch here,
+// giving the caller's own AbortSignal-based timeout sole authority with no
+// hidden ceiling. Preserves the same {ok, status, text} contract as fetch.
+function postJsonNoImplicitTimeout(urlString, body, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+    const target = new URL(urlString);
+    const payload = Buffer.from(JSON.stringify(body));
+    const req = httpRequest({
+      hostname: target.hostname,
+      port: target.port || (target.protocol === 'https:' ? 443 : 80),
+      path: `${target.pathname}${target.search}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          text: Buffer.concat(chunks).toString('utf8'),
+        });
+      });
+      res.on('error', reject);
+    });
+    req.on('error', (error) => {
+      if (signal && signal.aborted) return; // the abort listener below already rejected
+      reject(error);
+    });
+    if (signal) {
+      const onAbort = () => {
+        reject(new DOMException('The operation was aborted.', 'AbortError'));
+        req.destroy();
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      req.once('close', () => signal.removeEventListener('abort', onAbort));
+    }
+    req.end(payload);
+  });
+}
 
 const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : Number(x) || 0);
 
@@ -279,8 +330,8 @@ function makeOllama(config) {
     available() {
       return true;
     },
-    async acquireSharedLease({ purpose, signal, onLost }) {
-      return sharedClient ? sharedClient.acquire({ purpose, signal, onLost }) : null;
+    async acquireSharedLease({ purpose, signal, onLost, preemptible }) {
+      return sharedClient ? sharedClient.acquire({ purpose, signal, onLost, preemptible }) : null;
     },
     applySharedProfile(opts, lease) {
       return applySharedOllamaProfile(opts, lease);
@@ -298,17 +349,12 @@ function makeOllama(config) {
     },
     async rawGenerate({ system, prompt, opts, signal, purpose, format = null }) {
       const model = localModelFor(config, purpose);
-      const res = await fetch(`${url()}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model, system, prompt, options: opts, keep_alive: -1, stream: false,
-          ...(format ? { format } : {}),
-        }),
-        signal,
-      });
+      const res = await postJsonNoImplicitTimeout(`${url()}/api/generate`, {
+        model, system, prompt, options: opts, keep_alive: -1, stream: false,
+        ...(format ? { format } : {}),
+      }, signal);
       if (!res.ok) return { ok: false, status: res.status, text: '' };
-      const j = await res.json();
+      const j = JSON.parse(res.text);
       return { ok: true, status: 200, text: j.response || '', stats: j, model };
     },
   };

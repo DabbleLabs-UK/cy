@@ -17,7 +17,7 @@ export function createSharedOllamaClient(baseUrl, { fetchImpl = fetch } = {}) {
   if (!root) return null;
 
   return {
-    async acquire({ purpose = 'unknown', signal = null, onLost = () => {} } = {}) {
+    async acquire({ purpose = 'unknown', signal = null, onLost = () => {}, preemptible = false } = {}) {
       if (signal && signal.aborted) throw abortError();
       const response = await fetchImpl(`${root}/v1/acquire`, {
         method: 'POST',
@@ -43,9 +43,18 @@ export function createSharedOllamaClient(baseUrl, { fetchImpl = fetch } = {}) {
           });
           if (!result.ok) throw new Error(`heartbeat HTTP ${result.status}`);
           heartbeatFailures = 0;
+          // A preemptible lease (CY's low-priority AWG background inference) can be
+          // told by the arbiter that an interactive request is now queued behind
+          // it. This never applies to interactive/foreground leases, which do not
+          // opt in. Reusing the existing LEASE_LOSS abort path releases the model
+          // promptly without any new cancellation machinery.
+          if (preemptible && !released) {
+            const body = await result.json().catch(() => null);
+            if (body && body.interactiveWaiting) onLost('LEASE_PREEMPTED');
+          }
         } catch {
           heartbeatFailures += 1;
-          if (heartbeatFailures >= 2 && !released) onLost();
+          if (heartbeatFailures >= 2 && !released) onLost('LEASE_LOSS');
         } finally {
           heartbeatBusy = false;
         }
