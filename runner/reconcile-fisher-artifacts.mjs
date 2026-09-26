@@ -223,10 +223,29 @@ async function main(argv) {
   const args = argv.slice(2);
   const path = args.find((a) => !a.startsWith('--'));
   const apply = args.includes('--apply');
+  const verify = args.includes('--verify');
   const backup = !args.includes('--no-backup');
   if (!path) {
-    console.error('usage: node reconcile-fisher-artifacts.mjs <vitals.json> [--apply] [--no-backup]');
+    console.error('usage: node reconcile-fisher-artifacts.mjs <vitals.json> [--apply | --verify] [--no-backup]');
     process.exit(2);
+  }
+
+  // --verify asserts the CURRENT on-disk state already holds the approved
+  // reconciliation, without applying anything. Used to confirm a checkpoint
+  // survived save/reload/restart after deployment.
+  if (verify) {
+    const vitals = await loadVitals(path);
+    const world = reconcileWorldSimulationState(vitals.worldSimulation || {});
+    console.log('# Fisher artifact reconciliation (VERIFY)');
+    console.log(`checkpoint: ${path}`);
+    const current = FISHER_OBJECT_IDS
+      .map((id) => (world.objects || []).find((o) => o.id === id))
+      .filter((o) => o && isCurrentMessageObject(o))
+      .map((o) => o.id);
+    console.log(`  current message objects: [${current.join(', ')}]`);
+    assertApprovedFisherState(world);
+    console.log('  live-state assertion: PASS (checkpoint already holds the approved reconciliation)');
+    return;
   }
 
   const vitals = await loadVitals(path);
