@@ -9,6 +9,13 @@
 // It touches ONLY the five known objects and their four threads (matched by id).
 // Every other object, thread and field in the ~50MB world is preserved verbatim.
 //
+// CAUTION: this reapplies the reviewed reconciliation as of 2026-09-25, which
+// assumes the two current messages are DELIVERED in Cy's cell. It sets their
+// status to DELIVERED. If a later *legitimate* world event has since moved one
+// (e.g. a guard confiscation -> status CONFISCATED, location officer_desk), do
+// NOT run --apply: it would rewind that event. Verify current world status first
+// (--verify reports lifecycle currency, not world status/location).
+//
 // Usage:
 //   node reconcile-fisher-artifacts.mjs <path/to/vitals.json>            # dry-run (default)
 //   node reconcile-fisher-artifacts.mjs <path/to/vitals.json> --apply    # write (backs up first)
@@ -158,6 +165,11 @@ export function applyApprovedFisherReconciliation(world) {
       thread.type = threadEventFamily.get(thread.id) || thread.type;
       thread.state = 'OPEN';
       thread.summary = 'Fisher delivered a message to Cy; the message remains unread.';
+      // An OPEN thread must not carry a resolution. Leaving a stale resolution
+      // (from a pre-reconciliation event) makes the thread internally
+      // inconsistent and lets the OPEN state get undone on rehydration.
+      thread.resolution = null;
+      thread.nextEligibleAt = thread.nextEligibleAt || null;
     } else {
       thread.state = 'RESOLVED';
       thread.nextEligibleAt = null;
@@ -212,6 +224,14 @@ export function assertApprovedFisherState(world) {
   const expectedThreadStates = ['RESOLVED', 'RESOLVED', 'OPEN', 'OPEN'];
   if (JSON.stringify(threadStates) !== JSON.stringify(expectedThreadStates)) {
     throw new Error(`thread states = [${threadStates.join(', ')}], expected [${expectedThreadStates.join(', ')}]`);
+  }
+  // An OPEN thread carrying a resolution is internally inconsistent and can be
+  // undone on rehydration; the two current-message threads must have none.
+  for (const openId of [FISHER_THREAD_IDS[2], FISHER_THREAD_IDS[3]]) {
+    const thread = threadById.get(openId);
+    if (thread && thread.resolution) {
+      throw new Error(`OPEN thread ${openId} still carries a resolution: ${JSON.stringify(thread.resolution)}`);
+    }
   }
 }
 

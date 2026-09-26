@@ -63,6 +63,20 @@ test('reconcile leaves unrelated objects and threads untouched', () => {
   assert.equal(world.threads.find((t) => t.id === 'unrelated-thread').state, 'OPEN');
 });
 
+test('reconcile clears a stale resolution left on an OPEN (current-message) thread', () => {
+  // Reproduces the production drift: the current-message thread was set OPEN but
+  // kept a resolution from a pre-reconciliation event, so it settled on RESOLVED.
+  const base = resurrectedWorld();
+  const staleThread = base.threads.find((t) => t.id === FISHER_THREAD_IDS[2]);
+  staleThread.state = 'RESOLVED';
+  staleThread.resolution = { at: '2026-09-26T14:18:58.639Z', eventId: 'world-de5387a4', summary: 'Cy reads a message.' };
+  const world = reconcileInPlace(base);
+  assertApprovedFisherState(world);
+  const fixed = world.threads.find((t) => t.id === FISHER_THREAD_IDS[2]);
+  assert.equal(fixed.state, 'OPEN');
+  assert.equal(fixed.resolution, null);
+});
+
 test('reconciled state survives the real save/load/reconcile/restart path', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'cy-fisher-reconcile-'));
   const path = join(dir, 'vitals.json');
