@@ -1269,9 +1269,6 @@ async function main() {
   }
 
   function structuredEventForName(name, summary = null) {
-    if (name === 'injury') {
-      return captureEnvironmentEvent('minor_injury', { eventType: name, summary });
-    }
     if (name === 'cell_search') {
       return captureEnvironmentEvent('cell_search', { eventType: name, summary });
     }
@@ -4000,8 +3997,6 @@ async function main() {
     if (vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD) return;
     // wing noise: sparse texture, rate-limited (awake and asleep both routed here)
     maybeWingNoise(now, asleep, phase, mins);
-    // random ambient events, low probability per 5s tick
-    if (Math.random() < 0.0006) fireEvent('injury');
     if (!asleep && vitals.locationRegime.current.id === LOCATIONS.CELL
       && Math.random() < CELL_SEARCH_TICK_CHANCE) beginCellSearch(now);
     // a rare full lockdown - a real deviation, felt harder than a late unlock.
