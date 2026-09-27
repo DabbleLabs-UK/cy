@@ -117,10 +117,10 @@ function mealRecord(id, meal, rnd, mealId = null) {
     opportunityId: 'opportunity:unchanged-check', timestamp: '2026-09-27 10:00:00.000',
   });
   assert.ok(prepared, 'instrumental opportunities still open normally');
-  assert.equal(prepared.opening.world.action_opportunity.id, 'opportunity:unchanged-check');
+  assert.equal(prepared.pending.opportunityId, 'opportunity:unchanged-check');
   assert.equal(prepared.opening.world.instrumental.action_selection_provenance,
     'ENGINEERING_ROUND_ROBIN_NOT_PSYCHOLOGICAL');
-  ok('real instrumental opportunities (officer/inmate round-robin paths) are structurally unchanged (5)');
+  ok('real instrumental opportunities (officer/inmate round-robin paths) are structurally unchanged by the meal fix (5)');
 }
 
 // ---- 6: feeding/satiety facts remain fully correct for every meal outcome ----

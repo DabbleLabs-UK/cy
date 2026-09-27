@@ -5,6 +5,18 @@
 // relationship scalar, emotional score, success probability or control weight.
 // The current action selector is an engineering round-robin so both genuinely
 // available actions can occur; it is not a psychological model of choice.
+//
+// Because there is no genuine Cy/model chooser, opened and resolved events
+// deliberately do NOT assert world.action_opportunity (the schema
+// action-outcome-contingency.js reads to learn action-vs-noAction
+// controllability evidence). Asserting chosen_action/EXECUTED here would
+// misrepresent an engineering round-robin as an enacted choice and let the
+// controllability substrate learn a fabricated action->outcome contingency
+// from Cy's supposed behaviour. The branch resolution and its world
+// consequences are represented instead through world.instrumental, whose
+// action_selection_provenance field already honestly discloses
+// INSTRUMENTAL_ACTION_SELECTION. Only a future genuine agent/model chooser
+// should ever populate world.action_opportunity for these incidents.
 
 export const INSTRUMENTAL_AGENCY_SCHEMA = 'cy.instrumental-agency';
 export const INSTRUMENTAL_AGENCY_VERSION = 1;
@@ -412,21 +424,10 @@ export function openInstrumentalOpportunity(state, {
           remaining_possibilities: [...definition.actions],
           action_selection_provenance: INSTRUMENTAL_ACTION_SELECTION,
         },
-        action_opportunity: {
-          id: String(opportunityId),
-          context_id: contextId,
-          context_type: definition.contextType,
-          available_actions: [...definition.actions],
-          unavailable_actions: [],
-          chosen_action: chosenAction,
-          action_actually_executed: 'UNKNOWN',
-          execution_status: 'INTENDED',
-          onset_at: String(timestamp),
-          resolved_at: null,
-          resolution_status: 'UNRESOLVED',
-          linked_event_ids: [],
-          outcome_resolution: outcomes,
-        },
+        // No world.action_opportunity here: see the module header. This is an
+        // engineering round-robin branch, not an agent-selected action, so it
+        // must never feed action-outcome-contingency's controllability
+        // evidence.
       },
       observation: {
         summary: situationText,
@@ -500,21 +501,11 @@ export function resolveInstrumentalOpportunity(pending, { timestamp } = {}) {
         remaining_possibilities: [...branch.remainingPossibilities],
         action_selection_provenance: INSTRUMENTAL_ACTION_SELECTION,
       },
-      action_opportunity: {
-        id: pending.opportunityId,
-        context_id: pending.contextId,
-        context_type: definition.contextType,
-        available_actions: [...definition.actions],
-        unavailable_actions: [],
-        chosen_action: pending.chosenAction,
-        action_actually_executed: pending.chosenAction,
-        execution_status: 'EXECUTED',
-        onset_at: pending.onsetAt,
-        resolved_at: String(timestamp),
-        resolution_status: 'RESOLVED',
-        linked_event_ids: [pending.openingEnvironmentEventId],
-        outcome_resolution: clone(branch.outcomes),
-      },
+      // No world.action_opportunity here either: see the module header. The
+      // branch resolution and its world consequences are fully represented
+      // above via world.instrumental (stage/consequence) and
+      // associative_learning/defensive_context (the actual outcome facts);
+      // none of that requires claiming Cy executed a chosen action.
     },
     observation: {
       summary: consequenceText,

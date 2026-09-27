@@ -65,24 +65,20 @@ for (const definition of definitions) {
       forcedAction: chosenAction,
     });
     assert.ok(prepared, `${definition.id}: A: opportunity genuinely opens`);
-    const openingOpportunity = prepared.opening.world.action_opportunity;
-    assert.deepEqual(openingOpportunity.available_actions, definition.actions,
-      `${definition.id}: B: only definition actions are available`);
-    assert.deepEqual(openingOpportunity.unavailable_actions, []);
-    assert.equal(openingOpportunity.chosen_action, chosenAction);
-    assert.equal(openingOpportunity.action_actually_executed, 'UNKNOWN');
-    assert.equal(openingOpportunity.execution_status, 'INTENDED');
-    assert.equal(openingOpportunity.resolution_status, 'UNRESOLVED');
-    assert.ok(openingOpportunity.outcome_resolution.every((outcome) => outcome.status === 'unknown'),
-      `${definition.id}: F: opening outcomes remain unknown`);
+    assert.equal('action_opportunity' in prepared.opening.world, false,
+      `${definition.id}: an engineering round-robin branch must never assert world.action_opportunity`);
+    const contextId = prepared.opening.world.defensive_context.context_id;
     assert.equal(prepared.opening.world.instrumental.action_selection_provenance,
       INSTRUMENTAL_ACTION_SELECTION);
     assert.equal(prepared.opening.world.instrumental.situation_description, prepared.opening.text);
+    assert.deepEqual(prepared.opening.world.instrumental.remaining_possibilities, definition.actions,
+      `${definition.id}: the genuinely available branches remain visible via world.instrumental`);
 
     const openingRecord = recordFrom(prepared.opening, `${definition.id}-${chosenAction}-open`);
     const learner = createControllabilityState();
     const openingLearning = observeControllabilityRecord(learner, openingRecord);
-    assert.equal(openingLearning.updated, false, `${definition.id}: F: unresolved opening cannot update learner`);
+    assert.equal(openingLearning.updated, false, `${definition.id}: F: the opening event cannot update the learner`);
+    assert.equal(openingLearning.reason, 'no_action_opportunity');
     assert.equal(learner.history.length, 0);
 
     const queued = queueInstrumentalOpportunity(
@@ -97,13 +93,10 @@ for (const definition of definitions) {
     assert.equal(restarted.pending.length, 0);
 
     const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT });
-    const resolvedOpportunity = resolution.world.action_opportunity;
-    assert.equal(resolvedOpportunity.action_actually_executed, chosenAction,
-      `${definition.id}: C: executed action is persisted`);
-    assert.equal(resolvedOpportunity.execution_status, 'EXECUTED');
-    assert.equal(resolvedOpportunity.resolution_status, 'RESOLVED');
-    assert.ok(resolvedOpportunity.outcome_resolution.every((outcome) => outcome.status !== 'unknown'),
-      `${definition.id}: G: resolved event has explicit outcome classes`);
+    assert.equal('action_opportunity' in resolution.world, false,
+      `${definition.id}: C: a resolved engineering round-robin branch must never assert world.action_opportunity`);
+    assert.ok(resolution.world.associative_learning.outcomes.every((outcome) => outcome.status !== 'unknown'),
+      `${definition.id}: G: resolved event has explicit outcome classes (via associative_learning, not action_opportunity)`);
     assert.equal(resolution.world.instrumental.stage, 'WORLD_OUTCOME_RESOLVED');
     assert.ok(resolution.world.instrumental.consequence_description);
     assert.equal(resolution.world.instrumental.situation_description, prepared.opening.text,
@@ -112,13 +105,10 @@ for (const definition of definitions) {
 
     const resolvedRecord = recordFrom(resolution, `${definition.id}-${chosenAction}-resolved`);
     const learnerResult = observeControllabilityRecord(learner, resolvedRecord);
-    assert.equal(learnerResult.updated, true, `${definition.id}: H: Handoff-7 learner receives trial`);
-    assert.ok(learnerResult.updates.some((update) => update.condition === 'action'
-      && update.actionId === chosenAction));
-    for (const update of learnerResult.updates.filter((item) => item.condition === 'noAction')) {
-      assert.ok(definition.actions.includes(update.actionId),
-        `${definition.id}: D: no-action evidence comes only from an explicitly available alternative`);
-    }
+    assert.equal(learnerResult.updated, false,
+      `${definition.id}: H: an engineering round-robin resolution must never update controllability posteriors`);
+    assert.equal(learnerResult.reason, 'no_action_opportunity');
+    assert.deepEqual(learner.pairs, {}, `${definition.id}: no action/noAction pair is ever created`);
 
     const soma = reconcileSoma(null, { now: Date.parse(OPEN_AT) });
     const anxietyBefore = soma.experienced.metrics.anxiety.value;
@@ -127,16 +117,18 @@ for (const definition of definitions) {
     assert.ok(openedDefensive.transitions.length > 0,
       `${definition.id}: opening enters current defensive context`);
     assert.ok(openedDefensive.transitions.every((transition) => (
-      transition.contextId === openingOpportunity.context_id
+      transition.contextId === contextId
       && transition.temporalStatus === 'IMMINENT'
       && transition.resolutionStatus === 'UNRESOLVED'
     )), `${definition.id}: opening keeps its explicit unresolved defensive identity`);
+    assert.deepEqual(openedDefensive.transitions[0].learnedActionOutcomeContingency, [],
+      `${definition.id}: with no action_opportunity, no controllability evidence is attached to the defensive context`);
     observeSomaControllabilityRecord(soma, resolvedRecord);
     const resolvedDefensive = observeSomaCurrentDefensiveContextRecord(soma, resolvedRecord);
     assert.ok(resolvedDefensive.transitions.length > 0,
       `${definition.id}: consequence resolves current defensive context`);
     assert.ok(resolvedDefensive.transitions.every((transition) => (
-      transition.contextId === openingOpportunity.context_id
+      transition.contextId === contextId
       && transition.temporalStatus === 'RESOLVED'
     )), `${definition.id}: opening and consequence share one defensive context identity`);
     assert.equal(soma.experienced.metrics.anxiety.value, anxietyBefore,

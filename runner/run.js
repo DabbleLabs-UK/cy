@@ -1207,7 +1207,10 @@ async function main() {
       kind: 'event',
       payload: {
         name: 'instrumental_action',
-        text: `Cy chose ${prepared.pending.chosenAction.replace('action:', '').replaceAll('_', ' ')}`,
+        // Engineering round-robin branch, not an agent choice - see
+        // instrumental-agency.js. Neutral, factual wording only; must never
+        // imply Cy deliberately selected this branch.
+        text: `The situation resolved via ${prepared.pending.chosenAction.replace('action:', '').replaceAll('_', ' ')}`,
         action: prepared.pending.chosenAction,
         environment_event_id: structured.world_event.id,
       },
