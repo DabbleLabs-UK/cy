@@ -11,6 +11,14 @@ export const THREAT_LEARNING_MODEL_VERSION = 'probabilistic-threat-learning-v1';
 export const THREAT_LEARNING_PROVENANCE = 'config/model-specs/probabilistic-threat-learning.json';
 export const THREAT_LEARNING_PRIOR = Object.freeze({ alpha: 1, beta: 1 });
 
+// Bounded ledger of source environment event IDs already applied to this
+// learner. Replay/reload/direct re-ingestion of the exact same event must not
+// double-count its trials; a genuinely different event ID always counts
+// independently. Capped (not the full unbounded history) so this dedup
+// ledger itself cannot grow without limit; a restart or backfill only ever
+// needs to recheck events from recent real time, not Cy's entire lifetime.
+export const PROCESSED_EVENT_ID_LIMIT = 512;
+
 export const THREAT_OUTCOME_CLASSES = Object.freeze([
   'PHYSICAL_HARM',
   'COERCIVE_LOSS_OF_CONTROL',
@@ -61,7 +69,21 @@ export function createThreatLearning(now = Date.now()) {
     installedAtMs: now,
     pairs: {},
     history: [],
+    processedEventIds: [],
   };
+}
+
+function hasProcessedEvent(state, eventId) {
+  return Array.isArray(state.processedEventIds) && state.processedEventIds.includes(eventId);
+}
+
+function markEventProcessed(state, eventId) {
+  if (!Array.isArray(state.processedEventIds)) state.processedEventIds = [];
+  if (state.processedEventIds.includes(eventId)) return;
+  state.processedEventIds.push(eventId);
+  if (state.processedEventIds.length > PROCESSED_EVENT_ID_LIMIT) {
+    state.processedEventIds.splice(0, state.processedEventIds.length - PROCESSED_EVENT_ID_LIMIT);
+  }
 }
 
 function validPosterior(raw) {
@@ -92,6 +114,13 @@ export function reconcileThreatLearning(raw, { now = Date.now() } = {}) {
     }
   }
   out.history = Array.isArray(raw.history) ? clone(raw.history) : [];
+  // A checkpoint written before this field existed simply has no dedup
+  // ledger yet - defaulting to empty is safe: it never mistakes an old event
+  // for a duplicate, and every event observed from here on is deduplicated
+  // correctly going forward.
+  out.processedEventIds = Array.isArray(raw.processedEventIds)
+    ? [...new Set(raw.processedEventIds.filter((id) => typeof id === 'string' && id))].slice(-PROCESSED_EVENT_ID_LIMIT)
+    : [];
   return out;
 }
 
@@ -182,13 +211,28 @@ export function updateThreatLearning(state, trial) {
 }
 
 export function observeThreatLearningRecord(state, record) {
+  const eventId = record && record.world_event && record.world_event.id
+    ? String(record.world_event.id) : null;
+  if (state && eventId && hasProcessedEvent(state, eventId)) {
+    return {
+      modelId: THREAT_LEARNING_MODEL_ID,
+      modelVersion: THREAT_LEARNING_MODEL_VERSION,
+      provenance: THREAT_LEARNING_PROVENANCE,
+      sourceEnvironmentEventId: eventId,
+      trialsExamined: 0,
+      updatesApplied: 0,
+      results: [],
+      duplicateEvent: true,
+    };
+  }
   const trials = trialsFromEnvironmentRecord(record);
   const results = trials.map((trial) => updateThreatLearning(state, trial));
+  if (state && eventId && results.some((result) => result.updated)) markEventProcessed(state, eventId);
   return {
     modelId: THREAT_LEARNING_MODEL_ID,
     modelVersion: THREAT_LEARNING_MODEL_VERSION,
     provenance: THREAT_LEARNING_PROVENANCE,
-    sourceEnvironmentEventId: record && record.world_event ? record.world_event.id : null,
+    sourceEnvironmentEventId: eventId,
     trialsExamined: trials.length,
     updatesApplied: results.filter((result) => result.updated).length,
     results,

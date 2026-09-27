@@ -22,6 +22,15 @@ export const DEFENSIVE_CONTEXT_MODEL_VERSION = 'current-defensive-context-v1';
 export const DEFENSIVE_CONTEXT_PROVENANCE = 'config/model-specs/current-defensive-context.json';
 export const DEFENSIVE_CONTEXT_HISTORY_MAX = 64;
 
+// Bounded ledger of source environment event IDs already applied to this
+// substrate. Replay/reload/direct re-ingestion of the exact same event must
+// not append a duplicate transition or provenance entry; a different event ID
+// (e.g. a later resolution of the same context) always counts independently,
+// since this ledger is keyed on event identity, never on context identity.
+// Capped, not the full unbounded lifetime, so the dedup ledger itself cannot
+// grow without limit.
+export const PROCESSED_EVENT_ID_LIMIT = 512;
+
 export const DEFENSIVE_TEMPORAL_STATUSES = Object.freeze([
   'POTENTIAL',
   'IMMINENT',
@@ -184,7 +193,21 @@ export function createCurrentDefensiveContext(now = Date.now()) {
     installedAtMs: now,
     contexts: {},
     history: [],
+    processedEventIds: [],
   };
+}
+
+function hasProcessedEvent(state, eventId) {
+  return Array.isArray(state.processedEventIds) && state.processedEventIds.includes(eventId);
+}
+
+function markEventProcessed(state, eventId) {
+  if (!Array.isArray(state.processedEventIds)) state.processedEventIds = [];
+  if (state.processedEventIds.includes(eventId)) return;
+  state.processedEventIds.push(eventId);
+  if (state.processedEventIds.length > PROCESSED_EVENT_ID_LIMIT) {
+    state.processedEventIds.splice(0, state.processedEventIds.length - PROCESSED_EVENT_ID_LIMIT);
+  }
 }
 
 function validContext(raw) {
@@ -211,6 +234,13 @@ export function reconcileCurrentDefensiveContext(raw, { now = Date.now() } = {})
   }
   out.history = Array.isArray(raw.history)
     ? raw.history.filter(validContext).map(clone).slice(-DEFENSIVE_CONTEXT_HISTORY_MAX)
+    : [];
+  // A checkpoint written before this field existed simply has no dedup
+  // ledger yet - defaulting to empty is safe: it never mistakes an old event
+  // for a duplicate, and every event observed from here on is deduplicated
+  // correctly going forward.
+  out.processedEventIds = Array.isArray(raw.processedEventIds)
+    ? [...new Set(raw.processedEventIds.filter((id) => typeof id === 'string' && id))].slice(-PROCESSED_EVENT_ID_LIMIT)
     : [];
   return out;
 }
@@ -299,6 +329,18 @@ export function observeCurrentDefensiveContextRecord(state, threatLearning, lear
     learnedControllability = null;
   }
   if (!state || !record) return { updated: false, reason: 'invalid_record', transitions: [] };
+  const eventId = record.world_event && record.world_event.id ? String(record.world_event.id) : null;
+  if (eventId && hasProcessedEvent(state, eventId)) {
+    return {
+      modelId: DEFENSIVE_CONTEXT_MODEL_ID,
+      modelVersion: DEFENSIVE_CONTEXT_MODEL_VERSION,
+      provenance: DEFENSIVE_CONTEXT_PROVENANCE,
+      sourceEnvironmentEventId: eventId,
+      updated: false,
+      duplicateEvent: true,
+      transitions: [],
+    };
+  }
   const transitions = contextsFromEnvironmentRecord(state, threatLearning, learnedControllability, record);
   for (const transition of transitions) {
     if (transition.active) state.contexts[transition.contextKey] = clone(transition);
@@ -308,11 +350,12 @@ export function observeCurrentDefensiveContextRecord(state, threatLearning, lear
   if (state.history.length > DEFENSIVE_CONTEXT_HISTORY_MAX) {
     state.history = state.history.slice(-DEFENSIVE_CONTEXT_HISTORY_MAX);
   }
+  if (eventId && transitions.length > 0) markEventProcessed(state, eventId);
   return {
     modelId: DEFENSIVE_CONTEXT_MODEL_ID,
     modelVersion: DEFENSIVE_CONTEXT_MODEL_VERSION,
     provenance: DEFENSIVE_CONTEXT_PROVENANCE,
-    sourceEnvironmentEventId: record.world_event && record.world_event.id || null,
+    sourceEnvironmentEventId: eventId,
     updated: transitions.length > 0,
     transitions,
   };
