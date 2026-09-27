@@ -355,6 +355,18 @@ export function startAbortTimeout(ac, timeoutMs) {
   return () => { if (timeout) clearTimeout(timeout); };
 }
 
+// Co-presence rule for the random inmate/officer social producers below.
+// Association-style in-person inmate contact and ordinary officer contact
+// both require Cy to be out on the wing/landing; a cell search requires Cy to
+// actually be in his cell. Neither is ever plausible at the exercise yard
+// (excluded upstream, before these producers are even reached). This is the
+// ONLY thing that decides whether a random template may become a grounded,
+// direct-contact Social episode - it does not touch the Social substrate.
+export function officerEventCompatibleLocation(eventType) {
+  return eventType === 'search' ? LOCATIONS.CELL : LOCATIONS.WING_OR_LANDING;
+}
+export const INMATE_SOCIAL_COMPATIBLE_LOCATION = LOCATIONS.WING_OR_LANDING;
+
 // ---- config ---------------------------------------------------------------
 
 async function loadConfig() {
@@ -3789,6 +3801,13 @@ async function main() {
   // the one-shot officer cue describes the real event without those scores.
   function fireOfficer() {
     const { officerKey, ev } = pickOfficer();
+    // A cell search can only be co-present while Cy is actually in his cell;
+    // every other officer interaction here is wing-floor contact, only
+    // plausible while Cy is out on the wing/landing. If the picked event's
+    // location does not match Cy's authoritative current location, it simply
+    // does not occur this tick - no grounded claim, no relations nudge, no
+    // incident record - rather than asserting an impossible encounter.
+    if (vitals.locationRegime.current.id !== officerEventCompatibleLocation(ev.type)) return;
     const a = ampOf(vitals);
     applyOfficerEvent(vitals.relations, officerKey, ev, a);
     vitals.monotony = clamp((vitals.monotony || 0) - 0.25);
@@ -4013,9 +4032,16 @@ async function main() {
       recordIncident('trivial', { sub, phase, mins });
       fireEvent(sub);
     }
-    // social frictions between inmates (awake) - build warmth/suspicion/grudge
-    if (!asleep && Math.random() < 0.006) fireSocial();
-    // officers acting through the machinery of the place (awake)
+    // social frictions between inmates (awake) - build warmth/suspicion/grudge.
+    // Association-style in-person contact is only plausible while Cy is out on
+    // the wing/landing, never while he is locked in his cell or at the yard
+    // (yard already returned above); fireSocial itself only asserts 'association'
+    // co-presence, so the location check belongs at this call site.
+    if (!asleep && vitals.locationRegime.current.id === INMATE_SOCIAL_COMPATIBLE_LOCATION
+      && Math.random() < 0.006) fireSocial();
+    // officers acting through the machinery of the place (awake). fireOfficer
+    // picks its own event type (a cell search vs. everything else needs a
+    // different authoritative location), so the co-presence check lives inside it.
     if (!asleep && Math.random() < 0.004) fireOfficer();
     // half-heard remarks down the wing (awake) - may be misheard under paranoia
     if (!asleep && Math.random() < 0.005) fireOverheard();
