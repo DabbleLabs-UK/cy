@@ -37,10 +37,21 @@ export const SEARCH_STAGES = Object.freeze([
 export const SEARCH_STAGE_MIN_MS = 15 * 1000;
 export const MAX_OBSERVATION_GAPS = 20;
 export const YARD_OBSERVATION_INTERVAL_MS = 15 * 60 * 1000;
+
+// The stable defensive-context identity a lockdown always opens and later
+// resolves under, regardless of which episode instance produced it.
+export const LOCKDOWN_CONTEXT_ID = 'custody:lockdown';
+// A real institutional lockdown lasts somewhere between a slow stand-down and
+// a couple of hours. The duration is a random draw made ONCE at start and
+// persisted on the episode (scheduled_release_at) - not a hidden timer - so a
+// restart mid-lockdown resumes toward the same, already-decided release fact.
+export const LOCKDOWN_MIN_DURATION_MS = 25 * 60 * 1000;
+export const LOCKDOWN_MAX_DURATION_MS = 90 * 60 * 1000;
 export const CELL_SEARCH_TICK_CHANCE = 0.0008;
 
 const VALID_LOCATIONS = new Set(Object.values(LOCATIONS));
 const VALID_STAGES = new Set(SEARCH_STAGES);
+const VALID_LOCKDOWN_STATUSES = new Set(['ACTIVE', 'COMPLETE']);
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -117,6 +128,7 @@ function initialLocation(nowMs, date, minutes, asleep) {
     } : null,
     exerciseEpisodes: [],
     searchEpisode: null,
+    lockdownEpisode: null,
     observationGaps: [],
     lastTransitionAt: new Date(nowMs).toISOString(),
   };
@@ -147,6 +159,14 @@ export function reconcileLocationRegimeState(saved, {
     ? out.exerciseEpisodes.slice(-14) : [];
   if (out.searchEpisode && (!out.searchEpisode.id || !VALID_STAGES.has(out.searchEpisode.stage))) {
     out.searchEpisode = null;
+  }
+  if (out.lockdownEpisode && (
+    !out.lockdownEpisode.id
+    || !VALID_LOCKDOWN_STATUSES.has(out.lockdownEpisode.status)
+    || !out.lockdownEpisode.started_at
+    || !out.lockdownEpisode.scheduled_release_at
+  )) {
+    out.lockdownEpisode = null;
   }
   return out;
 }
@@ -478,6 +498,101 @@ export function advanceCellSearchEpisode(stateValue, {
   return { state, advanced: true, event, actionOpportunity, completed: episode.status === 'COMPLETE' };
 }
 
+// lockdownStageEvent builds the START or RELEASE environment event for a
+// persisted lockdown episode. Both reuse the 'lockdown' archetype and the
+// SAME stable defensive_context.context_id, so a new lockdown re-opens
+// exactly the context a prior lockdown resolved, and the RELEASE event never
+// re-declares an outcome for the original coercive-loss class: it closes the
+// ongoing condition without asserting the historical event did not occur.
+function lockdownStageEvent(episode, { stage, nowMs }) {
+  const at = new Date(nowMs).toISOString();
+  if (stage === 'RELEASED') {
+    return {
+      eventType: 'lockdown_ended',
+      summary: 'The lockdown was lifted and the regime returned to normal.',
+      occurredAt: at,
+      cyObserved: true,
+      world: {
+        situation: { resolution_status: 'resolved' },
+        associative_learning: { linkage: 'self_contained_event', outcomes: [] },
+        defensive_context: {
+          context_id: LOCKDOWN_CONTEXT_ID,
+          temporal_status: 'RESOLVED',
+          adverse_outcome_classes: ['COERCIVE_LOSS_OF_CONTROL'],
+        },
+        custody_lockdown_episode: { id: episode.id, stage: 'RELEASED', released_at: at },
+      },
+      observation: {
+        modality: 'direct', certainty: 'certain',
+        observed_facts: { lockdown_episode_id: episode.id, stage: 'RELEASED' },
+      },
+    };
+  }
+  return {
+    eventType: 'lockdown_started',
+    summary: 'A full lockdown was called; movement and association stopped.',
+    occurredAt: at,
+    cyObserved: true,
+    world: {
+      associative_learning: {
+        linkage: 'self_contained_event',
+        explicit_signals: [`lockdown:${episode.id}:STARTED`],
+        outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }],
+      },
+      defensive_context: {
+        context_id: LOCKDOWN_CONTEXT_ID,
+        temporal_status: 'ONGOING',
+        adverse_outcome_classes: ['COERCIVE_LOSS_OF_CONTROL'],
+      },
+      custody_lockdown_episode: {
+        id: episode.id, stage: 'STARTED', scheduled_release_at: episode.scheduled_release_at,
+      },
+    },
+    observation: {
+      modality: 'direct', certainty: 'certain',
+      observed_facts: { lockdown_episode_id: episode.id, stage: 'STARTED' },
+    },
+  };
+}
+
+// Starts a persisted lockdown episode. A lockdown already ACTIVE makes this a
+// safe no-op (started: false) - a duplicate trigger cannot open a second,
+// overlapping episode or re-emit the start event/evidence.
+export function startLockdownEpisode(stateValue, { nowMs = Date.now(), makeId, durationMs } = {}) {
+  const state = clone(stateValue);
+  if (state.lockdownEpisode && state.lockdownEpisode.status === 'ACTIVE') {
+    return { state, started: false, reason: 'LOCKDOWN_ALREADY_ACTIVE', event: null };
+  }
+  const id = typeof makeId === 'function' ? makeId('lockdown') : `lockdown:${nowMs}`;
+  const at = new Date(nowMs).toISOString();
+  const duration = Number.isFinite(durationMs) && durationMs > 0
+    ? durationMs
+    : LOCKDOWN_MIN_DURATION_MS + Math.floor(Math.random() * (LOCKDOWN_MAX_DURATION_MS - LOCKDOWN_MIN_DURATION_MS));
+  const episode = {
+    id, status: 'ACTIVE',
+    started_at: at,
+    scheduled_release_at: new Date(nowMs + duration).toISOString(),
+    released_at: null,
+    linked_event_ids: [],
+  };
+  state.lockdownEpisode = episode;
+  return { state, started: true, event: lockdownStageEvent(episode, { stage: 'STARTED', nowMs }) };
+}
+
+// Releases a persisted lockdown episode once its already-decided
+// scheduled_release_at has passed. No active episode, or the release time not
+// yet reached, is a safe no-op (released: false) - this also makes a
+// duplicate/replayed advance call after release produce nothing further.
+export function advanceLockdownEpisode(stateValue, { nowMs = Date.now() } = {}) {
+  const state = clone(stateValue);
+  const episode = state.lockdownEpisode;
+  if (!episode || episode.status !== 'ACTIVE') return { state, released: false, event: null };
+  if (nowMs < Date.parse(episode.scheduled_release_at)) return { state, released: false, event: null };
+  episode.status = 'COMPLETE';
+  episode.released_at = new Date(nowMs).toISOString();
+  return { state, released: true, event: lockdownStageEvent(episode, { stage: 'RELEASED', nowMs }) };
+}
+
 export function registerEpisodeEvent(stateValue, eventId, { locationSource = false } = {}) {
   const state = clone(stateValue);
   const id = clean(eventId);
@@ -485,6 +600,7 @@ export function registerEpisodeEvent(stateValue, eventId, { locationSource = fal
   if (state.activeExerciseEpisode) state.activeExerciseEpisode.event_ids.push(id);
   if (state.activeRegimeEpisode) state.activeRegimeEpisode.event_ids.push(id);
   if (state.searchEpisode) state.searchEpisode.linked_event_ids.push(id);
+  if (state.lockdownEpisode) state.lockdownEpisode.linked_event_ids.push(id);
   const stored = state.activeExerciseEpisode
     && state.exerciseEpisodes.find((item) => item.id === state.activeExerciseEpisode.id);
   if (stored) Object.assign(stored, clone(state.activeExerciseEpisode));

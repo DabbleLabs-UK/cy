@@ -166,6 +166,7 @@ import {
   LOCATIONS,
   YARD_OBSERVATION_INTERVAL_MS,
   advanceCellSearchEpisode,
+  advanceLockdownEpisode,
   availableExpressiveActions,
   createYardObservation,
   eventAllowedAtLocation,
@@ -176,6 +177,7 @@ import {
   reconcileRegimeLocation,
   registerEpisodeEvent,
   startCellSearchEpisode,
+  startLockdownEpisode,
 } from './location-regime.js';
 import {
   MEMORY_EXPRESSION_BATCH_LIMIT,
@@ -1126,6 +1128,26 @@ async function main() {
     }
   }
 
+  function beginLockdown(now) {
+    const started = startLockdownEpisode(vitals.locationRegime, {
+      nowMs: now,
+      makeId: (prefix) => `${prefix}-${randomUUID()}`,
+    });
+    vitals.locationRegime = started.state;
+    if (!started.started) return false;
+    const record = captureEpisodeEvent(started.event, { archetypeId: 'lockdown' });
+    publishEpisodeEvent(started.event, record);
+    return true;
+  }
+
+  function advanceLockdown(now) {
+    const advanced = advanceLockdownEpisode(vitals.locationRegime, { nowMs: now });
+    vitals.locationRegime = advanced.state;
+    if (!advanced.released || !advanced.event) return;
+    const record = captureEpisodeEvent(advanced.event, { archetypeId: 'lockdown' });
+    publishEpisodeEvent(advanced.event, record);
+  }
+
   function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName) {
     const prepared = openInstrumentalOpportunity(vitals.instrumentalAgency, {
       sourceKind,
@@ -1252,9 +1274,6 @@ async function main() {
     }
     if (name === 'cell_search') {
       return captureEnvironmentEvent('cell_search', { eventType: name, summary });
-    }
-    if (name === 'lockdown') {
-      return captureEnvironmentEvent('lockdown', { eventType: name, summary });
     }
     if (name === 'noise_night') {
       return captureEnvironmentEvent('sleep_interrupted', {
@@ -3957,6 +3976,9 @@ async function main() {
     const asleep = effectiveAsleep(mins);
     processLocationRegime(now, date, mins, asleep);
     advanceCellSearch(now);
+    // Checked every tick regardless of location, like advanceCellSearch above,
+    // so an already-scheduled release fires on time even while Cy is at yard.
+    advanceLockdown(now);
 
     for (const slot of PRISON_SCHEDULE) {
       if (slot.kind === 'routine' && slot.routine === 'exercise') continue;
@@ -3982,10 +4004,11 @@ async function main() {
     if (Math.random() < 0.0006) fireEvent('injury');
     if (!asleep && vitals.locationRegime.current.id === LOCATIONS.CELL
       && Math.random() < CELL_SEARCH_TICK_CHANCE) beginCellSearch(now);
-    // a rare full lockdown - a real deviation, felt harder than a late unlock
-    if (!asleep && Math.random() < 0.0005) {
+    // a rare full lockdown - a real deviation, felt harder than a late unlock.
+    // beginLockdown is itself idempotent (a no-op while one is already active),
+    // so this roll cannot open a second, overlapping episode.
+    if (!asleep && Math.random() < 0.0005 && beginLockdown(now)) {
       recordIncident('regime', { sub: 'lockdown', phase, mins });
-      fireEvent('lockdown');
     }
 
     // trivial daily irritations (awake) - tiny normally, huge under high amp
