@@ -1,0 +1,68 @@
+#!/bin/bash
+# cy-restart - request a controlled Cy runner restart WITHOUT Administrator
+# privileges.
+#
+# This writes a small, narrowly-scoped marker file
+# (runner/state/restart-request.json) into a directory the normal user
+# session already owns. It performs NO privileged action itself - it never
+# stops or starts anything.
+#
+# The Cy Runner Watchdog scheduled task (already running as SYSTEM, once per
+# minute, installed by install-watchdog-task.ps1) is the ONLY thing that ever
+# acts on this file. On its next tick (within ~60s) it will:
+#   - identify the Cy runner it actually owns (same strict
+#     node.exe + '*runner*run.js*' command-line match the watchdog already
+#     uses for its own stale-heartbeat recovery - never an arbitrary node.exe)
+#   - stop that process
+#   - let the existing supervisor loop (cy-supervisor.bat) start exactly one
+#     replacement runner after its normal 15s delay
+#   - clear the request file and log the whole sequence to
+#     runner/state/watchdog.log
+#
+# A request older than 5 minutes when the watchdog sees it is treated as
+# stale and cleared WITHOUT restarting anything, so a leftover file (e.g.
+# surviving a reboot) can never cause a restart loop.
+#
+# Usage:
+#   ./cy-restart                      # generic request
+#   ./cy-restart "deploy: fix XYZ"     # request with a reason (recommended)
+#
+# Check runner/state/watchdog.log afterwards to confirm the restart happened.
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="$HERE/state"
+REQUEST_PATH="$STATE_DIR/restart-request.json"
+REASON="${1:-manual restart request}"
+
+if [ ! -d "$STATE_DIR" ]; then
+  echo "cy-restart: state directory not found: $STATE_DIR" >&2
+  exit 1
+fi
+
+NOW_MS=$(date +%s%3N)
+NOW_ISO=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+REQUESTED_BY="${USER:-${USERNAME:-unknown}}"
+
+# Escape backslashes and double quotes for embedding in JSON.
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+REASON_JSON=$(json_escape "$REASON")
+REQUESTED_BY_JSON=$(json_escape "$REQUESTED_BY")
+
+cat > "$REQUEST_PATH" <<EOF
+{
+  "schema": "cy.restart-request",
+  "version": 1,
+  "requestedAtMs": $NOW_MS,
+  "requestedAt": "$NOW_ISO",
+  "reason": "$REASON_JSON",
+  "requestedBy": "$REQUESTED_BY_JSON"
+}
+EOF
+
+echo "cy-restart: restart requested ($REQUEST_PATH)"
+echo "cy-restart: the Cy Runner Watchdog (SYSTEM, runs every ~60s) will action this automatically."
+echo "cy-restart: check runner/state/watchdog.log to confirm."

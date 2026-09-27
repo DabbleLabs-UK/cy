@@ -39,6 +39,61 @@ $now = Get-Date
 $runners = @(Get-CyProcesses)
 $supervisors = @(Get-CySupervisors)
 
+# --- manual restart request -------------------------------------------------
+# A normal (non-elevated) user session cannot stop/start the runner directly,
+# but it CAN drop a small marker file (see the "cy-restart" script) into a
+# directory it already owns. This already-
+# privileged, already-scheduled watchdog task is the ONLY thing that ever
+# acts on it: it uses the exact same Get-CyProcesses ownership filter as the
+# stale-heartbeat path below, so it can never touch an unrelated node.exe.
+$restartRequestPath = Join-Path $stateDir 'restart-request.json'
+$restartRequestMaxAgeSeconds = 300
+$restartRequestedAtMs = $null
+$restartRequestInfo = $null
+if (Test-Path -LiteralPath $restartRequestPath) {
+    try {
+        $restartRequestInfo = Get-Content -LiteralPath $restartRequestPath -Raw | ConvertFrom-Json
+        $restartRequestedAtMs = [double]$restartRequestInfo.requestedAtMs
+    } catch {
+        Write-WatchdogLog ('restart-request.json is unreadable/corrupt ({0}); clearing it without acting' -f $_.Exception.Message)
+        Remove-Item -LiteralPath $restartRequestPath -Force -ErrorAction SilentlyContinue
+        $restartRequestedAtMs = $null
+    }
+}
+$nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$restartDisposition = Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs $restartRequestedAtMs `
+    -MaxAgeSeconds $restartRequestMaxAgeSeconds
+
+if ($restartDisposition -eq 'STALE') {
+    Write-WatchdogLog ('stale restart request ({0}s old, reason: {1}) ignored and cleared - not restarting' -f `
+        [int](($nowMs - $restartRequestedAtMs) / 1000), $restartRequestInfo.reason)
+    Remove-Item -LiteralPath $restartRequestPath -Force -ErrorAction SilentlyContinue
+}
+
+if ($restartDisposition -eq 'ACT') {
+    Write-WatchdogLog ('restart requested by {0} (reason: {1}); acting now' -f `
+        $restartRequestInfo.requestedBy, $restartRequestInfo.reason)
+    if ($runners.Count -gt 0) {
+        $pids = ($runners | ForEach-Object { $_.ProcessId }) -join ', '
+        Write-WatchdogLog ('stopping {0} Cy runner process(es) for requested restart: {1}' -f $runners.Count, $pids)
+        $runners | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+    } else {
+        Write-WatchdogLog 'restart requested but no Cy runner process was currently running'
+    }
+    Remove-Item -LiteralPath $restartRequestPath -Force -ErrorAction SilentlyContinue
+    Write-WatchdogLog 'restart request cleared/acknowledged'
+    if ($supervisors.Count -gt 0) {
+        Write-WatchdogLog 'existing supervisor will start the replacement runner.'
+    } else {
+        Write-WatchdogLog 'no supervisor present; starting the hidden supervisor to launch the replacement runner.'
+        if (-not (Test-Path -LiteralPath $launcherPath)) {
+            throw "Cy watchdog cannot find launcher: $launcherPath"
+        }
+        Start-Process -FilePath 'wscript.exe' -ArgumentList ('"{0}"' -f $launcherPath) -WindowStyle Hidden
+    }
+    exit 0
+}
+
 # See cy-watchdog-lib.ps1 (Test-CyHeartbeatFresh) for the startup-grace logic
 # and its rationale.
 $heartbeatFresh = $false

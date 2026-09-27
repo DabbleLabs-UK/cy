@@ -30,3 +30,30 @@ function Test-CyHeartbeatFresh {
     }
     return $effectiveAge -le $MaxAgeSeconds
 }
+
+# Decides what to do with a manual restart-request marker file (see
+# cy-restart-request.sh), keyed on epoch milliseconds rather than parsed
+# datetime strings so a plain-JSON request written from bash (or anywhere
+# else) never depends on culture/format-specific date parsing.
+#
+#   'NONE'  - no request is pending; caller proceeds exactly as before.
+#   'ACT'   - a fresh request exists; caller should stop the owned runner
+#             process and let the existing supervisor restart it, then clear
+#             the request file.
+#   'STALE' - a request file exists but is too old (or has a nonsensical
+#             future timestamp) to act on - e.g. it survived a reboot with no
+#             watchdog tick in between. The caller clears it WITHOUT
+#             restarting anything, so a leftover file can never cause a
+#             restart loop.
+function Get-CyRestartRequestDisposition {
+    param(
+        [Parameter(Mandatory)] [double]$NowMs,
+        [Nullable[double]]$RequestedAtMs,
+        [Parameter(Mandatory)] [int]$MaxAgeSeconds
+    )
+    if ($null -eq $RequestedAtMs) { return 'NONE' }
+    $ageSeconds = ($NowMs - $RequestedAtMs) / 1000
+    if ($ageSeconds -lt 0) { return 'STALE' }
+    if ($ageSeconds -gt $MaxAgeSeconds) { return 'STALE' }
+    return 'ACT'
+}

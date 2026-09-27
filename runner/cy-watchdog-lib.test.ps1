@@ -73,5 +73,32 @@ Assert-True (Test-CyHeartbeatFresh -Now $now -HeartbeatMtime $freshHeartbeat `
     -ProcessStart $null -MaxAgeSeconds 90) `
     'with no process information, a fresh file is judged fresh (unchanged fallback behaviour)'
 
+
+# --- Get-CyRestartRequestDisposition ---
+
+$nowMs = 1790500000000.0
+
+# 7. No request file present at all.
+Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs $null -MaxAgeSeconds 300) -eq 'NONE') `
+    'no restart request present is NONE'
+
+# 8. A request written moments ago is acted on.
+Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs ($nowMs - 5000) -MaxAgeSeconds 300) -eq 'ACT') `
+    'a fresh restart request (5s old) is ACT'
+
+# 9. A request right at the edge of the window is still acted on.
+Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs ($nowMs - 300000) -MaxAgeSeconds 300) -eq 'ACT') `
+    'a restart request exactly at the max age is still ACT (inclusive boundary)'
+
+# 10. A request older than the window (e.g. it survived a reboot with no
+#     watchdog tick since) is STALE, not acted on.
+Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs ($nowMs - 301000) -MaxAgeSeconds 300) -eq 'STALE') `
+    'a restart request older than the max age is STALE, preventing a restart loop after a reboot'
+
+# 11. A request with a nonsensical future timestamp (clock skew or a corrupt
+#     write) is also STALE, never acted on.
+Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs ($nowMs + 60000) -MaxAgeSeconds 300) -eq 'STALE') `
+    'a restart request timestamped in the future is STALE, not ACT'
+
 Write-Output ''
 Write-Output "cy-watchdog-lib.test.ps1: all $n checks passed"
