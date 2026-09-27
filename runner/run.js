@@ -3952,9 +3952,8 @@ async function main() {
       });
     }
     const event = materialiseScheduledEvent(slot, Math.random, { mealId });
-    if (expectedRecord && event.world.action_opportunity && event.world.action_opportunity.id) {
-      event.world.action_opportunity.onset_at = expectedRecord.world_event.timestamp;
-      event.world.action_opportunity.linked_event_ids = [expectedRecord.world_event.id];
+    if (expectedRecord) {
+      event.world.context = event.world.context || {};
       event.world.context.previous_event_ids = [expectedRecord.world_event.id];
     }
     const structured = captureEnvironmentEvent(event.archetypeId, {
