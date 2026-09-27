@@ -260,6 +260,23 @@ test('a structurally invalid persisted lockdown episode is reset, not trusted bl
   assert.equal(restored.lockdownEpisode, null);
 });
 
+test('persisted state predating this fix (no lockdownEpisode key at all) reconciles and starts cleanly', () => {
+  // Real production shape before this change: the key is entirely absent, not
+  // null. Reconciliation must not choke on it, and the very next lockdown must
+  // still be able to start and release normally against restored state.
+  const legacy = cell();
+  delete legacy.lockdownEpisode;
+  assert.equal(Object.hasOwn(legacy, 'lockdownEpisode'), false);
+  const restored = reconcileLocationRegimeState(JSON.parse(JSON.stringify(legacy)), {
+    nowMs: AT, date: DAY, minutes: 12 * 60,
+  });
+  const started = startLockdownEpisode(restored, { nowMs: AT, durationMs: 1000 });
+  assert.equal(started.started, true);
+  const released = advanceLockdownEpisode(started.state, { nowMs: AT + 2000 });
+  assert.equal(released.released, true);
+  assert.equal(released.state.lockdownEpisode.status, 'COMPLETE');
+});
+
 test('lockdown duration is drawn once at start and stays fixed across advances that do not release it', () => {
   const started = startLockdownEpisode(cell(), { nowMs: AT });
   const scheduledMs = Date.parse(started.state.lockdownEpisode.scheduled_release_at);
