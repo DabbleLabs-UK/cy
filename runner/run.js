@@ -1305,11 +1305,15 @@ async function main() {
       return captureEnvironmentEvent('cancelled_activity', { eventType: name, summary });
     }
     if (name === 'no_eggs' || name === 'cold_tea') {
+      // Tray-irritation colour, not a meal/intake transition: nothing about
+      // what was actually offered, available, received or consumed is
+      // established here, so no world.physical.food fact is asserted. See
+      // feeding-homeostasis.js's isFeedingRecord for the grounding this
+      // deliberately withholds.
       return captureEnvironmentEvent('meal', {
         eventType: name,
         summary,
         world: {
-          physical: { food: { offered: 'yes', consumed: 'unknown' } },
           situation: { deprivation_outcome: name === 'no_eggs' ? 'partial' : 'unknown' },
         },
       });

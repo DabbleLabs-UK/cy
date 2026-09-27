@@ -147,12 +147,33 @@ function intakeOutcome(event, food, offered, availability, consumption) {
   return 'UNKNOWN';
 }
 
+// Only the scalar food fields are checked for grounding here, never the
+// archetype ID alone. An event that merely reuses the 'meal' archetype for
+// narrative purposes (e.g. a tray-irritation complaint) but supplies no real
+// offered/available/received/consumed/meal-identity fact must not count as a
+// feeding observation. `food.nutrition` is a nested object, never a scalar
+// fact by itself - it is checked separately by its own leaf values, so its
+// permanently-present default shape can never itself trip this check.
+const FOOD_SCALAR_FIELDS = Object.freeze([
+  'meal_id', 'meal_type', 'scheduled', 'offered', 'available', 'received',
+  'consumed', 'intake_outcome', 'portion_category', 'portion_fraction',
+  'energy_proxy', 'energy_kcal',
+]);
+
+function hasGroundedFoodFact(food) {
+  if (FOOD_SCALAR_FIELDS.some((key) => {
+    const value = food[key];
+    return value != null && String(value).toLowerCase() !== 'unknown';
+  })) return true;
+  const nutrition = food.nutrition && typeof food.nutrition === 'object' ? food.nutrition : {};
+  return Object.values(nutrition).some((value) => value != null);
+}
+
 function isFeedingRecord(record) {
   const event = record && record.world_event;
   const food = foodFacts(record);
   if (!event || !food || typeof food !== 'object') return false;
-  if (event.archetype_id === 'meal' || event.archetype_id === 'meal_expected') return true;
-  return Object.values(food).some((value) => value != null && String(value).toLowerCase() !== 'unknown');
+  return hasGroundedFoodFact(food);
 }
 
 function finiteNonNegative(value) {
