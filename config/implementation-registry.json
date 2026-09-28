@@ -101,7 +101,7 @@
       "display_name": "SLEEPINESS",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "ingre-akerstedt-three-process-sb-c-u",
-      "status_note": "Predicts Karolinska Sleepiness Scale ratings with the validated TPM S_B + C + U equations from observed sleep-wake history. Runtime status remains CALIBRATING until two complete observed sleep episodes exist. This is not general fatigue or a direct report of subjective experience.",
+      "status_note": "Predicts Karolinska Sleepiness Scale ratings with the validated TPM S_B + C + U equations from schedule-derived sleep-wake history. Runtime status remains CALIBRATING until two complete schedule-derived sleep episodes exist. This is not general fatigue or a direct report of subjective experience.",
       "data_dependencies": ["sleep_period", "sleep_interruption", "duration_ms"],
       "version": "tpm-predicted-kss-v1",
       "provenance": "config/model-specs/three-process-sleepiness.json"
@@ -798,7 +798,7 @@
       "display_name": "HOMEOSTATIC SLEEP PRESSURE",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "borbely-daan-process-s-normalized",
-      "status_note": "Normalized Process S integrates actual observed sleep and wake intervals using the published Two-Process exponential formulation. It is not a measure of subjective fatigue.",
+      "status_note": "Normalized Process S integrates schedule-derived sleep and wake intervals using the published Two-Process exponential formulation. It is not a measure of subjective fatigue.",
       "data_dependencies": ["sleep_period", "sleep_interruption", "duration_ms"],
       "version": "process-s-normalized-v1",
       "provenance": "config/model-specs/sleep-homeostasis.json"
@@ -808,7 +808,7 @@
       "display_name": "PREDICTED SLEEPINESS",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "ingre-akerstedt-three-process-sb-c-u",
-      "status_note": "Implements the published S_B + C + U Three-Process Model and KSS transfer equation. It consumes only structured observed sleep-wake history, requires two complete observed sleep episodes, uses population-default phase, and remains CALIBRATING until that evidence exists.",
+      "status_note": "Implements the published S_B + C + U Three-Process Model and KSS transfer equation. It consumes only structured schedule-derived sleep-wake history, requires two complete schedule-derived sleep episodes, uses population-default phase, and remains CALIBRATING until that evidence exists.",
       "data_dependencies": ["sleep_period", "sleep_interruption", "duration_ms"],
       "version": "tpm-predicted-kss-v1",
       "provenance": "config/model-specs/three-process-sleepiness.json"

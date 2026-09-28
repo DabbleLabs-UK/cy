@@ -24,6 +24,35 @@ export function isSleepWindow(mins) {
   return mins >= LIGHTS_OUT_MIN || mins < LIGHTS_ON_MIN;
 }
 
+function londonMinutesOfDay(atMs) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour12: false, hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(atMs)).map((part) => [part.type, part.value]));
+  return (+parts.hour % 24) * 60 + (+parts.minute);
+}
+
+export function scheduleAsleepAt(atMs) {
+  return isSleepWindow(londonMinutesOfDay(atMs));
+}
+
+// Whether the fixed lights-out/lights-on schedule flips state at least once
+// between two timestamps. Used to tell a downtime gap that silently crossed a
+// scheduled sleep<->wake transition (nothing could be recorded while the
+// runner was down) from an ordinary gap that stayed within one phase.
+export function scheduleTransitionCrossed(fromMs, toMs) {
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return false;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  if (toMs - fromMs >= DAY_MS) return true; // any interval >= one schedule period must cross both fixed transitions
+  const STEP_MS = 10 * 60 * 1000; // well under the shortest phase (8h asleep)
+  let state = scheduleAsleepAt(fromMs);
+  for (let t = fromMs + STEP_MS; t < toMs; t += STEP_MS) {
+    const next = scheduleAsleepAt(t);
+    if (next !== state) return true;
+    state = next;
+  }
+  return scheduleAsleepAt(toMs) !== state;
+}
+
 // BURST BOUNDARY. Consecutive generations are concatenated into both the emitted
 // text stream and the fed-back Zone B context. If the previous context ends
 // mid-word (no trailing whitespace) and the next burst's first chunk does not

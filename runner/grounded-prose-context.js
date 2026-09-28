@@ -99,7 +99,7 @@ function sleepSection(state, now) {
       EPISTEMIC_STATUS.UNKNOWN,
       'predicted_sleepiness_tpm',
       'predicted_kss',
-      'CALIBRATING: two complete observed sleep episodes are required before a KSS estimate is supplied.',
+      'CALIBRATING: two complete schedule-derived sleep episodes are required before a KSS estimate is supplied.',
     ));
   }
   entries.push(entry(

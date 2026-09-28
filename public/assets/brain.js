@@ -385,7 +385,7 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
     <div class="sleep-pressure-reading"><strong class="sleep-pressure-value">--</strong><span>SLEEP PRESSURE INDEX</span></div>
     <p class="sleep-homeostasis-explanation">Sleep pressure accumulates while Cy is awake and dissipates during sleep.</p>
     <p class="sleep-homeostasis-state">Current sleep state unavailable.</p>
-    <p class="sleep-homeostasis-calibration">Waiting for observed sleep history.</p>
+    <p class="sleep-homeostasis-calibration">Waiting for schedule-derived sleep history.</p>
     <p class="sleep-homeostasis-range">S range unavailable.</p>
     <div class="sleep-homeostasis-history-wrap">
       <div class="sleep-ranges" aria-label="Sleep pressure history range">
@@ -413,9 +413,9 @@ function predictedSleepinessMarkup(status, admin) {
   return `<section class="predicted-sleepiness-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="predicted-sleepiness-head"><span>${status.displayName}</span><strong class="predicted-sleepiness-status">CALIBRATING</strong></div>
     <div class="predicted-sleepiness-reading"><strong class="predicted-sleepiness-value">--</strong><span>PREDICTED KSS (1-9)</span></div>
-    <p class="predicted-sleepiness-anchor">Waiting for observed sleep history.</p>
-    <p class="predicted-sleepiness-calibration">Two complete observed sleep episodes are required.</p>
-    <dl class="predicted-sleepiness-facts"><div><dt>MODEL</dt><dd>Three-Process Model of Alertness - Ingre et al. 2014</dd></div><div><dt>PHASE</dt><dd>POPULATION DEFAULT</dd></div><div><dt>SLEEP HISTORY</dt><dd>OBSERVED</dd></div></dl>
+    <p class="predicted-sleepiness-anchor">Waiting for schedule-derived sleep history.</p>
+    <p class="predicted-sleepiness-calibration">Two complete schedule-derived sleep episodes are required.</p>
+    <dl class="predicted-sleepiness-facts"><div><dt>MODEL</dt><dd>Three-Process Model of Alertness - Ingre et al. 2014</dd></div><div><dt>PHASE</dt><dd>POPULATION DEFAULT</dd></div><div><dt>SLEEP HISTORY</dt><dd>SCHEDULE-DERIVED</dd></div></dl>
     <p class="predicted-sleepiness-separation">The headline KSS prediction uses independently validated TPM equations. The Process S/C displays below are not numerically substituted into it.</p>
     <p class="predicted-sleepiness-caveat">Population-model estimate; individual sleepiness can differ substantially. General fatigue is not modelled. Sleep inertia is not adequately modelled, so the first hour after waking has additional known bias.</p>
     ${admin ? '<details class="predicted-sleepiness-inspector"><summary>TPM CALCULATION INSPECTION</summary><pre>Waiting for a live TPM calculation.</pre></details>' : ''}
@@ -1350,7 +1350,7 @@ export class BrainHud {
     const live = snapshot && snapshot.publicLabel === 'LIVE' && Number.isFinite(snapshot.predictedKss);
     entry.querySelector('.soma-reading-description').textContent = live
       ? `LIVE. Predicted KSS ${snapshot.predictedKss.toFixed(2)} from the published S_B + C + U Three-Process Model.`
-      : 'CALIBRATING. A live KSS estimate requires two complete observed sleep episodes.';
+      : 'CALIBRATING. A live KSS estimate requires two complete schedule-derived sleep episodes.';
     entry.querySelector('.soma-influences-title').hidden = true;
     entry.querySelector('.soma-contributors').textContent = '';
     card.querySelector('.predicted-sleepiness-status').textContent = live
@@ -1359,16 +1359,16 @@ export class BrainHud {
     card.querySelector('.predicted-sleepiness-value').textContent = live ? `${snapshot.predictedKss.toFixed(2)} / 9` : '--';
     card.querySelector('.predicted-sleepiness-anchor').textContent = live && snapshot.kssRegion
       ? `Descriptive region: ${snapshot.kssRegion.description}.`
-      : 'Waiting for enough structured observed sleep history.';
+      : 'Waiting for enough structured schedule-derived sleep history.';
     card.querySelector('.predicted-sleepiness-calibration').textContent = snapshot
-      ? `${snapshot.completeObservedSleepEpisodes} of ${snapshot.requiredCompleteObservedSleepEpisodes} complete observed sleep episodes; current state ${String(snapshot.currentObservedSleepState || 'unknown').toUpperCase()}.`
+      ? `${snapshot.completeObservedSleepEpisodes} of ${snapshot.requiredCompleteObservedSleepEpisodes} complete schedule-derived sleep episodes; current state ${String(snapshot.currentObservedSleepState || 'unknown').toUpperCase()}.`
       : 'No TPM state has reached this view.';
     const inspector = card.querySelector('.predicted-sleepiness-inspector pre');
     if (inspector) inspector.textContent = snapshot ? [
       `model: ${snapshot.modelId}`,
       `runtime status: ${snapshot.publicLabel}`,
       `phase basis: ${snapshot.phaseBasis}`,
-      `observed complete sleeps: ${snapshot.completeObservedSleepEpisodes}`,
+      `schedule-derived complete sleeps: ${snapshot.completeObservedSleepEpisodes}`,
       `continuity known: ${snapshot.continuityKnown}`,
       `TPM_S_B: ${snapshot.components && Number.isFinite(snapshot.components.tpmSB) ? snapshot.components.tpmSB.toFixed(6) : '--'}`,
       `TPM_C: ${snapshot.components && Number.isFinite(snapshot.components.tpmC) ? snapshot.components.tpmC.toFixed(6) : '--'}`,
@@ -1819,8 +1819,8 @@ export class BrainHud {
       : '--';
     card.querySelector('.sleep-homeostasis-state').textContent = `Current state: ${String(snapshot.currentSleepState || 'unknown').toUpperCase()}`;
     card.querySelector('.sleep-homeostasis-calibration').textContent = snapshot.calibrating
-      ? 'CALIBRATING FROM OBSERVED SLEEP HISTORY'
-      : 'ESTABLISHED FROM OBSERVED SLEEP HISTORY';
+      ? 'CALIBRATING FROM SCHEDULE-DERIVED SLEEP HISTORY'
+      : 'ESTABLISHED FROM SCHEDULE-DERIVED SLEEP HISTORY';
     card.querySelector('.sleep-homeostasis-range').textContent = Number.isFinite(snapshot.sMin) && Number.isFinite(snapshot.sMax)
       ? `Current uncertainty: S ${snapshot.sMin.toFixed(3)} to ${snapshot.sMax.toFixed(3)}`
       : 'S range unavailable.';
@@ -1866,7 +1866,7 @@ export class BrainHud {
       inspector.textContent = [
         `model: ${snapshot.modelName}`,
         `clock time: ${clockLabel(snapshot.clockHours)} (${snapshot.clockHours.toFixed(6)} h)`,
-        `habitual wake: ${clockLabel(snapshot.schedule.habitualWakeHour)} ${snapshot.schedule.timeZone} - observed configuration`,
+        `habitual wake: ${clockLabel(snapshot.schedule.habitualWakeHour)} ${snapshot.schedule.timeZone} - configured value`,
         `phase basis: habitual schedule estimate`,
         `estimated CBTmin: ${clockLabel(snapshot.estimatedCbtmin.startHour)} to ${clockLabel(snapshot.estimatedCbtmin.endHour)} - schedule-based estimate`,
         `derived phi: ${snapshot.phiInterval.startHour.toFixed(6)} to ${snapshot.phiInterval.endHour.toFixed(6)} h - mathematically derived`,
