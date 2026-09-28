@@ -21,7 +21,7 @@ export const METRICS = {
   hunger: { label: 'HUNGER', baseline: 18, recovery: 'body clock' },
   fatigue: { label: 'FATIGUE', baseline: 20, recovery: 'sleep / body clock' },
   loneliness: { label: 'LONELINESS / SOCIAL NEED', baseline: 30, recovery: 'slow' },
-  anger: { label: 'ANGER / HOSTILITY', baseline: 10, recovery: 'medium' },
+  anger: { label: 'LEGACY ACTIVATION HEURISTIC (ANGER)', baseline: 10, recovery: 'medium' },
   rumination: { label: 'RUMINATION / FIXATION', baseline: 16, recovery: 'slow' },
 };
 
@@ -524,7 +524,7 @@ export function experiencedSnapshot(state, now = null) {
       key, label: spec.label, value: state.metrics[key].value, baseline: spec.baseline,
       updatedAtMs: state.metrics[key].updatedAtMs, trend: trend.direction, trendDelta: trend.delta,
       recovery: spec.recovery, contributors: publicContributors(state, key, now),
-      ...(['loneliness', 'hunger', 'arousal'].includes(key) ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
+      ...(['loneliness', 'hunger', 'arousal', 'anger'].includes(key) ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
     };
   }
   const value = (key) => metrics[key].value;
