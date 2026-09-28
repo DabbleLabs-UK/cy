@@ -194,7 +194,20 @@ function captive_memory_public_item(array $row, bool $senderOwns = false): array
 
 // Deterministic engineering retrieval. There is no combined scalar and none of
 // these ranks are interpreted as psychological strength or activation.
-function captive_memory_rank_candidates(array $rows, array $query, ?string $visitorId, int $limit = CY_MEMORY_CANDIDATE_LIMIT): array
+//
+// $recentExpressionTerms is PROVENANCE ONLY: a set of tokens from Cy's own
+// recent-expression buffer, supplied by the caller for cross-referencing
+// against whatever terms/tags actually caused a match. It never widens or
+// narrows which rows match, never changes $_rank/ordering, and never changes
+// $limit. It only lets each row additionally record whether the match it
+// already made also happens to overlap with something Cy recently said.
+function captive_memory_rank_candidates(
+    array $rows,
+    array $query,
+    ?string $visitorId,
+    int $limit = CY_MEMORY_CANDIDATE_LIMIT,
+    array $recentExpressionTerms = []
+): array
 {
     $queryTags = captive_memory_tags($query['tags'] ?? []);
     $queryTerms = captive_memory_tokens((string)($query['text'] ?? ''));
@@ -236,6 +249,21 @@ function captive_memory_rank_candidates(array $rows, array $query, ?string $visi
         }
         $row['tags_array'] = $tags;
         $row['retrieval_reasons'] = array_values(array_unique($reasons));
+
+        // Provenance: which specific tokens caused this match, and did any of
+        // them independently also appear in Cy's own recent-expression buffer.
+        // This is read-only cross-referencing against already-computed matches
+        // and never influences whether/how the row is ranked or included.
+        $matchedLexical = array_values(array_unique(array_merge($tagMatches, $termMatches)));
+        $expressionOverlap = array_values(array_intersect($matchedLexical, $recentExpressionTerms));
+        $row['matched_tags'] = $tagMatches;
+        $row['matched_terms'] = $termMatches;
+        $row['match_provenance'] = [
+            'lexical_match' => $tagMatches !== [] || $termMatches !== [],
+            'structured_sender_identity' => $samePerson,
+            'recent_cy_expression_overlap' => $expressionOverlap !== [],
+            'recent_cy_expression_overlap_terms' => $expressionOverlap,
+        ];
         $row['_rank'] = [
             $samePerson ? 1 : 0,
             count($tagMatches),
@@ -409,10 +437,16 @@ function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): a
     return $stmt->fetchAll();
 }
 
-function captive_memory_query(PDO $db, array $query, ?string $visitorId, int $limit = CY_MEMORY_CANDIDATE_LIMIT): array
+function captive_memory_query(
+    PDO $db,
+    array $query,
+    ?string $visitorId,
+    int $limit = CY_MEMORY_CANDIDATE_LIMIT,
+    array $recentExpressionTerms = []
+): array
 {
     $rows = captive_memory_fetch_rows($db, $query, $visitorId);
-    $ranked = captive_memory_rank_candidates($rows, $query, $visitorId, $limit);
+    $ranked = captive_memory_rank_candidates($rows, $query, $visitorId, $limit, $recentExpressionTerms);
     return array_map(static function (array $row) use ($visitorId): array {
         $crossVisitor = $visitorId !== null
             && (string)$row['privacy_scope'] === 'PUBLIC_RECALLABLE'
@@ -429,6 +463,15 @@ function captive_memory_query(PDO $db, array $query, ?string $visitorId, int $li
             'classification' => $row['classification'],
             'consistencyStatus' => (string)$row['consistency_status'],
             'version' => (int)$row['version'],
+            // Retrieval-cue provenance (instrumentation only; never sent to the
+            // model - see filterMemoriesBeforePrompt in autobiographical-memory.js
+            // which whitelists fields and does not forward these).
+            'matchedTags' => $row['matched_tags'] ?? [],
+            'matchedTerms' => $row['matched_terms'] ?? [],
+            'matchProvenance' => $row['match_provenance'] ?? [
+                'lexical_match' => false, 'structured_sender_identity' => false,
+                'recent_cy_expression_overlap' => false, 'recent_cy_expression_overlap_terms' => [],
+            ],
             'tags' => $row['tags_array'],
             'reasons' => $row['retrieval_reasons'],
             'sourceCount' => (int)$row['source_count'],

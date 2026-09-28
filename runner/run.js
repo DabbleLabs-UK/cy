@@ -1018,6 +1018,13 @@ async function main() {
           tags: source.tags,
           location: event.world.context.location || null,
           publicSituation: source.text,
+          // Retrieval-cue provenance only: labels this query as cued by a
+          // world event, and snapshots Cy's own recent expression from just
+          // before the cue arrived, so a later analysis can tell whether the
+          // event's own content or Cy's own words explain any resulting
+          // memory match. Never used to fetch/rank/select memories.
+          querySourceType: 'ENVIRONMENT_EVENT',
+          recentExpressionText: contextText().slice(-640),
         };
       }
     }
@@ -3132,6 +3139,10 @@ async function main() {
       publicSituation: `A postcard has arrived: ${postcardText.slice(0, 600)}`,
       groundedContext: cognition.groundedDirective,
       generationRef: `postcard:${pc.id}`,
+      // Retrieval-cue provenance only - see the matching comment at the
+      // ENVIRONMENT_EVENT pendingMemoryQuery assembly above.
+      querySourceType: 'POSTCARD',
+      recentExpressionText: contextText().slice(-640),
     }, { deadlineMs: 750, priority: 100, scheduleDelayMs: 1000 });
 
     // Recognition supplies factual visitor identity/count/timing only. Legacy

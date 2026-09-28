@@ -294,9 +294,15 @@ export class Client {
     return res.json();
   }
 
-  async queryMemories({ query, visitorId = null, limit = 10 } = {}) {
+  async queryMemories({
+    query, visitorId = null, limit = 10, recentExpressionText = '', querySourceType = null,
+  } = {}) {
     return this._memoryRequest('query', {
       query: query || {}, visitor_id: visitorId, limit,
+      // Provenance only - see captive_memory_rank_candidates's doc comment.
+      // Never affects which candidates are fetched/ranked/limited.
+      recent_expression_text: recentExpressionText || '',
+      query_source_type: querySourceType || null,
     });
   }
 
@@ -308,13 +314,16 @@ export class Client {
     return this._memoryRequest('record_query', {
       generation_ref: generationRef,
       current_context: inspection && inspection.query || {},
+      query_source_type: (inspection && inspection.querySourceType) || null,
       sender_known: !!(inspection && inspection.senderKnown),
       candidate_memory_ids: inspection && inspection.candidateIds || [],
       retrieval_mechanisms: inspection && inspection.mechanisms || [],
+      candidate_match_provenance: (inspection && inspection.candidateProvenance) || {},
       privacy_filter: inspection && inspection.privacyFilter || {},
       offered_memory_ids: inspection && inspection.offeredIds || [],
       selected_memory_ids: inspection && inspection.selectedIds || [],
       inserted_memory_ids: inspection && inspection.insertedIds || [],
+      repeated_from_previous_generation_ids: (inspection && inspection.repeatedFromPreviousGenerationIds) || [],
       selected_memory_reasons: inspection && inspection.selectedReasons || {},
     });
   }

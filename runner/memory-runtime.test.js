@@ -12,6 +12,18 @@ const candidate = {
   publicSummary: null, consistencyStatus: 'CONSISTENT', version: 1,
   tags: ['television', 'postcard'], reasons: ['SAME_PERSON'],
 };
+// Shaped like what captive_memory_query now additionally returns per
+// candidate (matchedTags/matchedTerms/matchProvenance) - used to test that
+// this provenance reaches the query ledger without reaching the model prompt
+// or affecting selection.
+const candidateWithProvenance = {
+  ...candidate,
+  matchedTags: ['television'], matchedTerms: ['television'],
+  matchProvenance: {
+    lexical_match: true, structured_sender_identity: true,
+    recent_cy_expression_overlap: false, recent_cy_expression_overlap_terms: [],
+  },
+};
 
 function client(overrides = {}) {
   return {
@@ -327,4 +339,136 @@ test('foreground interruption is recorded as preemption for surfacing', async ()
   r.interruptBackground('foreground');
   await work;
   assert.equal(completed[0].result_category, 'PREEMPTED');
+});
+
+// --- retrieval-cue provenance (instrumentation only) --------------------
+
+test('recent-expression text and query source type reach the server query without entering the model prompt', async () => {
+  const queried = [];
+  const r = runtime({
+    client: {
+      async queryMemories(value) { queried.push(value); return { candidates: [candidateWithProvenance] }; },
+    },
+    generate: async () => '{"memoryRefs":[]}',
+  });
+  await r.processSurfacing({
+    id: 20, context_fingerprint: memoryContextFingerprint({ text: 'tv', currentVisitorId: sender }),
+    subject_visitor_id: sender,
+    context: {
+      text: 'tv', currentVisitorId: sender,
+      querySourceType: 'ENVIRONMENT_EVENT', recentExpressionText: 'Cy mentioned a television earlier.',
+    },
+  });
+  assert.equal(queried[0].querySourceType, 'ENVIRONMENT_EVENT');
+  assert.equal(queried[0].recentExpressionText, 'Cy mentioned a television earlier.');
+});
+
+test('candidate match provenance and repeat detection reach the query ledger without changing selection', async () => {
+  const recorded = [];
+  const r = runtime({
+    client: {
+      async queryMemories() { return { candidates: [candidateWithProvenance] }; },
+      async recordMemoryQuery(value) { recorded.push(value); },
+    },
+    generate: async () => `{"memoryRefs":["C1"]}`,
+  });
+  await r.processSurfacing({
+    id: 21, context_fingerprint: memoryContextFingerprint({ text: 'tv', currentVisitorId: sender }),
+    subject_visitor_id: sender,
+    context: { text: 'tv', currentVisitorId: sender, querySourceType: 'POSTCARD' },
+  });
+  const inspection = recorded[0].inspection;
+  assert.equal(inspection.querySourceType, 'POSTCARD');
+  assert.deepEqual(inspection.candidateProvenance[candidate.id].matchedTags, ['television']);
+  assert.equal(inspection.candidateProvenance[candidate.id].matchProvenance.structured_sender_identity, true);
+  assert.equal(inspection.candidateProvenance[candidate.id].repeatedFromPreviousGeneration, false);
+  assert.deepEqual(inspection.repeatedFromPreviousGenerationIds, []);
+  // Selection itself is untouched by the added provenance fields.
+  assert.deepEqual(inspection.selectedIds, [candidate.id]);
+  assert.deepEqual(inspection.insertedIds, [candidate.id]);
+});
+
+test('a memory inserted in the immediately preceding generation is marked repeated in the next query', async () => {
+  const recorded = [];
+  const r = runtime({
+    client: { async recordMemoryQuery(value) { recorded.push(value); } },
+  });
+  const priorContext = { text: 'television', currentVisitorId: sender };
+  r.activatePrepared({
+    id: 'set-repeat', context_fingerprint: memoryContextFingerprint(priorContext),
+    subject_visitor_id: sender, selected_memories: [candidate],
+    expires_at: new Date(Date.now() + 60000).toISOString(),
+  }, priorContext);
+  r.consumeWorking('generation:1', sender);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(r.lastConsumed.insertedIds, [candidate.id]);
+
+  const other = { ...candidateWithProvenance, id: '00000000-0000-4000-8000-000000000099' };
+  r.client.queryMemories = async () => ({ candidates: [candidateWithProvenance, other] });
+  await r.processSurfacing({
+    id: 22, context_fingerprint: memoryContextFingerprint({ text: 'tv', currentVisitorId: sender }),
+    subject_visitor_id: sender, context: { text: 'tv', currentVisitorId: sender },
+  });
+  const inspection = recorded[0].inspection;
+  assert.deepEqual(inspection.repeatedFromPreviousGenerationIds, [candidate.id]);
+  assert.equal(inspection.candidateProvenance[candidate.id].repeatedFromPreviousGeneration, true);
+  assert.equal(inspection.candidateProvenance[other.id].repeatedFromPreviousGeneration, false);
+});
+
+test('provenance instrumentation never reaches the model prompt', async () => {
+  const prompts = [];
+  const r = runtime({
+    client: { async queryMemories() { return { candidates: [candidateWithProvenance] }; } },
+    generate: async (call) => { prompts.push(call); return '{"memoryRefs":[]}'; },
+  });
+  await r.processSurfacing({
+    id: 23, context_fingerprint: memoryContextFingerprint({ text: 'tv', currentVisitorId: sender }),
+    subject_visitor_id: sender,
+    context: {
+      text: 'tv', currentVisitorId: sender,
+      querySourceType: 'ENVIRONMENT_EVENT', recentExpressionText: 'a television, apparently',
+    },
+  });
+  const sent = `${prompts[0].system}\n${prompts[0].prompt}`;
+  for (const leaked of ['matchProvenance', 'matchedTags', 'matchedTerms', 'recent_cy_expression', 'ENVIRONMENT_EVENT', 'repeatedFromPreviousGeneration']) {
+    assert.equal(sent.includes(leaked), false, `${leaked} must not reach the model prompt`);
+  }
+});
+
+test('selection and model prompt are identical whether or not recent-expression provenance is supplied', async () => {
+  const prompts = [];
+  const selections = [];
+  const makeRuntime = () => runtime({
+    client: { async queryMemories() { return { candidates: [candidateWithProvenance] }; } },
+    generate: async (call) => { prompts.push(`${call.system}\n${call.prompt}`); return '{"memoryRefs":["C1"]}'; },
+  });
+  for (const context of [
+    { text: 'tv', currentVisitorId: sender },
+    { text: 'tv', currentVisitorId: sender, querySourceType: 'POSTCARD', recentExpressionText: 'television, television' },
+  ]) {
+    const r = makeRuntime();
+    r.client.recordMemoryQuery = async (value) => { selections.push(value.inspection.selectedIds); };
+    await r.processSurfacing({
+      id: 24, context_fingerprint: memoryContextFingerprint({ text: 'tv', currentVisitorId: sender }),
+      subject_visitor_id: sender, context,
+    });
+  }
+  assert.equal(prompts[0], prompts[1]);
+  assert.deepEqual(selections[0], selections[1]);
+});
+
+test('a fresh runtime after restart reports no repeats and does not crash on candidates carrying provenance', async () => {
+  const recorded = [];
+  const r = runtime({
+    client: {
+      async queryMemories() { return { candidates: [candidateWithProvenance] }; },
+      async recordMemoryQuery(value) { recorded.push(value); },
+    },
+  });
+  assert.deepEqual(r.lastConsumed, { generationRef: null, insertedIds: [] });
+  await r.processSurfacing({
+    id: 25, context_fingerprint: memoryContextFingerprint({ text: 'tv', currentVisitorId: sender }),
+    subject_visitor_id: sender, context: { text: 'tv', currentVisitorId: sender },
+  });
+  assert.deepEqual(recorded[0].inspection.repeatedFromPreviousGenerationIds, []);
 });

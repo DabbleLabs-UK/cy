@@ -130,6 +130,82 @@ $checks['sender recallable source requires a real visitor scope'] = (function ()
     }
 })();
 
+// --- retrieval-cue provenance (instrumentation only) ------------------
+// $recentExpressionTerms is a supplied set of tokens from Cy's own recent
+// expression buffer, used only to cross-reference against terms that ALREADY
+// caused a match. It must never change which rows match, their order, or
+// how many are returned.
+
+$lighthouseRow = array_replace($row, [
+    'id' => '00000000-0000-4000-8000-000000000010',
+    'privacy_scope' => 'INTERNAL_ONLY', 'subject_visitor_id' => null,
+    'content' => 'The guard mentioned a lighthouse and a raven on the horizon.',
+    'tags' => 'lighthouse,raven',
+]);
+
+$externalOnly = captive_memory_rank_candidates(
+    [$lighthouseRow], ['text' => 'lighthouse', 'tags' => []], null, 10, []
+);
+$checks['candidate matched by external query text alone is labelled without expression overlap'] =
+    ($externalOnly[0]['match_provenance']['lexical_match'] ?? null) === true
+    && ($externalOnly[0]['match_provenance']['recent_cy_expression_overlap'] ?? null) === false
+    && ($externalOnly[0]['matched_terms'] ?? null) === ['lighthouse'];
+
+$selfOnly = captive_memory_rank_candidates(
+    [$lighthouseRow], ['text' => 'lighthouse', 'tags' => []], null, 10, ['lighthouse']
+);
+$checks['candidate whose matched term also appears in recent Cy expression is labelled as such'] =
+    ($selfOnly[0]['match_provenance']['recent_cy_expression_overlap'] ?? null) === true
+    && ($selfOnly[0]['match_provenance']['recent_cy_expression_overlap_terms'] ?? null) === ['lighthouse'];
+
+$mixed = captive_memory_rank_candidates(
+    [$lighthouseRow], ['text' => 'lighthouse raven', 'tags' => []], null, 10, ['raven']
+);
+$checks['mixed-source matching records both the external match and the expression overlap, not just one'] =
+    ($mixed[0]['matched_terms'] ?? null) === ['lighthouse', 'raven']
+    && ($mixed[0]['match_provenance']['lexical_match'] ?? null) === true
+    && ($mixed[0]['match_provenance']['recent_cy_expression_overlap_terms'] ?? null) === ['raven'];
+
+$structuredOnlyRow = array_replace($row, [
+    'id' => '00000000-0000-4000-8000-000000000013',
+    'content' => 'A note about something else entirely.', 'tags' => 'unrelated',
+]);
+$structuredOnly = captive_memory_rank_candidates(
+    [$structuredOnlyRow], ['text' => 'cell', 'tags' => ['postcard']], $sender, 10, ['unrelated-term']
+)[0] ?? null;
+$checks['structured sender-identity match is distinguished from any lexical or expression match'] =
+    $structuredOnly !== null
+    && $structuredOnly['match_provenance']['structured_sender_identity'] === true
+    && $structuredOnly['match_provenance']['lexical_match'] === false
+    && $structuredOnly['matched_tags'] === [] && $structuredOnly['matched_terms'] === []
+    && $structuredOnly['match_provenance']['recent_cy_expression_overlap'] === false;
+
+$withoutExpr = captive_memory_rank_candidates([$public, $row], ['text' => 'cell', 'tags' => ['postcard']], $sender, 10, []);
+$withExpr = captive_memory_rank_candidates(
+    [$public, $row], ['text' => 'cell', 'tags' => ['postcard']], $sender, 10, ['cell', 'postcard']
+);
+$idsWithout = array_map(static fn(array $r): string => $r['id'], $withoutExpr);
+$idsWith = array_map(static fn(array $r): string => $r['id'], $withExpr);
+$reasonsWithout = $withoutExpr[0]['retrieval_reasons'] ?? null;
+$reasonsWith = $withExpr[0]['retrieval_reasons'] ?? null;
+$checks['supplying recent-expression terms does not change candidate set, order, or existing reasons'] =
+    $idsWithout === $idsWith && $reasonsWithout === $reasonsWith;
+
+$library = file_get_contents(__DIR__ . '/../lib/autobiographical_memory.php');
+$checks['match provenance is not folded into the reason vocabulary sent to the model'] = is_string($library)
+    && CY_MEMORY_REASONS === [
+        'SAME_PERSON', 'SAME_PLACE', 'SHARED_ENTITIES', 'SIMILAR_SUBJECT',
+        'UNRESOLVED_THREAD', 'CURRENT_EVENT', 'DIRECT_SENDER_HISTORY',
+    ];
+$jsSource = file_get_contents(__DIR__ . '/../runner/autobiographical-memory.js');
+$checks['surfacing/formation prompts never reference match provenance fields'] = is_string($jsSource)
+    && !str_contains($jsSource, 'matchProvenance')
+    && !str_contains($jsSource, 'matchedTags')
+    && !str_contains($jsSource, 'matchedTerms')
+    && !str_contains($jsSource, 'recentCyExpression');
+$checks['memory candidate whitelist sent to the model still excludes provenance fields'] = is_string($jsSource)
+    && str_contains($jsSource, "epistemicStatus: 'SUBJECTIVE_AUTOBIOGRAPHICAL_MEMORY'");
+
 $failed = 0;
 foreach ($checks as $label => $ok) {
     echo ($ok ? '  ok   ' : '  FAIL ') . $label . "\n";

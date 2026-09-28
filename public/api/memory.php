@@ -318,7 +318,13 @@ try {
         $visitorId = $parseVisitorId($input['visitor_id'] ?? null);
         $query = is_array($input['query'] ?? null) ? $input['query'] : [];
         $limit = max(1, min(CY_MEMORY_CANDIDATE_LIMIT, (int)($input['limit'] ?? CY_MEMORY_CANDIDATE_LIMIT)));
-        $candidates = captive_memory_query($db, $query, $visitorId, $limit);
+        // Provenance only: tokens from Cy's own recent-expression buffer, supplied
+        // by the caller so candidates can record whether their match overlaps with
+        // it. Never used to fetch/rank/filter/limit candidates - see
+        // captive_memory_rank_candidates's doc comment.
+        $recentExpressionText = mb_substr(trim((string)($input['recent_expression_text'] ?? '')), 0, 2000);
+        $recentExpressionTerms = captive_memory_tokens($recentExpressionText);
+        $candidates = captive_memory_query($db, $query, $visitorId, $limit, $recentExpressionTerms);
         captive_json_response([
             'ok' => true,
             'candidates' => $candidates,
@@ -349,17 +355,21 @@ try {
     if ($action === 'record_query') {
         $stmt = $db->prepare(
             'INSERT INTO autobiographical_memory_queries
-                (generation_ref, current_context, sender_known, candidate_memory_ids,
-                 retrieval_mechanisms, privacy_filter, offered_memory_ids,
-                 selected_memory_ids, inserted_memory_ids, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))'
+                (generation_ref, current_context, query_source_type, sender_known, candidate_memory_ids,
+                 retrieval_mechanisms, candidate_match_provenance, privacy_filter, offered_memory_ids,
+                 selected_memory_ids, inserted_memory_ids, repeated_from_previous_generation_ids, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))'
         );
         $stmt->execute([
             isset($input['generation_ref']) ? mb_substr((string)$input['generation_ref'], 0, 64) : null,
-            $json($input['current_context'] ?? []), !empty($input['sender_known']) ? 1 : 0,
+            $json($input['current_context'] ?? []),
+            isset($input['query_source_type']) ? mb_substr((string)$input['query_source_type'], 0, 32) : null,
+            !empty($input['sender_known']) ? 1 : 0,
             $json($input['candidate_memory_ids'] ?? []), $json($input['retrieval_mechanisms'] ?? []),
+            $json($input['candidate_match_provenance'] ?? []),
             $json($input['privacy_filter'] ?? []), $json($input['offered_memory_ids'] ?? []),
             $json($input['selected_memory_ids'] ?? []), $json($input['inserted_memory_ids'] ?? []),
+            $json($input['repeated_from_previous_generation_ids'] ?? []),
         ]);
         $selected = array_slice(array_values(array_filter($input['selected_memory_ids'] ?? [], 'is_string')), 0, 3);
         if ($selected) {
