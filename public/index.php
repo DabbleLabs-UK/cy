@@ -218,7 +218,7 @@ window.CY = {
 
   <aside class="col col-brain">
     <div class="panel">
-      <div class="panel-title">SOMA / FUNCTIONAL ANALOGY</div>
+      <div class="panel-title">SOMA</div>
       <div id="brain"></div>
     </div>
     <div class="panel memory-panel">

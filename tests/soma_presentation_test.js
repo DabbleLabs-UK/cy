@@ -99,4 +99,37 @@ assert.match(styleSource,
   /\.soma-state-row > strong \{[\s\S]*grid-column: 2;[\s\S]*grid-row: 2;/,
   'the reading value must sit on the second line opposite its context');
 
+// SOMA RESET PHASE 1: Anxiety is the only promoted subsystem; everything else
+// (other readings, the brain-region map, circuit diagnostics, legacy stats)
+// must sit inside one collapsed quarantine section, in that DOM order.
+const promotedIndex = brainSource.indexOf('class="soma-anxiety-promoted"');
+const quarantineIndex = brainSource.indexOf('class="soma-legacy-quarantine"');
+assert.ok(promotedIndex >= 0, 'a promoted Anxiety block must exist');
+assert.ok(quarantineIndex >= 0, 'a quarantine wrapper for the old Soma presentation must exist');
+assert.ok(promotedIndex < quarantineIndex,
+  'the promoted Anxiety block must render before the quarantined diagnostics');
+
+const promotedBlock = brainSource.slice(promotedIndex, quarantineIndex);
+assert.match(promotedBlock, /not a measurement of felt anxiety/,
+  'the promoted block must carry a plain-English disclaimer distinguishing computed state from felt anxiety');
+assert.doesNotMatch(promotedBlock, /soma-public-readout|brain-figure|soma-region-list|CIRCUITS|legacy-box/,
+  'the promoted Anxiety block must not contain any of the quarantined legacy markup');
+
+const quarantineBlock = brainSource.slice(quarantineIndex);
+assert.match(quarantineBlock,
+  /class="soma-legacy-quarantine">\s*<summary>PREVIOUS MODELS \/ DIAGNOSTICS<\/summary>/,
+  'the quarantine section must be a collapsed <details> with a plain "previous models" label');
+assert.doesNotMatch(quarantineBlock.slice(0, quarantineBlock.indexOf('PREVIOUS MODELS') + 40), /\bopen\b/,
+  'the quarantine <details> must not carry an open attribute (collapsed by default)');
+for (const marker of ['soma-public-readout', 'brain-figure', 'soma-region-list', 'soma-diagnostics', 'legacy-box']) {
+  assert.ok(quarantineBlock.includes(marker), `quarantine section must still preserve ${marker}`);
+}
+
+// The Anxiety entry itself must render into the promoted readout, not the
+// legacy one, regardless of DOM/registry state - this is a code-path check,
+// not just a static-markup check.
+assert.match(brainSource,
+  /\(definition\.key === 'anxiety' \? anxietyReadout : readout\)\.appendChild\(entry\)/,
+  'the anxiety reading must be routed to the promoted readout container at build time');
+
 console.log('soma_presentation_test.js: all checks passed');

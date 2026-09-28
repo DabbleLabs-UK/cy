@@ -849,6 +849,17 @@ body.cy-paused::after {
 .soma-overall-status { color: #d2a259; font-size: 8px; letter-spacing: 0.12em; }
 .soma-caveat { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
 .soma-public-readout { display: grid; gap: 5px; }
+.soma-anxiety-promoted {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.soma-anxiety-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.soma-anxiety-overall-status { color: #7fa9c9; font-size: 8px; letter-spacing: 0.12em; }
+.soma-anxiety-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-anxiety-readout { display: grid; gap: 5px; }
+.soma-legacy-quarantine { border-top: 1px solid var(--line); padding-top: 8px; }
+.soma-legacy-quarantine > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
+.soma-quarantine-note { margin: 6px 0 8px; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
 .soma-state-entry {
   border: 1px solid transparent;
   background: transparent;
@@ -2327,7 +2338,11 @@ body.cy-paused::after {
   font-size: 13px;
   line-height: 1.55;
 }
-.soma-public-readout { gap: 7px; }
+.soma-anxiety-intro, .soma-quarantine-note {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.soma-public-readout, .soma-anxiety-readout { gap: 7px; }
 .soma-state-row {
   min-height: 48px;
   padding: 8px 6px 8px 18px;
