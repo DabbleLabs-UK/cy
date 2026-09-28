@@ -271,13 +271,14 @@ export function computeDerived(v) {
   const mean = (a, b) => (a + b) / 2;
   const d = {
     confusion: clamp(mean(1 - m.lucidity, m.dissociation)),
-    overwhelm: clamp(0.5 * m.stress + 0.3 * m.agitation + 0.1 * p.hunger),
+    overwhelm: clamp(0.5 * m.stress + 0.3 * m.agitation),
     numbness: clamp(m.despair * (1 - m.agitation)),
     paranoia: clamp(0.6 * m.anxiety + 0.4 * suspicionPeak),
     fixation: clamp(0.5 * m.stress + 0.5 * (v.monotony || 0)),
     resignation: clamp(m.despair * m.lucidity),
-    // Legacy fatigue is retained as a diagnostic scalar only.
-    brittleness: clamp(0.3 * p.hunger + 0.3 * m.anger),
+    // Legacy fatigue and the legacy elapsed-time hunger scalar are retained as
+    // diagnostic scalars only and no longer feed this compatibility-derived state.
+    brittleness: clamp(0.3 * m.anger),
   };
   for (const k in d) d[k] = Number(d[k].toFixed(3));
   return d;
@@ -350,7 +351,7 @@ export function heartRate(v, asleep = false) {
   const a = asleep ? 1 : 0;
   return Math.round(
     clamp(
-      62 + 46 * m.agitation + 10 * p.hunger,
+      62 + 46 * m.agitation,
       48,
       150,
     ),
@@ -367,7 +368,7 @@ export function brainRegions(v, { broca = 0, v1 = 0, asleep = false } = {}) {
   const r = {
     amygdala: 0.2 + 0.3 * m.agitation,
     acc: 0.25 + 0.6 * m.stress,
-    insula: 0.2 + 0.4 * p.hunger,
+    insula: 0.2,
     hippocampus: 0.3 + 0.5 * (v.imageRecall || 0),
     dlpfc: 0.85 * m.lucidity,
     broca,

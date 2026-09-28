@@ -794,6 +794,17 @@
       "version": null
     },
     {
+      "id": "legacy_hunger_metric",
+      "display_name": "LEGACY HUNGER SCALAR",
+      "implementation_status": "PROVISIONAL",
+      "lifecycle_status": "DIAGNOSTICS_ONLY",
+      "data_flow_status": "ISOLATED",
+      "model_spec_id": null,
+      "status_note": "The older elapsed-time-since-meal hunger scalar is retained only for state compatibility and private diagnostics. It no longer feeds public primary state, the public satiety panel or graph, prompts, actions, environment, brain analogies, compatibility vitals, the heart-rate diagnostic or another grounded subsystem, and it no longer couples into arousal. The grounded physiological satiety model supersedes it and it does not compete with it.",
+      "data_dependencies": ["ingestion_ledger"],
+      "version": "legacy-experienced-state-v2"
+    },
+    {
       "id": "sleep_homeostasis",
       "display_name": "HOMEOSTATIC SLEEP PRESSURE",
       "implementation_status": "IMPLEMENTED",
