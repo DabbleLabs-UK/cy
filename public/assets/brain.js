@@ -666,36 +666,46 @@ export class BrainHud {
         <span class="measure-dot"></span><span class="measure-label">MODEL INFERENCE</span>
         <span class="measure-value">IDLE</span><span class="measure-kind">MEASURED</span>
       </div>
-      <div class="soma-scaffold">
-        <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
-        <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
-        <div class="soma-public-readout"></div>
-        <div class="brain-figure">
-          <svg class="brain-svg" viewBox="0 0 340 230" role="group" aria-label="Soma functional brain analogy">
-            <path class="brain-shell" d="M34 128 C24 91 45 60 80 43 C105 20 147 19 178 31 C214 27 257 40 286 66 C309 86 316 116 303 139 C307 157 294 176 272 181 C252 198 212 204 179 196 C148 204 108 195 82 178 C55 172 38 154 34 128 Z"/>
-            <path class="brain-cerebellum" d="M235 164 C262 151 295 158 304 178 C296 197 264 205 235 189 C226 181 227 171 235 164 Z"/>
-            <path class="brain-stem" d="M213 178 C226 183 237 193 235 219 L218 219 C220 201 207 192 196 184 Z"/>
-            <path class="brain-folds" d="M54 83 C85 72 105 72 132 82 M46 111 C78 102 98 107 119 119 M82 50 C104 60 110 71 111 93 M143 40 C154 60 153 79 142 98 M184 39 C197 56 203 73 198 94 M230 48 C238 66 242 83 237 105 M273 73 C284 91 284 110 274 128 M236 132 C253 141 261 153 260 173 M94 146 C117 137 137 140 153 154"/>
-          </svg>
-          <div class="brain-key">SOMA / FUNCTIONAL ANALOGY</div>
-        </div>
-        <div class="soma-region-list" aria-label="Functional brain region states"></div>
-        <details class="soma-diagnostics"><summary>LEGACY SOMA DIAGNOSTICS - PROVISIONAL</summary><div class="soma-diagnostic-rows"></div><div class="soma-selection"></div></details>
+      <div class="soma-anxiety-promoted">
+        <div class="soma-anxiety-head"><span class="soma-badge">ANXIETY</span><span class="soma-anxiety-overall-status">CATEGORICAL OPERATIONAL STATE</span></div>
+        <p class="soma-anxiety-intro">Anxiety here means Cy's current computed threat condition, not a measurement of felt anxiety. It is one of a small set of named states drawn from structured world events, not a biological-arousal or brain-activation reading.</p>
+        <div class="soma-anxiety-readout"></div>
       </div>
-      <details class="legacy-box"><summary>PLANNED STATS</summary>
-        <p class="soma-pending-note"><strong>Implementation registry:</strong> unavailable systems remain blank rather than displaying fake zeroes.</p>
-        <p>Legacy synthetic values are retained only for compatibility and are not observations or clinical measures.</p>
-        <dl><div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
-        <div><dt>legacy mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
-        <div><dt>legacy composites</dt><dd class="legacy-derived">unavailable</dd></div>
-        <div><dt>monotony amp</dt><dd class="legacy-amp">unavailable</dd></div>
-        <div><dt>legacy brain map</dt><dd class="legacy-brain">unavailable</dd></div>
-        <div><dt>cast standing</dt><dd class="legacy-cast">unavailable</dd></div></dl>
+      <details class="soma-legacy-quarantine">
+        <summary>PREVIOUS MODELS / DIAGNOSTICS</summary>
+        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety above is currently promoted.</p>
+        <div class="soma-scaffold">
+          <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
+          <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
+          <div class="soma-public-readout"></div>
+          <div class="brain-figure">
+            <svg class="brain-svg" viewBox="0 0 340 230" role="group" aria-label="Soma functional brain analogy">
+              <path class="brain-shell" d="M34 128 C24 91 45 60 80 43 C105 20 147 19 178 31 C214 27 257 40 286 66 C309 86 316 116 303 139 C307 157 294 176 272 181 C252 198 212 204 179 196 C148 204 108 195 82 178 C55 172 38 154 34 128 Z"/>
+              <path class="brain-cerebellum" d="M235 164 C262 151 295 158 304 178 C296 197 264 205 235 189 C226 181 227 171 235 164 Z"/>
+              <path class="brain-stem" d="M213 178 C226 183 237 193 235 219 L218 219 C220 201 207 192 196 184 Z"/>
+              <path class="brain-folds" d="M54 83 C85 72 105 72 132 82 M46 111 C78 102 98 107 119 119 M82 50 C104 60 110 71 111 93 M143 40 C154 60 153 79 142 98 M184 39 C197 56 203 73 198 94 M230 48 C238 66 242 83 237 105 M273 73 C284 91 284 110 274 128 M236 132 C253 141 261 153 260 173 M94 146 C117 137 137 140 153 154"/>
+            </svg>
+            <div class="brain-key">SOMA / FUNCTIONAL ANALOGY</div>
+          </div>
+          <div class="soma-region-list" aria-label="Functional brain region states"></div>
+          <details class="soma-diagnostics"><summary>LEGACY SOMA DIAGNOSTICS - PROVISIONAL</summary><div class="soma-diagnostic-rows"></div><div class="soma-selection"></div></details>
+        </div>
+        <details class="legacy-box"><summary>PLANNED STATS</summary>
+          <p class="soma-pending-note"><strong>Implementation registry:</strong> unavailable systems remain blank rather than displaying fake zeroes.</p>
+          <p>Legacy synthetic values are retained only for compatibility and are not observations or clinical measures.</p>
+          <dl><div><dt>heartbeat model</dt><dd class="legacy-heart">-- BPM</dd></div>
+          <div><dt>legacy mood axes</dt><dd class="legacy-mental">unavailable</dd></div>
+          <div><dt>legacy composites</dt><dd class="legacy-derived">unavailable</dd></div>
+          <div><dt>monotony amp</dt><dd class="legacy-amp">unavailable</dd></div>
+          <div><dt>legacy brain map</dt><dd class="legacy-brain">unavailable</dd></div>
+          <div><dt>cast standing</dt><dd class="legacy-cast">unavailable</dd></div></dl>
+        </details>
       </details>`;
 
     this.root.querySelector('.soma-overall-status').textContent = overallImplementationLabel(this.registry);
 
     const readout = this.root.querySelector('.soma-public-readout');
+    const anxietyReadout = this.root.querySelector('.soma-anxiety-readout');
     for (const definition of this.metricDefinitions) {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
@@ -823,7 +833,7 @@ export class BrainHud {
       if (definition.key === 'satiety') this._wireFeeding(entry);
       if (definition.key === 'somaticHarm') this._wireSomatic(entry);
       if (definition.key === 'loneliness') this._wireSocialContact(entry);
-      readout.appendChild(entry);
+      (definition.key === 'anxiety' ? anxietyReadout : readout).appendChild(entry);
       this.rows[definition.key] = entry;
     }
     const svg = this.root.querySelector('.brain-svg');
