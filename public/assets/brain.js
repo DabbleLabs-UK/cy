@@ -383,7 +383,6 @@ function processSMarkup(status, admin) {
   return `<section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="sleep-homeostasis-head"><span>${status.displayName}</span><strong class="sleep-homeostasis-status">${status.publicLabel}</strong></div>
     <div class="sleep-pressure-reading"><strong class="sleep-pressure-value">--</strong><span>SLEEP PRESSURE INDEX</span></div>
-    <p class="sleep-homeostasis-explanation">Sleep pressure accumulates while Cy is awake and dissipates during sleep.</p>
     <p class="sleep-homeostasis-state">Current sleep state unavailable.</p>
     <p class="sleep-homeostasis-calibration">Waiting for schedule-derived sleep history.</p>
     <p class="sleep-homeostasis-range">S range unavailable.</p>
@@ -483,7 +482,6 @@ function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, an
 function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatus, peripheralStatus, centralStatus, actionStatus, admin) {
   return `<section class="somatic-input-card status-${somaticStatus.status.toLowerCase().replace('_', '-')}">
     <div class="somatic-input-head"><span>CURRENT STRUCTURED STATE</span><strong class="somatic-input-status">LIVE</strong></div>
-    <p class="somatic-input-explanation">Somatic Harm tracks noxious events and injuries.</p>
     <dl class="somatic-input-facts">
       <div><dt>CURRENT STATE</dt><dd data-somatic="category">UNKNOWN</dd></div>
       <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">UNKNOWN</dd></div>
@@ -819,7 +817,7 @@ export class BrainHud {
           ? historyMarkup('KSS PREDICTED SLEEPINESS', 'Stored predicted KSS sleepiness history on the 1 to 9 scale')
           : historyMarkup();
       const summary = definition.key === 'somaticHarm'
-        ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE - structured bodily state</span><strong class="soma-state-value">--</strong></summary>`
+        ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">--</strong></summary>`
         : definition.key === 'anxiety'
           ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong><span class="soma-state-bar operational-anxiety-state-bar" data-state="UNKNOWN" aria-hidden="true"><i></i><i></i><i></i><i></i></span></summary>`
         : definition.key === 'loneliness'
@@ -1594,7 +1592,7 @@ export class BrainHud {
     const headline = live && snapshot.headline ? snapshot.headline : null;
     entry.querySelector('.soma-state-value').textContent = headline ? headline.display : 'STATE UNAVAILABLE';
     entry.querySelector('.soma-state-status').textContent = live
-      ? 'LIVE - structured bodily state' : 'UNAVAILABLE';
+      ? 'LIVE' : 'UNAVAILABLE';
     entry.querySelector('summary').title = live
       ? `SOMATIC HARM. ${headline.display}. Structured noxious events and injuries.`
       : 'SOMATIC HARM. Grounded state unavailable.';
