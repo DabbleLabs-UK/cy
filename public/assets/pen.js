@@ -664,15 +664,16 @@ export class Pen {
     // past the card's message area.
     if (this.card) return;
     const me = payload.mental || {};
-    const agitation = clamp01(me.agitation ?? 0.25);
     const despair = clamp01(me.despair ?? 0.3);
     const lucidity = clamp01(me.lucidity ?? 0.65);
 
     // Legacy fatigue is diagnostics-only and cannot change handwriting.
     this.size = 19;
-    // agitation -> faster, heavier
-    this.penSpeed = (95 + agitation * 70) * (this.size / 19); // scales with size
-    this.strokeWidth = 1.5 + agitation * 1.3;
+    // Legacy arousal/agitation is retired: no bodily-activation signal exists
+    // to drive pen speed or weight, so both are fixed constants, not derived
+    // from any mental.* value. Purely theatrical motion, not a claimed measurement.
+    this.penSpeed = 112 * (this.size / 19); // scales with size
+    this.strokeWidth = 1.8;
     // despair -> fainter ink
     this.inkOpacity = 0.95 - despair * 0.4; // 0.95..0.55
     // lucidity -> tighter line

@@ -461,7 +461,7 @@ function summaryFor(ev) {
       return `${p.title ? '"' + p.title + '"' : '(untitled)'}${pass}  strokes=${n}`;
     }
     case 'vitals':
-      return `hr=${p.hr}  mode=${p.mode || '?'}  day=${p.day}`;
+      return `hr=${p.hr ?? 'unavailable'}  mode=${p.mode || '?'}  day=${p.day}`;
     case 'host':
       return `cpu=${p.cpu}%  mem=${p.memPct}%  cyCpu=${p.cyCpu ?? '?'}%  ollama=${p.ollamaProcs ?? '?'}`;
     case 'power':

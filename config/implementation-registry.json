@@ -51,11 +51,13 @@
     },
     {
       "id": "arousal",
-      "display_name": "AROUSAL / STRESS LOAD",
+      "display_name": "LEGACY ACTIVATION HEURISTIC",
       "implementation_status": "PROVISIONAL",
+      "lifecycle_status": "DIAGNOSTICS_ONLY",
+      "data_flow_status": "ISOLATED",
       "model_spec_id": null,
-      "status_note": "Currently produced by the older heuristic experienced-state model. No grounded stress-load specification has been approved.",
-      "data_dependencies": ["possible_harm", "nociceptive_impact", "sleep_interruption", "physical_discomfort"],
+      "status_note": "A decaying threat/control keyword-appraisal heuristic, not a physiological or stress-load measurement. Its dominant input is a binary threat/control classification matched from free-text event name/tags in soma.js, not read from any structured soma-input field; this is the same appraisal used by legacy Anxiety, so arousal substantially duplicates it under a faster decay. sleep_interruption is its only genuinely-consumed structured field. Earlier versions of this entry also listed possible_harm, nociceptive_impact and physical_discomfort as dependencies; those are valid soma-input schema fields but are never actually read by the arousal computation, so they have been removed. Retired from live presentation: it no longer drives the heartbeat/BPM readout or drawing-pen animation, and it is not mirrored into compatibility vitals, brain mappings, prompts, actions or any other live behaviour. Retained only for diagnostics and historical chart continuity. No grounded stress-load, autonomic-activation or arousal specification exists or is planned to replace it.",
+      "data_dependencies": ["sleep_interruption"],
       "version": "legacy-experienced-state-v2"
     },
     {

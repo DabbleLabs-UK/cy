@@ -4,7 +4,7 @@
 
 export const EXPERIENCED_METRICS = [
   { key: 'anxiety', label: 'ANXIETY' },
-  { key: 'arousal', label: 'AROUSAL / STRESS' },
+  { key: 'arousal', label: 'LEGACY ACTIVATION HEURISTIC' },
   { key: 'somaticHarm', registryKey: 'somatic_harm_headline', label: 'SOMATIC HARM' },
   { key: 'satiety', label: 'PHYSIOLOGICAL SATIETY' },
   { key: 'sleepiness', label: 'PREDICTED SLEEPINESS' },

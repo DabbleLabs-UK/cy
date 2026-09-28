@@ -4117,8 +4117,15 @@ async function main() {
       // Legacy fatigue remains inside the explicitly provisional diagnostic
       // snapshot. It no longer enters compatibility vitals, brain mappings,
       // prompt inputs, action selection or environmental behaviour.
-      vitals.mental.stress = experienced.arousal.value / 100;
-      vitals.mental.agitation = experienced.arousal.value / 100;
+      // Legacy Arousal/Stress is retired: it was an arbitrary decaying
+      // threat/control keyword heuristic that substantially duplicated
+      // promoted Anxiety and had no defensible physiological grounding. It no
+      // longer feeds heart rate, pen animation, compatibility vitals, brain
+      // mappings or any other live behaviour. Keep the required compatibility
+      // slots finite and neutral (matching Loneliness below) rather than
+      // let the pre-Soma event-delta heuristic drive them unlabelled.
+      vitals.mental.stress = 0;
+      vitals.mental.agitation = 0;
       vitals.mental.anger = experienced.anger.value / 100;
       // Legacy Loneliness remains available only inside experienced-state
       // diagnostics. Keep the required compatibility slot finite and neutral

@@ -344,18 +344,14 @@ export function applyEvent(v, name, { now = 0 } = {}) {
   return amp;
 }
 
-// Derived heart rate. asleep is coerced 0/1.
+// RETIRED. This used to derive a synthetic BPM from legacy arousal/agitation,
+// which was itself an arbitrary decaying threat/control keyword heuristic with
+// no physiological grounding and no validated mapping to real heart rate. No
+// replacement bodily-activation signal exists, so this honestly reports
+// unavailable rather than inventing a new heuristic BPM. Signature and args
+// kept for compatibility with existing callers.
 export function heartRate(v, asleep = false) {
-  const p = v.physical;
-  const m = v.mental;
-  const a = asleep ? 1 : 0;
-  return Math.round(
-    clamp(
-      62 + 46 * m.agitation,
-      48,
-      150,
-    ),
-  );
+  return null;
 }
 
 // LEGACY PLACEHOLDER brain-region activations. These are synthetic mappings,

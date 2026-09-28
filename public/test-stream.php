@@ -287,7 +287,11 @@ function fake_vitals(int $seq): array
         'thalamus' => round(min(1, 0.5 + 0.3 * $lucidity), 3),
     ];
 
-    $hr = (int)round(62 + 46 * $agitation + 30 * $anxiety);
+    // Heart rate is retired in the real payload (it was derived from legacy
+    // arousal/agitation, which has no physiological grounding). Mirror that
+    // honestly here rather than fabricating a fixture BPM the live system no
+    // longer produces.
+    $hr = null;
 
     // derived composite states the CORTICAL READOUT renders as bars. Real runs
     // carry a full derived{} object; mirror its seven keys here so the panel can

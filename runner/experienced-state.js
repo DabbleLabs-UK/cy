@@ -16,7 +16,7 @@ export const HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const METRICS = {
   anxiety: { label: 'ANXIETY', baseline: 18, recovery: 'medium' },
-  arousal: { label: 'AROUSAL / STRESS', baseline: 20, recovery: 'fast' },
+  arousal: { label: 'LEGACY ACTIVATION HEURISTIC', baseline: 20, recovery: 'fast' },
   pain: { label: 'PAIN / DISCOMFORT', baseline: 2, recovery: 'slow' },
   hunger: { label: 'HUNGER', baseline: 18, recovery: 'body clock' },
   fatigue: { label: 'FATIGUE', baseline: 20, recovery: 'sleep / body clock' },
@@ -524,7 +524,7 @@ export function experiencedSnapshot(state, now = null) {
       key, label: spec.label, value: state.metrics[key].value, baseline: spec.baseline,
       updatedAtMs: state.metrics[key].updatedAtMs, trend: trend.direction, trendDelta: trend.delta,
       recovery: spec.recovery, contributors: publicContributors(state, key, now),
-      ...(['loneliness', 'hunger'].includes(key) ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
+      ...(['loneliness', 'hunger', 'arousal'].includes(key) ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
     };
   }
   const value = (key) => metrics[key].value;
