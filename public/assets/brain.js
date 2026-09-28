@@ -680,9 +680,14 @@ export class BrainHud {
         <p class="soma-sleep-pressure-intro">Sleep pressure is a modelled homeostatic drive that rises during scheduled wake and falls during scheduled sleep. It is not a measurement of how tired Cy feels.</p>
         ${processSMarkup(this.sleepHomeostasisStatus, this.admin)}
       </div>
+      <div class="soma-satiety-promoted">
+        <div class="soma-satiety-head"><span class="soma-badge">PHYSIOLOGICAL SATIETY</span><span class="soma-satiety-overall-status">PHYSIOLOGICAL MODEL ESTIMATE</span></div>
+        <p class="soma-satiety-intro">Physiological satiety is a model estimate of post-meal gastrointestinal and hormonal state. It is not a measurement of whether Cy feels hungry or full.</p>
+        <div class="soma-satiety-readout"></div>
+      </div>
       <details class="soma-legacy-quarantine">
         <summary>PREVIOUS MODELS / DIAGNOSTICS</summary>
-        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety and Homeostatic Sleep Pressure above are currently promoted.</p>
+        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety, Homeostatic Sleep Pressure and Physiological Satiety above are currently promoted.</p>
         <div class="soma-scaffold">
           <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
           <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
@@ -715,6 +720,7 @@ export class BrainHud {
 
     const readout = this.root.querySelector('.soma-public-readout');
     const anxietyReadout = this.root.querySelector('.soma-anxiety-readout');
+    const satietyReadout = this.root.querySelector('.soma-satiety-readout');
     for (const definition of this.metricDefinitions) {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
@@ -841,7 +847,10 @@ export class BrainHud {
       if (definition.key === 'satiety') this._wireFeeding(entry);
       if (definition.key === 'somaticHarm') this._wireSomatic(entry);
       if (definition.key === 'loneliness') this._wireSocialContact(entry);
-      (definition.key === 'anxiety' ? anxietyReadout : readout).appendChild(entry);
+      const target = definition.key === 'anxiety' ? anxietyReadout
+        : definition.key === 'satiety' ? satietyReadout
+          : readout;
+      target.appendChild(entry);
       this.rows[definition.key] = entry;
     }
     const svg = this.root.querySelector('.brain-svg');

@@ -864,6 +864,14 @@ body.cy-paused::after {
 .soma-sleep-pressure-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .soma-sleep-pressure-overall-status { color: #65d59a; font-size: 8px; letter-spacing: 0.12em; }
 .soma-sleep-pressure-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-satiety-promoted {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.soma-satiety-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.soma-satiety-overall-status { color: #c98fd6; font-size: 8px; letter-spacing: 0.12em; }
+.soma-satiety-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-satiety-readout { display: grid; gap: 5px; }
 .soma-legacy-quarantine { border-top: 1px solid var(--line); padding-top: 8px; }
 .soma-legacy-quarantine > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
 .soma-quarantine-note { margin: 6px 0 8px; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
