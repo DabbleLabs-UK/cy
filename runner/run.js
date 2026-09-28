@@ -4126,7 +4126,17 @@ async function main() {
       // let the pre-Soma event-delta heuristic drive them unlabelled.
       vitals.mental.stress = 0;
       vitals.mental.agitation = 0;
-      vitals.mental.anger = experienced.anger.value / 100;
+      // Legacy Anger/Hostility is retired: it was an arbitrary decaying
+      // threat/control keyword heuristic that substantially duplicated
+      // promoted Anxiety, with registry-claimed appraisal-theory dependencies
+      // (goal_obstruction, agency, responsibility_evidence, intent,
+      // learned_context) that were never actually read. It is no longer
+      // mirrored into compatibility vitals here. vitals.mental.anger is left
+      // untouched by this retirement - updateAffect() below is a separate,
+      // independently-audited live mechanism (recent-output profanity/threat
+      // density plus per-character grudge) that owns this field end to end,
+      // including easing from its own previous tick's value; overwriting it
+      // here would break that continuity, not retire anything.
       // Legacy Loneliness remains available only inside experienced-state
       // diagnostics. Keep the required compatibility slot finite and neutral
       // so it cannot feed prompts, drawing or other legacy behaviour while the

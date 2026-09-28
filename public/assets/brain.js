@@ -9,7 +9,7 @@ export const EXPERIENCED_METRICS = [
   { key: 'satiety', label: 'PHYSIOLOGICAL SATIETY' },
   { key: 'sleepiness', label: 'PREDICTED SLEEPINESS' },
   { key: 'loneliness', label: 'SOCIAL CONTACT / ISOLATION' },
-  { key: 'anger', label: 'ANGER / HOSTILITY' },
+  { key: 'anger', label: 'LEGACY ACTIVATION HEURISTIC (ANGER)' },
   { key: 'rumination', label: 'RUMINATION / FIXATION' },
 ];
 

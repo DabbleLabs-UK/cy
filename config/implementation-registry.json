@@ -121,11 +121,13 @@
     },
     {
       "id": "anger",
-      "display_name": "ANGER / HOSTILITY",
+      "display_name": "LEGACY ACTIVATION HEURISTIC (ANGER)",
       "implementation_status": "PROVISIONAL",
+      "lifecycle_status": "DIAGNOSTICS_ONLY",
+      "data_flow_status": "ISOLATED",
       "model_spec_id": null,
-      "status_note": "Currently produced by older event and relationship heuristics. No grounded anger/appraisal specification has been approved.",
-      "data_dependencies": ["goal_obstruction", "agency", "responsibility_evidence", "intent", "learned_context"],
+      "status_note": "A decaying threat/control keyword-appraisal heuristic, not a measurement of hostile intent, blocked-goal frustration or felt anger. It reads the same binary threat/control appraisal used by legacy Anxiety and legacy Arousal and substantially duplicates them under different constants. Earlier versions of this entry claimed goal_obstruction, agency, responsibility_evidence, intent and learned_context as dependencies; those are valid soma-input schema fields for an appraisal-theory anger model but are never actually read by this heuristic, so they have been removed - it has no genuinely-consumed structured dependency. Retired from live presentation: it is not mirrored into compatibility vitals. It is unrelated to the separate, independently-audited live capitalisation/shouting behaviour in shout.js, which reads its own recent-output profanity/threat signal and a per-character grudge state, not this metric. Retained only for diagnostics and historical chart continuity. No grounded anger/appraisal specification exists or is planned to replace it.",
+      "data_dependencies": [],
       "version": "legacy-experienced-state-v2"
     },
     {
