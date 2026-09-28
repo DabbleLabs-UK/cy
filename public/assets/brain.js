@@ -503,7 +503,7 @@ function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatu
       </div>
     </details>
     <details class="soma-substrate-more"><summary>MODEL / LIMITATIONS</summary>
-      <div class="somatic-model-limits"><span>INJURY SEVERITY</span><strong>NOT MODELLED / UNKNOWN</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
+      <div class="somatic-model-limits"><span>SUBJECTIVE PAIN</span><strong>${painStatus.publicLabel}</strong><span>INJURY SEVERITY</span><strong>NOT MODELLED / UNKNOWN</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
     </details>
     ${admin ? '<details class="somatic-input-inspector"><summary>SOMATIC / NOXIOUS INPUT TRACE</summary><pre>Waiting for the complete somatic ledger.</pre></details>' : ''}
   </section>`;
@@ -685,9 +685,14 @@ export class BrainHud {
         <p class="soma-satiety-intro">Physiological satiety is a model estimate of post-meal gastrointestinal and hormonal state. It is not a measurement of whether Cy feels hungry or full.</p>
         <div class="soma-satiety-readout"></div>
       </div>
+      <div class="soma-harm-promoted">
+        <div class="soma-harm-head"><span class="soma-badge">HARM / NOCICEPTIVE IMPACT</span><span class="soma-harm-overall-status">STRUCTURED BODILY STATE</span></div>
+        <p class="soma-harm-intro">Harm tracks structured bodily injury and nociceptive state. It does not measure how much pain Cy feels.</p>
+        <div class="soma-harm-readout"></div>
+      </div>
       <details class="soma-legacy-quarantine">
         <summary>PREVIOUS MODELS / DIAGNOSTICS</summary>
-        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety, Homeostatic Sleep Pressure and Physiological Satiety above are currently promoted.</p>
+        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety, Homeostatic Sleep Pressure, Physiological Satiety and Harm / Nociceptive Impact above are currently promoted.</p>
         <div class="soma-scaffold">
           <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
           <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
@@ -721,6 +726,7 @@ export class BrainHud {
     const readout = this.root.querySelector('.soma-public-readout');
     const anxietyReadout = this.root.querySelector('.soma-anxiety-readout');
     const satietyReadout = this.root.querySelector('.soma-satiety-readout');
+    const harmReadout = this.root.querySelector('.soma-harm-readout');
     for (const definition of this.metricDefinitions) {
       const entry = document.createElement('details');
       entry.className = `soma-state-entry soma-reading-entry status-${definition.status.status.toLowerCase().replace('_', '-')}`;
@@ -849,7 +855,8 @@ export class BrainHud {
       if (definition.key === 'loneliness') this._wireSocialContact(entry);
       const target = definition.key === 'anxiety' ? anxietyReadout
         : definition.key === 'satiety' ? satietyReadout
-          : readout;
+          : definition.key === 'somaticHarm' ? harmReadout
+            : readout;
       target.appendChild(entry);
       this.rows[definition.key] = entry;
     }
