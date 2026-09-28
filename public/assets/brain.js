@@ -379,8 +379,8 @@ function satietyHistoryMarkup() {
   </div>`;
 }
 
-function sleepHomeostasisMarkup(status, circadianStatus, admin) {
-  return `<div class="sleep-regulation-stack"><section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
+function processSMarkup(status, admin) {
+  return `<section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="sleep-homeostasis-head"><span>${status.displayName}</span><strong class="sleep-homeostasis-status">${status.publicLabel}</strong></div>
     <div class="sleep-pressure-reading"><strong class="sleep-pressure-value">--</strong><span>SLEEP PRESSURE INDEX</span></div>
     <p class="sleep-homeostasis-explanation">Sleep pressure accumulates while Cy is awake and dissipates during sleep.</p>
@@ -392,11 +392,14 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
         <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
       </div>
       <svg class="soma-history sleep-homeostasis-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored Process S history"><path></path></svg>
-      <p class="sleep-history-note">Open this reading to load stored Process S history.</p>
+      <p class="sleep-history-note">Loading stored Process S history...</p>
     </div>
     ${admin ? '<details class="sleep-homeostasis-inspector"><summary>SLEEP HOMEOSTASIS INSPECTION</summary><pre>Waiting for a Process S integration.</pre></details>' : ''}
-  </section>
-  <section class="circadian-process-card status-${circadianStatus.status.toLowerCase().replace('_', '-')}">
+  </section>`;
+}
+
+function processCMarkup(circadianStatus, admin) {
+  return `<section class="circadian-process-card status-${circadianStatus.status.toLowerCase().replace('_', '-')}">
     <div class="circadian-process-head"><span>${circadianStatus.displayName}</span><strong class="circadian-process-status">${circadianStatus.publicLabel}</strong></div>
     <div class="circadian-process-reading"><strong class="circadian-process-value">--</strong><span>MODEL OUTPUT C</span></div>
     <p class="circadian-process-explanation">The circadian component follows a published 24-hour waveform. Cy's exact biological phase cannot be observed, so its phase is estimated from his habitual sleep schedule.</p>
@@ -406,7 +409,7 @@ function sleepHomeostasisMarkup(status, circadianStatus, admin) {
     ${circadianHistoryMarkup()}
     <p class="circadian-entrainment"><span>CIRCADIAN ENTRAINMENT</span><strong>NOT MODELLED</strong></p>
     ${admin ? '<details class="circadian-process-inspector"><summary>CIRCADIAN PROCESS C INSPECTION</summary><pre>Waiting for a Process C evaluation.</pre></details>' : ''}
-  </section></div>`;
+  </section>`;
 }
 
 function predictedSleepinessMarkup(status, admin) {
@@ -656,6 +659,7 @@ export class BrainHud {
     this.sleepHistoryRequests = new WeakMap();
     this.circadianHistoryRequests = new WeakMap();
     this.scnPhaseHand = null;
+    this._sleepPressureHistoryLoaded = false;
     this._build();
   }
 
@@ -671,9 +675,14 @@ export class BrainHud {
         <p class="soma-anxiety-intro">Anxiety here means Cy's current computed threat condition, not a measurement of felt anxiety. It is one of a small set of named states drawn from structured world events, not a biological-arousal or brain-activation reading.</p>
         <div class="soma-anxiety-readout"></div>
       </div>
+      <div class="soma-sleep-pressure-promoted">
+        <div class="soma-sleep-pressure-head"><span class="soma-badge">HOMEOSTATIC SLEEP PRESSURE</span><span class="soma-sleep-pressure-overall-status">NOT AVAILABLE</span></div>
+        <p class="soma-sleep-pressure-intro">Sleep pressure is a modelled homeostatic drive that rises during scheduled wake and falls during scheduled sleep. It is not a measurement of how tired Cy feels.</p>
+        ${processSMarkup(this.sleepHomeostasisStatus, this.admin)}
+      </div>
       <details class="soma-legacy-quarantine">
         <summary>PREVIOUS MODELS / DIAGNOSTICS</summary>
-        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety above is currently promoted.</p>
+        <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety and Homeostatic Sleep Pressure above are currently promoted.</p>
         <div class="soma-scaffold">
           <div class="soma-head"><span class="soma-badge">SOMA MODEL STATUS</span><span class="soma-overall-status">PROVISIONAL</span></div>
           <p class="soma-caveat">Some displayed values come from an older heuristic model and are marked accordingly. Unfinished mappings do not display activation.</p>
@@ -714,8 +723,8 @@ export class BrainHud {
       if (definition.key === 'somaticHarm') entry.classList.add('soma-somatic-entry');
       if (definition.key === 'loneliness') entry.classList.add('soma-social-entry');
       entry.dataset.metric = definition.key;
-      const sleepHomeostasis = definition.key === 'sleepiness'
-        ? `${predictedSleepinessMarkup(this.predictedSleepinessStatus, this.admin)}${sleepHomeostasisMarkup(this.sleepHomeostasisStatus, this.circadianStatus, this.admin)}`
+      const circadianProcess = definition.key === 'sleepiness'
+        ? `${predictedSleepinessMarkup(this.predictedSleepinessStatus, this.admin)}${processCMarkup(this.circadianStatus, this.admin)}`
         : '';
       const threatLearning = definition.key === 'anxiety'
         ? threatLearningMarkup(this.threatLearningStatus, this.threatVolatilityStatus, this.threatGeneralisationStatus, this.threatContextualStatus, this.admin)
@@ -818,14 +827,13 @@ export class BrainHud {
             </div>`
         : definition.key === 'loneliness'
           ? `<div class="soma-reading-detail social-contact-detail">${socialContact}</div>`
-          : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${feeding}${sleepHomeostasis}</div>`;
+          : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${feeding}${circadianProcess}</div>`;
       entry.innerHTML = `${summary}${detail}`;
       const historyScope = definition.key === 'anxiety' ? 'operational-anxiety'
         : definition.key === 'sleepiness' ? 'sleepiness'
         : definition.key === 'satiety' ? 'satiety'
           : definition.key === 'somaticHarm' ? 'somatic' : 'metric';
       this._wireReading(entry, historyScope, definition.registryKey || definition.key);
-      if (definition.key === 'sleepiness') this._wireSleepHomeostasis(entry);
       if (definition.key === 'sleepiness') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
@@ -902,6 +910,7 @@ export class BrainHud {
       row.innerHTML = `<span>${label}</span><strong>--</strong><small>awaiting source</small>`;
       diagnostics.appendChild(row);
     }
+    this._wireSleepPressure();
     this.measure = { root: this.root.querySelector('.inference-measured'), value: this.root.querySelector('.measure-value') };
   }
 
@@ -929,15 +938,12 @@ export class BrainHud {
     }));
   }
 
-  _wireSleepHomeostasis(entry) {
-    entry.addEventListener('toggle', () => {
-      if (!entry.open || this.sleepHomeostasisStatus.status !== IMPLEMENTATION_STATUS.IMPLEMENTED) return;
-      const active = entry.querySelector('.sleep-ranges button.active');
-      this.loadSleepHomeostasisHistory(entry, active ? active.dataset.range : '24h');
-    });
-    entry.querySelectorAll('.sleep-ranges button').forEach((button) => button.addEventListener('click', () => {
-      entry.querySelectorAll('.sleep-ranges button').forEach((item) => item.classList.toggle('active', item === button));
-      this.loadSleepHomeostasisHistory(entry, button.dataset.range);
+  _wireSleepPressure() {
+    const card = this.root.querySelector('.soma-sleep-pressure-promoted');
+    if (!card) return;
+    card.querySelectorAll('.sleep-ranges button').forEach((button) => button.addEventListener('click', () => {
+      card.querySelectorAll('.sleep-ranges button').forEach((item) => item.classList.toggle('active', item === button));
+      this.loadSleepHomeostasisHistory(card, button.dataset.range);
     }));
   }
 
@@ -1800,20 +1806,23 @@ export class BrainHud {
   }
 
   renderSleepHomeostasis() {
-    const entry = this.rows.sleepiness;
-    const card = entry && entry.querySelector('.sleep-homeostasis-card');
+    const promoted = this.root.querySelector('.soma-sleep-pressure-promoted');
+    const card = promoted && promoted.querySelector('.sleep-homeostasis-card');
     if (!card) return;
+    const overallStatus = promoted.querySelector('.soma-sleep-pressure-overall-status');
     const snapshot = this.sleepHomeostasis;
     const live = this.sleepHomeostasisStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
       && snapshot && snapshot.status === 'implemented';
     card.querySelector('.sleep-homeostasis-status').textContent = live ? this.sleepHomeostasisStatus.publicLabel : 'UNAVAILABLE';
     if (!live) {
+      if (overallStatus) overallStatus.textContent = 'NOT AVAILABLE';
       card.querySelector('.sleep-pressure-value').textContent = '--';
       card.querySelector('.sleep-homeostasis-state').textContent = 'Current sleep state unavailable.';
       card.querySelector('.sleep-homeostasis-calibration').textContent = 'No grounded Process S state has reached this view.';
       card.querySelector('.sleep-homeostasis-range').textContent = 'S range unavailable.';
       return;
     }
+    if (overallStatus) overallStatus.textContent = snapshot.calibrating ? 'CALIBRATING' : 'LIVE';
     card.querySelector('.sleep-pressure-value').textContent = Number.isFinite(snapshot.sleepPressureIndex)
       ? String(snapshot.sleepPressureIndex)
       : '--';
@@ -1824,6 +1833,11 @@ export class BrainHud {
     card.querySelector('.sleep-homeostasis-range').textContent = Number.isFinite(snapshot.sMin) && Number.isFinite(snapshot.sMax)
       ? `Current uncertainty: S ${snapshot.sMin.toFixed(3)} to ${snapshot.sMax.toFixed(3)}`
       : 'S range unavailable.';
+    if (!this._sleepPressureHistoryLoaded) {
+      this._sleepPressureHistoryLoaded = true;
+      const active = promoted.querySelector('.sleep-ranges button.active');
+      this.loadSleepHomeostasisHistory(promoted, active ? active.dataset.range : '24h');
+    }
     const inspector = card.querySelector('.sleep-homeostasis-inspector pre');
     if (inspector) {
       const detail = snapshot.inspection;
@@ -2047,5 +2061,5 @@ export class BrainHud {
   setAmp(monotony, amp) { this.root.querySelector('.legacy-amp').textContent = clamp01(monotony) == null || !Number.isFinite(amp) ? 'unavailable' : `monotony ${Math.round(monotony * 100)} / x${amp.toFixed(1)}`; }
   setCast(relations) { this.root.querySelector('.legacy-cast').textContent = relations && Object.keys(relations).length ? `${Object.keys(relations).length} synthetic standings` : 'unavailable'; }
 
-  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this.sleepHistoryRequests = new WeakMap(); this.circadianHistoryRequests = new WeakMap(); this._build(); }
+  reset() { this.metrics = {}; this.latestBrain = {}; this.rows = {}; this.regions = {}; this.regionRows = {}; this.historyRequests = new WeakMap(); this.sleepHistoryRequests = new WeakMap(); this.circadianHistoryRequests = new WeakMap(); this._sleepPressureHistoryLoaded = false; this._build(); }
 }

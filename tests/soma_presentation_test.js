@@ -99,21 +99,52 @@ assert.match(styleSource,
   /\.soma-state-row > strong \{[\s\S]*grid-column: 2;[\s\S]*grid-row: 2;/,
   'the reading value must sit on the second line opposite its context');
 
-// SOMA RESET PHASE 1: Anxiety is the only promoted subsystem; everything else
-// (other readings, the brain-region map, circuit diagnostics, legacy stats)
-// must sit inside one collapsed quarantine section, in that DOM order.
-const promotedIndex = brainSource.indexOf('class="soma-anxiety-promoted"');
+// SOMA RESET PHASE 2: exactly two promoted subsystems - Anxiety, then
+// Homeostatic Sleep Pressure (Process S) - render above one collapsed
+// quarantine section, in that DOM order. Everything else (Process C, the
+// predicted-KSS diagnostic, other readings, the brain-region map, circuit
+// diagnostics, legacy stats) stays inside the quarantine.
+const anxietyPromotedIndex = brainSource.indexOf('class="soma-anxiety-promoted"');
+const sleepPressurePromotedIndex = brainSource.indexOf('class="soma-sleep-pressure-promoted"');
 const quarantineIndex = brainSource.indexOf('class="soma-legacy-quarantine"');
-assert.ok(promotedIndex >= 0, 'a promoted Anxiety block must exist');
+assert.ok(anxietyPromotedIndex >= 0, 'a promoted Anxiety block must exist');
+assert.ok(sleepPressurePromotedIndex >= 0, 'a promoted Homeostatic Sleep Pressure block must exist');
 assert.ok(quarantineIndex >= 0, 'a quarantine wrapper for the old Soma presentation must exist');
-assert.ok(promotedIndex < quarantineIndex,
-  'the promoted Anxiety block must render before the quarantined diagnostics');
+assert.ok(anxietyPromotedIndex < sleepPressurePromotedIndex,
+  'Anxiety must remain promoted subsystem #1, rendering before Homeostatic Sleep Pressure');
+assert.ok(sleepPressurePromotedIndex < quarantineIndex,
+  'the promoted Homeostatic Sleep Pressure block must render before the quarantined diagnostics');
 
-const promotedBlock = brainSource.slice(promotedIndex, quarantineIndex);
+const promotedBlock = brainSource.slice(anxietyPromotedIndex, quarantineIndex);
 assert.match(promotedBlock, /not a measurement of felt anxiety/,
   'the promoted block must carry a plain-English disclaimer distinguishing computed state from felt anxiety');
 assert.doesNotMatch(promotedBlock, /soma-public-readout|brain-figure|soma-region-list|CIRCUITS|legacy-box/,
-  'the promoted Anxiety block must not contain any of the quarantined legacy markup');
+  'the promoted blocks must not contain any of the quarantined legacy markup');
+
+const sleepPressurePromotedBlock = brainSource.slice(sleepPressurePromotedIndex, quarantineIndex);
+assert.match(sleepPressurePromotedBlock, /HOMEOSTATIC SLEEP PRESSURE/,
+  'the promoted block must carry the registry-authoritative subsystem name');
+assert.match(sleepPressurePromotedBlock,
+  /Sleep pressure is a modelled homeostatic drive that rises during scheduled wake and falls during scheduled sleep\. It is not a measurement of how tired Cy feels\./,
+  'the promoted block must carry the exact plain-English Process S disclaimer');
+assert.match(sleepPressurePromotedBlock, /\$\{processSMarkup\(this\.sleepHomeostasisStatus, this\.admin\)\}/,
+  'the promoted block must render Process S via its own dedicated markup builder');
+assert.match(sleepPressurePromotedBlock, /soma-sleep-pressure-overall-status/,
+  'the promoted block must carry a LIVE/CALIBRATING status readout');
+assert.doesNotMatch(sleepPressurePromotedBlock, /processCMarkup|predictedSleepinessMarkup/,
+  'Process C and the predicted-KSS diagnostic must stay subordinate, not promoted alongside Process S');
+
+const processSMarkupBody = brainSource.slice(
+  brainSource.indexOf('function processSMarkup('),
+  brainSource.indexOf('function processCMarkup('),
+);
+assert.ok(processSMarkupBody.length > 0, 'a dedicated processSMarkup builder must exist');
+assert.match(processSMarkupBody, /class="sleep-pressure-value"/,
+  'processSMarkup must show the current Process S estimate');
+assert.match(processSMarkupBody, /class="sleep-homeostasis-range"/,
+  'processSMarkup must show the existing S uncertainty/range');
+assert.match(processSMarkupBody, /class="soma-history sleep-homeostasis-history"/,
+  'processSMarkup must show a real persisted Process S history graph, not a placeholder');
 
 const quarantineBlock = brainSource.slice(quarantineIndex);
 assert.match(quarantineBlock,
@@ -124,6 +155,16 @@ assert.doesNotMatch(quarantineBlock.slice(0, quarantineBlock.indexOf('PREVIOUS M
 for (const marker of ['soma-public-readout', 'brain-figure', 'soma-region-list', 'soma-diagnostics', 'legacy-box']) {
   assert.ok(quarantineBlock.includes(marker), `quarantine section must still preserve ${marker}`);
 }
+assert.match(quarantineBlock, /circadian-process-card/,
+  'Process C must remain inside the quarantine, explicitly schedule-estimated');
+assert.match(quarantineBlock, /PHASE SCHEDULE-ESTIMATED/,
+  'Process C must stay labelled as schedule-estimated rather than observed');
+assert.match(quarantineBlock, /predicted-sleepiness-card/,
+  'the predicted-KSS diagnostic must remain inside the quarantine, not promoted');
+assert.match(quarantineBlock, /predictedSleepinessMarkup\(this\.predictedSleepinessStatus, this\.admin\)/,
+  'the predicted-KSS diagnostic must be rendered inside the quarantine loop, not the promoted block');
+assert.match(brainSource, /PREDICTED KSS \(1-9\)/,
+  'the predicted-KSS reading must stay caveated as a diagnostic, not a promoted subjective state');
 
 // The Anxiety entry itself must render into the promoted readout, not the
 // legacy one, regardless of DOM/registry state - this is a code-path check,

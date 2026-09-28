@@ -857,6 +857,13 @@ body.cy-paused::after {
 .soma-anxiety-overall-status { color: #7fa9c9; font-size: 8px; letter-spacing: 0.12em; }
 .soma-anxiety-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
 .soma-anxiety-readout { display: grid; gap: 5px; }
+.soma-sleep-pressure-promoted {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.soma-sleep-pressure-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.soma-sleep-pressure-overall-status { color: #65d59a; font-size: 8px; letter-spacing: 0.12em; }
+.soma-sleep-pressure-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
 .soma-legacy-quarantine { border-top: 1px solid var(--line); padding-top: 8px; }
 .soma-legacy-quarantine > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
 .soma-quarantine-note { margin: 6px 0 8px; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
@@ -1023,7 +1030,6 @@ body.cy-paused::after {
 .soma-reading-entry[data-reading-scope="brain"] .soma-history path { stroke: #8fb2c9; }
 .soma-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
 
-.sleep-regulation-stack { display: grid; gap: 8px; margin-top: 10px; }
 .sleep-homeostasis-card { padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
 .sleep-homeostasis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
 .sleep-homeostasis-status { color: #65d59a; font-size: 8px; }
@@ -1151,7 +1157,7 @@ body.cy-paused::after {
 .soma-substrate-more > summary::-webkit-details-marker { display: none; }
 .soma-substrate-more > summary::before { content: '+ '; }
 .soma-substrate-more[open] > summary::before { content: '- '; }
-.circadian-process-card { padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
+.circadian-process-card { margin-top: 9px; padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
 .circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 8px; letter-spacing: 0.08em; }
 .circadian-process-status { color: #65d59a; font-size: 8px; }
 .circadian-process-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
