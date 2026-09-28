@@ -55,6 +55,7 @@ import {
   NUM_CTX,
   LIGHTS_OUT_MIN,
   isSleepWindow,
+  scheduleTransitionCrossed,
   dreamMaterial,
   dreamMurmurGapMs,
 } from './prompt.js';
@@ -590,6 +591,18 @@ async function main() {
     const observedSleepHistory = await client.fetchObservedSleepHistory();
     soma.replayObservedSleepRecords(observedSleepHistory, { now: Date.now() });
     console.log(`[cy] TPM sleep history: ${observedSleepHistory.length} structured observations replayed`);
+    // The replay only knows about transitions that were actually recorded. If
+    // this runner was down across a scheduled lights-out/lights-on boundary,
+    // nothing could be recorded for it, and the replayed state would otherwise
+    // read as continuous sleep/wake straight through the outage. Mark
+    // continuity unknown instead of letting that false continuity stand.
+    const tpmState = soma.state && soma.state.predictedSleepiness;
+    const restartAtMs = Date.now();
+    if (tpmState && tpmState.continuityKnown && Number.isFinite(tpmState.lastObservedAtMs)
+      && scheduleTransitionCrossed(tpmState.lastObservedAtMs, restartAtMs)) {
+      soma.markThreeProcessContinuityUnknown({ now: restartAtMs, source: 'restart-gap-crossed-unrecorded-schedule-transition' });
+      console.log('[cy] TPM continuity marked unknown: downtime gap crossed an unrecorded schedule transition');
+    }
   } catch (error) {
     console.warn(`[cy] TPM sleep history unavailable; remaining CALIBRATING: ${error.message}`);
   }
@@ -3618,7 +3631,7 @@ async function main() {
       : 'unknown';
     const target = asleep ? 'asleep' : 'awake';
     if (current === target) return;
-    const summary = asleep ? 'Cy returned to or remained in observed sleep' : 'Cy was observed awake';
+    const summary = asleep ? 'Cy returned to or remained in scheduled sleep' : 'Cy was scheduled awake';
     const structured = captureEnvironmentEvent('sleep_normal', {
       eventType: asleep ? 'sleep_state_asleep' : 'sleep_state_awake',
       summary,

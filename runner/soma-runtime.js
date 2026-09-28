@@ -141,6 +141,12 @@ export function createSomaRuntime(rawState, {
         return current;
       });
     },
+    markThreeProcessContinuityUnknown(options) {
+      return mutate('three-process continuity reset after an unrecorded schedule transition', (current) => {
+        engine.markSomaThreeProcessContinuityUnknown(current, options);
+        return current;
+      });
+    },
     observeOutput(text, options) {
       return mutate('self-output feedback', (current) => engine.observeSomaOutput(current, text, options));
     },

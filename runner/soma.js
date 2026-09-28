@@ -32,6 +32,7 @@ import {
 } from './circadian-process-c.js';
 import {
   createThreeProcessSleepiness,
+  markThreeProcessContinuityUnknown,
   observeThreeProcessSleepState,
   reconcileThreeProcessSleepiness,
   replayObservedSleepRecords,
@@ -343,6 +344,11 @@ export function observeSomaSocialContactRecord(state, record) {
 export function replaySomaObservedSleepRecords(state, records, { now = Date.now() } = {}) {
   if (!state) return null;
   return replayObservedSleepRecords(state.predictedSleepiness, records, { now });
+}
+
+export function markSomaThreeProcessContinuityUnknown(state, { now = Date.now(), source = 'unknown-interval' } = {}) {
+  if (!state) return null;
+  return markThreeProcessContinuityUnknown(state.predictedSleepiness, { now, source });
 }
 
 function familyOf(name, tags = []) {

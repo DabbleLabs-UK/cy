@@ -74,7 +74,7 @@ assert.equal(
   'the public subsystem heading is supplied by the authoritative implementation registry',
 );
 assert.match(source, /SLEEP PRESSURE INDEX/);
-assert.match(source, /CALIBRATING FROM OBSERVED SLEEP HISTORY/);
+assert.match(source, /CALIBRATING FROM SCHEDULE-DERIVED SLEEP HISTORY/);
 assert.equal(
   implementationEntry('soma_subsystems', 'circadian_process_c').display_name,
   'CIRCADIAN PROCESS C',
