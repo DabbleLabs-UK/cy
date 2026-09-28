@@ -125,13 +125,15 @@ assert.equal(elapsedFeedingLabel(0), '0m');
 assert.equal(elapsedFeedingLabel((2 * 60 + 17) * 60000), '2h 17m');
 assert.equal(elapsedFeedingLabel((25 * 60 + 3) * 60000), '1d 1h 3m');
 assert.equal(elapsedFeedingLabel(null), 'UNKNOWN');
-assert.match(source, /Somatic Harm tracks noxious events and injuries/);
+assert.doesNotMatch(source, /Somatic Harm tracks noxious events and injuries/,
+  'the inner card must not restate the promoted intro paragraph - removed as duplicate presentation');
 assert.doesNotMatch(source, /It does not claim how painful Cy experiences them/);
 assert.doesNotMatch(source, /subjective Pain is not modelled/);
 assert.match(source, /SOMATIC \/ NOXIOUS INPUT TRACE/);
 assert.match(source, /subjectivePainStatus/);
 assert.match(source, /somatic_harm_headline/);
-assert.match(source, /LIVE - structured bodily state/);
+assert.doesNotMatch(source, /LIVE - structured bodily state/,
+  'the verbose inner status must not duplicate the promoted head badge; the entry now just says LIVE');
 assert.match(source, /ACTIVE INJURIES/);
 assert.match(source, /NO SOMATIC EVENTS IN THIS PERIOD/);
 assert.doesNotMatch(source, /data-metric="pain"/,

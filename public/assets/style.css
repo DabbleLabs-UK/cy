@@ -351,6 +351,17 @@ body.cy-paused::after {
   gap: 14px;
   padding: 14px;
   align-items: start;
+  transition: grid-template-columns 0.22s ease;
+}
+/* Expanded Soma: the four promoted subsystems plus their history charts need
+   real room to read at normal desktop distance. Widening this column alone
+   (rather than a full separate layout mode) keeps every other panel exactly
+   where a returning visitor expects it. The centre column keeps a real
+   minimum so the chronology never becomes cramped in exchange. */
+@media (min-width: 1181px) {
+  .layout.soma-expanded {
+    grid-template-columns: clamp(480px, 40vw, 640px) minmax(420px, 1fr) clamp(260px, 20vw, 340px);
+  }
 }
 .col { min-width: 0; }
 .col-brain { grid-area: soma; }
@@ -372,6 +383,32 @@ body.cy-paused::after {
   margin-bottom: 8px;
   border-bottom: 1px dashed var(--line);
   padding-bottom: 6px;
+}
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.soma-expand-toggle {
+  flex: 0 0 auto;
+  font: 10px var(--mono, inherit);
+  letter-spacing: 0.14em;
+  color: #a7c9dd;
+  background: transparent;
+  border: 1px solid rgba(167, 201, 221, 0.4);
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.soma-expand-toggle:hover { color: #d6e8f3; border-color: rgba(167, 201, 221, 0.7); }
+.soma-expand-toggle:focus-visible { outline: 2px solid #6fb2ff; outline-offset: 2px; }
+.soma-expand-toggle[aria-expanded="true"] { color: #0c1013; background: #a7c9dd; border-color: #a7c9dd; }
+/* Below the point the grid stops being a fixed-width three-column board, a
+   wider Soma column has nothing to expand into, so the control is hidden
+   rather than left as a dead affordance. */
+@media (max-width: 1180px) {
+  .soma-expand-toggle { display: none; }
 }
 
 /* The three machine-control cards begin as compact title bars. Native details
@@ -844,45 +881,45 @@ body.cy-paused::after {
 .soma-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .soma-badge {
   color: #d2a259; border: 1px solid rgba(210,162,89,0.45); border-radius: 2px;
-  padding: 3px 6px; font-size: 9px; letter-spacing: 0.15em;
+  padding: 3px 6px; font-size: 13.5px; letter-spacing: 0.15em;
 }
-.soma-overall-status { color: #d2a259; font-size: 8px; letter-spacing: 0.12em; }
-.soma-caveat { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-overall-status { color: #d2a259; font-size: 12.5px; letter-spacing: 0.12em; }
+.soma-caveat { margin: 0; color: var(--tel); font-size: 14px; line-height: 1.45; }
 .soma-public-readout { display: grid; gap: 5px; }
 .soma-anxiety-promoted {
   display: flex; flex-direction: column; gap: 8px;
   padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
 }
 .soma-anxiety-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.soma-anxiety-overall-status { color: #7fa9c9; font-size: 8px; letter-spacing: 0.12em; }
-.soma-anxiety-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-anxiety-overall-status { color: #7fa9c9; font-size: 12.5px; letter-spacing: 0.12em; }
+.soma-anxiety-intro { margin: 0; color: var(--tel); font-size: 14px; line-height: 1.45; }
 .soma-anxiety-readout { display: grid; gap: 5px; }
 .soma-sleep-pressure-promoted {
   display: flex; flex-direction: column; gap: 8px;
   padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
 }
 .soma-sleep-pressure-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.soma-sleep-pressure-overall-status { color: #65d59a; font-size: 8px; letter-spacing: 0.12em; }
-.soma-sleep-pressure-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-sleep-pressure-overall-status { color: #65d59a; font-size: 12.5px; letter-spacing: 0.12em; }
+.soma-sleep-pressure-intro { margin: 0; color: var(--tel); font-size: 17px; line-height: 1.55; }
 .soma-satiety-promoted {
   display: flex; flex-direction: column; gap: 8px;
   padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
 }
 .soma-satiety-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.soma-satiety-overall-status { color: #c98fd6; font-size: 8px; letter-spacing: 0.12em; }
-.soma-satiety-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-satiety-overall-status { color: #c98fd6; font-size: 12.5px; letter-spacing: 0.12em; }
+.soma-satiety-intro { margin: 0; color: var(--tel); font-size: 17px; line-height: 1.55; }
 .soma-satiety-readout { display: grid; gap: 5px; }
 .soma-harm-promoted {
   display: flex; flex-direction: column; gap: 8px;
   padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
 }
 .soma-harm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.soma-harm-overall-status { color: #d68f6a; font-size: 8px; letter-spacing: 0.12em; }
-.soma-harm-intro { margin: 0; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-harm-overall-status { color: #d68f6a; font-size: 12.5px; letter-spacing: 0.12em; }
+.soma-harm-intro { margin: 0; color: var(--tel); font-size: 17px; line-height: 1.55; }
 .soma-harm-readout { display: grid; gap: 5px; }
 .soma-legacy-quarantine { border-top: 1px solid var(--line); padding-top: 8px; }
-.soma-legacy-quarantine > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
-.soma-quarantine-note { margin: 6px 0 8px; color: var(--tel-dim); font-size: 9.5px; line-height: 1.45; }
+.soma-legacy-quarantine > summary { cursor: pointer; color: #788a98; font-size: 13.5px; letter-spacing: 0.13em; }
+.soma-quarantine-note { margin: 6px 0 8px; color: var(--tel); font-size: 14px; line-height: 1.45; }
 .soma-state-entry {
   border: 1px solid transparent;
   background: transparent;
@@ -898,7 +935,7 @@ body.cy-paused::after {
 .soma-state-entry > .soma-state-row,
 .soma-state-entry > .soma-state-row * { cursor: pointer; }
 .soma-state-row:hover { background: rgba(56, 82, 103, 0.18); }
-.soma-state-row::before { content: '+'; position: absolute; left: 2px; top: 5px; color: #718796; font-size: 9px; }
+.soma-state-row::before { content: '+'; position: absolute; left: 2px; top: 5px; color: #718796; font-size: 13.5px; }
 .soma-state-entry[open] > .soma-state-row::before { content: '-'; }
 .soma-state-row:hover .soma-state-label,
 .soma-state-row:focus-visible .soma-state-label { color: #e8eef4; }
@@ -931,7 +968,7 @@ body.cy-paused::after {
 .soma-state-entry.status-not-implemented .soma-state-bar { opacity: 0.35; }
 .soma-somatic-entry .soma-state-row { grid-template-columns: minmax(0, 1fr) auto; }
 .soma-somatic-entry .soma-state-value {
-  grid-column: 1 / -1; text-align: left; color: #d8ddec; font-size: 9px; letter-spacing: 0.05em;
+  grid-column: 1 / -1; text-align: left; color: #d8ddec; font-size: 13.5px; letter-spacing: 0.05em;
 }
 .soma-somatic-entry .somatic-input-card { margin-top: 0; border-width: 0; border-top-width: 1px; }
 .brain-figure { position: relative; border: 1px solid var(--line); background: radial-gradient(circle at 46% 45%, rgba(65,85,102,0.22), rgba(8,11,15,0.7) 68%); }
@@ -979,11 +1016,11 @@ body.cy-paused::after {
   position: absolute;
   left: 6px;
   color: #718796;
-  font-size: 9px;
+  font-size: 13.5px;
 }
 .soma-region-entry[open] > summary::before { content: '-'; }
-.soma-region-name { color: var(--tel); font-size: 8.5px; letter-spacing: 0.04em; }
-.soma-region-state { color: #cbd6de; font-size: 8px; font-weight: 600; letter-spacing: 0.07em; }
+.soma-region-name { color: var(--tel); font-size: 13px; letter-spacing: 0.04em; }
+.soma-region-state { color: #cbd6de; font-size: 12.5px; font-weight: 600; letter-spacing: 0.07em; }
 .soma-region-entry.status-provisional { border-left-style: dashed; }
 .soma-region-entry.status-provisional .soma-region-state { color: #d2a259; }
 .soma-region-entry.status-not-implemented { opacity: 0.72; border-left-color: #4a535c; }
@@ -994,8 +1031,8 @@ body.cy-paused::after {
 }
 .soma-reading-description {
   margin: 0;
-  color: #91a2af;
-  font-size: 8.5px;
+  color: #aebfca;
+  font-size: 13px;
   line-height: 1.45;
 }
 .soma-region-entry.is-associated {
@@ -1012,17 +1049,17 @@ body.cy-paused::after {
 .measure-kind { color: var(--good); font-size: 8px; letter-spacing: 0.12em; }
 .soma-readout { display: flex; flex-direction: column; gap: 7px; }
 .soma-row-top { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: baseline; }
-.soma-name { color: var(--tel); font-size: 9.5px; letter-spacing: 0.08em; }
-.soma-anatomy { color: #667887; font-size: 8px; text-align: right; }
-.soma-pct { color: #e8eef4; min-width: 3ch; text-align: right; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+.soma-name { color: var(--tel); font-size: 14px; letter-spacing: 0.08em; }
+.soma-anatomy { color: #667887; font-size: 12.5px; text-align: right; }
+.soma-pct { color: #e8eef4; min-width: 3ch; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
 .soma-bar { display: block; height: 4px; background: #0b0e12; border: 1px solid var(--line); overflow: hidden; margin-top: 2px; }
 .soma-bar i { display: block; width: 0; height: 100%; transition: width 0.8s ease, background-color 0.8s ease; }
-.soma-source { display: block; color: #5f7080; font-size: 8px; line-height: 1.3; margin-top: 2px; }
+.soma-source { display: block; color: #5f7080; font-size: 12.5px; line-height: 1.3; margin-top: 2px; }
 .soma-selection { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 7px; }
-.soma-selection div > span { display: block; color: var(--tel-dim); font-size: 8px; letter-spacing: 0.14em; margin-bottom: 2px; }
-.soma-selection strong { display: block; color: #c8d4de; font-size: 9.5px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
-.soma-influences-title { margin: 8px 0 3px; color: #718391; font-size: 8px; letter-spacing: 0.12em; }
-.soma-contributors { margin: 7px 0 8px; padding-left: 15px; color: #91a4b2; font-size: 8px; line-height: 1.45; overflow-wrap: anywhere; }
+.soma-selection div > span { display: block; color: var(--tel-dim); font-size: 12.5px; letter-spacing: 0.14em; margin-bottom: 2px; }
+.soma-selection strong { display: block; color: #c8d4de; font-size: 14px; line-height: 1.4; font-weight: 400; overflow-wrap: anywhere; }
+.soma-influences-title { margin: 8px 0 3px; color: #718391; font-size: 12.5px; letter-spacing: 0.12em; }
+.soma-contributors { margin: 7px 0 8px; padding-left: 15px; color: #91a4b2; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .soma-reading-history { position: relative; margin-top: 7px; }
 .soma-history-axis {
   display: grid;
@@ -1031,31 +1068,31 @@ body.cy-paused::after {
   align-items: center;
   margin-bottom: 3px;
   color: #78909e;
-  font-size: 7px;
+  font-size: 12px;
 }
 .soma-history-axis strong { text-align: center; font-weight: 400; letter-spacing: 0.08em; }
-.soma-history-display-note { margin: 0 0 4px; color: #6f838f; font-size: 7px; line-height: 1.35; }
+.soma-history-display-note { margin: 0 0 4px; color: #6f838f; font-size: 12px; line-height: 1.35; }
 .soma-ranges { display: flex; gap: 4px; margin-bottom: 5px; }
 .soma-ranges button {
   border: 1px solid var(--line); background: #0c1117; color: #718391;
   font: 8px var(--mono); padding: 3px 6px; cursor: pointer;
 }
 .soma-ranges button.active { color: #e8eef4; border-color: #50728b; background: #14202a; }
-.soma-history { width: 100%; height: 80px; display: block; background: repeating-linear-gradient(to bottom, transparent 0 19px, rgba(75,98,116,0.15) 20px); border: 1px solid var(--line); margin-bottom: 5px; }
+.soma-history { width: 100%; height: 108px; display: block; background: repeating-linear-gradient(to bottom, transparent 0 19px, rgba(75,98,116,0.15) 20px); border: 1px solid var(--line); margin-bottom: 5px; }
 .soma-history path { fill: none; stroke: #d99d45; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .soma-reading-entry[data-reading-scope="brain"] .soma-history path { stroke: #8fb2c9; }
-.soma-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
+.soma-history-note { margin: 0; color: #8294a1; font-size: 12.5px; line-height: 1.4; }
 
 .sleep-homeostasis-card { padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
-.sleep-homeostasis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
-.sleep-homeostasis-status { color: #65d59a; font-size: 8px; }
+.sleep-homeostasis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 12.5px; letter-spacing: 0.08em; }
+.sleep-homeostasis-status { color: #65d59a; font-size: 12.5px; }
 .sleep-pressure-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
 .sleep-pressure-value { color: #d9f1e4; font-size: 22px; line-height: 1; }
 .sleep-pressure-reading span { color: #8caa9b; font-size: 7px; letter-spacing: 0.08em; }
 .sleep-homeostasis-explanation,
 .sleep-homeostasis-state,
 .sleep-homeostasis-calibration,
-.sleep-homeostasis-range { margin: 4px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
+.sleep-homeostasis-range { margin: 4px 0; color: #9cb2a7; font-size: 12.5px; line-height: 1.45; }
 .sleep-homeostasis-calibration { color: #d8b56d; letter-spacing: 0.04em; }
 .sleep-ranges { display: flex; gap: 4px; margin: 7px 0 4px; }
 .sleep-ranges button { border: 1px solid var(--line); background: transparent; color: #8294a1; font: inherit; font-size: 7px; padding: 2px 6px; }
@@ -1063,20 +1100,20 @@ body.cy-paused::after {
 .sleep-homeostasis-history path { stroke: #65d59a; }
 .sleep-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
 .sleep-homeostasis-inspector { margin-top: 8px; border-top: 1px solid rgba(80, 105, 94, 0.35); padding-top: 6px; }
-.sleep-homeostasis-inspector summary { cursor: pointer; color: #86a99a; font-size: 8px; letter-spacing: 0.06em; }
-.sleep-homeostasis-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; font-size: 8px; line-height: 1.45; }
+.sleep-homeostasis-inspector summary { cursor: pointer; color: #86a99a; font-size: 12.5px; letter-spacing: 0.06em; }
+.sleep-homeostasis-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; font-size: 12.5px; line-height: 1.45; }
 .threat-learning-card { margin-top: 9px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
-.threat-learning-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
-.threat-learning-status { color: #65d59a; font-size: 8px; }
+.threat-learning-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 12.5px; letter-spacing: 0.08em; }
+.threat-learning-status { color: #65d59a; font-size: 12.5px; }
 .threat-learning-explanation,
-.threat-learning-empty { margin: 5px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
+.threat-learning-empty { margin: 5px 0; color: #9cb2a7; font-size: 12.5px; line-height: 1.45; }
 .threat-learning-associations { display: grid; gap: 6px; margin-top: 7px; }
 .threat-learning-association { padding: 6px; border: 1px solid rgba(80, 105, 94, 0.45); background: rgba(5, 12, 10, 0.34); }
 .threat-learning-association > strong { display: block; color: #c7e1d4; font: 8px/1.35 var(--mono); text-transform: uppercase; }
-.threat-learning-association p { margin: 3px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
-.threat-learning-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 7.5px; line-height: 1.4; }
+.threat-learning-association p { margin: 3px 0; color: #9cb2a7; font-size: 12.5px; line-height: 1.45; }
+.threat-learning-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 12px; line-height: 1.4; }
 .threat-learning-limits strong { color: #788693; }
-.threat-learning-inspector { margin-top: 7px; color: #86a99a; font-size: 8px; }
+.threat-learning-inspector { margin-top: 7px; color: #86a99a; font-size: 12.5px; }
 .threat-learning-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
 .defensive-context-card { margin-top: 9px; padding: 9px; border: 1px solid #425d6d; background: rgba(17, 29, 38, 0.48); }
 .defensive-context-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b9d5e4; font-size: 8px; letter-spacing: 0.08em; }
@@ -1098,66 +1135,66 @@ body.cy-paused::after {
 .defensive-context-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b5c7d0; font: inherit; line-height: 1.45; }
 .defensive-context-action-evidence { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid rgba(94, 126, 144, 0.28); color: #a8c7d6; font-size: 7.5px; line-height: 1.45; text-transform: uppercase; }
 .controllability-card { margin-top: 9px; padding: 9px; border: 1px solid #48596b; background: rgba(18, 24, 34, 0.5); }
-.controllability-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #c1d0df; font-size: 8px; letter-spacing: 0.08em; }
-.controllability-status { color: #65d59a; font-size: 8px; }
+.controllability-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #c1d0df; font-size: 12.5px; letter-spacing: 0.08em; }
+.controllability-status { color: #65d59a; font-size: 12.5px; }
 .controllability-explanation,
-.controllability-empty { margin: 5px 0; color: #9eafbf; font-size: 8px; line-height: 1.45; }
+.controllability-empty { margin: 5px 0; color: #9eafbf; font-size: 12.5px; line-height: 1.45; }
 .controllability-evidence { display: grid; gap: 7px; margin-top: 7px; }
 .controllability-item { padding: 7px; border: 1px solid rgba(104, 122, 145, 0.45); background: rgba(6, 10, 17, 0.38); }
 .controllability-item > strong { display: block; color: #d0dce8; font: 8px/1.35 var(--mono); }
-.controllability-item > p { margin: 4px 0; color: #a6b6c6; font-size: 7.5px; line-height: 1.45; }
+.controllability-item > p { margin: 4px 0; color: #a6b6c6; font-size: 12px; line-height: 1.45; }
 .controllability-item dl { display: grid; gap: 4px; margin: 7px 0; }
 .controllability-item dl > div { display: grid; gap: 2px; }
-.controllability-item dt { color: #778da3; font-size: 7px; letter-spacing: 0.06em; }
-.controllability-item dd { margin: 0; color: #c0ccd7; font-size: 7.5px; overflow-wrap: anywhere; }
+.controllability-item dt { color: #778da3; font-size: 12px; letter-spacing: 0.06em; }
+.controllability-item dd { margin: 0; color: #c0ccd7; font-size: 12px; overflow-wrap: anywhere; }
 .controllability-interpretation { color: #bdd4e4 !important; }
 .controllability-causal-limit { color: #8c9baa !important; text-transform: uppercase; }
-.controllability-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(104, 122, 145, 0.35); color: #8494a5; font-size: 7.5px; line-height: 1.4; }
+.controllability-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(104, 122, 145, 0.35); color: #8494a5; font-size: 12px; line-height: 1.4; }
 .controllability-limits strong { color: #788693; }
-.controllability-inspector { margin-top: 7px; color: #9aafc3; font-size: 8px; }
+.controllability-inspector { margin-top: 7px; color: #9aafc3; font-size: 12.5px; }
 .controllability-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bec8d2; font: inherit; line-height: 1.45; }
 .feeding-input-card { margin-top: 9px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
-.feeding-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 8px; letter-spacing: 0.08em; }
-.feeding-input-status { color: #65d59a; font-size: 8px; }
+.feeding-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 12.5px; letter-spacing: 0.08em; }
+.feeding-input-status { color: #65d59a; font-size: 12.5px; }
 .feeding-input-explanation,
-.feeding-timeline-empty { margin: 5px 0; color: #9cb2a7; font-size: 8px; line-height: 1.45; }
+.feeding-timeline-empty { margin: 5px 0; color: #9cb2a7; font-size: 12.5px; line-height: 1.45; }
 .feeding-input-facts { display: grid; gap: 3px; margin: 8px 0 0; }
 .feeding-input-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.feeding-input-facts dt { color: #7f998c; font-size: 7px; letter-spacing: 0.06em; }
-.feeding-input-facts dd { margin: 0; color: #c5ded2; font-size: 7.5px; text-align: right; }
+.feeding-input-facts dt { color: #7f998c; font-size: 12px; letter-spacing: 0.06em; }
+.feeding-input-facts dd { margin: 0; color: #c5ded2; font-size: 12px; text-align: right; }
 .feeding-timeline { display: grid; gap: 5px; margin-top: 8px; }
 .feeding-timeline-item { padding: 6px; border: 1px solid rgba(80, 105, 94, 0.45); background: rgba(5, 12, 10, 0.34); }
 .feeding-timeline-item > strong { display: block; color: #c7e1d4; font: 8px/1.35 var(--mono); text-transform: uppercase; }
-.feeding-timeline-item p { margin: 3px 0 0; color: #9cb2a7; font-size: 7.5px; line-height: 1.45; }
-.feeding-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 7.5px; line-height: 1.4; }
+.feeding-timeline-item p { margin: 3px 0 0; color: #9cb2a7; font-size: 12px; line-height: 1.45; }
+.feeding-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 12px; line-height: 1.4; }
 .feeding-model-limits strong { color: #788693; }
 .satiety-model-reading { display: flex; align-items: baseline; gap: 7px; margin: 8px 0 5px; }
-.satiety-model-reading strong { color: #efd58c; font-size: 17px; letter-spacing: 0.04em; }
-.satiety-model-reading span { color: #7f97a7; font-size: 7px; letter-spacing: 0.14em; }
-.satiety-uncertainty { color: #91a6b4; font-size: 8px; line-height: 1.45; }
+.satiety-model-reading strong { color: #efd58c; font-size: 20px; letter-spacing: 0.04em; }
+.satiety-model-reading span { color: #7f97a7; font-size: 12px; letter-spacing: 0.14em; }
+.satiety-uncertainty { color: #91a6b4; font-size: 12.5px; line-height: 1.45; }
 .satiety-history-band { fill: rgba(239, 190, 74, 0.18); stroke: none; }
 .satiety-history-line { fill: none; stroke: #efbe4a; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
 .soma-state-entry[data-metric="satiety"] .soma-state-bar i { position: relative; }
-.feeding-input-inspector { margin-top: 7px; color: #86a99a; font-size: 8px; }
+.feeding-input-inspector { margin-top: 7px; color: #86a99a; font-size: 12.5px; }
 .feeding-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
 .somatic-input-card { margin-top: 9px; padding: 9px; border: 1px solid #535b73; background: rgba(31, 35, 48, 0.42); }
-.somatic-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #c4cbe0; font-size: 8px; letter-spacing: 0.08em; }
-.somatic-input-status { color: #65d59a; font-size: 8px; }
+.somatic-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #c4cbe0; font-size: 12.5px; letter-spacing: 0.08em; }
+.somatic-input-status { color: #65d59a; font-size: 12.5px; }
 .somatic-input-explanation,
-.somatic-timeline-empty { margin: 5px 0; color: #a9b0c4; font-size: 8px; line-height: 1.45; }
+.somatic-timeline-empty { margin: 5px 0; color: #a9b0c4; font-size: 12.5px; line-height: 1.45; }
 .somatic-input-facts { display: grid; gap: 3px; margin: 8px 0 0; }
 .somatic-input-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.somatic-input-facts dt { color: #858da5; font-size: 7px; letter-spacing: 0.06em; }
-.somatic-input-facts dd { margin: 0; color: #d0d5e2; font-size: 7.5px; text-align: right; }
+.somatic-input-facts dt { color: #858da5; font-size: 12px; letter-spacing: 0.06em; }
+.somatic-input-facts dd { margin: 0; color: #d0d5e2; font-size: 12px; text-align: right; }
 .somatic-timeline { display: grid; gap: 5px; margin-top: 8px; }
 .somatic-timeline-item { padding: 6px; border: 1px solid rgba(112, 121, 147, 0.45); background: rgba(9, 11, 18, 0.38); }
 .somatic-timeline-item > strong { display: block; color: #d8ddec; font: 8px/1.35 var(--mono); text-transform: uppercase; }
-.somatic-timeline-item p { margin: 3px 0 0; color: #a9b0c4; font-size: 7.5px; line-height: 1.45; }
-.somatic-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(112, 121, 147, 0.35); color: #8d95aa; font-size: 7.5px; line-height: 1.4; }
+.somatic-timeline-item p { margin: 3px 0 0; color: #a9b0c4; font-size: 12px; line-height: 1.45; }
+.somatic-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(112, 121, 147, 0.35); color: #8d95aa; font-size: 12px; line-height: 1.4; }
 .somatic-model-limits strong { color: #8d96aa; }
-.somatic-input-inspector { margin-top: 7px; color: #a2abc2; font-size: 8px; }
+.somatic-input-inspector { margin-top: 7px; color: #a2abc2; font-size: 12.5px; }
 .somatic-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bfc5d4; font: inherit; line-height: 1.45; }
-.somatic-history-axis { display: flex; justify-content: center; margin: 2px 0 3px; color: #858da5; font-size: 7px; letter-spacing: 0.08em; }
+.somatic-history-axis { display: flex; justify-content: center; margin: 2px 0 3px; color: #858da5; font-size: 12px; letter-spacing: 0.08em; }
 .somatic-history path { stroke: #c4cbe0; }
 .somatic-event-markers { position: relative; height: 10px; margin: -5px 2px 4px; border-top: 1px solid rgba(112, 121, 147, 0.45); }
 .somatic-event-markers span { position: absolute; top: -3px; width: 5px; height: 5px; border: 1px solid #d99d45; background: #11151e; transform: translateX(-50%) rotate(45deg); }
@@ -1166,7 +1203,7 @@ body.cy-paused::after {
   padding: 7px 0 2px;
   color: #8295a3;
   cursor: pointer;
-  font-size: 7.5px;
+  font-size: 12px;
   letter-spacing: .09em;
   list-style: none;
 }
@@ -1174,40 +1211,40 @@ body.cy-paused::after {
 .soma-substrate-more > summary::before { content: '+ '; }
 .soma-substrate-more[open] > summary::before { content: '- '; }
 .circadian-process-card { margin-top: 9px; padding: 9px; border: 1px solid #3b5265; background: rgba(20, 32, 44, 0.42); }
-.circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 8px; letter-spacing: 0.08em; }
-.circadian-process-status { color: #65d59a; font-size: 8px; }
+.circadian-process-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #b6cfdf; font-size: 12.5px; letter-spacing: 0.08em; }
+.circadian-process-status { color: #65d59a; font-size: 12.5px; }
 .circadian-process-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
-.circadian-process-value { color: #e2f0f8; font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; }
-.circadian-process-reading span { color: #8ca6b8; font-size: 7px; letter-spacing: 0.08em; }
+.circadian-process-value { color: #e2f0f8; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+.circadian-process-reading span { color: #8ca6b8; font-size: 12px; letter-spacing: 0.08em; }
 .circadian-process-explanation,
 .circadian-process-phase,
 .circadian-process-cbtmin,
-.circadian-process-range { margin: 4px 0; color: #9eb2c0; font-size: 8px; line-height: 1.45; }
+.circadian-process-range { margin: 4px 0; color: #9eb2c0; font-size: 12.5px; line-height: 1.45; }
 .circadian-process-phase { color: #b8d3e4; letter-spacing: 0.03em; }
 .circadian-process-cbtmin { color: #d8b56d; }
 .circadian-ranges { display: flex; gap: 4px; margin: 7px 0 4px; }
-.circadian-ranges button { border: 1px solid var(--line); background: transparent; color: #8294a1; font: inherit; font-size: 7px; padding: 2px 6px; }
+.circadian-ranges button { border: 1px solid var(--line); background: transparent; color: #8294a1; font: inherit; font-size: 12px; padding: 2px 6px; }
 .circadian-ranges button.active { border-color: #75aac9; color: #cbe8f7; }
 .circadian-history { width: 100%; height: 80px; display: block; background: repeating-linear-gradient(to bottom, transparent 0 19px, rgba(75,98,116,0.15) 20px); border: 1px solid var(--line); margin-bottom: 5px; }
 .circadian-history path { vector-effect: non-scaling-stroke; }
 .circadian-history-band { fill: rgba(117,170,201,0.15); stroke: none; }
 .circadian-history-line { fill: none; stroke: #75aac9; stroke-width: 1.5; }
-.circadian-history-note { margin: 0; color: #8294a1; font-size: 8px; line-height: 1.4; }
-.circadian-entrainment { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid rgba(80, 105, 120, 0.4); color: #8294a1; font-size: 8px; }
+.circadian-history-note { margin: 0; color: #8294a1; font-size: 12.5px; line-height: 1.4; }
+.circadian-entrainment { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0 0; padding-top: 7px; border-top: 1px solid rgba(80, 105, 120, 0.4); color: #8294a1; font-size: 12.5px; }
 .circadian-entrainment strong { color: #a0a8ad; }
 .circadian-process-inspector { margin-top: 8px; border-top: 1px solid rgba(80, 105, 120, 0.4); padding-top: 6px; }
-.circadian-process-inspector summary { cursor: pointer; color: #91b3c7; font-size: 8px; letter-spacing: 0.06em; }
-.circadian-process-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b4c4ce; font: inherit; font-size: 8px; line-height: 1.45; }
+.circadian-process-inspector summary { cursor: pointer; color: #91b3c7; font-size: 12.5px; letter-spacing: 0.06em; }
+.circadian-process-inspector pre { white-space: pre-wrap; overflow-wrap: anywhere; color: #b4c4ce; font: inherit; font-size: 12.5px; line-height: 1.45; }
 .soma-region[data-region="scnCircadian"] { fill: rgba(117,170,201,0.2); stroke: #75aac9; stroke-dasharray: none; }
 .soma-region[data-region="scnCircadian"].circadian-phase-live { filter: drop-shadow(0 0 3px rgba(117,170,201,0.7)); }
 .scn-phase-hand { fill: none; stroke: #d9edf8; stroke-width: 1.5; stroke-linecap: round; pointer-events: none; }
 .soma-diagnostics { border-top: 1px solid var(--line); padding-top: 5px; }
-.soma-diagnostics > summary { cursor: pointer; color: #788a98; font-size: 9px; letter-spacing: 0.13em; }
+.soma-diagnostics > summary { cursor: pointer; color: #788a98; font-size: 13.5px; letter-spacing: 0.13em; }
 .soma-diagnostic-rows { display: grid; gap: 4px; margin-top: 8px; }
 .soma-diagnostic-row { display: grid; grid-template-columns: 1fr auto; gap: 5px; }
-.soma-diagnostic-row span { color: var(--tel); font-size: 8.5px; }
-.soma-diagnostic-row strong { color: #c8d4de; font-size: 8.5px; }
-.soma-diagnostic-row small { grid-column: 1 / -1; color: #5f7080; font-size: 8px; }
+.soma-diagnostic-row span { color: var(--tel); font-size: 13px; }
+.soma-diagnostic-row strong { color: #c8d4de; font-size: 13px; }
+.soma-diagnostic-row small { grid-column: 1 / -1; color: #5f7080; font-size: 12.5px; }
 
 /* ================= AUTOBIOGRAPHICAL MEMORY ================= */
 .memory-panel { margin-top: 10px; }
@@ -1253,13 +1290,13 @@ body.cy-paused::after {
 .memory-runtime-card small { color: #7e95a5; font-size: inherit; }
 .memory-runtime-error { margin: 3px 0 0; color: #d4866a; font-size: 7px; overflow-wrap: anywhere; }
 .legacy-box { border: 1px solid rgba(190,138,67,0.35); background: rgba(72,48,23,0.12); padding: 7px 8px; }
-.legacy-box summary { cursor: pointer; color: #c28d4b; font-size: 9px; letter-spacing: 0.13em; }
-.legacy-box p { color: #8d795f; font-size: 9px; line-height: 1.4; }
+.legacy-box summary { cursor: pointer; color: #c28d4b; font-size: 13.5px; letter-spacing: 0.13em; }
+.legacy-box p { color: #8d795f; font-size: 13.5px; line-height: 1.4; }
 .legacy-box p strong { color: #b7996e; font-weight: 600; }
 .legacy-box dl { margin: 0; display: flex; flex-direction: column; gap: 5px; }
 .legacy-box dl div { display: grid; grid-template-columns: 8.5em 1fr; gap: 7px; }
-.legacy-box dt { color: #8d795f; font-size: 8.5px; }
-.legacy-box dd { margin: 0; color: #a8957a; font-size: 8.5px; overflow-wrap: anywhere; }
+.legacy-box dt { color: #8d795f; font-size: 13px; }
+.legacy-box dd { margin: 0; color: #a8957a; font-size: 13px; overflow-wrap: anywhere; }
 
 /* ================= HOST PANEL ================= */
 .hostpanel {
@@ -2012,7 +2049,7 @@ body.cy-paused::after {
 }
 .soma-operational-anxiety-entry .soma-state-value {
   color: #d8ddec;
-  font-size: 8px;
+  font-size: 12.5px;
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
@@ -2026,12 +2063,12 @@ body.cy-paused::after {
   grid-template-columns: minmax(9ch, 0.8fr) minmax(0, 1.2fr);
   gap: 7px;
 }
-.operational-anxiety-facts dt { color: #728a97; font-size: 7px; letter-spacing: 0.06em; }
-.operational-anxiety-facts dd { margin: 0; color: #bfd0da; font-size: 7.5px; text-align: right; overflow-wrap: anywhere; }
+.operational-anxiety-facts dt { color: #728a97; font-size: 12px; letter-spacing: 0.06em; }
+.operational-anxiety-facts dd { margin: 0; color: #bfd0da; font-size: 12px; text-align: right; overflow-wrap: anywhere; }
 .operational-anxiety-contexts { display: grid; gap: 5px; margin-top: 7px; }
 .operational-anxiety-contexts article { padding: 6px; border: 1px solid rgba(94, 126, 144, 0.4); background: rgba(6, 13, 18, 0.35); }
-.operational-anxiety-contexts strong { color: #c8e0ec; font-size: 7.5px; letter-spacing: 0.05em; }
-.operational-anxiety-contexts p { margin: 3px 0 0; color: #91a6b2; font-size: 7.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.operational-anxiety-contexts strong { color: #c8e0ec; font-size: 12px; letter-spacing: 0.05em; }
+.operational-anxiety-contexts p { margin: 3px 0 0; color: #91a6b2; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
 .operational-anxiety-history-wrap { display: block; }
 .operational-anxiety-history { height: 80px; }
 .operational-anxiety-history path { stroke: #d99d45; stroke-width: 2; }
@@ -2292,7 +2329,7 @@ body.cy-paused::after {
 .soma-social-entry .soma-state-value {
   grid-column: 1 / -1;
   color: #d7e3e8;
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.3;
   letter-spacing: .035em;
   text-align: left;
@@ -2318,7 +2355,7 @@ body.cy-paused::after {
 .predicted-sleepiness-head span,
 .predicted-sleepiness-reading span {
   color: #7895a8;
-  font-size: 9px;
+  font-size: 13.5px;
   letter-spacing: 0.12em;
 }
 
@@ -2341,7 +2378,7 @@ body.cy-paused::after {
 
 .predicted-sleepiness-caveat {
   color: #78909e;
-  font-size: 10px;
+  font-size: 15px;
 }
 .predicted-sleepiness-facts { margin: 8px 0 0; }
 .predicted-sleepiness-facts div {
@@ -2351,17 +2388,17 @@ body.cy-paused::after {
   padding: 4px 0;
   border-top: 1px solid #20313b;
 }
-.predicted-sleepiness-facts dt { color: #7895a8; font-size: 8px; letter-spacing: 0.08em; }
-.predicted-sleepiness-facts dd { margin: 0; color: #c5d2da; font-size: 9px; line-height: 1.35; }
+.predicted-sleepiness-facts dt { color: #7895a8; font-size: 12.5px; letter-spacing: 0.08em; }
+.predicted-sleepiness-facts dd { margin: 0; color: #c5d2da; font-size: 13.5px; line-height: 1.35; }
 .predicted-sleepiness-separation { color: #9fb2be; }
 
 /* SOMA 1C: readable primary instrument panel and categorical Anxiety display. */
 .soma-caveat {
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.55;
 }
 .soma-anxiety-intro, .soma-quarantine-note {
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.55;
 }
 .soma-public-readout, .soma-anxiety-readout { gap: 7px; }
@@ -2374,12 +2411,12 @@ body.cy-paused::after {
 .soma-state-row::before {
   left: 5px;
   top: 10px;
-  font-size: 12px;
+  font-size: 16px;
 }
 .soma-state-label {
   grid-column: 1;
   grid-row: 1;
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.25;
   letter-spacing: 0.045em;
 }
@@ -2388,27 +2425,27 @@ body.cy-paused::after {
   grid-row: 1;
   justify-self: end;
   padding: 2px 4px;
-  font-size: 9.5px;
+  font-size: 14px;
   line-height: 1.2;
 }
 .soma-state-trend {
   grid-column: 1;
   grid-row: 2;
   align-self: start;
-  font-size: 11.5px;
+  font-size: 16px;
 }
 .soma-state-row > strong {
   grid-column: 2;
   grid-row: 2;
   align-self: start;
-  font-size: 14px;
+  font-size: 18px;
 }
 .soma-state-bar { grid-column: 1 / -1; }
 .soma-sleepiness-entry .soma-state-row,
 .soma-somatic-entry .soma-state-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
-.soma-somatic-entry .soma-state-value { font-size: 13px; }
+.soma-somatic-entry .soma-state-value { font-size: 17px; }
 .soma-reading-detail {
   padding: 12px;
 }
@@ -2416,30 +2453,30 @@ body.cy-paused::after {
 .soma-reading-detail p,
 .soma-reading-detail li,
 .soma-reading-detail dd {
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.55;
 }
 .soma-reading-detail dt {
-  font-size: 10.5px;
+  font-size: 15px;
   line-height: 1.4;
 }
-.soma-reading-detail pre { font-size: 12px; line-height: 1.5; }
+.soma-reading-detail pre { font-size: 16px; line-height: 1.5; }
 .soma-reading-detail details > summary,
 .soma-substrate-more > summary {
   min-height: 34px;
   padding-block: 8px;
-  font-size: 11px;
+  font-size: 15.5px;
   line-height: 1.35;
 }
 .soma-ranges { gap: 6px; margin-bottom: 8px; }
 .soma-ranges button {
   min-width: 42px;
   min-height: 30px;
-  font-size: 10px;
+  font-size: 15px;
   padding: 5px 9px;
 }
 .soma-history-note { margin-top: 7px; }
-.soma-influences-title { font-size: 10.5px; margin-top: 12px; }
+.soma-influences-title { font-size: 15px; margin-top: 12px; }
 .soma-contributors { padding-left: 20px; }
 
 .soma-region-list { gap: 6px; margin-top: 10px; }
@@ -2448,13 +2485,13 @@ body.cy-paused::after {
   gap: 8px;
   padding: 8px 9px 8px 21px;
 }
-.soma-region-entry > summary::before { left: 8px; font-size: 12px; }
+.soma-region-entry > summary::before { left: 8px; font-size: 16px; }
 .soma-region-name {
-  font-size: 12.5px;
+  font-size: 16.5px;
   line-height: 1.3;
   letter-spacing: 0.025em;
 }
-.soma-region-state { font-size: 9.5px; line-height: 1.2; }
+.soma-region-state { font-size: 14px; line-height: 1.2; }
 
 .soma-operational-anxiety-entry .soma-state-row {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2463,7 +2500,7 @@ body.cy-paused::after {
 .soma-operational-anxiety-entry .soma-state-value {
   grid-column: 1 / -1;
   color: #e2c77c;
-  font-size: 15px;
+  font-size: 19px;
   line-height: 1.2;
   letter-spacing: 0.055em;
   text-align: left;
@@ -2488,7 +2525,6 @@ body.cy-paused::after {
   border-style: dashed;
   opacity: 0.55;
 }
-.operational-anxiety-detail > .soma-reading-description { color: #aebfca; }
 .operational-anxiety-history-wrap {
   display: block;
   margin-top: 12px;
@@ -2521,7 +2557,7 @@ body.cy-paused::after {
 .operational-anxiety-drivers h3 {
   margin: 0 0 8px;
   color: #c6d9e4;
-  font-size: 11px;
+  font-size: 15.5px;
   line-height: 1.3;
   letter-spacing: 0.12em;
 }
@@ -2555,7 +2591,7 @@ body.cy-paused::after {
 .operational-anxiety-facts dd { text-align: left; }
 .operational-anxiety-contexts { gap: 8px; margin-top: 10px; }
 .operational-anxiety-contexts article { padding: 10px; }
-.operational-anxiety-contexts strong { font-size: 11px; }
+.operational-anxiety-contexts strong { font-size: 15.5px; }
 
 @media (max-width: 760px) {
   .layout { padding: 8px; gap: 10px; }
