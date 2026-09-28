@@ -4109,9 +4109,11 @@ async function main() {
     // not a second simulation deciding whether Cy is hungry, tired or tense.
     const experienced = soma.state && soma.state.experienced && soma.state.experienced.metrics;
     if (experienced) {
-      // Legacy Pain remains in its own diagnostics state and is not mirrored
-      // into compatibility vitals, derived state or brain mappings.
-      vitals.physical.hunger = experienced.hunger.value / 100;
+      // Legacy Pain and the legacy elapsed-time Hunger scalar remain in their own
+      // diagnostics state and are NOT mirrored into compatibility vitals, derived
+      // state or brain mappings. The grounded physiological satiety model is the
+      // only feeding-related signal that reaches the prompt, presentation or brain
+      // analogies; the legacy hunger scalar no longer competes with it.
       // Legacy fatigue remains inside the explicitly provisional diagnostic
       // snapshot. It no longer enters compatibility vitals, brain mappings,
       // prompt inputs, action selection or environmental behaviour.

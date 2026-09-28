@@ -566,7 +566,7 @@ function modelFacingLine(item) {
     case 'record_status':
       return `[${item.epistemicStatus}] Feeding record: ${value.missedScheduledMeals || 0} missed scheduled meals; intake knowledge ${words(value.intakeKnowledgeStatus)}; ${value.observationGapCount || 0} observation gaps.`;
     case 'physiological_satiety':
-      return `[${item.epistemicStatus}] Physiological satiety range ${finite(value.range?.[0], 2)}-${finite(value.range?.[1], 2)} on the published model's nominal 1-10 scale; input uncertainty ${words(value.inputUncertainty)}. This is a model estimate, not an observed feeling.`;
+      return `[${item.epistemicStatus}] Physiological satiety estimate ${finite(value.median, 2)} (central 95% ${finite(value.central95?.lower, 2)}-${finite(value.central95?.upper, 2)}) on the published model's nominal 1-10 scale; input uncertainty ${words(value.inputUncertainty)}. This is a model estimate, not an observed feeling.`;
     case 'physiological_satiety_unavailable':
       return `[${item.epistemicStatus}] Physiological satiety estimate unavailable: ${words(value)}.`;
     case 'current_social_context':

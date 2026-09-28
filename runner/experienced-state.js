@@ -469,9 +469,11 @@ export function tickExperienced(state, {
       ? 'social need is rising with time since reassuring contact'
       : 'social need is at rest until actual contact is recorded',
     now, 'social_clock');
-  const hunger = finite(state.metrics.hunger && state.metrics.hunger.value, METRICS.hunger.baseline);
-  setLevel(state, 'arousal', 'coupling:body-arousal', Math.max(0, hunger - 60) * 0.16,
-    'current legacy hunger is raising bodily activation', now, 'state_coupling');
+  // The legacy elapsed-time hunger scalar is quarantined: it no longer couples
+  // into arousal or any other experienced metric, and it must not compete with
+  // the grounded physiological satiety model. Drop any stale coupling contributor
+  // a pre-quarantine checkpoint may still carry so persisted state self-heals.
+  state.contributors.arousal = state.contributors.arousal.filter((item) => item.id !== 'coupling:body-arousal');
   setLevel(state, 'rumination', 'coupling:attention-rumination', 16 * clamp(attention.salience, 0, 1) + 14 * clamp(predictionError, 0, 1),
     attention.text ? `present attention remains on: ${clean(attention.text)}` : 'unresolved attention and prediction mismatch',
     now, 'cognitive_state');
@@ -522,7 +524,7 @@ export function experiencedSnapshot(state, now = null) {
       key, label: spec.label, value: state.metrics[key].value, baseline: spec.baseline,
       updatedAtMs: state.metrics[key].updatedAtMs, trend: trend.direction, trendDelta: trend.delta,
       recovery: spec.recovery, contributors: publicContributors(state, key, now),
-      ...(key === 'loneliness' ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
+      ...(['loneliness', 'hunger'].includes(key) ? { implementationStatus: 'PROVISIONAL', lifecycleStatus: 'DIAGNOSTICS_ONLY' } : {}),
     };
   }
   const value = (key) => metrics[key].value;
@@ -563,7 +565,7 @@ export function experiencedDirective(state, now = null) {
   if (!state) return '';
   now = Number.isFinite(now) ? now : finite(state.updatedAtMs, Date.now());
   const snapshot = experiencedSnapshot(state, now);
-  const active = Object.entries(snapshot.metrics).filter(([key]) => !['pain', 'loneliness'].includes(key)).map(([, metric]) => ({
+  const active = Object.entries(snapshot.metrics).filter(([key]) => !['pain', 'loneliness', 'hunger'].includes(key)).map(([, metric]) => ({
     ...metric, distance: Math.abs(metric.value - metric.baseline),
   })).filter((metric) => metric.distance >= 8).sort((a, b) => b.distance - a.distance).slice(0, 3);
   if (!active.length) return 'EXPERIENCED STATE: no pressure is far from its resting tendency.';

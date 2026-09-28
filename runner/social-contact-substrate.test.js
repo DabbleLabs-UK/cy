@@ -220,7 +220,7 @@ assert.doesNotMatch(runSource, /delete vitals\.mental\.longing/);
 assert.match(runSource, /vitals\.mental\.longing = 0;/,
   'the required legacy persistence slot remains finite but behaviourally neutral');
 assert.doesNotMatch(somaSource, /drives\.contact\s*=\s*round\(experienced\.loneliness/);
-assert.match(experiencedSource, /!\['pain', 'loneliness'\]\.includes\(key\)/);
+assert.match(experiencedSource, /!\['pain', 'loneliness', 'hunger'\]\.includes\(key\)/);
 assert.match(experiencedSource, /temporalSocial[\s\S]{0,240}value: null/);
 
 console.log('social-contact-substrate.test.js: all checks passed');
