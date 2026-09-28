@@ -32,6 +32,13 @@ function stableContext(value = {}) {
     groundedContext: String(value.groundedContext || '').trim().slice(0, 4000),
     senderLabel: value.senderLabel ? String(value.senderLabel).slice(0, 120) : null,
     generationRef: value.generationRef ? String(value.generationRef).slice(0, 96) : null,
+    // Retrieval-cue provenance only (see autobiographical_memory.php's doc
+    // comment on captive_memory_rank_candidates). Deliberately excluded from
+    // memoryContextFingerprint's identity below: neither field changes what
+    // is fetched, ranked or selected, so including them would only fragment
+    // prepared-set caching for no behavioural benefit.
+    querySourceType: value.querySourceType ? String(value.querySourceType).slice(0, 32) : null,
+    recentExpressionText: String(value.recentExpressionText || '').trim().slice(0, 2000),
   };
 }
 
@@ -78,6 +85,12 @@ export class AutobiographicalMemoryRuntime {
     this.backgroundTimeoutMs = backgroundTimeoutMs;
     this.working = { directive: '', selected: [], inspection: null };
     this.desired = null;
+    // Provenance only: the ids explicitly inserted into the most recently
+    // CONSUMED (i.e. actually used in a model generation) working set, so the
+    // next surfacing query can record which of its candidates were also
+    // inserted into the immediately preceding generation context. Never read
+    // by anything that fetches/ranks/selects/inserts memories.
+    this.lastConsumed = { generationRef: null, insertedIds: [] };
     this.busy = false;
     // Start conservatively: the durable server queues have not been inspected
     // yet, so lower-priority world generation must wait for the first poll.
@@ -229,6 +242,10 @@ export class AutobiographicalMemoryRuntime {
       return this.working;
     }
     inspection.consumedBy = generationRef || null;
+    this.lastConsumed = {
+      generationRef: generationRef || null,
+      insertedIds: Array.isArray(inspection.insertedIds) ? [...inspection.insertedIds] : [],
+    };
     void this.client.consumePreparedMemorySet({
       preparedSetId: inspection.preparedSetId,
       generationRef,
@@ -316,6 +333,8 @@ export class AutobiographicalMemoryRuntime {
         query: { text: context.text, tags: context.tags, location: context.location },
         visitorId: job.subject_visitor_id || null,
         limit: 10,
+        recentExpressionText: context.recentExpressionText,
+        querySourceType: context.querySourceType,
       });
       candidates = Array.isArray(response && response.candidates) ? response.candidates : [];
       const grounded = this.broker('MEMORY_SURFACING', {
@@ -367,12 +386,30 @@ export class AutobiographicalMemoryRuntime {
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
     });
     if (category === 'PREPARED' || category === 'NO_CANDIDATES') {
+      // Provenance only, from here to the end of this block: none of it is
+      // read back into fetching/ranking/selection/insertion above. It exists
+      // solely so the owner-gated query ledger (recordMemoryQuery) can answer,
+      // per candidate, which terms/tags matched and whether that match
+      // independently overlaps Cy's own recent-expression buffer, plus
+      // whether the candidate repeats the immediately preceding generation.
+      const previouslyInsertedIds = this.lastConsumed.insertedIds || [];
+      const candidateProvenance = Object.fromEntries(candidates.map((memory) => [memory.id, {
+        matchedTags: memory.matchedTags || [],
+        matchedTerms: memory.matchedTerms || [],
+        matchProvenance: memory.matchProvenance || {},
+        repeatedFromPreviousGeneration: previouslyInsertedIds.includes(memory.id),
+      }]));
+      const repeatedFromPreviousGenerationIds = candidates
+        .map((memory) => memory.id)
+        .filter((id) => previouslyInsertedIds.includes(id));
       const inspection = {
         status: 'LIVE', query: { text: context.text, tags: context.tags, location: context.location },
+        querySourceType: context.querySourceType || null,
         senderKnown: !!job.subject_visitor_id, mechanisms: [], privacyFilter: 'APPLIED BEFORE RESPONSE',
         candidateIds: candidates.map((memory) => memory.id), offeredIds: candidates.map((memory) => memory.id),
         selectedIds: selected.map((memory) => memory.id), insertedIds: selected.map((memory) => memory.id),
         selectedReasons: Object.fromEntries(selected.map((memory) => [memory.id, memory.reasons || []])),
+        candidateProvenance, repeatedFromPreviousGenerationIds,
         boundaries: MEMORY_MODEL_BOUNDARIES,
       };
       await this.client.recordMemoryQuery({ generationRef: context.generationRef, inspection }).catch(() => {});

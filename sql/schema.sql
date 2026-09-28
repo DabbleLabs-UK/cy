@@ -309,13 +309,16 @@ CREATE TABLE autobiographical_memory_queries (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     generation_ref VARCHAR(64) NULL,
     current_context JSON NOT NULL,
+    query_source_type VARCHAR(32) NULL,
     sender_known TINYINT UNSIGNED NOT NULL DEFAULT 0,
     candidate_memory_ids JSON NOT NULL,
     retrieval_mechanisms JSON NOT NULL,
+    candidate_match_provenance JSON NULL,
     privacy_filter JSON NOT NULL,
     offered_memory_ids JSON NOT NULL,
     selected_memory_ids JSON NOT NULL,
     inserted_memory_ids JSON NOT NULL,
+    repeated_from_previous_generation_ids JSON NULL,
     created_at DATETIME(3) NOT NULL,
     INDEX idx_memory_query_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
