@@ -381,7 +381,6 @@ function satietyHistoryMarkup() {
 
 function processSMarkup(status, admin) {
   return `<section class="sleep-homeostasis-card status-${status.status.toLowerCase().replace('_', '-')}">
-    <div class="sleep-homeostasis-head"><span>${status.displayName}</span><strong class="sleep-homeostasis-status">${status.publicLabel}</strong></div>
     <div class="sleep-pressure-reading"><strong class="sleep-pressure-value">--</strong><span>SLEEP PRESSURE INDEX</span></div>
     <p class="sleep-homeostasis-state">Current sleep state unavailable.</p>
     <p class="sleep-homeostasis-calibration">Waiting for schedule-derived sleep history.</p>
@@ -417,71 +416,58 @@ function predictedSleepinessMarkup(status, admin) {
     <div class="predicted-sleepiness-reading"><strong class="predicted-sleepiness-value">--</strong><span>PREDICTED KSS (1-9)</span></div>
     <p class="predicted-sleepiness-anchor">Waiting for schedule-derived sleep history.</p>
     <p class="predicted-sleepiness-calibration">Two complete schedule-derived sleep episodes are required.</p>
-    <dl class="predicted-sleepiness-facts"><div><dt>MODEL</dt><dd>Three-Process Model of Alertness - Ingre et al. 2014</dd></div><div><dt>PHASE</dt><dd>POPULATION DEFAULT</dd></div><div><dt>SLEEP HISTORY</dt><dd>SCHEDULE-DERIVED</dd></div></dl>
-    <p class="predicted-sleepiness-separation">The headline KSS prediction uses independently validated TPM equations. The Process S/C displays below are not numerically substituted into it.</p>
-    <p class="predicted-sleepiness-caveat">Population-model estimate; individual sleepiness can differ substantially. General fatigue is not modelled. Sleep inertia is not adequately modelled, so the first hour after waking has additional known bias.</p>
+    <p class="predicted-sleepiness-caveat">Population-model estimate; individual sleepiness can differ substantially. General fatigue is not modelled. Sleep inertia is not adequately modelled, so the first hour after waking has additional known bias. Full methodology: <a href="how-cy-works.php#sleepiness" target="_blank" rel="noopener">How Cy Works</a>.</p>
     ${admin ? '<details class="predicted-sleepiness-inspector"><summary>TPM CALCULATION INSPECTION</summary><pre>Waiting for a live TPM calculation.</pre></details>' : ''}
   </section>`;
 }
 
-function threatLearningMarkup(status, volatilityStatus, generalisationStatus, contextualStatus, admin) {
+function threatLearningMarkup(status, admin) {
   return `<section class="threat-learning-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="threat-learning-head"><span>${status.displayName}</span><strong class="threat-learning-status">${status.publicLabel}</strong></div>
     <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome.</p>
     <div class="threat-learning-associations"><p class="threat-learning-empty">No resolved post-installation trials have been observed yet.</p></div>
-    <div class="threat-learning-limits"><span>STATIONARY CUE-OUTCOME LEARNING</span><strong>${status.publicLabel}</strong><span>${volatilityStatus.displayName}</span><strong>${volatilityStatus.publicLabel}</strong><span>${generalisationStatus.displayName}</span><strong>${generalisationStatus.publicLabel}</strong><span>${contextualStatus.displayName}</span><strong>${contextualStatus.publicLabel}</strong></div>
     ${admin ? '<details class="threat-learning-inspector"><summary>THREAT LEARNING INSPECTION</summary><pre>Waiting for a threat-learning snapshot.</pre></details>' : ''}
   </section>`;
 }
 
-function defensiveContextMarkup(status, objectiveStatus, imminenceStatus, perceivedStatus, learnedControlStatus, rememberedStatus, admin) {
+function defensiveContextMarkup(status, admin) {
   return `<section class="defensive-context-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="defensive-context-head"><span>${status.displayName}</span><strong class="defensive-context-status">${status.publicLabel}</strong></div>
-    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution. Learned uncertainty remains separate in the owner inspection.</p>
+    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution.</p>
     <div class="defensive-contexts"><p class="defensive-context-empty">No current structured defensive context is active.</p></div>
-    <div class="defensive-context-limits"><span>${objectiveStatus.displayName}</span><strong>${objectiveStatus.publicLabel}</strong><span>${imminenceStatus.displayName}</span><strong>${imminenceStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${learnedControlStatus.displayName}</span><strong>${learnedControlStatus.publicLabel}</strong><span>${rememberedStatus.displayName}</span><strong>${rememberedStatus.publicLabel}</strong></div>
     ${admin ? '<details class="defensive-context-inspector"><summary>CURRENT DEFENSIVE CONTEXT INSPECTION</summary><pre>Waiting for exact context state and transition history.</pre></details>' : ''}
   </section>`;
 }
 
-function controllabilityMarkup(status, causalStatus, perceivedStatus, comparisonStatus, actionStatus, admin) {
+function controllabilityMarkup(status, admin) {
   return `<section class="controllability-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="controllability-head"><span>${status.displayName}</span><strong class="controllability-status">${status.publicLabel}</strong></div>
-    <p class="controllability-explanation">Compares adverse-outcome evidence after a genuinely available action was executed versus deliberately not executed in the same structured context. It is observational evidence, not a control percentage or causal proof.</p>
+    <p class="controllability-explanation">Compares what happened after Cy took an available action against what happened when he deliberately did not, in the same situation.</p>
     <div class="controllability-evidence"><p class="controllability-empty">No resolved comparable action opportunities have been observed yet.</p></div>
-    <div class="controllability-limits"><span>${causalStatus.displayName}</span><strong>${causalStatus.publicLabel}</strong><span>${perceivedStatus.displayName}</span><strong>${perceivedStatus.publicLabel}</strong><span>${comparisonStatus.displayName}</span><strong>${comparisonStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong></div>
     ${admin ? '<details class="controllability-inspector"><summary>ACTION-OUTCOME CONTINGENCY INSPECTION</summary><pre>Waiting for the complete opportunity and posterior history.</pre></details>' : ''}
   </section>`;
 }
 
-function feedingMarkup(feedingStatus, energyStatus, gutStatus, hedonicStatus, anticipationStatus, actionStatus, admin) {
+function feedingMarkup(feedingStatus, admin) {
   return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
-    <div class="feeding-input-head"><span>${gutStatus.displayName}</span><strong class="feeding-input-status">CALIBRATING</strong></div>
-    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>PHYSIOLOGICAL MODEL</span></div>
-    <p class="feeding-input-explanation">PHYSIOLOGICAL MODEL ESTIMATE. Statistical intervals come from the paper's published input distributions. Unknown meal composition is kept as a separate scenario range.</p>
+    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>MODEL ESTIMATE</span></div>
+    <p class="feeding-input-explanation">Based on a physiological model of gut and hormonal response to eating. Where the meal's exact composition isn't known, the estimate is shown as a range rather than one number. Full methodology: <a href="how-cy-works.php#satiety" target="_blank" rel="noopener">How Cy Works</a>.</p>
     <dl class="feeding-input-facts">
-      <div><dt>GASTRIC CONTENTS</dt><dd data-satiety="gastric">UNKNOWN</dd></div>
-      <div><dt>CCK</dt><dd data-satiety="cck">UNKNOWN</dd></div>
-      <div><dt>GLP-1</dt><dd data-satiety="glp1">UNKNOWN</dd></div>
-      <div><dt>PYY</dt><dd data-satiety="pyy">UNKNOWN</dd></div>
-      <div><dt>GHRELIN</dt><dd data-satiety="ghrelin">UNKNOWN</dd></div>
       <div><dt>LATEST KNOWN INTAKE</dt><dd data-satiety="intake">UNKNOWN</dd></div>
-      <div><dt>NUTRITION BASIS</dt><dd data-satiety="nutrition">UNKNOWN</dd></div>
     </dl>
     ${satietyHistoryMarkup()}
-    <details class="soma-substrate-more"><summary>MODEL, LIMITATIONS AND FEEDING HISTORY</summary>
+    <details class="soma-substrate-more"><summary>DETAIL AND RECENT FEEDING</summary>
       <p class="satiety-uncertainty">Waiting for a clean breakfast anchor.</p>
       <div class="satiety-scenarios"></div>
       <div class="feeding-timeline"><p class="feeding-timeline-empty">No structured feeding records have reached this view.</p></div>
-      <div class="feeding-model-limits"><span>${feedingStatus.displayName}</span><strong>${feedingStatus.publicLabel}</strong><span>${energyStatus.displayName}</span><strong>${energyStatus.publicLabel}</strong><span>${hedonicStatus.displayName}</span><strong>${hedonicStatus.publicLabel}</strong><span>${anticipationStatus.displayName}</span><strong>${anticipationStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>HYPOTHALAMIC NEURAL ACTIVITY</span><strong>NOT MODELLED</strong></div>
     </details>
     ${admin ? '<details class="feeding-input-inspector"><summary>PHYSIOLOGICAL SATIETY CALCULATION</summary><pre>Waiting for the current calculation and complete feeding ledger.</pre></details>' : ''}
   </section>`;
 }
 
-function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatus, peripheralStatus, centralStatus, actionStatus, admin) {
+function somaticMarkup(somaticStatus, admin) {
   return `<section class="somatic-input-card status-${somaticStatus.status.toLowerCase().replace('_', '-')}">
-    <div class="somatic-input-head"><span>CURRENT STRUCTURED STATE</span><strong class="somatic-input-status">LIVE</strong></div>
+    <p class="somatic-input-explanation">Structured record of bodily injury and noxious stimulus, drawn from world events. Full methodology: <a href="how-cy-works.php#harm" target="_blank" rel="noopener">How Cy Works</a>.</p>
     <dl class="somatic-input-facts">
       <div><dt>CURRENT STATE</dt><dd data-somatic="category">UNKNOWN</dd></div>
       <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">UNKNOWN</dd></div>
@@ -499,9 +485,6 @@ function somaticMarkup(somaticStatus, painStatus, healingStatus, predictiveStatu
         <p class="soma-history-note">Open this reading to load factual somatic events.</p>
         <div class="somatic-timeline"></div>
       </div>
-    </details>
-    <details class="soma-substrate-more"><summary>MODEL / LIMITATIONS</summary>
-      <div class="somatic-model-limits"><span>SUBJECTIVE PAIN</span><strong>${painStatus.publicLabel}</strong><span>INJURY SEVERITY</span><strong>NOT MODELLED / UNKNOWN</strong><span>${healingStatus.displayName}</span><strong>${healingStatus.publicLabel}</strong><span>${predictiveStatus.displayName}</span><strong>${predictiveStatus.publicLabel}</strong><span>${peripheralStatus.displayName}</span><strong>${peripheralStatus.publicLabel}</strong><span>${centralStatus.displayName}</span><strong>${centralStatus.publicLabel}</strong><span>${actionStatus.displayName}</span><strong>${actionStatus.publicLabel}</strong><span>BRAIN ACTIVATION</span><strong>NOT MODELLED</strong></div>
     </details>
     ${admin ? '<details class="somatic-input-inspector"><summary>SOMATIC / NOXIOUS INPUT TRACE</summary><pre>Waiting for the complete somatic ledger.</pre></details>' : ''}
   </section>`;
@@ -564,10 +547,6 @@ function feedingTimestampLabel(value) {
   return new Date(parsed).toLocaleString();
 }
 
-function decimal3(value) {
-  return Number.isFinite(Number(value)) ? Number(value).toFixed(3) : 'UNKNOWN';
-}
-
 function displayIdentifier(value) {
   return publicSomaLabel(value, 'structured record').replaceAll(/[:_]/g, ' ').toUpperCase();
 }
@@ -602,31 +581,10 @@ export class BrainHud {
     this.predictedSleepinessStatus = implementationStatus(this.registry, 'soma_subsystems', 'predicted_sleepiness_tpm');
     this.circadianStatus = implementationStatus(this.registry, 'soma_subsystems', 'circadian_process_c');
     this.threatLearningStatus = implementationStatus(this.registry, 'soma_subsystems', 'probabilistic_threat_learning');
-    this.threatVolatilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_volatility');
-    this.threatGeneralisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_generalisation');
-    this.threatContextualStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_contextual_inference');
     this.defensiveContextStatus = implementationStatus(this.registry, 'soma_subsystems', 'current_defensive_context');
-    this.objectiveControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'objective_controllability');
-    this.threatImminenceStatus = implementationStatus(this.registry, 'soma_subsystems', 'threat_imminence_representation');
-    this.perceivedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'perceived_controllability');
     this.learnedControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'learned_controllability');
-    this.causalControllabilityStatus = implementationStatus(this.registry, 'soma_subsystems', 'causal_controllability');
-    this.controllabilityComparisonStatus = implementationStatus(this.registry, 'soma_subsystems', 'bayesian_controllability_model_comparison');
-    this.controlActionSelectionStatus = implementationStatus(this.registry, 'soma_subsystems', 'action_selection_from_control');
-    this.rememberedThreatCueStatus = implementationStatus(this.registry, 'soma_subsystems', 'remembered_imagined_threat_cues');
     this.feedingStatus = implementationStatus(this.registry, 'soma_subsystems', 'ingestion_ledger');
-    this.energyHomeostasisStatus = implementationStatus(this.registry, 'soma_subsystems', 'energy_homeostatic_state');
-    this.gutSatietyStatus = implementationStatus(this.registry, 'soma_subsystems', 'gut_satiety');
-    this.hedonicAppetiteStatus = implementationStatus(this.registry, 'soma_subsystems', 'hedonic_appetite');
-    this.mealAnticipationStatus = implementationStatus(this.registry, 'soma_subsystems', 'learned_meal_anticipation');
-    this.feedingActionStatus = implementationStatus(this.registry, 'soma_subsystems', 'feeding_action_selection');
     this.somaticStatus = implementationStatus(this.registry, 'soma_subsystems', 'computational_nociceptive_input_analogue');
-    this.subjectivePainStatus = implementationStatus(this.registry, 'soma_subsystems', 'subjective_pain');
-    this.healingStatus = implementationStatus(this.registry, 'soma_subsystems', 'injury_healing_dynamics');
-    this.predictivePainStatus = implementationStatus(this.registry, 'soma_subsystems', 'predictive_pain_inference');
-    this.peripheralSensitisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'peripheral_sensitisation');
-    this.centralSensitisationStatus = implementationStatus(this.registry, 'soma_subsystems', 'central_sensitisation');
-    this.nocifensiveActionStatus = implementationStatus(this.registry, 'soma_subsystems', 'nocifensive_action_model');
     this.socialContactStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_contact_ledger');
     this.socialSetPointStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_set_point');
     this.socialErrorStatus = implementationStatus(this.registry, 'soma_subsystems', 'social_homeostatic_error');
@@ -668,26 +626,48 @@ export class BrainHud {
         <span class="measure-dot"></span><span class="measure-label">MODEL INFERENCE</span>
         <span class="measure-value">IDLE</span><span class="measure-kind">MEASURED</span>
       </div>
-      <div class="soma-anxiety-promoted">
+      <nav class="soma-overview" aria-label="Current inner state overview">
+        <div class="soma-overview-title">CURRENT INNER STATE</div>
+        <div class="soma-overview-grid">
+          <a href="#soma-card-anxiety" class="soma-overview-tile" data-overview-tile="anxiety">
+            <span class="soma-overview-label">ANXIETY</span>
+            <strong class="soma-overview-value">--</strong>
+          </a>
+          <a href="#soma-card-sleep-pressure" class="soma-overview-tile" data-overview-tile="sleepPressure">
+            <span class="soma-overview-label">SLEEP PRESSURE</span>
+            <strong class="soma-overview-value">--</strong>
+          </a>
+          <a href="#soma-card-satiety" class="soma-overview-tile" data-overview-tile="satiety">
+            <span class="soma-overview-label">SATIETY</span>
+            <strong class="soma-overview-value">--</strong>
+          </a>
+          <a href="#soma-card-harm" class="soma-overview-tile" data-overview-tile="harm">
+            <span class="soma-overview-label">HARM</span>
+            <strong class="soma-overview-value">--</strong>
+          </a>
+        </div>
+      </nav>
+      <div class="soma-anxiety-promoted" id="soma-card-anxiety">
         <div class="soma-anxiety-head"><span class="soma-badge">ANXIETY</span><span class="soma-anxiety-overall-status">CATEGORICAL OPERATIONAL STATE</span></div>
         <p class="soma-anxiety-intro">Anxiety here means Cy's current computed threat condition, not a measurement of felt anxiety. It is one of a small set of named states drawn from structured world events, not a biological-arousal or brain-activation reading.</p>
         <div class="soma-anxiety-readout"></div>
       </div>
-      <div class="soma-sleep-pressure-promoted">
+      <div class="soma-sleep-pressure-promoted" id="soma-card-sleep-pressure">
         <div class="soma-sleep-pressure-head"><span class="soma-badge">HOMEOSTATIC SLEEP PRESSURE</span><span class="soma-sleep-pressure-overall-status">NOT AVAILABLE</span></div>
         <p class="soma-sleep-pressure-intro">Sleep pressure is a modelled homeostatic drive that rises during scheduled wake and falls during scheduled sleep. It is not a measurement of how tired Cy feels.</p>
         ${processSMarkup(this.sleepHomeostasisStatus, this.admin)}
       </div>
-      <div class="soma-satiety-promoted">
+      <div class="soma-satiety-promoted" id="soma-card-satiety">
         <div class="soma-satiety-head"><span class="soma-badge">PHYSIOLOGICAL SATIETY</span><span class="soma-satiety-overall-status">PHYSIOLOGICAL MODEL ESTIMATE</span></div>
         <p class="soma-satiety-intro">Physiological satiety is a model estimate of post-meal gastrointestinal and hormonal state. It is not a measurement of whether Cy feels hungry or full.</p>
         <div class="soma-satiety-readout"></div>
       </div>
-      <div class="soma-harm-promoted">
+      <div class="soma-harm-promoted" id="soma-card-harm">
         <div class="soma-harm-head"><span class="soma-badge">HARM / NOCICEPTIVE IMPACT</span><span class="soma-harm-overall-status">STRUCTURED BODILY STATE</span></div>
         <p class="soma-harm-intro">Harm tracks structured bodily injury and nociceptive state. It does not measure how much pain Cy feels.</p>
         <div class="soma-harm-readout"></div>
       </div>
+      <p class="soma-how-it-works-link"><a href="how-cy-works.php" target="_blank" rel="noopener">HOW CY WORKS -&gt;</a></p>
       <details class="soma-legacy-quarantine">
         <summary>PREVIOUS MODELS / DIAGNOSTICS</summary>
         <p class="soma-quarantine-note">Everything below is earlier diagnostic work: a mixture of grounded substrates, provisional heuristics, legacy scalars and analogy-only brain mappings. It is preserved for continuity. Only Anxiety, Homeostatic Sleep Pressure, Physiological Satiety and Harm / Nociceptive Impact above are currently promoted.</p>
@@ -732,37 +712,25 @@ export class BrainHud {
       if (definition.key === 'sleepiness') entry.classList.add('soma-sleepiness-entry');
       if (definition.key === 'somaticHarm') entry.classList.add('soma-somatic-entry');
       if (definition.key === 'loneliness') entry.classList.add('soma-social-entry');
+      if (definition.key === 'satiety') entry.classList.add('soma-satiety-entry');
+      const isPromotedCard = ['anxiety', 'satiety', 'somaticHarm'].includes(definition.key);
+      if (isPromotedCard) entry.classList.add('soma-promoted-metric-entry');
       entry.dataset.metric = definition.key;
       const circadianProcess = definition.key === 'sleepiness'
         ? `${predictedSleepinessMarkup(this.predictedSleepinessStatus, this.admin)}${processCMarkup(this.circadianStatus, this.admin)}`
         : '';
       const threatLearning = definition.key === 'anxiety'
-        ? threatLearningMarkup(this.threatLearningStatus, this.threatVolatilityStatus, this.threatGeneralisationStatus, this.threatContextualStatus, this.admin)
+        ? threatLearningMarkup(this.threatLearningStatus, this.admin)
         : '';
       const defensiveContext = definition.key === 'anxiety'
-        ? defensiveContextMarkup(
-          this.defensiveContextStatus,
-          this.objectiveControllabilityStatus,
-          this.threatImminenceStatus,
-          this.perceivedControllabilityStatus,
-          this.learnedControllabilityStatus,
-          this.rememberedThreatCueStatus,
-          this.admin,
-        )
+        ? defensiveContextMarkup(this.defensiveContextStatus, this.admin)
         : '';
       const learnedControllability = definition.key === 'anxiety'
-        ? controllabilityMarkup(
-          this.learnedControllabilityStatus,
-          this.causalControllabilityStatus,
-          this.perceivedControllabilityStatus,
-          this.controllabilityComparisonStatus,
-          this.controlActionSelectionStatus,
-          this.admin,
-        )
+        ? controllabilityMarkup(this.learnedControllabilityStatus, this.admin)
         : '';
       const anxietyGrounding = definition.key === 'anxiety'
         ? `<details class="operational-anxiety-model-details"><summary>MODEL DETAILS</summary>
-            <p class="soma-reading-description operational-anxiety-model-note">Categorical threat context, timing, objective control and exact learned cue-outcome statistics.</p>
+            <p class="soma-reading-description operational-anxiety-model-note">Current threat context, timing, objective control and learned cue-outcome history. Full methodology: <a href="how-cy-works.php#anxiety" target="_blank" rel="noopener">How Cy Works</a>.</p>
             <dl class="operational-anxiety-facts">
               <div><dt>CURRENT CONCERN</dt><dd class="operational-anxiety-concern">NONE</dd></div>
               <div><dt>EXPECTED OUTCOME</dt><dd class="operational-anxiety-outcome">NONE</dd></div>
@@ -770,34 +738,16 @@ export class BrainHud {
               <div><dt>WORLD AMBIGUITY</dt><dd class="operational-anxiety-ambiguity">UNKNOWN</dd></div>
               <div><dt>ACTUAL CONTROL</dt><dd class="operational-anxiety-control">UNKNOWN</dd></div>
               <div><dt>LEARNED HISTORY</dt><dd class="operational-anxiety-learning">UNKNOWN</dd></div>
-              <div><dt>TEMPORAL HAZARD</dt><dd class="operational-anxiety-hazard">NOT AVAILABLE</dd></div>
             </dl>
             <div class="operational-anxiety-contexts"></div>
             ${threatLearning}${defensiveContext}${learnedControllability}
           </details>`
         : '';
       const feeding = definition.key === 'satiety'
-        ? feedingMarkup(
-          this.feedingStatus,
-          this.energyHomeostasisStatus,
-          this.gutSatietyStatus,
-          this.hedonicAppetiteStatus,
-          this.mealAnticipationStatus,
-          this.feedingActionStatus,
-          this.admin,
-        )
+        ? feedingMarkup(this.feedingStatus, this.admin)
         : '';
       const somatic = definition.key === 'somaticHarm'
-        ? somaticMarkup(
-          this.somaticStatus,
-          this.subjectivePainStatus,
-          this.healingStatus,
-          this.predictivePainStatus,
-          this.peripheralSensitisationStatus,
-          this.centralSensitisationStatus,
-          this.nocifensiveActionStatus,
-          this.admin,
-        )
+        ? somaticMarkup(this.somaticStatus, this.admin)
         : '';
       const socialContact = definition.key === 'loneliness'
         ? socialContactMarkup(
@@ -816,13 +766,14 @@ export class BrainHud {
           : definition.key === 'sleepiness'
           ? historyMarkup('KSS PREDICTED SLEEPINESS', 'Stored predicted KSS sleepiness history on the 1 to 9 scale')
           : historyMarkup();
+      const nameLabel = isPromotedCard ? '' : `<span class="soma-state-label">${definition.status.displayName}</span>`;
       const summary = definition.key === 'somaticHarm'
-        ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">--</strong></summary>`
+        ? `<summary class="soma-state-row">${nameLabel}<span class="soma-state-status">LIVE</span><strong class="soma-state-value">--</strong></summary>`
         : definition.key === 'anxiety'
-          ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong><span class="soma-state-bar operational-anxiety-state-bar" data-state="UNKNOWN" aria-hidden="true"><i></i><i></i><i></i><i></i></span></summary>`
+          ? `<summary class="soma-state-row">${nameLabel}<span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong><span class="soma-state-bar operational-anxiety-state-bar" data-state="UNKNOWN" aria-hidden="true"><i></i><i></i><i></i><i></i></span></summary>`
         : definition.key === 'loneliness'
-          ? `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong></summary>`
-          : `<summary class="soma-state-row"><span class="soma-state-label">${definition.status.displayName}</span><span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>`;
+          ? `<summary class="soma-state-row">${nameLabel}<span class="soma-state-status">LIVE</span><strong class="soma-state-value">UNKNOWN</strong></summary>`
+          : `<summary class="soma-state-row">${nameLabel}<span class="soma-state-status">${definition.status.publicLabel}</span><span class="soma-state-trend">--</span><strong class="soma-state-value">--</strong><span class="soma-state-bar"><i></i></span></summary>`;
       const detail = definition.key === 'somaticHarm'
         ? somatic
         : definition.key === 'anxiety'
@@ -837,7 +788,9 @@ export class BrainHud {
             </div>`
         : definition.key === 'loneliness'
           ? `<div class="soma-reading-detail social-contact-detail">${socialContact}</div>`
-          : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${feeding}${circadianProcess}</div>`;
+          : definition.key === 'satiety'
+            ? feeding
+            : `<div class="soma-reading-detail"><p class="soma-reading-description">${definition.status.note}</p><p class="soma-influences-title">RECENT INFLUENCES - PROVISIONAL</p><ul class="soma-contributors"></ul>${numericHistory}${anxietyGrounding}${circadianProcess}</div>`;
       entry.innerHTML = `${summary}${detail}`;
       const historyScope = definition.key === 'anxiety' ? 'operational-anxiety'
         : definition.key === 'sleepiness' ? 'sleepiness'
@@ -1260,6 +1213,23 @@ export class BrainHud {
       item.append(span, strong);
       selection.appendChild(item);
     }
+    this._updateOverview();
+  }
+
+  _updateOverview() {
+    const anxietyRow = this.rows.anxiety;
+    const satietyRow = this.rows.satiety;
+    const harmRow = this.rows.somaticHarm;
+    const sleepCard = this.root.querySelector('.soma-sleep-pressure-promoted .sleep-homeostasis-card');
+    const set = (key, value) => {
+      const tile = this.root.querySelector(`.soma-overview-tile[data-overview-tile="${key}"] .soma-overview-value`);
+      if (tile) tile.textContent = value || '--';
+    };
+    set('anxiety', anxietyRow && anxietyRow.querySelector('.soma-state-value').textContent);
+    const sleepValue = sleepCard && sleepCard.querySelector('.sleep-pressure-value').textContent;
+    set('sleepPressure', sleepValue && sleepValue !== '--' ? `${sleepValue} / 100` : 'CALIBRATING');
+    set('satiety', satietyRow && satietyRow.querySelector('.soma-state-value').textContent);
+    set('harm', harmRow && harmRow.querySelector('.soma-state-value').textContent);
   }
 
   renderOperationalAnxiety() {
@@ -1318,7 +1288,6 @@ export class BrainHud {
       ? (state === 'QUIET' ? 'NO ACTIVE CUE' : 'UNKNOWN')
       : resolved === 0 ? 'NO RESOLVED LEARNING HISTORY'
         : `${learnedCounts.occurred} ADVERSE / ${learnedCounts.safe} SAFE OBSERVATIONS`;
-    entry.querySelector('.operational-anxiety-hazard').textContent = 'NOT AVAILABLE - NO EVENT-TIME DISTRIBUTION';
 
     const contexts = entry.querySelector('.operational-anxiety-contexts');
     contexts.textContent = '';
@@ -1335,8 +1304,8 @@ export class BrainHud {
         const line = document.createElement('p');
         const posterior = learned.evidence && learned.evidence.posterior;
         line.textContent = posterior
-          ? `${publicSomaLabel(learned.cue && learned.cue.label, 'structured cue')} -> ${learned.outcomeClass.replaceAll('_', ' ')}: ${posterior.outcomesOccurred} adverse / ${posterior.outcomesDidNotOccur} safe; Beta(${posterior.alpha}, ${posterior.beta}), expected probability ${posterior.mean.toFixed(3)}, variance ${posterior.variance.toFixed(4)}.`
-          : `${publicSomaLabel(learned.cue && learned.cue.label, 'structured cue')} -> ${learned.outcomeClass.replaceAll('_', ' ')}: NO RESOLVED LEARNING HISTORY (Beta(1, 1) prior).`;
+          ? `${publicSomaLabel(learned.cue && learned.cue.label, 'structured cue')} -> ${learned.outcomeClass.replaceAll('_', ' ')}: ${posterior.outcomesOccurred} adverse / ${posterior.outcomesDidNotOccur} safe resolutions so far.`
+          : `${publicSomaLabel(learned.cue && learned.cue.label, 'structured cue')} -> ${learned.outcomeClass.replaceAll('_', ' ')}: no resolved learning history yet.`;
         article.appendChild(line);
       }
       contexts.appendChild(article);
@@ -1553,29 +1522,12 @@ export class BrainHud {
       heading.textContent = `${displayIdentifier(learned.actionId)} - ${displayIdentifier(learned.contextId)}`;
       const outcome = document.createElement('p');
       outcome.textContent = `Adverse outcome: ${displayIdentifier(learned.outcomeClass)}`;
-      const facts = document.createElement('dl');
-      const action = learned.actionPosterior || {};
-      const noAction = learned.noActionPosterior || {};
-      for (const [label, value] of [
-        ['ACTION PERFORMED', `${learned.observationCounts.actionPerformed} resolved; Beta(${action.alpha}, ${action.beta}); mean ${decimal3(action.mean)}; variance ${decimal3(action.variance)}`],
-        ['ACTION WITHHELD', `${learned.observationCounts.actionWithheld} resolved; Beta(${noAction.alpha}, ${noAction.beta}); mean ${decimal3(noAction.mean)}; variance ${decimal3(noAction.variance)}`],
-        ['OBSERVED DIFFERENCE', `${decimal3(learned.contingencyDifference)}; variance ${decimal3(learned.contingencyVariance)}`],
-      ]) {
-        const wrapper = document.createElement('div');
-        const term = document.createElement('dt');
-        const detail = document.createElement('dd');
-        term.textContent = label;
-        detail.textContent = value;
-        wrapper.append(term, detail);
-        facts.appendChild(wrapper);
-      }
+      const counts = document.createElement('p');
+      counts.textContent = `${learned.observationCounts.actionPerformed} resolved trial${learned.observationCounts.actionPerformed === 1 ? '' : 's'} with the action taken; ${learned.observationCounts.actionWithheld} with it withheld.`;
       const interpretation = document.createElement('p');
       interpretation.className = 'controllability-interpretation';
       interpretation.textContent = contingencyEvidenceText(learned.evidenceDescription);
-      const limits = document.createElement('p');
-      limits.className = 'controllability-causal-limit';
-      limits.textContent = 'Causal control: not established. Perceived control: not modelled.';
-      item.append(heading, outcome, facts, interpretation, limits);
+      item.append(heading, outcome, counts, interpretation);
       root.appendChild(item);
     }
   }
@@ -1587,8 +1539,6 @@ export class BrainHud {
     const snapshot = this.somaticNociceptive;
     const live = this.somaticStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
       && snapshot && snapshot.status === 'implemented';
-    card.querySelector('.somatic-input-status').textContent = live
-      ? this.somaticStatus.publicLabel : 'UNAVAILABLE';
     const headline = live && snapshot.headline ? snapshot.headline : null;
     entry.querySelector('.soma-state-value').textContent = headline ? headline.display : 'STATE UNAVAILABLE';
     entry.querySelector('.soma-state-status').textContent = live
@@ -1629,24 +1579,13 @@ export class BrainHud {
       && snapshot && snapshot.status === 'implemented';
     const modelLive = physiology && physiology.status === 'LIVE' && physiology.headline;
     const estimated = modelLive && physiology.headline.status === 'ESTIMATE_AVAILABLE';
-    card.querySelector('.feeding-input-status').textContent = modelLive
+    const overallStatus = this.root.querySelector('.soma-satiety-overall-status');
+    if (overallStatus) overallStatus.textContent = modelLive
       ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
-    const range = (value, unit = '') => value && Number.isFinite(value.minimum) && Number.isFinite(value.maximum)
-      ? `${value.minimum.toFixed(2)}-${value.maximum.toFixed(2)}${unit}` : 'UNKNOWN';
     const intake = physiology && physiology.latestKnownIntake;
     const facts = {
-      score: modelLive ? (estimated ? `${physiology.headline.estimate.toFixed(1)} / 10` : 'SATIETY - INPUT UNCERTAIN') : '--',
-      gastric: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
-      cck: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
-      glp1: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
-      pyy: modelLive ? 'SCENARIO-DEPENDENT' : 'UNKNOWN',
-      ghrelin: modelLive && physiology.ghrelin
-        ? (physiology.ghrelin.status === 'WITHIN_CALIBRATED_PHYSICAL_DOMAIN'
-          ? `${physiology.ghrelin.median.toFixed(2)} pM (central 95% ${physiology.ghrelin.central95.lower.toFixed(2)}-${physiology.ghrelin.central95.upper.toFixed(2)})`
-          : physiology.ghrelin.display)
-        : 'UNKNOWN',
+      score: modelLive ? (estimated ? `${physiology.headline.estimate.toFixed(1)} / 10` : 'ESTIMATE UNCERTAIN') : '--',
       intake: intake ? `${String(intake.mealType || 'meal').toUpperCase()}, ${Number(intake.consumedEnergyKcal).toFixed(0)} kcal, ${String(intake.portionBasis || 'UNKNOWN').replaceAll('_', ' ')}` : 'NONE RECORDED',
-      nutrition: intake ? `${String(intake.nutritionBasis || 'UNKNOWN').replaceAll('_', ' ')}; ${String(intake.nutritionalComposition || 'UNKNOWN').replaceAll('_', ' ')}` : 'UNKNOWN',
     };
     for (const [key, value] of Object.entries(facts)) {
       const target = card.querySelector(`[data-satiety="${key}"]`);
@@ -1654,7 +1593,7 @@ export class BrainHud {
     }
     const uncertainty = card.querySelector('.satiety-uncertainty');
     if (uncertainty) uncertainty.textContent = modelLive
-      ? `${physiology.compositionUncertainty.classification}: ${physiology.compositionUncertainty.status.replaceAll('_', ' ')}. Each scenario uses a central 95% interval from published input distributions.`
+      ? `Meal composition is ${physiology.compositionUncertainty.status.replaceAll('_', ' ').toLowerCase()}, so the estimate below is shown as a typical range rather than a single figure.`
       : `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}.`;
     const scenarios = card.querySelector('.satiety-scenarios');
     if (scenarios) {
@@ -1662,7 +1601,7 @@ export class BrainHud {
       for (const scenario of (physiology && physiology.scenarios || [])) {
         const item = document.createElement('p');
         const estimateText = scenario.displaySatiety
-          ? `${scenario.displaySatiety.median.toFixed(2)} / 10; central 95% ${scenario.displaySatiety.central95.lower.toFixed(2)}-${scenario.displaySatiety.central95.upper.toFixed(2)}`
+          ? `${scenario.displaySatiety.median.toFixed(2)} / 10 (typical range ${scenario.displaySatiety.central95.lower.toFixed(2)}-${scenario.displaySatiety.central95.upper.toFixed(2)})`
           : 'unavailable';
         item.textContent = `${scenario.label}: ${estimateText}.`;
         scenarios.appendChild(item);
@@ -1827,7 +1766,6 @@ export class BrainHud {
     const snapshot = this.sleepHomeostasis;
     const live = this.sleepHomeostasisStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
       && snapshot && snapshot.status === 'implemented';
-    card.querySelector('.sleep-homeostasis-status').textContent = live ? this.sleepHomeostasisStatus.publicLabel : 'UNAVAILABLE';
     if (!live) {
       if (overallStatus) overallStatus.textContent = 'NOT AVAILABLE';
       card.querySelector('.sleep-pressure-value').textContent = '--';
