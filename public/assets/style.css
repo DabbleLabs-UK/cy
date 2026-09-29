@@ -886,6 +886,105 @@ body.cy-paused::after {
 .soma-overall-status { color: #d2a259; font-size: 12.5px; letter-spacing: 0.12em; }
 .soma-caveat { margin: 0; color: var(--tel); font-size: 14px; line-height: 1.45; }
 .soma-public-readout { display: grid; gap: 5px; }
+
+/* Current inner state overview: a compact snapshot of all four promoted
+   subsystems, read in seconds before scrolling into any one card. */
+.soma-overview {
+  padding-bottom: 12px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line);
+}
+.soma-overview-title {
+  color: var(--tel-dim);
+  font-size: 10.5px;
+  letter-spacing: 0.24em;
+  margin-bottom: 8px;
+}
+.soma-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.soma-overview-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--chrome-1);
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.soma-overview-tile:hover,
+.soma-overview-tile:focus-visible {
+  border-color: #50728b;
+  background: #14202a;
+  outline: none;
+}
+.soma-overview-label {
+  color: var(--tel-dim);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+}
+.soma-overview-value {
+  color: #e8eef4;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 1181px) {
+  .layout.soma-expanded .soma-overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Subtle exit into the deep-dive documentation surface: intentionally quiet
+   so it never competes with Cy's live state above it. */
+.soma-how-it-works-link {
+  margin: 2px 0 4px;
+  text-align: right;
+}
+.soma-how-it-works-link a {
+  color: var(--tel-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+}
+.soma-how-it-works-link a:hover { color: #a7c9dd; }
+.soma-anxiety-promoted a,
+.soma-satiety-promoted a,
+.soma-harm-promoted a { color: #8fb2c9; }
+.soma-anxiety-promoted a:hover,
+.soma-satiety-promoted a:hover,
+.soma-harm-promoted a:hover { color: #d6e8f3; }
+
+/* One shared grammar for the three details-based promoted cards (Anxiety,
+   Satiety, Harm): the collapsed summary row itself IS the at-a-glance
+   headline - a large current value up top, status/trend below it - so a
+   visitor never has to open anything to read the current state. */
+.soma-promoted-metric-entry > .soma-state-row {
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: start;
+}
+.soma-promoted-metric-entry .soma-state-value {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  font-size: 20px;
+  line-height: 1.25;
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+.soma-promoted-metric-entry .soma-state-status {
+  grid-column: 2;
+  grid-row: 2;
+}
+.soma-promoted-metric-entry .soma-state-trend {
+  grid-column: 1;
+  grid-row: 2;
+}
+.soma-promoted-metric-entry .soma-state-bar { grid-column: 1 / -1; grid-row: 3; }
+
 .soma-anxiety-promoted {
   display: flex; flex-direction: column; gap: 8px;
   padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line);
@@ -1084,8 +1183,6 @@ body.cy-paused::after {
 .soma-history-note { margin: 0; color: #8294a1; font-size: 12.5px; line-height: 1.4; }
 
 .sleep-homeostasis-card { padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
-.sleep-homeostasis-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 12.5px; letter-spacing: 0.08em; }
-.sleep-homeostasis-status { color: #65d59a; font-size: 12.5px; }
 .sleep-pressure-reading { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 5px; }
 .sleep-pressure-value { color: #d9f1e4; font-size: 22px; line-height: 1; }
 .sleep-pressure-reading span { color: #8caa9b; font-size: 7px; letter-spacing: 0.08em; }
@@ -1111,8 +1208,6 @@ body.cy-paused::after {
 .threat-learning-association { padding: 6px; border: 1px solid rgba(80, 105, 94, 0.45); background: rgba(5, 12, 10, 0.34); }
 .threat-learning-association > strong { display: block; color: #c7e1d4; font: 8px/1.35 var(--mono); text-transform: uppercase; }
 .threat-learning-association p { margin: 3px 0; color: #9cb2a7; font-size: 12.5px; line-height: 1.45; }
-.threat-learning-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 12px; line-height: 1.4; }
-.threat-learning-limits strong { color: #788693; }
 .threat-learning-inspector { margin-top: 7px; color: #86a99a; font-size: 12.5px; }
 .threat-learning-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
 .defensive-context-card { margin-top: 9px; padding: 9px; border: 1px solid #425d6d; background: rgba(17, 29, 38, 0.48); }
@@ -1129,8 +1224,6 @@ body.cy-paused::after {
 .defensive-context-item dl > div { display: flex; justify-content: space-between; gap: 8px; }
 .defensive-context-item dt { color: #728a97; font-size: 7px; letter-spacing: 0.06em; }
 .defensive-context-item dd { margin: 0; color: #b8cbd4; font-size: 7px; text-align: right; }
-.defensive-context-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(94, 126, 144, 0.35); color: #849ca8; font-size: 7.5px; line-height: 1.4; }
-.defensive-context-limits strong { color: #788693; }
 .defensive-context-inspector { margin-top: 7px; color: #91b2c2; font-size: 8px; }
 .defensive-context-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b5c7d0; font: inherit; line-height: 1.45; }
 .defensive-context-action-evidence { margin: 6px 0 0; padding-top: 6px; border-top: 1px solid rgba(94, 126, 144, 0.28); color: #a8c7d6; font-size: 7.5px; line-height: 1.45; text-transform: uppercase; }
@@ -1143,20 +1236,11 @@ body.cy-paused::after {
 .controllability-item { padding: 7px; border: 1px solid rgba(104, 122, 145, 0.45); background: rgba(6, 10, 17, 0.38); }
 .controllability-item > strong { display: block; color: #d0dce8; font: 8px/1.35 var(--mono); }
 .controllability-item > p { margin: 4px 0; color: #a6b6c6; font-size: 12px; line-height: 1.45; }
-.controllability-item dl { display: grid; gap: 4px; margin: 7px 0; }
-.controllability-item dl > div { display: grid; gap: 2px; }
-.controllability-item dt { color: #778da3; font-size: 12px; letter-spacing: 0.06em; }
-.controllability-item dd { margin: 0; color: #c0ccd7; font-size: 12px; overflow-wrap: anywhere; }
 .controllability-interpretation { color: #bdd4e4 !important; }
-.controllability-causal-limit { color: #8c9baa !important; text-transform: uppercase; }
-.controllability-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(104, 122, 145, 0.35); color: #8494a5; font-size: 12px; line-height: 1.4; }
-.controllability-limits strong { color: #788693; }
 .controllability-inspector { margin-top: 7px; color: #9aafc3; font-size: 12.5px; }
 .controllability-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bec8d2; font: inherit; line-height: 1.45; }
 .feeding-input-card { margin-top: 9px; padding: 9px; border: 1px solid #285846; background: rgba(19, 41, 34, 0.35); }
-.feeding-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #a9d8c1; font-size: 12.5px; letter-spacing: 0.08em; }
-.feeding-input-status { color: #65d59a; font-size: 12.5px; }
-.feeding-input-explanation,
+.feeding-input-explanation { margin: 5px 0; color: #9cb2a7; font-size: 17px; line-height: 1.55; }
 .feeding-timeline-empty { margin: 5px 0; color: #9cb2a7; font-size: 12.5px; line-height: 1.45; }
 .feeding-input-facts { display: grid; gap: 3px; margin: 8px 0 0; }
 .feeding-input-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -1166,8 +1250,6 @@ body.cy-paused::after {
 .feeding-timeline-item { padding: 6px; border: 1px solid rgba(80, 105, 94, 0.45); background: rgba(5, 12, 10, 0.34); }
 .feeding-timeline-item > strong { display: block; color: #c7e1d4; font: 8px/1.35 var(--mono); text-transform: uppercase; }
 .feeding-timeline-item p { margin: 3px 0 0; color: #9cb2a7; font-size: 12px; line-height: 1.45; }
-.feeding-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(80, 105, 94, 0.35); color: #849990; font-size: 12px; line-height: 1.4; }
-.feeding-model-limits strong { color: #788693; }
 .satiety-model-reading { display: flex; align-items: baseline; gap: 7px; margin: 8px 0 5px; }
 .satiety-model-reading strong { color: #efd58c; font-size: 20px; letter-spacing: 0.04em; }
 .satiety-model-reading span { color: #7f97a7; font-size: 12px; letter-spacing: 0.14em; }
@@ -1178,9 +1260,7 @@ body.cy-paused::after {
 .feeding-input-inspector { margin-top: 7px; color: #86a99a; font-size: 12.5px; }
 .feeding-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #aebdb5; font: inherit; line-height: 1.45; }
 .somatic-input-card { margin-top: 9px; padding: 9px; border: 1px solid #535b73; background: rgba(31, 35, 48, 0.42); }
-.somatic-input-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #c4cbe0; font-size: 12.5px; letter-spacing: 0.08em; }
-.somatic-input-status { color: #65d59a; font-size: 12.5px; }
-.somatic-input-explanation,
+.somatic-input-explanation { margin: 5px 0; color: #a9b0c4; font-size: 17px; line-height: 1.55; }
 .somatic-timeline-empty { margin: 5px 0; color: #a9b0c4; font-size: 12.5px; line-height: 1.45; }
 .somatic-input-facts { display: grid; gap: 3px; margin: 8px 0 0; }
 .somatic-input-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
@@ -1190,8 +1270,6 @@ body.cy-paused::after {
 .somatic-timeline-item { padding: 6px; border: 1px solid rgba(112, 121, 147, 0.45); background: rgba(9, 11, 18, 0.38); }
 .somatic-timeline-item > strong { display: block; color: #d8ddec; font: 8px/1.35 var(--mono); text-transform: uppercase; }
 .somatic-timeline-item p { margin: 3px 0 0; color: #a9b0c4; font-size: 12px; line-height: 1.45; }
-.somatic-model-limits { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(112, 121, 147, 0.35); color: #8d95aa; font-size: 12px; line-height: 1.4; }
-.somatic-model-limits strong { color: #8d96aa; }
 .somatic-input-inspector { margin-top: 7px; color: #a2abc2; font-size: 12.5px; }
 .somatic-input-inspector pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bfc5d4; font: inherit; line-height: 1.45; }
 .somatic-history-axis { display: flex; justify-content: center; margin: 2px 0 3px; color: #858da5; font-size: 12px; letter-spacing: 0.08em; }
@@ -1247,7 +1325,16 @@ body.cy-paused::after {
 .soma-diagnostic-row small { grid-column: 1 / -1; color: #5f7080; font-size: 12.5px; }
 
 /* ================= AUTOBIOGRAPHICAL MEMORY ================= */
-.memory-panel { margin-top: 10px; }
+/* Deliberately its own system, not a continuation of the Soma card pile: a
+   plainly different accent colour and standalone breathing room above it,
+   so a visitor's eye registers the boundary before reading a word of it. */
+.memory-panel {
+  margin-top: 22px;
+  border-top: 2px solid #3a3550;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.memory-panel .panel-title { color: #ab9fd6; border-bottom-color: #3a3550; }
 #memory { display: grid; gap: 8px; }
 .memory-status { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: baseline; }
 .memory-status strong { color: #d7e3eb; font-size: 9px; font-weight: 500; }
@@ -2370,7 +2457,6 @@ body.cy-paused::after {
 
 .predicted-sleepiness-anchor,
 .predicted-sleepiness-calibration,
-.predicted-sleepiness-separation,
 .predicted-sleepiness-caveat {
   margin: 6px 0 0;
   line-height: 1.45;
@@ -2380,17 +2466,7 @@ body.cy-paused::after {
   color: #78909e;
   font-size: 15px;
 }
-.predicted-sleepiness-facts { margin: 8px 0 0; }
-.predicted-sleepiness-facts div {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 8px;
-  padding: 4px 0;
-  border-top: 1px solid #20313b;
-}
-.predicted-sleepiness-facts dt { color: #7895a8; font-size: 12.5px; letter-spacing: 0.08em; }
-.predicted-sleepiness-facts dd { margin: 0; color: #c5d2da; font-size: 13.5px; line-height: 1.35; }
-.predicted-sleepiness-separation { color: #9fb2be; }
+.predicted-sleepiness-caveat a { color: #8fb2c9; }
 
 /* SOMA 1C: readable primary instrument panel and categorical Anxiety display. */
 .soma-caveat {
