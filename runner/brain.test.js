@@ -91,11 +91,11 @@ assert.match(source, /class="circadian-history-band"/);
 assert.match(source, /setAttribute\('class', 'scn-phase-hand'\)/);
 assert.match(source, /class="soma-region-list"/);
 assert.match(source, /probabilistic_threat_learning/);
-assert.match(source, /Learns whether a structured cue has been followed/);
+assert.match(source, /What Cy has learned about which warning signs tend to lead to trouble/);
 assert.match(source, /threat-learning-inspector/);
 assert.match(source, /CURRENT DEFENSIVE CONTEXT/);
 assert.doesNotMatch(source, /It is not an anxiety or threat score/);
-assert.match(source, /Learned uncertainty remains separate in the owner inspection/);
+assert.match(source, /What's present right now, what it could lead to, and how much say Cy has over what happens next/);
 assert.match(source, /defensive-context-inspector/);
 assert.match(source, /ACTUAL CONTROL/);
 assert.equal(
@@ -103,9 +103,10 @@ assert.equal(
   'LEARNED ACTION-OUTCOME CONTINGENCY',
 );
 assert.match(source, /learnedControllabilityStatus/);
-assert.match(source, /observational evidence, not a control percentage or causal proof/);
+assert.match(source, /Whether acting on it has actually made a difference before/);
 assert.match(source, /controllability-inspector/);
-assert.match(source, /Causal control: not established\. Perceived control: not modelled\./);
+assert.doesNotMatch(source, /Causal control: not established\. Perceived control: not modelled\./,
+  'the registry-classification limits line was removed as main-page jargon clutter');
 assert.doesNotMatch(source, /Cy has 73% control/);
 assert.equal(
   implementationEntry('soma_subsystems', 'feeding_event_model').display_name,
@@ -115,7 +116,7 @@ assert.doesNotMatch(source, /SUBJECTIVE HUNGER/);
 assert.match(source, /feeding-input-inspector/);
 assert.match(source, /PHYSIOLOGICAL SATIETY/);
 assert.match(source, /<span>10<\/span><strong>MODELLED PHYSIOLOGICAL SATIETY<\/strong><span>1<\/span>/);
-assert.match(source, /PHYSIOLOGICAL MODEL ESTIMATE/);
+assert.match(source, /soma-satiety-overall-status">ESTIMATE<\/span>/);
 assert.doesNotMatch(source, /NOT A REPORTED FEELING/);
 assert.match(source, /scope === 'satiety'/);
 assert.match(source, /class="satiety-history-band"/);
@@ -130,16 +131,17 @@ assert.doesNotMatch(source, /Somatic Harm tracks noxious events and injuries/,
 assert.doesNotMatch(source, /It does not claim how painful Cy experiences them/);
 assert.doesNotMatch(source, /subjective Pain is not modelled/);
 assert.match(source, /SOMATIC \/ NOXIOUS INPUT TRACE/);
-assert.match(source, /subjectivePainStatus/);
+assert.match(source, /What's happened to Cy's body, and what is still affecting him/);
 assert.match(source, /somatic_harm_headline/);
 assert.doesNotMatch(source, /LIVE - structured bodily state/,
   'the verbose inner status must not duplicate the promoted head badge; the entry now just says LIVE');
 assert.match(source, /ACTIVE INJURIES/);
-assert.match(source, /NO SOMATIC EVENTS IN THIS PERIOD/);
+assert.match(source, /No bodily harm in this period\./);
 assert.doesNotMatch(source, /data-metric="pain"/,
   'the legacy Pain scalar must not be a primary visitor row');
 assert.match(source, /<summary>EVENT HISTORY<\/summary>/);
-assert.match(source, /<summary>MODEL \/ LIMITATIONS<\/summary>/);
+assert.doesNotMatch(source, /<summary>MODEL \/ LIMITATIONS<\/summary>/,
+  'the registry-classification limits disclosure was removed from the Harm card as main-page jargon clutter');
 assert.equal(
   buildCountStepPath([{ ts: 1000, value: 1 }, { ts: 2000, value: 2 }], 0, 3000),
   'M93.3 32.0 H186.7 V0.0 H280.0',
@@ -172,7 +174,7 @@ assert.match(source, /this\._wireCircadian\(entry\)/);
 assert.match(source, /closeOtherReadings\([\s\S]*?details\.soma-state-entry, details\.soma-region-entry/,
   'Soma metrics and brain regions participate in one single-open accordion');
 assert.match(source, /buildHistoryUrl\(this\.historyUrl, scope, key, range\)/);
-assert.match(source, /MODEL DETAILS[\s\S]*?\$\{threatLearning\}\$\{defensiveContext\}\$\{learnedControllability\}/,
+assert.match(source, /MORE DETAIL[\s\S]*?\$\{threatLearning\}\$\{defensiveContext\}\$\{learnedControllability\}/,
   'the three detailed Anxiety subsystems remain available behind one secondary disclosure');
 assert.doesNotMatch(
   source,

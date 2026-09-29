@@ -26,7 +26,8 @@ for (const note of [sleepinessNote, homeostasisNote, tpmNote]) {
 // Public UI: the predicted-sleepiness and Process S cards must not label
 // schedule-derived sleep history as "OBSERVED".
 assert.doesNotMatch(brainSource, /SLEEP HISTORY<\/dt><dd>OBSERVED/);
-assert.match(brainSource, /SLEEP HISTORY<\/dt><dd>SCHEDULE-DERIVED/);
+assert.match(brainSource, /two complete schedule-derived sleep episodes are required/i,
+  'the sleep-history provenance facts dl was removed as main-page jargon, but the schedule-derived (not directly observed) framing must remain honest somewhere on the card');
 assert.doesNotMatch(brainSource, /observed sleep history/i);
 assert.doesNotMatch(brainSource, /observed sleep episodes?/i);
 assert.doesNotMatch(brainSource, /FROM OBSERVED SLEEP HISTORY/);

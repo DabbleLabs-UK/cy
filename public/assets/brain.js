@@ -77,6 +77,25 @@ const LEGACY_DERIVED = ['confusion', 'overwhelm', 'numbness', 'paranoia', 'fixat
 const clamp01 = (value) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
 const clamp100 = (value) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
 
+// The satiety model is far more often scenario-bounded (meal composition not
+// exactly known) than it has one exact estimate, so headline.status stays
+// 'INPUT_UNCERTAIN' most of the time - but a real computed range still
+// exists in scenarioEnvelope/scenarios and should be shown, not hidden
+// behind a bare "uncertain" label. The one case that must NOT be shown as a
+// real range is a numerically degenerate run (e.g. a long-running track set
+// that has drifted outside its physical domain) - the model already flags
+// that itself via each scenario's ghrelin status.
+function satietyScenarioRange(physiology) {
+  const envelope = physiology && physiology.scenarioEnvelope;
+  const minimum = envelope && Number.isFinite(envelope.minimumScenarioMedian) ? envelope.minimumScenarioMedian : null;
+  const maximum = envelope && Number.isFinite(envelope.maximumScenarioMedian) ? envelope.maximumScenarioMedian : null;
+  if (minimum == null || maximum == null) return null;
+  const scenarios = Array.isArray(physiology && physiology.scenarios) ? physiology.scenarios : [];
+  const degenerate = scenarios.some((scenario) => scenario && scenario.ghrelin
+    && scenario.ghrelin.status === 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN');
+  return degenerate ? null : { minimum, maximum };
+}
+
 function activityColor(value) {
   const v = clamp01(value) || 0;
   const stops = [[38, 58, 75], [47, 112, 135], [205, 146, 66], [240, 91, 54]];
@@ -467,16 +486,17 @@ function feedingMarkup(feedingStatus, admin) {
 
 function somaticMarkup(somaticStatus, admin) {
   return `<section class="somatic-input-card status-${somaticStatus.status.toLowerCase().replace('_', '-')}">
-    <p class="somatic-input-explanation">What's happened to Cy's body, and what's still healing. Full methodology: <a href="how-cy-works.php#harm" target="_blank" rel="noopener">How Cy Works</a>.</p>
+    <p class="somatic-input-explanation">What's happened to Cy's body, and what is still affecting him. Full methodology: <a href="how-cy-works.php#harm" target="_blank" rel="noopener">How Cy Works</a>.</p>
     <dl class="somatic-input-facts">
       <div><dt>CURRENT STATE</dt><dd data-somatic="category">UNKNOWN</dd></div>
       <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">UNKNOWN</dd></div>
-      <div><dt>LATEST</dt><dd data-somatic="latest">UNKNOWN</dd></div>
-      <div><dt>NOXIOUS STIMULUS</dt><dd data-somatic="stimulus-status">UNKNOWN</dd></div>
       <div><dt>TISSUE DAMAGE</dt><dd data-somatic="damage">UNKNOWN</dd></div>
-      <div><dt>INJURY</dt><dd data-somatic="injury-status">UNKNOWN</dd></div>
+      <div class="somatic-event-fact"><dt>LATEST</dt><dd data-somatic="latest">UNKNOWN</dd></div>
+      <div class="somatic-event-fact"><dt>NOXIOUS STIMULUS</dt><dd data-somatic="stimulus-status">UNKNOWN</dd></div>
+      <div class="somatic-event-fact"><dt>INJURY</dt><dd data-somatic="injury-status">UNKNOWN</dd></div>
     </dl>
-    <details class="soma-substrate-more" open><summary>EVENT HISTORY</summary>
+    <p class="somatic-clear-note" hidden>No recent bodily harm recorded.</p>
+    <details class="soma-substrate-more"><summary>EVENT HISTORY</summary>
       <div class="soma-reading-history somatic-history-wrap">
         <div class="soma-ranges" aria-label="Somatic event history range"><button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button></div>
         <div class="somatic-history-axis"><strong>ACTIVE INJURIES</strong></div>
@@ -1067,21 +1087,28 @@ export class BrainHud {
         continue;
       }
       if (definition.key === 'satiety') {
-        const headline = this.physiologicalSatiety && this.physiologicalSatiety.headline;
-        const live = this.physiologicalSatiety && this.physiologicalSatiety.status === 'LIVE'
-          && headline;
+        const physiology = this.physiologicalSatiety;
+        const headline = physiology && physiology.headline;
+        const live = physiology && physiology.status === 'LIVE' && headline;
         const estimated = live && headline.status === 'ESTIMATE_AVAILABLE'
           && Number.isFinite(headline.estimate);
-        row.querySelector('.soma-state-value').textContent = live
-          ? (estimated ? `${headline.estimate.toFixed(1)} / 10` : 'INPUT UNCERTAIN') : '--';
+        const range = live && !estimated ? satietyScenarioRange(physiology) : null;
+        const low = estimated ? headline.central95.lower : range ? range.minimum : null;
+        const high = estimated ? headline.central95.upper : range ? range.maximum : null;
+        const point = estimated ? headline.estimate : range ? (range.minimum + range.maximum) / 2 : null;
+        row.querySelector('.soma-state-value').textContent = !live ? '--'
+          : estimated ? `${point.toFixed(1)} / 10`
+            : range ? `${low.toFixed(1)}-${high.toFixed(1)} / 10`
+              : 'ESTIMATE SETTLING';
         row.querySelector('.soma-state-status').textContent = live
-          ? 'LIVE' : String(this.physiologicalSatiety && this.physiologicalSatiety.status || 'CALIBRATING').replaceAll('_', ' ');
-        row.querySelector('.soma-state-trend').textContent = estimated ? 'typical range' : live ? 'meal composition unclear' : 'waiting on a meal';
-        const left = estimated ? Math.max(0, Math.min(100, headline.central95.lower * 10)) : 0;
-        const right = estimated ? Math.max(left, Math.min(100, headline.central95.upper * 10)) : 0;
+          ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
+        row.querySelector('.soma-state-trend').textContent = estimated ? 'typical range'
+          : range ? 'typical range' : live ? 'recalibrating' : 'waiting on a meal';
+        const left = low != null ? Math.max(0, Math.min(100, low * 10)) : 0;
+        const rightEdge = high != null ? Math.max(left, Math.min(100, high * 10)) : 0;
         row.querySelector('.soma-state-bar i').style.left = `${left}%`;
-        row.querySelector('.soma-state-bar i').style.width = estimated ? `${Math.max(3, right - left)}%` : '0';
-        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(estimated ? headline.estimate / 10 : 0);
+        row.querySelector('.soma-state-bar i').style.width = point != null ? `${Math.max(3, rightEdge - left)}%` : '0';
+        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(point != null ? point / 10 : 0);
         row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means greater modelled physiological satiety.`;
         continue;
       }
@@ -1552,22 +1579,40 @@ export class BrainHud {
     const latestStimulus = latest && latest.stimulus || {};
     const latestTissue = latest && latest.tissue || {};
     const latestBody = latest && latest.body || {};
-    const latestDescription = latest
-      ? `${latestBody.site || 'UNKNOWN'} - ${latestStimulus.modality || 'UNKNOWN'}` : 'NO SOMATIC RECORD';
+    // Not every recorded event is about a stimulus or injury (a routine event
+    // can touch this ledger purely to state "no tissue damage happened").
+    // Showing UNKNOWN for fields the event never claimed anything about
+    // reads as broken data, so only surface these rows when the latest
+    // event actually carries a stimulus or injury fact.
+    const hasEventFacts = latest && (
+      latestBody.site !== 'UNKNOWN'
+      || latestStimulus.modality !== 'UNKNOWN'
+      || latestStimulus.noxiousStimulus === 'YES'
+      || latestTissue.injuryId != null
+      || latestTissue.injuryStatus !== 'UNKNOWN'
+    );
     const facts = {
       category: headline ? String(headline.category).replaceAll('_', ' ') : 'UNKNOWN',
       injuries: live && Number.isFinite(snapshot.activeInjuryCount)
         ? String(snapshot.activeInjuryCount)
         : live && Array.isArray(snapshot.activeInjuries)
           ? String(snapshot.activeInjuries.length) : 'UNKNOWN',
-      latest: latestDescription,
-      'stimulus-status': latest ? String(latestStimulus.status || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
       damage: live ? String(snapshot.tissueDamageStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
-      'injury-status': latest ? String(latestTissue.injuryStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
+      latest: hasEventFacts ? `${latestBody.site || 'UNKNOWN'} - ${latestStimulus.modality || 'UNKNOWN'}` : '',
+      'stimulus-status': hasEventFacts ? String(latestStimulus.status || 'UNKNOWN').replaceAll('_', ' ') : '',
+      'injury-status': hasEventFacts ? String(latestTissue.injuryStatus || 'UNKNOWN').replaceAll('_', ' ') : '',
     };
     for (const [key, value] of Object.entries(facts)) {
       const target = card.querySelector(`[data-somatic="${key}"]`);
       if (target) target.textContent = value;
+    }
+    card.querySelectorAll('.somatic-event-fact').forEach((row) => { row.hidden = !hasEventFacts; });
+    const clearNote = card.querySelector('.somatic-clear-note');
+    if (clearNote) {
+      clearNote.hidden = hasEventFacts;
+      clearNote.textContent = !live ? 'Bodily state unavailable.'
+        : snapshot.totalSomaticEvents ? 'No recent bodily harm recorded.'
+          : 'No bodily harm has been recorded.';
     }
   }
 
@@ -1581,12 +1626,16 @@ export class BrainHud {
       && snapshot && snapshot.status === 'implemented';
     const modelLive = physiology && physiology.status === 'LIVE' && physiology.headline;
     const estimated = modelLive && physiology.headline.status === 'ESTIMATE_AVAILABLE';
+    const range = modelLive && !estimated ? satietyScenarioRange(physiology) : null;
     const overallStatus = this.root.querySelector('.soma-satiety-overall-status');
     if (overallStatus) overallStatus.textContent = modelLive
       ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
     const intake = physiology && physiology.latestKnownIntake;
     const facts = {
-      score: modelLive ? (estimated ? `${physiology.headline.estimate.toFixed(1)} / 10` : 'ESTIMATE UNCERTAIN') : '--',
+      score: !modelLive ? '--'
+        : estimated ? `${physiology.headline.estimate.toFixed(1)} / 10`
+          : range ? `${range.minimum.toFixed(1)}-${range.maximum.toFixed(1)} / 10`
+            : 'ESTIMATE SETTLING',
       intake: intake ? `${String(intake.mealType || 'meal').toUpperCase()}, ${Number(intake.consumedEnergyKcal).toFixed(0)} kcal, ${String(intake.portionBasis || 'UNKNOWN').replaceAll('_', ' ')}` : 'NONE RECORDED',
     };
     for (const [key, value] of Object.entries(facts)) {
@@ -1594,9 +1643,13 @@ export class BrainHud {
       if (target) target.textContent = value;
     }
     const uncertainty = card.querySelector('.satiety-uncertainty');
-    if (uncertainty) uncertainty.textContent = modelLive
-      ? `Meal composition is ${physiology.compositionUncertainty.status.replaceAll('_', ' ').toLowerCase()}, so the estimate below is shown as a typical range rather than a single figure.`
-      : `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}.`;
+    if (uncertainty) uncertainty.textContent = !modelLive
+      ? `Physiological model unavailable: ${String(physiology && physiology.statusReason || 'waiting for clean breakfast anchor').replaceAll('_', ' ')}.`
+      : estimated
+        ? 'Meal composition was observed exactly, so this is a precise reading rather than a range.'
+        : range
+          ? `Meal composition is ${physiology.compositionUncertainty.status.replaceAll('_', ' ').toLowerCase()}, so the estimate above is shown as a typical range rather than a single figure.`
+          : "The current estimate isn't holding a stable value right now, so no reading is shown until it settles.";
     const scenarios = card.querySelector('.satiety-scenarios');
     if (scenarios) {
       scenarios.textContent = '';
@@ -1901,6 +1954,10 @@ export class BrainHud {
       }
       if (scope === 'somatic') {
         const events = Array.isArray(data.events) ? data.events : [];
+        const chart = entry.querySelector('.soma-history.somatic-history');
+        if (chart) chart.hidden = !events.length;
+        const axis = entry.querySelector('.somatic-history-axis');
+        if (axis) axis.hidden = !events.length;
         path.setAttribute('d', events.length
           ? buildCountStepPath(data.points, data.fromMs, data.toMs) : '');
         const markers = entry.querySelector('.somatic-event-markers');
@@ -1908,7 +1965,7 @@ export class BrainHud {
         markers.textContent = '';
         timeline.textContent = '';
         if (!events.length) {
-          note.textContent = 'NO SOMATIC EVENTS IN THIS PERIOD';
+          note.textContent = 'No bodily harm in this period.';
           return;
         }
         const span = Math.max(1, data.toMs - data.fromMs);

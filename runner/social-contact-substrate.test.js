@@ -201,7 +201,10 @@ assert.match(brainSource, /SOCIAL CONTACT \/ ISOLATION/);
 assert.match(brainSource, /CURRENT SOCIAL CONTEXT/);
 assert.match(brainSource, /SOCIAL HISTORY/);
 assert.match(brainSource, /SUBJECTIVE LONELINESS<\/span><strong>NOT MODELLED/);
-assert.doesNotMatch(brainSource, /definition\.key === 'loneliness'[\s\S]{0,500}soma-state-bar/);
+const lonelinessSummary = brainSource.match(/definition\.key === 'loneliness'\s*\?\s*`<summary[\s\S]*?<\/summary>`/);
+assert.ok(lonelinessSummary, 'loneliness summary branch not found in brain.js');
+assert.doesNotMatch(lonelinessSummary[0], /soma-state-bar/,
+  'loneliness is categorical (LIVE/UNKNOWN), not a graduated 0-100 bar');
 const endpointSource = readFileSync(new URL('../public/api/social-contact.php', import.meta.url), 'utf8');
 assert.match(endpointSource, /unset\(\$episode\['episodeId'\], \$episode\['linkedEnvironmentEventIds'\]\)/);
 assert.match(endpointSource, /unset\(\$episode\['opportunity'\]\['opportunityId'\]\)/);
