@@ -182,6 +182,7 @@ assert.match(source, /THREAT_ONGOING/);
 assert.doesNotMatch(source, /data-reading-scope="metric" data-reading-key="anxiety"/);
 assert.match(source, /NO RESOLVED LEARNING HISTORY/,
   'M: public UI presents prior-only learning truthfully');
-assert.match(source, /NOT AVAILABLE - NO EVENT-TIME DISTRIBUTION/);
+assert.doesNotMatch(source, /NOT AVAILABLE - NO EVENT-TIME DISTRIBUTION/,
+  'the TEMPORAL HAZARD row was removed as main-page jargon clutter - it was always static and never carried real information');
 
 console.log('operational-anxiety-state.test.js: all checks passed');

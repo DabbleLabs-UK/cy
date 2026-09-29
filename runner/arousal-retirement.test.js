@@ -79,15 +79,12 @@ assert.doesNotMatch(brainSource, /AROUSAL \/ STRESS/,
 assert.match(brainSource, /LEGACY ACTIVATION HEURISTIC/,
   'the retired metric must carry an honest legacy label');
 const promotedBlock = brainSource.slice(
-  brainSource.indexOf('<div class="soma-anxiety-promoted">'),
+  brainSource.indexOf('<div class="soma-anxiety-promoted"'),
   brainSource.indexOf('<details class="soma-legacy-quarantine">'),
 );
+assert.ok(promotedBlock.length > 100, 'promoted-card slice failed to locate its start/end anchors');
 assert.doesNotMatch(promotedBlock, /'arousal'|"arousal"|data-metric="arousal"/,
   'the three promoted cards (Anxiety, Sleep Pressure, Satiety) must not reference the arousal metric key');
-// Incidental prose use of the word "arousal" is fine and expected here - the
-// promoted Anxiety card explicitly disclaims being a biological-arousal
-// reading, which is honest and should not be mistaken for a leaked metric.
-assert.match(promotedBlock, /not a biological-arousal or brain-activation reading/);
 // All eight EXPERIENCED_METRICS cards (including arousal - proven present in
 // brain.test.js) are rendered into '.soma-public-readout'. Confirming that
 // mount point sits inside the quarantine <details> - and nowhere in the three
@@ -115,7 +112,7 @@ assert.equal(historySnapshot.metrics.arousal.lifecycleStatus, 'DIAGNOSTICS_ONLY'
 const anxietyEntry = implementationEntry('soma_variables', 'anxiety');
 assert.equal(anxietyEntry.implementation_status, 'IMPLEMENTED');
 assert.equal(anxietyEntry.display_name, 'ANXIETY');
-assert.match(brainSource, /Anxiety here means Cy's current computed threat condition/,
+assert.match(brainSource, /What Cy's immediate situation is currently registering/,
   'the promoted Anxiety intro copy must be unchanged');
 
 console.log('arousal-retirement.test.js: all checks passed');

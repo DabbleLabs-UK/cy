@@ -107,6 +107,44 @@ compact_expect(captive_compact_vitals_history_payload($calibrating)['satiety'] =
     'status' => 'CALIBRATING', 'estimate' => null, 'minimum' => null, 'maximum' => null,
 ], 'satiety model status was lost while no estimate was available');
 
+// The common case: meal composition is scenario-bounded (not exactly
+// observed), so headline has no estimate/central95 - but the model is LIVE
+// and has computed a real scenario envelope. History must fall back to it
+// rather than staying permanently null.
+$scenarioBounded = $rich;
+$scenarioBounded['soma']['physiologicalSatiety']['headline'] = ['status' => 'INPUT_UNCERTAIN', 'label' => 'SATIETY - INPUT UNCERTAIN'];
+$scenarioBounded['soma']['physiologicalSatiety']['scenarioEnvelope'] = [
+    'classification' => 'MEAL-COMPOSITION SCENARIO RANGE',
+    'minimumScenarioMedian' => 4.1, 'maximumScenarioMedian' => 6.8,
+];
+$scenarioBounded['soma']['physiologicalSatiety']['scenarios'] = [
+    ['ghrelin' => ['status' => 'WITHIN_CALIBRATED_PHYSICAL_DOMAIN']],
+    ['ghrelin' => ['status' => 'WITHIN_CALIBRATED_PHYSICAL_DOMAIN']],
+    ['ghrelin' => ['status' => 'WITHIN_CALIBRATED_PHYSICAL_DOMAIN']],
+];
+compact_expect(captive_compact_vitals_history_payload($scenarioBounded)['satiety'] === [
+    'status' => 'INPUT_UNCERTAIN', 'estimate' => 5.45, 'minimum' => 4.1, 'maximum' => 6.8,
+], 'scenario-bounded satiety did not fall back to the computed scenario envelope');
+
+// A degenerate/saturated model run (e.g. a track set that has run for many
+// days without re-anchoring) can push a hormone outside its physical domain.
+// The model already flags this itself (ghrelinPublicSummary); history must
+// not record that scenario envelope as if it were a trustworthy reading.
+$degenerate = $rich;
+$degenerate['soma']['physiologicalSatiety']['headline'] = ['status' => 'INPUT_UNCERTAIN', 'label' => 'SATIETY - INPUT UNCERTAIN'];
+$degenerate['soma']['physiologicalSatiety']['scenarioEnvelope'] = [
+    'classification' => 'MEAL-COMPOSITION SCENARIO RANGE',
+    'minimumScenarioMedian' => 10, 'maximumScenarioMedian' => 10,
+];
+$degenerate['soma']['physiologicalSatiety']['scenarios'] = [
+    ['ghrelin' => ['status' => 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN']],
+    ['ghrelin' => ['status' => 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN']],
+    ['ghrelin' => ['status' => 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN']],
+];
+compact_expect(captive_compact_vitals_history_payload($degenerate)['satiety'] === [
+    'status' => 'INPUT_UNCERTAIN', 'estimate' => null, 'minimum' => null, 'maximum' => null,
+], 'a model-artefact scenario envelope was recorded as a trustworthy satiety reading');
+
 $worstCase = $rich;
 foreach (CAPTIVE_VITALS_HISTORY_METRICS as $name) {
     $worstCase['soma']['experienced']['metrics'][$name]['value'] = PHP_FLOAT_MAX;

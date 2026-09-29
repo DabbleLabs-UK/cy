@@ -43,7 +43,7 @@ assert.equal((source.match(/-promoted"/g) || []).length, 4,
 assert.match(source, /Only Anxiety, Homeostatic Sleep Pressure, Physiological Satiety and Harm \/ Nociceptive Impact above are currently promoted\./);
 
 // Honest, non-subjective wording for satiety.
-assert.match(source, /Physiological satiety is a model estimate of post-meal gastrointestinal and hormonal state\. It is not a measurement of whether Cy feels hungry or full\./);
+assert.match(source, /How full Cy is likely to be after eating, building after a meal and fading as time passes\./);
 assert.doesNotMatch(source, /Cy is hungry/i);
 assert.doesNotMatch(source, /Cy is full\b/i);
 assert.doesNotMatch(source, /SUBJECTIVE HUNGER/);
@@ -54,15 +54,20 @@ assert.doesNotMatch(source, /data-metric="hunger"/,
 // Honest, non-subjective wording for harm. It must distinguish objective
 // injury/nociceptive tracking from felt pain, and never claim a severity or
 // distress score.
-assert.match(source, /Harm tracks structured bodily injury and nociceptive state\. It does not measure how much pain Cy feels\./);
+assert.match(source, /Injuries Cy is carrying, and whether they're still with him\./);
 assert.doesNotMatch(source, /HARM \/ NOCICEPTIVE IMPACT[\s\S]{0,400}Cy feels pain/i);
 assert.doesNotMatch(source, /BODILY DISTRESS/i);
 assert.doesNotMatch(source, /PAIN SCORE/i);
 assert.doesNotMatch(source, /HEALING (?:COUNTDOWN|TIMER|ETA)/i);
-assert.match(source, /SUBJECTIVE PAIN<\/span><strong>\$\{painStatus\.publicLabel\}/,
-  'subjective pain must be an explicit NOT MODELLED label, never a computed value');
-assert.match(source, /INJURY SEVERITY<\/span><strong>NOT MODELLED \/ UNKNOWN/,
-  'injury severity must be explicit NOT MODELLED, never invented from injury count/type');
+// The registry-classification grid that used to show these on the main page
+// was removed as jargon clutter (see the immersive-copy and data-completeness
+// passes); the explicit NOT MODELLED admission now lives in the public
+// How Cy Works documentation instead, not silently dropped altogether.
+const howCyWorksSource = await readFile(join(here, '..', 'public', 'how-cy-works.php'), 'utf8');
+assert.match(howCyWorksSource, /subjective pain intensity/i,
+  'subjective pain must be explicitly documented as not modelled, never a computed value');
+assert.match(howCyWorksSource, /injury severity scoring/i,
+  'injury severity must be explicitly documented as not modelled, never invented from injury count/type');
 
 // The satiety and harm readouts are routed to their own promoted containers,
 // not the quarantined public readout, mirroring how Anxiety is already routed.

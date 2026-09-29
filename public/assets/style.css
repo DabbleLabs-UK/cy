@@ -1266,6 +1266,7 @@ body.cy-paused::after {
 .somatic-input-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .somatic-input-facts dt { color: #858da5; font-size: 12px; letter-spacing: 0.06em; }
 .somatic-input-facts dd { margin: 0; color: #d0d5e2; font-size: 12px; text-align: right; }
+.somatic-clear-note { margin: 8px 0 0; color: #a9b0c4; font-size: 15px; line-height: 1.5; }
 .somatic-timeline { display: grid; gap: 5px; margin-top: 8px; }
 .somatic-timeline-item { padding: 6px; border: 1px solid rgba(112, 121, 147, 0.45); background: rgba(9, 11, 18, 0.38); }
 .somatic-timeline-item > strong { display: block; color: #d8ddec; font: 8px/1.35 var(--mono); text-transform: uppercase; }

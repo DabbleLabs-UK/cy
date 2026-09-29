@@ -66,9 +66,10 @@ const brainSource = await readFile(join(here, '..', 'public', 'assets', 'brain.j
 assert.doesNotMatch(brainSource, /'ANGER \/ HOSTILITY'/,
   'the old "ANGER / HOSTILITY" label must not remain anywhere in the public UI source');
 const promotedBlock = brainSource.slice(
-  brainSource.indexOf('<div class="soma-anxiety-promoted">'),
+  brainSource.indexOf('<div class="soma-anxiety-promoted"'),
   brainSource.indexOf('<details class="soma-legacy-quarantine">'),
 );
+assert.ok(promotedBlock.length > 100, 'promoted-card slice failed to locate its start/end anchors');
 assert.doesNotMatch(promotedBlock, /'anger'|"anger"|data-metric="anger"/,
   'the three promoted cards must not reference the anger metric key');
 const anxietyEntry = implementationEntry('soma_variables', 'anxiety');

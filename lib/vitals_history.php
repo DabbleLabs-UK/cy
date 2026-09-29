@@ -55,6 +55,34 @@ function captive_compact_vitals_history_payload(array $payload): array
         ? $soma['physiologicalSatiety']['headline']
         : [];
     $satietyRange = is_array($satiety['central95'] ?? null) ? $satiety['central95'] : [];
+    // The model is LIVE (tracks exist) far more often than it has an exact
+    // observed composition, so headline.estimate/central95 (only set when
+    // ESTIMATE_AVAILABLE) leaves this permanently null for the common
+    // scenario-bounded case - the model still computes a real scenario
+    // envelope then, it's just never captured. Fall back to it, but only
+    // when the model's own artefact check (ghrelin outside the physical
+    // domain - see physiological-satiety.js ghrelinPublicSummary) hasn't
+    // flagged the scenarios as numerically degenerate; a saturated/invalid
+    // model state must stay absent rather than be recorded as a real range.
+    $satietyEnvelope = is_array($soma['physiologicalSatiety']['scenarioEnvelope'] ?? null)
+        ? $soma['physiologicalSatiety']['scenarioEnvelope']
+        : [];
+    $satietyScenarios = is_array($soma['physiologicalSatiety']['scenarios'] ?? null)
+        ? $soma['physiologicalSatiety']['scenarios']
+        : [];
+    $satietyScenariosTrustworthy = $satietyScenarios !== [] && !array_any(
+        $satietyScenarios,
+        static fn(mixed $scenario): bool => is_array($scenario)
+            && is_array($scenario['ghrelin'] ?? null)
+            && ($scenario['ghrelin']['status'] ?? null) === 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN'
+    );
+    $satietyEnvelopeMin = $satietyScenariosTrustworthy
+        ? captive_vitals_history_number($satietyEnvelope['minimumScenarioMedian'] ?? null) : null;
+    $satietyEnvelopeMax = $satietyScenariosTrustworthy
+        ? captive_vitals_history_number($satietyEnvelope['maximumScenarioMedian'] ?? null) : null;
+    $satietyEnvelopeMid = ($satietyEnvelopeMin !== null && $satietyEnvelopeMax !== null)
+        ? round(($satietyEnvelopeMin + $satietyEnvelopeMax) / 2, 3)
+        : null;
     $processC = is_array($soma['circadianProcessC'] ?? null) ? $soma['circadianProcessC'] : [];
 
     return [
@@ -75,9 +103,9 @@ function captive_compact_vitals_history_payload(array $payload): array
                 $satiety['status'] ?? ($soma['physiologicalSatiety']['status'] ?? null),
                 CAPTIVE_VITALS_HISTORY_SATIETY_STATES
             ),
-            'estimate' => captive_vitals_history_number($satiety['estimate'] ?? null),
-            'minimum' => captive_vitals_history_number($satietyRange['lower'] ?? null),
-            'maximum' => captive_vitals_history_number($satietyRange['upper'] ?? null),
+            'estimate' => captive_vitals_history_number($satiety['estimate'] ?? null) ?? $satietyEnvelopeMid,
+            'minimum' => captive_vitals_history_number($satietyRange['lower'] ?? null) ?? $satietyEnvelopeMin,
+            'maximum' => captive_vitals_history_number($satietyRange['upper'] ?? null) ?? $satietyEnvelopeMax,
         ],
         'processC' => [
             'estimate' => captive_vitals_history_number($processC['processCEstimate'] ?? null),

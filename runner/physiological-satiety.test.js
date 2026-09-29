@@ -141,7 +141,13 @@ assert.equal(migrated.tracks.length, 0);
 assert.equal(migrated.migrationArchive.previousTrackCount, 225);
 
 const ui = readFileSync(new URL('../public/assets/brain.js', import.meta.url), 'utf8');
-assert.match(ui, /SATIETY - INPUT UNCERTAIN/);
+// Scenario-bounded (not exactly observed) is the common case, not an edge
+// case - the UI must surface the model's real computed scenario envelope
+// range rather than a bare "uncertain" label, but must fall back to a
+// non-numeric reading if the model's own artefact check (ghrelin outside
+// the physical domain) flags the run as numerically degenerate.
+assert.match(ui, /scenarioEnvelope/);
+assert.match(ui, /MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN/);
 assert.doesNotMatch(ui, /ghrelinPM/);
 assert.equal(implementationEntry('soma_variables', 'satiety').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
