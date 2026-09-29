@@ -664,7 +664,7 @@ export class BrainHud {
       </div>
       <div class="soma-harm-promoted" id="soma-card-harm">
         <div class="soma-harm-head"><span class="soma-badge">HARM / NOCICEPTIVE IMPACT</span><span class="soma-harm-overall-status">BODILY STATE</span></div>
-        <p class="soma-harm-intro">Injury Cy is currently carrying, and how it's healing.</p>
+        <p class="soma-harm-intro">Injuries Cy is carrying, and whether they're still with him.</p>
         <div class="soma-harm-readout"></div>
       </div>
       <p class="soma-how-it-works-link"><a href="how-cy-works.php" target="_blank" rel="noopener">HOW CY WORKS -&gt;</a></p>
