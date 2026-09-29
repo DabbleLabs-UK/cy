@@ -14,6 +14,9 @@ const CAPTIVE_VITALS_HISTORY_ANXIETY_STATES = [
 const CAPTIVE_VITALS_HISTORY_SATIETY_STATES = [
     'ESTIMATE_AVAILABLE', 'INPUT_UNCERTAIN', 'INPUT_INCOMPLETE', 'CALIBRATING', 'LIVE', 'UNKNOWN',
 ];
+const CAPTIVE_VITALS_HISTORY_FULLNESS_BANDS = [
+    'EMPTY', 'SETTLING', 'COMFORTABLY_FULL', 'VERY_FULL', 'UNKNOWN',
+];
 
 function captive_vitals_history_number(mixed $value): ?float
 {
@@ -83,6 +86,26 @@ function captive_compact_vitals_history_payload(array $payload): array
     $satietyEnvelopeMid = ($satietyEnvelopeMin !== null && $satietyEnvelopeMax !== null)
         ? round(($satietyEnvelopeMin + $satietyEnvelopeMax) / 2, 3)
         : null;
+
+    // Physiological-satiety-v3 promotes gastric distention/fullness (a pure
+    // function of stomach content volume) as the public signal, replacing the
+    // v2 hormone-composite headline this 'satiety' block above still reads.
+    // It never touches hormone state, so - unlike 'satiety' above - it needs
+    // no ghrelin-artefact trustworthiness gate. A distinct 'fullness' key (not
+    // a reinterpretation of 'satiety') keeps pre-migration hormone-score
+    // history and post-migration gastric-fullness history from ever being
+    // read as the same measurement.
+    $fullness = is_array($soma['physiologicalSatiety']['headline'] ?? null)
+        ? $soma['physiologicalSatiety']['headline']
+        : [];
+    $fullnessEnvelope = is_array($soma['physiologicalSatiety']['scenarioEnvelope'] ?? null)
+        ? $soma['physiologicalSatiety']['scenarioEnvelope']
+        : [];
+    $fullnessEnvelopeMinPercent = captive_vitals_history_number($fullnessEnvelope['minimumScenarioMedianPercent'] ?? null);
+    $fullnessEnvelopeMaxPercent = captive_vitals_history_number($fullnessEnvelope['maximumScenarioMedianPercent'] ?? null);
+    $fullnessPercent = captive_vitals_history_number($fullness['normalizedPercent'] ?? null);
+    $fullnessCentral95Percent = is_array($fullness['normalizedPercentCentral95'] ?? null)
+        ? $fullness['normalizedPercentCentral95'] : [];
     $processC = is_array($soma['circadianProcessC'] ?? null) ? $soma['circadianProcessC'] : [];
 
     return [
@@ -106,6 +129,19 @@ function captive_compact_vitals_history_payload(array $payload): array
             'estimate' => captive_vitals_history_number($satiety['estimate'] ?? null) ?? $satietyEnvelopeMid,
             'minimum' => captive_vitals_history_number($satietyRange['lower'] ?? null) ?? $satietyEnvelopeMin,
             'maximum' => captive_vitals_history_number($satietyRange['upper'] ?? null) ?? $satietyEnvelopeMax,
+        ],
+        'fullness' => [
+            'status' => captive_vitals_history_enum(
+                $fullness['status'] ?? ($soma['physiologicalSatiety']['status'] ?? null),
+                CAPTIVE_VITALS_HISTORY_SATIETY_STATES
+            ),
+            'band' => captive_vitals_history_enum($fullness['band'] ?? null, CAPTIVE_VITALS_HISTORY_FULLNESS_BANDS),
+            'percent' => $fullnessPercent ?? (
+                ($fullnessEnvelopeMinPercent !== null && $fullnessEnvelopeMaxPercent !== null)
+                    ? round(($fullnessEnvelopeMinPercent + $fullnessEnvelopeMaxPercent) / 2, 3) : null
+            ),
+            'minimumPercent' => captive_vitals_history_number($fullnessCentral95Percent['lower'] ?? null) ?? $fullnessEnvelopeMinPercent,
+            'maximumPercent' => captive_vitals_history_number($fullnessCentral95Percent['upper'] ?? null) ?? $fullnessEnvelopeMaxPercent,
         ],
         'processC' => [
             'estimate' => captive_vitals_history_number($processC['processCEstimate'] ?? null),

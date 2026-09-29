@@ -211,6 +211,70 @@ if ($satietyFromLegacyHunger !== []) {
     exit(1);
 }
 
+// Physiological-satiety-v3 promotes gastric fullness (distinct jsonPaths and
+// compact key from the retired hormone-composite 'satiety' scope above, so
+// old and new history are never read as the same measurement).
+$fullnessConfig = captive_soma_history_config('24h', 'fullness', 'fullness');
+if ($fullnessConfig['jsonPath'] !== '$.soma.physiologicalSatiety.headline.normalizedPercent'
+    || $fullnessConfig['jsonPathMin'] !== '$.soma.physiologicalSatiety.headline.normalizedPercentCentral95.lower'
+    || $fullnessConfig['jsonPathMax'] !== '$.soma.physiologicalSatiety.headline.normalizedPercentCentral95.upper'
+    || $fullnessConfig['compactJsonPath'] !== '$.fullness.percent'
+    || $fullnessConfig['compactJsonPathMin'] !== '$.fullness.minimumPercent'
+    || $fullnessConfig['compactJsonPathMax'] !== '$.fullness.maximumPercent'
+    || $fullnessConfig['scale'] !== 1.0) {
+    fwrite(STDERR, "FAIL: gastric fullness history config is incorrect\n");
+    exit(1);
+}
+$fullnessPoints = captive_soma_history_points([[
+    'ts_ms' => 9000,
+    'value' => '62.5',
+    'minimum' => '55.0',
+    'maximum' => '70.0',
+]], 'fullness', 0, 10000, 10, 'fullness', 1.0);
+if (count($fullnessPoints) !== 1
+    || $fullnessPoints[0]['value'] !== 62.5
+    || $fullnessPoints[0]['minimum'] !== 55.0
+    || $fullnessPoints[0]['maximum'] !== 70.0) {
+    fwrite(STDERR, "FAIL: gastric fullness history did not preserve its uncertainty band\n");
+    exit(1);
+}
+$fullnessPayload = json_encode([
+    'soma' => ['physiologicalSatiety' => ['headline' => [
+        'status' => 'ESTIMATE_AVAILABLE',
+        'normalizedPercent' => 62.5,
+        'normalizedPercentCentral95' => ['lower' => 55.0, 'upper' => 70.0],
+    ]]],
+], JSON_THROW_ON_ERROR);
+$fullnessPayloadPoints = captive_soma_history_points(
+    [['ts_ms' => 9250, 'payload' => $fullnessPayload]],
+    'fullness', 0, 10000, 10, 'fullness', 1.0
+);
+if ($fullnessPayloadPoints !== [[
+    'ts' => 9250,
+    'value' => 62.5,
+    'minimum' => 55.0,
+    'maximum' => 70.0,
+]]) {
+    fwrite(STDERR, "FAIL: gastric fullness payload fallback lost its uncertainty band\n");
+    exit(1);
+}
+$fullnessFromLegacyHunger = captive_soma_history_points(
+    [['ts_ms' => 9500, 'payload' => $legacyHungerPayload]],
+    'fullness', 0, 10000, 10, 'fullness', 1.0
+);
+if ($fullnessFromLegacyHunger !== []) {
+    fwrite(STDERR, "FAIL: legacy Hunger history leaked into gastric fullness history\n");
+    exit(1);
+}
+$fullnessFromOldSatietyPayload = captive_soma_history_points(
+    [['ts_ms' => 9750, 'payload' => $satietyPayload]],
+    'fullness', 0, 10000, 10, 'fullness', 1.0
+);
+if ($fullnessFromOldSatietyPayload !== []) {
+    fwrite(STDERR, "FAIL: pre-migration hormone-composite satiety history leaked into gastric fullness history\n");
+    exit(1);
+}
+
 if (captive_soma_history_bucket_seconds(captive_soma_history_config('1h', 'arousal')) !== 30
     || captive_soma_history_bucket_seconds(captive_soma_history_config('24h', 'arousal')) !== 600
     || captive_soma_history_bucket_seconds(captive_soma_history_config('7d', 'arousal')) !== 3600) {

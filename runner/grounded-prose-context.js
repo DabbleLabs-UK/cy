@@ -327,9 +327,10 @@ function feedingSection(state, now) {
       'physiological_satiety',
       'physiological_satiety',
       {
-        median: satiety.headline.estimate,
-        central95: satiety.headline.central95,
-        scale: 'display-only nominal 1-10 scale',
+        gastricDistentionMl: satiety.headline.gastricDistentionMl,
+        central95Ml: satiety.headline.central95Ml,
+        normalizedPercent: satiety.headline.normalizedPercent,
+        band: satiety.headline.band,
         uncertaintyClass: 'PUBLISHED INPUT-DISTRIBUTION UNCERTAINTY',
         inputUncertainty: satiety.inputUncertainty,
         latestIntake: satiety.latestKnownIntake && {
@@ -566,7 +567,7 @@ function modelFacingLine(item) {
     case 'record_status':
       return `[${item.epistemicStatus}] Feeding record: ${value.missedScheduledMeals || 0} missed scheduled meals; intake knowledge ${words(value.intakeKnowledgeStatus)}; ${value.observationGapCount || 0} observation gaps.`;
     case 'physiological_satiety':
-      return `[${item.epistemicStatus}] Physiological satiety estimate ${finite(value.median, 2)} (central 95% ${finite(value.central95?.lower, 2)}-${finite(value.central95?.upper, 2)}) on the published model's nominal 1-10 scale; input uncertainty ${words(value.inputUncertainty)}. This is a model estimate, not an observed feeling.`;
+      return `[${item.epistemicStatus}] Gastric fullness estimate: ${finite(value.normalizedPercent, 0)}% of reference full (${words(value.band)}; modelled gastric distention ~${finite(value.gastricDistentionMl, 0)} mL, central 95% ${finite(value.central95Ml?.lower, 0)}-${finite(value.central95Ml?.upper, 0)} mL); input uncertainty ${words(value.inputUncertainty)}. This is a model estimate of stomach fullness after eating, not an observed feeling.`;
     case 'physiological_satiety_unavailable':
       return `[${item.epistemicStatus}] Physiological satiety estimate unavailable: ${words(value)}.`;
     case 'current_social_context':

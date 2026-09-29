@@ -73,6 +73,9 @@ function captive_soma_history_config(string $range, string $key, string $scope =
         ];
     }
     if ($scope === 'satiety' && $key === 'satiety') {
+        // Retired at physiological-satiety-v3 (see the 'fullness' scope below):
+        // left in place, unmodified, so any pre-migration hormone-composite
+        // history stays queryable. It is not fed by new data going forward.
         return CAPTIVE_SOMA_RANGES[$range] + [
             'scope' => $scope,
             'key' => $key,
@@ -82,6 +85,24 @@ function captive_soma_history_config(string $range, string $key, string $scope =
             'compactJsonPath' => '$.satiety.estimate',
             'compactJsonPathMin' => '$.satiety.minimum',
             'compactJsonPathMax' => '$.satiety.maximum',
+            'scale' => 1.0,
+        ];
+    }
+    if ($scope === 'fullness' && $key === 'fullness') {
+        // Promoted at physiological-satiety-v3: gastric distention/fullness
+        // (0-100% of the derived reference-full envelope), a pure function of
+        // stomach content volume that never reads hormone state. A distinct
+        // scope from 'satiety' above, so old hormone-score history and new
+        // gastric-fullness history are never read as the same measurement.
+        return CAPTIVE_SOMA_RANGES[$range] + [
+            'scope' => $scope,
+            'key' => $key,
+            'jsonPath' => '$.soma.physiologicalSatiety.headline.normalizedPercent',
+            'jsonPathMin' => '$.soma.physiologicalSatiety.headline.normalizedPercentCentral95.lower',
+            'jsonPathMax' => '$.soma.physiologicalSatiety.headline.normalizedPercentCentral95.upper',
+            'compactJsonPath' => '$.fullness.percent',
+            'compactJsonPathMin' => '$.fullness.minimumPercent',
+            'compactJsonPathMax' => '$.fullness.maximumPercent',
             'scale' => 1.0,
         ];
     }
@@ -527,6 +548,13 @@ function captive_soma_history_points(
                     $row['minimum'] = $headline['central95']['lower'] ?? null;
                     $row['maximum'] = $headline['central95']['upper'] ?? null;
                 }
+            } elseif ($scope === 'fullness') {
+                $headline = $payload['soma']['physiologicalSatiety']['headline'] ?? null;
+                if (is_array($headline) && ($headline['status'] ?? null) === 'ESTIMATE_AVAILABLE') {
+                    $value = $headline['normalizedPercent'] ?? null;
+                    $row['minimum'] = $headline['normalizedPercentCentral95']['lower'] ?? null;
+                    $row['maximum'] = $headline['normalizedPercentCentral95']['upper'] ?? null;
+                }
             } else {
                 $group = $scope === 'brain' ? 'brain' : 'metrics';
                 $value = $payload['soma']['experienced'][$group][$key]['value'] ?? null;
@@ -553,13 +581,13 @@ function captive_soma_history_points(
         $bucket = (int)floor(($tsMs - $fromMs) / $bucketMs);
         // Keep the last real reading in each bucket. No interpolation or fake
         // samples are introduced when the runner was offline.
-        $digits = in_array($scope, ['satiety', 'circadian'], true) ? ($scope === 'circadian' ? 6 : 3) : 1;
+        $digits = in_array($scope, ['satiety', 'fullness', 'circadian'], true) ? ($scope === 'circadian' ? 6 : ($scope === 'fullness' ? 1 : 3)) : 1;
         $point = ['ts' => $tsMs, 'value' => round((float)$value * $scale, $digits)];
-        if (in_array($scope, ['satiety', 'circadian'], true)
+        if (in_array($scope, ['satiety', 'fullness', 'circadian'], true)
             && is_numeric($row['minimum'] ?? null) && is_numeric($row['maximum'] ?? null)) {
             $point['minimum'] = round((float)$row['minimum'] * $scale, $digits);
             $point['maximum'] = round((float)$row['maximum'] * $scale, $digits);
-        } elseif (in_array($scope, ['satiety', 'circadian'], true)) {
+        } elseif (in_array($scope, ['satiety', 'fullness', 'circadian'], true)) {
             continue;
         }
         $buckets[$bucket] = $point;

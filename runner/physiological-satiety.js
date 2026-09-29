@@ -7,9 +7,9 @@
 import { HMPPS_REFERENCE_RATION, ingestionRecordFromEnvironment } from './feeding-homeostasis.js';
 
 export const PHYSIOLOGICAL_SATIETY_SCHEMA = 'cy.physiological-satiety';
-export const PHYSIOLOGICAL_SATIETY_VERSION = 2;
+export const PHYSIOLOGICAL_SATIETY_VERSION = 3;
 export const PHYSIOLOGICAL_SATIETY_MODEL_ID = 'martinez-dibbs-integrated-physiological-satiety';
-export const PHYSIOLOGICAL_SATIETY_MODEL_VERSION = 'physiological-satiety-v2';
+export const PHYSIOLOGICAL_SATIETY_MODEL_VERSION = 'physiological-satiety-v3';
 export const PHYSIOLOGICAL_SATIETY_PROVENANCE = 'config/model-specs/physiological-satiety.json';
 
 export const PUBLISHED_PARAMETERS = Object.freeze({
@@ -76,6 +76,82 @@ const timestampMs = (value) => {
 };
 const round = (value, digits = 6) => Number(Number(value).toFixed(digits));
 const halfLifeRate = (minutes) => -Math.log(0.5) / minutes;
+
+// Gastric distention is the promoted public fullness signal (the source ties
+// distention directly to fullness/meal-termination). It is a pure function of
+// stomach content volume and never touches hormone state, so a hormone-model
+// artefact (e.g. a negative ghrelin excursion) cannot corrupt it. The bands
+// below reuse the source's own gastricCoefficient breakpoints (296 mL, 500
+// mL) for their lower two edges; only the top edge (reference-full) is a new
+// engineering value, derived below rather than hand-typed.
+export const GASTRIC_FULLNESS_BAND_THRESHOLDS = Object.freeze({
+  emptyMaximumMl: PUBLISHED_PARAMETERS.initialGastricDistentionMl,
+  settlingMaximumMl: 500,
+});
+
+function largestConfiguredMealEnergyKcal() {
+  return Math.max(...Object.values(HMPPS_REFERENCE_RATION.mealEnergyKcal));
+}
+
+function singleMealStomachVolumeMl(mealEnergyKcal, relativeFatFraction, fatDensityGPerMl, carbohydrateDensityGPerMl) {
+  const nonProteinEnergyKcal = mealEnergyKcal * (1 - PUBLISHED_PARAMETERS.proteinEnergyFraction);
+  const fatEnergyKcal = nonProteinEnergyKcal * relativeFatFraction;
+  const carbohydrateEnergyKcal = nonProteinEnergyKcal * (1 - relativeFatFraction);
+  const fatG = fatEnergyKcal / DERIVED_CONVERSIONS.fatEnergyKcalPerG;
+  const carbohydrateG = carbohydrateEnergyKcal / DERIVED_CONVERSIONS.carbohydrateEnergyKcalPerG;
+  return (fatG / fatDensityGPerMl) + (carbohydrateG / carbohydrateDensityGPerMl);
+}
+
+// The reference-full envelope is the worst-case single configured HMPPS meal
+// (fully consumed, before any transfer out) evaluated at the published
+// composition-scenario and food-density-range corners that maximise stomach
+// content volume. It is an engineering visualization envelope, not a
+// scientific parameter, and not a claim about anatomical stomach capacity.
+function computeGastricFullnessEnvelope() {
+  const mealEnergyKcal = largestConfiguredMealEnergyKcal();
+  const fatDensityCorners = [NUMERICAL_GRID.fatDensity.minimum, NUMERICAL_GRID.fatDensity.maximum];
+  const carbohydrateDensityCorners = [NUMERICAL_GRID.carbohydrateDensity.minimum, NUMERICAL_GRID.carbohydrateDensity.maximum];
+  let maximumVolumeMl = 0;
+  for (const scenario of COMPOSITION_SCENARIOS) {
+    for (const fatDensityGPerMl of fatDensityCorners) {
+      for (const carbohydrateDensityGPerMl of carbohydrateDensityCorners) {
+        maximumVolumeMl = Math.max(maximumVolumeMl, singleMealStomachVolumeMl(
+          mealEnergyKcal, scenario.relativeFatFraction, fatDensityGPerMl, carbohydrateDensityGPerMl,
+        ));
+      }
+    }
+  }
+  const baselineMl = PUBLISHED_PARAMETERS.initialGastricDistentionMl;
+  const referenceFullMl = baselineMl + PUBLISHED_PARAMETERS.gastricDistentionConstant * maximumVolumeMl;
+  return Object.freeze({
+    classification: 'DERIVED VISUALIZATION ENVELOPE',
+    derivation: `Worst-case single configured HMPPS meal (${mealEnergyKcal} kcal) fully consumed, evaluated at the published composition-scenario and food-density-range corners that maximise stomach content volume. Not a scientific parameter and not a claim about anatomical stomach capacity - used only to normalize the public fullness display to a 0-100% bar.`,
+    baselineMl,
+    largestConfiguredMealEnergyKcal: mealEnergyKcal,
+    maximumSingleMealStomachVolumeMl: round(maximumVolumeMl, 2),
+    referenceFullMl: round(referenceFullMl, 2),
+  });
+}
+
+export const GASTRIC_FULLNESS_ENVELOPE = computeGastricFullnessEnvelope();
+
+export function gastricFullnessBand(distentionMl) {
+  if (!Number.isFinite(distentionMl)) return null;
+  if (distentionMl <= GASTRIC_FULLNESS_BAND_THRESHOLDS.emptyMaximumMl) return 'EMPTY';
+  if (distentionMl < GASTRIC_FULLNESS_BAND_THRESHOLDS.settlingMaximumMl) return 'SETTLING';
+  if (distentionMl < GASTRIC_FULLNESS_ENVELOPE.referenceFullMl) return 'COMFORTABLY_FULL';
+  return 'VERY_FULL';
+}
+
+// Raw gastric distention (mL) is never clamped - only this display percent
+// is, with `capped` flagging a genuine excursion past the envelope (e.g.
+// overlapping meals) rather than silently absorbing it.
+export function gastricFullnessNormalized(distentionMl) {
+  if (!Number.isFinite(distentionMl)) return null;
+  const { baselineMl, referenceFullMl } = GASTRIC_FULLNESS_ENVELOPE;
+  const raw = 100 * (distentionMl - baselineMl) / (referenceFullMl - baselineMl);
+  return { percent: round(Math.max(0, Math.min(100, raw)), 1), capped: raw > 100 };
+}
 
 export function createModelTrack(parameters) {
   return {
@@ -157,32 +233,60 @@ function validRaw(raw) {
     && raw.modelVersion === PHYSIOLOGICAL_SATIETY_MODEL_VERSION;
 }
 
+// Shared by every "this persisted state was computed under a superseded
+// interpretation" migration: rebuild a clean state (GI/hormone tracks are not
+// carried forward as though they still meant the same thing), keep the
+// observed meal ledger (source of truth per Task 5/6), and require a fresh
+// clean-breakfast anchor rather than fabricating continuity.
+function legacyHeadlineMigration(raw, now, {
+  fromModelVersion,
+  disposition,
+  inputUncertaintyNote,
+  statusReasonWhenCalibrating,
+  statusReasonOtherwise,
+}) {
+  const migrated = createPhysiologicalSatiety(now);
+  migrated.intakeHistory = clone(raw.intakeHistory || []).slice(-128);
+  migrated.latestKnownIntake = clone(raw.latestKnownIntake || null);
+  migrated.lastContinuityGapCount = Number(raw.lastContinuityGapCount || 0);
+  migrated.inputUncertainty = [...new Set([...(raw.inputUncertainty || []), inputUncertaintyNote])];
+  migrated.compositionKnowledge = raw.latestKnownIntake && raw.latestKnownIntake.fullMealMacros
+    ? 'OBSERVED_EXACT' : 'SCENARIO_BOUNDED';
+  migrated.status = raw.status === 'CALIBRATING' ? 'CALIBRATING' : 'INPUT_INCOMPLETE';
+  migrated.statusReason = raw.status === 'CALIBRATING' ? statusReasonWhenCalibrating : statusReasonOtherwise;
+  migrated.migrationArchive = {
+    fromVersion: raw.version,
+    fromModelVersion: raw.modelVersion || fromModelVersion,
+    previousStatus: raw.status || 'UNKNOWN',
+    previousTrackCount: Array.isArray(raw.tracks) ? raw.tracks.length : 0,
+    previousInitializedAtMs: raw.initializedAtMs || null,
+    migratedAtMs: now,
+    disposition,
+  };
+  return migrated;
+}
+
 export function reconcilePhysiologicalSatiety(raw, {
   now = Date.now(),
   feedingUnknownIntervals = [],
 } = {}) {
   if (raw && raw.schema === PHYSIOLOGICAL_SATIETY_SCHEMA && raw.version === 1) {
-    const migrated = createPhysiologicalSatiety(now);
-    migrated.intakeHistory = clone(raw.intakeHistory || []).slice(-128);
-    migrated.latestKnownIntake = clone(raw.latestKnownIntake || null);
-    migrated.lastContinuityGapCount = Number(raw.lastContinuityGapCount || 0);
-    migrated.inputUncertainty = [...new Set([...(raw.inputUncertainty || []), 'legacy v1 parameter ensemble requires a clean breakfast anchor'])];
-    migrated.compositionKnowledge = raw.latestKnownIntake && raw.latestKnownIntake.fullMealMacros
-      ? 'OBSERVED_EXACT' : 'SCENARIO_BOUNDED';
-    migrated.status = raw.status === 'CALIBRATING' ? 'CALIBRATING' : 'INPUT_INCOMPLETE';
-    migrated.statusReason = raw.status === 'CALIBRATING'
-      ? 'WAITING_FOR_CLEAN_BREAKFAST_ANCHOR'
-      : 'LEGACY_PARAMETER_ENSEMBLE_REQUIRES_CLEAN_BREAKFAST_ANCHOR';
-    migrated.migrationArchive = {
-      fromVersion: raw.version,
-      fromModelVersion: raw.modelVersion || 'physiological-satiety-v1',
-      previousStatus: raw.status || 'UNKNOWN',
-      previousTrackCount: Array.isArray(raw.tracks) ? raw.tracks.length : 0,
-      previousInitializedAtMs: raw.initializedAtMs || null,
-      migratedAtMs: now,
+    return legacyHeadlineMigration(raw, now, {
+      fromModelVersion: 'physiological-satiety-v1',
       disposition: 'OLD ENSEMBLE NOT RELABELLED; RE-ANCHOR REQUIRED',
-    };
-    return migrated;
+      inputUncertaintyNote: 'legacy v1 parameter ensemble requires a clean breakfast anchor',
+      statusReasonWhenCalibrating: 'WAITING_FOR_CLEAN_BREAKFAST_ANCHOR',
+      statusReasonOtherwise: 'LEGACY_PARAMETER_ENSEMBLE_REQUIRES_CLEAN_BREAKFAST_ANCHOR',
+    });
+  }
+  if (raw && raw.schema === PHYSIOLOGICAL_SATIETY_SCHEMA && raw.version === 2) {
+    return legacyHeadlineMigration(raw, now, {
+      fromModelVersion: 'physiological-satiety-v2',
+      disposition: 'GASTRIC-FULLNESS HEADLINE PROMOTED; PRIOR HORMONE-COMPOSITE HEADLINE SUPERSEDED; RE-ANCHOR REQUIRED',
+      inputUncertaintyNote: 'gastric-fullness headline architecture requires a clean breakfast anchor',
+      statusReasonWhenCalibrating: 'WAITING_FOR_CLEAN_BREAKFAST_ANCHOR',
+      statusReasonOtherwise: 'FULLNESS_ARCHITECTURE_MIGRATION_REQUIRES_CLEAN_BREAKFAST_ANCHOR',
+    });
   }
   if (!validRaw(raw)) return createPhysiologicalSatiety(now);
   const out = clone(raw);
@@ -198,19 +302,26 @@ export function reconcilePhysiologicalSatiety(raw, {
   return out;
 }
 
-function gastricDistention(track) {
+export function gastricDistention(track) {
   return PUBLISHED_PARAMETERS.initialGastricDistentionMl
     + PUBLISHED_PARAMETERS.gastricDistentionConstant
       * (track.stomach.fatMl + track.stomach.carbohydrateMl);
 }
 
+// The article prints this term as a PYY*GLP1 product, but Table 1 defines
+// cSatiety/dSatiety as independent per-hormone coefficients, which is better
+// supported as an additive effect than a multiplicative interaction - see
+// sourceAudit.satietyPyyGlp1Interaction in the model spec for the full
+// disclosure. This is a diagnostic/composite-only correction: it does not
+// touch the promoted gastric-fullness signal, which never reads hormones.
 export function satietyFromState({ gastricDistentionMl, cckPM, pyyPM, glp1PM, ghrelinPM }) {
   const gastricCoefficient = gastricDistentionMl <= 296 ? 0
     : gastricDistentionMl < 500 ? PUBLISHED_PARAMETERS.satiety.gastricLow
       : PUBLISHED_PARAMETERS.satiety.gastricHigh;
   return gastricCoefficient * gastricDistentionMl
     + PUBLISHED_PARAMETERS.satiety.cck * cckPM
-    + PUBLISHED_PARAMETERS.satiety.pyy * pyyPM * PUBLISHED_PARAMETERS.satiety.glp1 * glp1PM
+    + PUBLISHED_PARAMETERS.satiety.pyy * pyyPM
+    + PUBLISHED_PARAMETERS.satiety.glp1 * glp1PM
     + PUBLISHED_PARAMETERS.satiety.ghrelin * (PUBLISHED_PARAMETERS.ghrelin.fasting - ghrelinPM);
 }
 
@@ -487,28 +598,47 @@ export function physiologicalSatietySnapshot(state) {
   };
   if (!state || state.status !== 'LIVE' || !state.tracks.length) return base;
   const scenarioGroups = compositionScenarioGroups(state);
-  const scenarios = scenarioGroups.map((scenario) => ({
-    id: scenario.id,
-    label: scenario.label,
-    relativeFatFraction: scenario.relativeFatFraction,
-    publishedInputDistribution: {
-      classification: 'PUBLISHED INPUT-DISTRIBUTION UNCERTAINTY',
-      centralIntervalPercent: 95,
-      sampleCount: scenario.tracks.length,
-    },
-    displaySatiety: distributionFor(scenario.tracks, trackSatiety, displaySatiety),
-    ghrelin: ghrelinPublicSummary(scenario.tracks),
-  }));
+  const scenarios = scenarioGroups.map((scenario) => {
+    const distentionDistribution = distributionFor(scenario.tracks, gastricDistention);
+    const normalized = distentionDistribution ? gastricFullnessNormalized(distentionDistribution.median) : null;
+    const normalizedLower = distentionDistribution ? gastricFullnessNormalized(distentionDistribution.central95.lower) : null;
+    const normalizedUpper = distentionDistribution ? gastricFullnessNormalized(distentionDistribution.central95.upper) : null;
+    return {
+      id: scenario.id,
+      label: scenario.label,
+      relativeFatFraction: scenario.relativeFatFraction,
+      publishedInputDistribution: {
+        classification: 'PUBLISHED INPUT-DISTRIBUTION UNCERTAINTY',
+        centralIntervalPercent: 95,
+        sampleCount: scenario.tracks.length,
+      },
+      gastricFullness: distentionDistribution ? {
+        medianMl: distentionDistribution.median,
+        central95Ml: clone(distentionDistribution.central95),
+        normalizedPercent: normalized && normalized.percent,
+        normalizedPercentCapped: !!(normalized && normalized.capped),
+        normalizedPercentCentral95: normalizedLower && normalizedUpper
+          ? { lower: normalizedLower.percent, upper: normalizedUpper.percent } : null,
+        band: gastricFullnessBand(distentionDistribution.median),
+      } : null,
+      ghrelin: ghrelinPublicSummary(scenario.tracks),
+    };
+  });
   const exactComposition = scenarios.length === 1 && scenarios[0].id === 'observed_exact';
-  const scenarioMedians = scenarios.map((scenario) => scenario.displaySatiety && scenario.displaySatiety.median).filter(Number.isFinite);
-  const headline = exactComposition && scenarios[0].displaySatiety ? {
+  const scenarioMedianMl = scenarios.map((scenario) => scenario.gastricFullness && scenario.gastricFullness.medianMl).filter(Number.isFinite);
+  const scenarioMedianPercent = scenarios.map((scenario) => scenario.gastricFullness && scenario.gastricFullness.normalizedPercent).filter(Number.isFinite);
+  const headline = exactComposition && scenarios[0].gastricFullness ? {
     status: 'ESTIMATE_AVAILABLE',
-    label: 'SATIETY',
-    estimate: scenarios[0].displaySatiety.median,
-    central95: clone(scenarios[0].displaySatiety.central95),
+    label: 'FULLNESS',
+    gastricDistentionMl: scenarios[0].gastricFullness.medianMl,
+    central95Ml: clone(scenarios[0].gastricFullness.central95Ml),
+    normalizedPercent: scenarios[0].gastricFullness.normalizedPercent,
+    normalizedPercentCapped: scenarios[0].gastricFullness.normalizedPercentCapped,
+    normalizedPercentCentral95: clone(scenarios[0].gastricFullness.normalizedPercentCentral95),
+    band: scenarios[0].gastricFullness.band,
   } : {
     status: 'INPUT_UNCERTAIN',
-    label: 'SATIETY - INPUT UNCERTAIN',
+    label: 'FULLNESS - INPUT UNCERTAIN',
   };
   return {
     ...base,
@@ -522,15 +652,17 @@ export function physiologicalSatietySnapshot(state) {
       constraintCalculation: exactComposition ? null : clone(COMPOSITION_SCENARIO_DERIVATION),
     },
     scenarios,
-    scenarioEnvelope: scenarioMedians.length ? {
+    scenarioEnvelope: scenarioMedianMl.length ? {
       classification: 'MEAL-COMPOSITION SCENARIO RANGE',
-      minimumScenarioMedian: round(Math.min(...scenarioMedians)),
-      maximumScenarioMedian: round(Math.max(...scenarioMedians)),
+      minimumScenarioMedianMl: round(Math.min(...scenarioMedianMl)),
+      maximumScenarioMedianMl: round(Math.max(...scenarioMedianMl)),
+      minimumScenarioMedianPercent: scenarioMedianPercent.length ? Math.min(...scenarioMedianPercent) : null,
+      maximumScenarioMedianPercent: scenarioMedianPercent.length ? Math.max(...scenarioMedianPercent) : null,
     } : null,
     displayTransformation: {
       classification: 'DISPLAY ONLY',
-      operation: 'clamp raw equation result to nominal 1-10 display scale',
-      sourceDefinesClamp: false,
+      operation: 'normalize gastric distention (mL) to a 0-100% bar against the derived reference-full envelope; raw mL is never clamped',
+      envelope: clone(GASTRIC_FULLNESS_ENVELOPE),
     },
     ghrelin: ghrelinPublicSummary(state.tracks),
     numericalMethod: clone(state.numericalMethod),

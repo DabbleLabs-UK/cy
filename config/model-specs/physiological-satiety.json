@@ -2,7 +2,7 @@
   "schema": "cy.model-specification",
   "version": 1,
   "id": "martinez-dibbs-integrated-physiological-satiety",
-  "modelVersion": "physiological-satiety-v2",
+  "modelVersion": "physiological-satiety-v3",
   "locked": true,
   "publication": {
     "citation": "Martinez MF, Dibbs A, et al. Computationally Modeling the Physiologic Impact of the Ratio of Fats to Carbohydrates in the Diet on Intake Among Metabolically Healthy Adults. Current Developments in Nutrition. 2025;9(7):107487.",
@@ -20,7 +20,7 @@
     "cck": "delta_per_min = upper_si_fat_ml * 0.01 + upper_si_carbohydrate_ml * 0.005 - cck_pM * 0.03",
     "pyy": "delta_per_min = lower_si_fat_ml * 2.0 + large_intestine_fat_ml * 1.5 + lower_si_carbohydrate_ml * 0.8 - pyy_pM * 0.075",
     "ghrelin": "delta_per_min = stomach_fat_ml * -0.01 + upper_si_fat_ml * -0.005 + stomach_carbohydrate_ml * -0.01 + upper_si_carbohydrate_ml * -0.005 + (110 - ghrelin_pM) * 0.04",
-    "satiety": "gastric_coefficient * gastric_distention_ml + 1.2 * CCK + 0.08 * PYY * 0.2 * GLP1 + 0.02 * (110 - ghrelin)",
+    "satiety": "gastric_coefficient * gastric_distention_ml + 1.2 * CCK + 0.08 * PYY + 0.2 * GLP1 + 0.02 * (110 - ghrelin)",
     "reportedSatietyScore": "The published equation is retained without a mathematical clamp. Public display may clamp to the stated nominal 1-to-10 scale, explicitly classified DISPLAY ONLY.",
     "gastricCoefficient": "0 when distention <= 296 mL; 0.0025 when 296 < distention < 500 mL; 0.0035 when distention >= 500 mL"
   },
@@ -117,6 +117,24 @@
     "stateResetAndBaseline": {
       "finding": "Initial gastric distention is 296 mL and fasting ghrelin is 110 pM. The remaining GI compartments and above-baseline hormone deltas start at zero. No additional reset rule was found in the article or supplement.",
       "implementation": "Use those published initial conditions and no invented per-meal state reset."
+    },
+    "satietyPyyGlp1Interaction": {
+      "finding": "The article's printed satiety equation contains a PYY * GLP1 product term. Table 1, however, defines the pyy_satiety_coefficient and glp1_satiety_coefficient as independent per-hormone effect sizes, consistent with the other additive terms (gastric, CCK, ghrelin) in the same equation. The article does not state that PYY and GLP1 interact multiplicatively; the product reads more plausibly as a transcription artefact than an intended interaction term.",
+      "implementation": "CY computes the diagnostic composite score additively (cSatiety*PYY + dSatiety*GLP1) as the best-supported correction, not because the source states additivity outright. This does not affect the promoted public fullness signal, which is gastric distention only and never reads hormone state."
+    },
+    "compositeScoreNotAPromotedFullnessMeasure": {
+      "finding": "A follow-up source-verification review found the published composite satiety score is used in the article as an internal decision variable feeding a saturating eating/start-stop rule, not as a validated 1-10 subjective-fullness magnitude gauge. The article does, separately, tie gastric distention directly to fullness and meal termination.",
+      "implementation": "From modelVersion physiological-satiety-v3, gastric distention (not the hormone composite) is the promoted public fullness signal. The composite score remains computed every tick as supporting/diagnostic physiology (see epistemicLimits and the runner's physiologicalSatietyInspection) but is no longer shown publicly as an 'x/10 fullness' reading."
+    }
+  },
+  "visualizationEnvelope": {
+    "classification": "ENGINEERING / DERIVED VISUALIZATION, NOT A LOCKED SCIENTIFIC PARAMETER",
+    "purpose": "Normalizes gastric distention (mL) to a 0-100% public display bar. Computed from the worst-case single configured HMPPS meal (750 kcal) fully consumed, evaluated at the published composition-scenario and food-density-range corners that maximise stomach content volume. See GASTRIC_FULLNESS_ENVELOPE in runner/physiological-satiety.js for the exact computed values.",
+    "bandThresholds": {
+      "empty": "distention <= 296 mL (the published gastricCoefficient 0 breakpoint)",
+      "settling": "296 mL < distention < 500 mL (the published gastricCoefficient low/high breakpoint)",
+      "comfortablyFull": "500 mL <= distention < the derived reference-full envelope",
+      "veryFull": "distention >= the derived reference-full envelope"
     }
   },
   "initialConditions": {

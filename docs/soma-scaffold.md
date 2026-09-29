@@ -521,8 +521,15 @@ not configured or loaded for ordinary visitors.
 not implement subjective Hunger. `runner/physiological-satiety.js` consumes only
 resolved ingestion records from that ledger and implements the integrated GI and
 gut-hormone satiety model in Martinez, Dibbs et al. (2025), PMCID PMC12272436.
-The visitor-facing headline is PHYSIOLOGICAL SATIETY, on the publication's model
-scale, and never the older heuristic Hunger value. Subjective Hunger remains NOT
+The visitor-facing headline is PHYSIOLOGICAL SATIETY / FULLNESS, and never the
+older heuristic Hunger value. From model version physiological-satiety-v3 the
+promoted public reading is gastric distention (modelled stomach content
+volume) rather than the publication's composite hormone score: a
+source-verification review found that composite is the paper's own internal
+eating-decision variable, not a validated 1-10 fullness magnitude, while the
+paper does tie gastric distention directly to fullness/meal termination. The
+composite remains computed every tick as supporting/diagnostic physiology
+only (see `physiologicalSatietyInspection`). Subjective Hunger remains NOT
 MODELLED. Neither the old Hunger value nor its legacy nutrition mirror can
 initialize or modify the grounded ledger or physiological model.
 
@@ -569,18 +576,20 @@ uses the full energy; NONE, REFUSED and UNAVAILABLE add zero; an exact partial
 portion scales energy exactly; categorical partial and UNKNOWN intake do not
 become an invented amount and make the model input incomplete.
 
-The public SATIETY detail contains a compact physiological range, modelled
-gastric contents and CCK, GLP-1, PYY and ghrelin ranges, latest intake and its
-nutrition basis. Feeding history and model limitations remain behind secondary
-disclosures. Private structured event IDs and the complete ledger are omitted
-from the public snapshot. The owner-only inspector exposes the full ledger,
-source IDs, model compartments, hormones, parameter provenance and uncertainty.
+The public SATIETY/FULLNESS detail contains a compact gastric-fullness range
+(distention in mL, a 0-100% normalized reading against a derived reference-full
+envelope, and a qualitative band), latest intake and its nutrition basis.
+Feeding history and model limitations remain behind secondary disclosures.
+Private structured event IDs, the complete ledger and the hormone-composite
+score are omitted from the public snapshot. The owner-only inspector exposes
+the full ledger, source IDs, model compartments, hormones (including the
+composite satiety score), parameter provenance and uncertainty.
 
-Soma can read the factual `feeding` snapshot and the separate physiological
-satiety range. Once LIVE, the latter enters the grounded prose projection as a
-MODEL ESTIMATE with its scale and input uncertainty. The assembler does not say
-that Cy is hungry. Satiety does not create an appraisal, select attention or
-action, activate a brain analogy, or alter the legacy Hunger number.
+Soma can read the factual `feeding` snapshot and the separate gastric-fullness
+range. Once LIVE, the latter enters the grounded prose projection as a MODEL
+ESTIMATE with its percent/band and input uncertainty. The assembler does not
+say that Cy is hungry. Fullness does not create an appraisal, select attention
+or action, activate a brain analogy, or alter the legacy Hunger number.
 
 ### Published GI and gut-hormone model
 

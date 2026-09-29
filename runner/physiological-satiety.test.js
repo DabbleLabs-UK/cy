@@ -5,9 +5,11 @@ import { PRISON_REGIME_CONFIGURATION, PRISON_SCHEDULE, chooseMealEvent, mealExpe
 import { HMPPS_REFERENCE_RATION, ingestionRecordFromEnvironment } from './feeding-homeostasis.js';
 import { groundedSomaDirective, observeSomaFeedingRecord, reconcileSoma, tickSoma } from './soma.js';
 import {
-  COMPOSITION_SCENARIOS, COMPOSITION_SCENARIO_DERIVATION, NUMERICAL_METHOD, advancePhysiologicalSatiety,
+  COMPOSITION_SCENARIOS, COMPOSITION_SCENARIO_DERIVATION, NUMERICAL_METHOD, PHYSIOLOGICAL_SATIETY_VERSION,
+  PHYSIOLOGICAL_SATIETY_MODEL_VERSION, GASTRIC_FULLNESS_ENVELOPE, advancePhysiologicalSatiety,
   buildDeterministicParameterGrid, createModelTrack, createPhysiologicalSatiety,
-  displaySatiety, integrateTrackMinute, observePhysiologicalSatietyRecord,
+  displaySatiety, gastricDistention, gastricFullnessBand, gastricFullnessNormalized,
+  integrateTrackMinute, observePhysiologicalSatietyRecord,
   physiologicalSatietyInspection, physiologicalSatietySnapshot,
   reconcilePhysiologicalSatiety, satietyFromState, trackSatiety,
 } from './physiological-satiety.js';
@@ -27,9 +29,12 @@ const event = (id, mealType, intakeOutcome, consumed, portionCategory, portionFr
     } } },
   }));
 
-// A. Published equations and one-minute recurrence are unchanged.
+// A. The gastric/hormone recurrence is unchanged; the composite's PYY/GLP1
+// term is now additive (Table 1 supports independent effects, not a product -
+// see sourceAudit.satietyPyyGlp1Interaction). This is diagnostic-only: it
+// never touches the promoted gastric-fullness signal.
 assert.equal(satietyFromState({ gastricDistentionMl: 400, cckPM: 2, pyyPM: 3, glp1PM: 4, ghrelinPM: 100 }),
-  0.0025 * 400 + 1.2 * 2 + 0.08 * 3 * 0.2 * 4 + 0.02 * 10);
+  0.0025 * 400 + 1.2 * 2 + 0.08 * 3 + 0.2 * 4 + 0.02 * 10);
 const recurrence = createModelTrack({ relativeFatFraction: 0.1, fatDensityGPerMl: 0.7,
   carbohydrateDensityGPerMl: 0.117, mealEatingRateKcalPerMin: 28.7, snackEatingRateKcalPerMin: 3.3 });
 Object.assign(recurrence.stomach, { fatMl: 4, carbohydrateMl: 5 });
@@ -51,6 +56,7 @@ const artefactState = createPhysiologicalSatiety(T0);
 artefactState.status = 'LIVE';
 artefactState.statusReason = 'TEST';
 artefactState.tracks = [rawTrack];
+artefactState.compositionKnowledge = 'OBSERVED_EXACT';
 artefactState.latestKnownIntake = { fullMealMacros: { fatG: 1, carbohydrateG: 1, proteinG: 1 } };
 const artefactPublic = physiologicalSatietySnapshot(artefactState);
 const artefactAdmin = physiologicalSatietyInspection(artefactState);
@@ -58,7 +64,16 @@ assert.equal(artefactPublic.ghrelin.status, 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOM
 assert.equal(JSON.stringify(artefactPublic).includes('-0.468'), false);
 assert.equal(artefactAdmin.rawModelState.ghrelin.median, -0.468);
 assert.ok(artefactAdmin.physicalDomainViolations.includes('GHRELIN_MODEL_STATE_BELOW_ZERO'));
-assert.equal(artefactPublic.displayTransformation.sourceDefinesClamp, false);
+assert.equal(artefactPublic.displayTransformation.classification, 'DISPLAY ONLY');
+assert.equal(artefactPublic.displayTransformation.envelope.classification, 'DERIVED VISUALIZATION ENVELOPE');
+// The ghrelin artefact must not corrupt the promoted fullness signal, which
+// never reads hormone state - it stays a normal, valid EMPTY-stomach reading.
+assert.equal(artefactPublic.headline.status, 'ESTIMATE_AVAILABLE');
+assert.equal(artefactPublic.headline.band, 'EMPTY');
+assert.equal(artefactPublic.headline.normalizedPercent, 0);
+// The hormone composite itself is demoted to inspection-only.
+assert.equal(Object.hasOwn(artefactPublic, 'scenarios') && artefactPublic.scenarios.some((s) => Object.hasOwn(s, 'displaySatiety')), false);
+assert.ok(artefactAdmin.rawModelState.satiety.median > 10);
 
 // D. Published uniform inputs are represented reproducibly by deterministic QMC.
 const firstGrid = buildDeterministicParameterGrid();
@@ -78,9 +93,18 @@ assert.equal(breakfastSnapshot.compositionUncertainty.classification, 'MEAL-COMP
 assert.equal(breakfastSnapshot.scenarios.length, 3);
 assert.equal(COMPOSITION_SCENARIO_DERIVATION.maximumRelativeFatFractionOfNonProteinEnergy, 0.3913);
 assert.ok(breakfastSnapshot.scenarios.every((item) => item.publishedInputDistribution.centralIntervalPercent === 95));
-assert.ok(breakfastSnapshot.scenarios.every((item) => item.displaySatiety.central95.lower <= item.displaySatiety.median
-  && item.displaySatiety.median <= item.displaySatiety.central95.upper));
+// The composite hormone score is demoted to inspection-only; the public
+// scenario shape now carries gastric fullness instead.
+assert.ok(breakfastSnapshot.scenarios.every((item) => Object.hasOwn(item, 'displaySatiety') === false));
+assert.ok(breakfastSnapshot.scenarios.every((item) => item.gastricFullness.central95Ml.lower <= item.gastricFullness.medianMl
+  && item.gastricFullness.medianMl <= item.gastricFullness.central95Ml.upper));
+assert.ok(breakfastSnapshot.scenarios.every((item) => ['EMPTY', 'SETTLING', 'COMFORTABLY_FULL', 'VERY_FULL'].includes(item.gastricFullness.band)));
 assert.equal(Object.hasOwn(breakfastSnapshot.scenarioEnvelope, 'midpoint'), false);
+assert.ok(Object.hasOwn(breakfastSnapshot.scenarioEnvelope, 'minimumScenarioMedianMl'));
+const admin = physiologicalSatietyInspection(breakfast);
+// The hormone composite remains available - as supporting/diagnostic physiology only.
+assert.equal(admin.rawModelState.scenarios.length, 3);
+assert.ok(admin.rawModelState.scenarios.every((item) => Number.isFinite(item.satiety.median)));
 
 const exactBreakfast = createEnvironmentRecord(createEnvironmentEvent('meal', {
   id: 'exact-breakfast', timestamp: new Date(T0).toISOString(),
@@ -93,7 +117,14 @@ const exactBreakfast = createEnvironmentRecord(createEnvironmentEvent('meal', {
 const exact = createPhysiologicalSatiety(T0);
 observePhysiologicalSatietyRecord(exact, exactBreakfast);
 advancePhysiologicalSatiety(exact, T0 + 30 * 60000);
-assert.equal(physiologicalSatietySnapshot(exact).headline.status, 'ESTIMATE_AVAILABLE');
+const exactSnapshot = physiologicalSatietySnapshot(exact);
+assert.equal(exactSnapshot.headline.status, 'ESTIMATE_AVAILABLE');
+assert.equal(exactSnapshot.headline.label, 'FULLNESS');
+assert.ok(Number.isFinite(exactSnapshot.headline.gastricDistentionMl));
+assert.ok(exactSnapshot.headline.gastricDistentionMl >= GASTRIC_FULLNESS_ENVELOPE.baselineMl);
+assert.ok(Number.isFinite(exactSnapshot.headline.normalizedPercent));
+assert.ok(['EMPTY', 'SETTLING', 'COMFORTABLY_FULL', 'VERY_FULL'].includes(exactSnapshot.headline.band));
+assert.equal(Object.hasOwn(exactSnapshot.headline, 'estimate'), false);
 
 // H/I/J. Supper snack is a real unresolved-until-observed event and the food gap is below 14h.
 const snackSlot = PRISON_SCHEDULE.find((slot) => slot.kind === 'meal' && slot.meal === 'supper_snack');
@@ -140,17 +171,55 @@ assert.equal(migrated.status, 'INPUT_INCOMPLETE');
 assert.equal(migrated.tracks.length, 0);
 assert.equal(migrated.migrationArchive.previousTrackCount, 225);
 
+// M. V2 (hormone-composite-headline) state is re-anchored under v3
+// (gastric-fullness-headline); the observed meal ledger survives, the old
+// track ensemble does not carry forward as though it still meant fullness.
+assert.equal(PHYSIOLOGICAL_SATIETY_VERSION, 3);
+assert.equal(PHYSIOLOGICAL_SATIETY_MODEL_VERSION, 'physiological-satiety-v3');
+const migratedV2 = reconcilePhysiologicalSatiety({ ...breakfast, version: 2,
+  modelVersion: 'physiological-satiety-v2', status: 'LIVE', tracks: breakfast.tracks.slice(0, 100),
+  latestKnownIntake: breakfast.latestKnownIntake, intakeHistory: breakfast.intakeHistory },
+{ now: T0 + 60 * 60000 });
+assert.equal(migratedV2.status, 'INPUT_INCOMPLETE');
+assert.equal(migratedV2.version, PHYSIOLOGICAL_SATIETY_VERSION);
+assert.equal(migratedV2.tracks.length, 0);
+assert.equal(migratedV2.migrationArchive.fromVersion, 2);
+assert.equal(migratedV2.migrationArchive.fromModelVersion, 'physiological-satiety-v2');
+assert.equal(migratedV2.migrationArchive.previousTrackCount, 100);
+assert.match(migratedV2.migrationArchive.disposition, /GASTRIC-FULLNESS HEADLINE PROMOTED/);
+assert.equal(migratedV2.intakeHistory.length, breakfast.intakeHistory.length);
+assert.deepEqual(migratedV2.latestKnownIntake, breakfast.latestKnownIntake);
+
+// N. Gastric-fullness envelope/band math: reuses the source's own 296/500 mL
+// breakpoints for its lower edges; only the top (reference-full) edge is a
+// new derived engineering value, and raw mL is never clamped past it.
+assert.equal(GASTRIC_FULLNESS_ENVELOPE.baselineMl, 296);
+assert.ok(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl > 500);
+assert.equal(gastricDistention(createModelTrack({})), 296);
+assert.equal(gastricFullnessBand(296), 'EMPTY');
+assert.equal(gastricFullnessBand(297), 'SETTLING');
+assert.equal(gastricFullnessBand(499.99), 'SETTLING');
+assert.equal(gastricFullnessBand(500), 'COMFORTABLY_FULL');
+assert.equal(gastricFullnessBand(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl), 'VERY_FULL');
+assert.equal(gastricFullnessNormalized(296).percent, 0);
+assert.equal(gastricFullnessNormalized(296).capped, false);
+assert.equal(gastricFullnessNormalized(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl - 1).percent < 100, true);
+assert.equal(gastricFullnessNormalized(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl - 1).capped, false);
+assert.equal(gastricFullnessNormalized(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl + 500).percent, 100);
+assert.equal(gastricFullnessNormalized(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl + 500).capped, true);
+
 const ui = readFileSync(new URL('../public/assets/brain.js', import.meta.url), 'utf8');
 // Scenario-bounded (not exactly observed) is the common case, not an edge
 // case - the UI must surface the model's real computed scenario envelope
-// range rather than a bare "uncertain" label, but must fall back to a
-// non-numeric reading if the model's own artefact check (ghrelin outside
-// the physical domain) flags the run as numerically degenerate.
+// range rather than a bare "uncertain" label. Gastric fullness never reads
+// hormone state, so - unlike the retired hormone composite - it needs no
+// ghrelin-artefact gate; the UI must not render raw hormone concentrations.
 assert.match(ui, /scenarioEnvelope/);
-assert.match(ui, /MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN/);
+assert.match(ui, /normalizedPercent/);
 assert.doesNotMatch(ui, /ghrelinPM/);
+assert.doesNotMatch(ui, /displaySatiety/);
 assert.equal(implementationEntry('soma_variables', 'satiety').implementation_status, 'IMPLEMENTED');
 assert.equal(implementationEntry('brain_regions', 'hypothalamic').implementation_status, 'NOT_IMPLEMENTED');
 
-console.log(`500 kcal breakfast at 30 min: ${breakfastSnapshot.scenarios.map((scenario) => `${scenario.id} median ${scenario.displaySatiety.median}, central95 ${scenario.displaySatiety.central95.lower}-${scenario.displaySatiety.central95.upper}`).join('; ')}`);
+console.log(`500 kcal breakfast at 30 min: ${breakfastSnapshot.scenarios.map((scenario) => `${scenario.id} median ${scenario.gastricFullness.medianMl} mL (${scenario.gastricFullness.normalizedPercent}%, ${scenario.gastricFullness.band}), central95 ${scenario.gastricFullness.central95Ml.lower}-${scenario.gastricFullness.central95Ml.upper} mL`).join('; ')}`);
 console.log('physiological-satiety.test.js: all checks passed');
