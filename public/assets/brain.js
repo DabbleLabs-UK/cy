@@ -205,8 +205,8 @@ export function operationalAnxietyDrivers(snapshot, limit = 4) {
   const concern = snapshot && snapshot.currentConcern;
   if (!concern) {
     return state === 'QUIET'
-      ? ['No active structured defensive concern is present.'].slice(0, maximum)
-      : ['Current structured defensive context is unavailable.'].slice(0, maximum);
+      ? ["Nothing right now is being treated as an active threat."].slice(0, maximum)
+      : ["Cy's current situation isn't clear right now."].slice(0, maximum);
   }
 
   const drivers = [];
@@ -424,7 +424,7 @@ function predictedSleepinessMarkup(status, admin) {
 function threatLearningMarkup(status, admin) {
   return `<section class="threat-learning-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="threat-learning-head"><span>${status.displayName}</span><strong class="threat-learning-status">${status.publicLabel}</strong></div>
-    <p class="threat-learning-explanation">Learns whether a structured cue has been followed by one specific class of adverse outcome.</p>
+    <p class="threat-learning-explanation">What Cy has learned about which warning signs tend to lead to trouble.</p>
     <div class="threat-learning-associations"><p class="threat-learning-empty">No resolved post-installation trials have been observed yet.</p></div>
     ${admin ? '<details class="threat-learning-inspector"><summary>THREAT LEARNING INSPECTION</summary><pre>Waiting for a threat-learning snapshot.</pre></details>' : ''}
   </section>`;
@@ -433,7 +433,7 @@ function threatLearningMarkup(status, admin) {
 function defensiveContextMarkup(status, admin) {
   return `<section class="defensive-context-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="defensive-context-head"><span>${status.displayName}</span><strong class="defensive-context-status">${status.publicLabel}</strong></div>
-    <p class="defensive-context-explanation">Shows present external cues, their separately learned possible outcomes, world ambiguity, categorical imminence, actual control and resolution.</p>
+    <p class="defensive-context-explanation">What's present right now, what it could lead to, and how much say Cy has over what happens next.</p>
     <div class="defensive-contexts"><p class="defensive-context-empty">No current structured defensive context is active.</p></div>
     ${admin ? '<details class="defensive-context-inspector"><summary>CURRENT DEFENSIVE CONTEXT INSPECTION</summary><pre>Waiting for exact context state and transition history.</pre></details>' : ''}
   </section>`;
@@ -442,7 +442,7 @@ function defensiveContextMarkup(status, admin) {
 function controllabilityMarkup(status, admin) {
   return `<section class="controllability-card status-${status.status.toLowerCase().replace('_', '-')}">
     <div class="controllability-head"><span>${status.displayName}</span><strong class="controllability-status">${status.publicLabel}</strong></div>
-    <p class="controllability-explanation">Compares what happened after Cy took an available action against what happened when he deliberately did not, in the same situation.</p>
+    <p class="controllability-explanation">Whether acting on it has actually made a difference before.</p>
     <div class="controllability-evidence"><p class="controllability-empty">No resolved comparable action opportunities have been observed yet.</p></div>
     ${admin ? '<details class="controllability-inspector"><summary>ACTION-OUTCOME CONTINGENCY INSPECTION</summary><pre>Waiting for the complete opportunity and posterior history.</pre></details>' : ''}
   </section>`;
@@ -450,8 +450,8 @@ function controllabilityMarkup(status, admin) {
 
 function feedingMarkup(feedingStatus, admin) {
   return `<section class="feeding-input-card status-${feedingStatus.status.toLowerCase().replace('_', '-')}">
-    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>MODEL ESTIMATE</span></div>
-    <p class="feeding-input-explanation">Based on a physiological model of gut and hormonal response to eating. Where the meal's exact composition isn't known, the estimate is shown as a range rather than one number. Full methodology: <a href="how-cy-works.php#satiety" target="_blank" rel="noopener">How Cy Works</a>.</p>
+    <div class="satiety-model-reading"><strong data-satiety="score">--</strong><span>ESTIMATE</span></div>
+    <p class="feeding-input-explanation">Builds on what and when Cy last ate. When the meal itself is hard to pin down, the estimate is shown as a range rather than one exact number. Full methodology: <a href="how-cy-works.php#satiety" target="_blank" rel="noopener">How Cy Works</a>.</p>
     <dl class="feeding-input-facts">
       <div><dt>LATEST KNOWN INTAKE</dt><dd data-satiety="intake">UNKNOWN</dd></div>
     </dl>
@@ -467,7 +467,7 @@ function feedingMarkup(feedingStatus, admin) {
 
 function somaticMarkup(somaticStatus, admin) {
   return `<section class="somatic-input-card status-${somaticStatus.status.toLowerCase().replace('_', '-')}">
-    <p class="somatic-input-explanation">Structured record of bodily injury and noxious stimulus, drawn from world events. Full methodology: <a href="how-cy-works.php#harm" target="_blank" rel="noopener">How Cy Works</a>.</p>
+    <p class="somatic-input-explanation">What's happened to Cy's body, and what's still healing. Full methodology: <a href="how-cy-works.php#harm" target="_blank" rel="noopener">How Cy Works</a>.</p>
     <dl class="somatic-input-facts">
       <div><dt>CURRENT STATE</dt><dd data-somatic="category">UNKNOWN</dd></div>
       <div><dt>ACTIVE INJURIES</dt><dd data-somatic="injuries">UNKNOWN</dd></div>
@@ -648,23 +648,23 @@ export class BrainHud {
         </div>
       </nav>
       <div class="soma-anxiety-promoted" id="soma-card-anxiety">
-        <div class="soma-anxiety-head"><span class="soma-badge">ANXIETY</span><span class="soma-anxiety-overall-status">CATEGORICAL OPERATIONAL STATE</span></div>
-        <p class="soma-anxiety-intro">Anxiety here means Cy's current computed threat condition, not a measurement of felt anxiety. It is one of a small set of named states drawn from structured world events, not a biological-arousal or brain-activation reading.</p>
+        <div class="soma-anxiety-head"><span class="soma-badge">ANXIETY</span><span class="soma-anxiety-overall-status">CURRENT THREAT STATE</span></div>
+        <p class="soma-anxiety-intro">What Cy's immediate situation is currently registering: quiet, building unease, or an active threat.</p>
         <div class="soma-anxiety-readout"></div>
       </div>
       <div class="soma-sleep-pressure-promoted" id="soma-card-sleep-pressure">
         <div class="soma-sleep-pressure-head"><span class="soma-badge">HOMEOSTATIC SLEEP PRESSURE</span><span class="soma-sleep-pressure-overall-status">NOT AVAILABLE</span></div>
-        <p class="soma-sleep-pressure-intro">Sleep pressure is a modelled homeostatic drive that rises during scheduled wake and falls during scheduled sleep. It is not a measurement of how tired Cy feels.</p>
+        <p class="soma-sleep-pressure-intro">Sleep pressure has been building through Cy's waking hours, and eases whenever he sleeps.</p>
         ${processSMarkup(this.sleepHomeostasisStatus, this.admin)}
       </div>
       <div class="soma-satiety-promoted" id="soma-card-satiety">
-        <div class="soma-satiety-head"><span class="soma-badge">PHYSIOLOGICAL SATIETY</span><span class="soma-satiety-overall-status">PHYSIOLOGICAL MODEL ESTIMATE</span></div>
-        <p class="soma-satiety-intro">Physiological satiety is a model estimate of post-meal gastrointestinal and hormonal state. It is not a measurement of whether Cy feels hungry or full.</p>
+        <div class="soma-satiety-head"><span class="soma-badge">PHYSIOLOGICAL SATIETY</span><span class="soma-satiety-overall-status">ESTIMATE</span></div>
+        <p class="soma-satiety-intro">How full Cy is likely to be after eating, building after a meal and fading as time passes.</p>
         <div class="soma-satiety-readout"></div>
       </div>
       <div class="soma-harm-promoted" id="soma-card-harm">
-        <div class="soma-harm-head"><span class="soma-badge">HARM / NOCICEPTIVE IMPACT</span><span class="soma-harm-overall-status">STRUCTURED BODILY STATE</span></div>
-        <p class="soma-harm-intro">Harm tracks structured bodily injury and nociceptive state. It does not measure how much pain Cy feels.</p>
+        <div class="soma-harm-head"><span class="soma-badge">HARM / NOCICEPTIVE IMPACT</span><span class="soma-harm-overall-status">BODILY STATE</span></div>
+        <p class="soma-harm-intro">Injury Cy is currently carrying, and how it's healing.</p>
         <div class="soma-harm-readout"></div>
       </div>
       <p class="soma-how-it-works-link"><a href="how-cy-works.php" target="_blank" rel="noopener">HOW CY WORKS -&gt;</a></p>
@@ -729,8 +729,8 @@ export class BrainHud {
         ? controllabilityMarkup(this.learnedControllabilityStatus, this.admin)
         : '';
       const anxietyGrounding = definition.key === 'anxiety'
-        ? `<details class="operational-anxiety-model-details"><summary>MODEL DETAILS</summary>
-            <p class="soma-reading-description operational-anxiety-model-note">Current threat context, timing, objective control and learned cue-outcome history. Full methodology: <a href="how-cy-works.php#anxiety" target="_blank" rel="noopener">How Cy Works</a>.</p>
+        ? `<details class="operational-anxiety-model-details"><summary>MORE DETAIL</summary>
+            <p class="soma-reading-description operational-anxiety-model-note">Current threat context, timing, how much control Cy has, and what's been learned from past run-ins. Full methodology: <a href="how-cy-works.php#anxiety" target="_blank" rel="noopener">How Cy Works</a>.</p>
             <dl class="operational-anxiety-facts">
               <div><dt>CURRENT CONCERN</dt><dd class="operational-anxiety-concern">NONE</dd></div>
               <div><dt>EXPECTED OUTCOME</dt><dd class="operational-anxiety-outcome">NONE</dd></div>
@@ -778,11 +778,11 @@ export class BrainHud {
         ? somatic
         : definition.key === 'anxiety'
           ? `<div class="soma-reading-detail operational-anxiety-detail">
-              <p class="soma-reading-description">Current structured threat context is unavailable.</p>
+              <p class="soma-reading-description">Cy's current situation isn't clear right now.</p>
               ${numericHistory}
               <section class="operational-anxiety-drivers" aria-labelledby="operational-anxiety-drivers-title">
                 <h3 id="operational-anxiety-drivers-title">WHAT IS DRIVING THIS</h3>
-                <ul><li>Current structured defensive context is unavailable.</li></ul>
+                <ul><li>Cy's current situation isn't clear right now.</li></ul>
               </section>
               ${anxietyGrounding}
             </div>`
@@ -1076,7 +1076,7 @@ export class BrainHud {
           ? (estimated ? `${headline.estimate.toFixed(1)} / 10` : 'INPUT UNCERTAIN') : '--';
         row.querySelector('.soma-state-status').textContent = live
           ? 'LIVE' : String(this.physiologicalSatiety && this.physiologicalSatiety.status || 'CALIBRATING').replaceAll('_', ' ');
-        row.querySelector('.soma-state-trend').textContent = estimated ? 'published input distribution' : live ? 'meal composition unknown' : 'awaiting valid input';
+        row.querySelector('.soma-state-trend').textContent = estimated ? 'typical range' : live ? 'meal composition unclear' : 'waiting on a meal';
         const left = estimated ? Math.max(0, Math.min(100, headline.central95.lower * 10)) : 0;
         const right = estimated ? Math.max(left, Math.min(100, headline.central95.upper * 10)) : 0;
         row.querySelector('.soma-state-bar i').style.left = `${left}%`;
@@ -1243,11 +1243,13 @@ export class BrainHud {
     entry.querySelector('.soma-state-status').textContent = 'LIVE';
     entry.querySelector('.operational-anxiety-state-bar').dataset.state = state;
     entry.querySelector('summary').title = `Anxiety: ${state.replaceAll('_', ' ')}. Open for current threat context and history.`;
-    entry.querySelector('.soma-reading-description').textContent = state === 'QUIET'
-      ? 'No current structured defensive concern is active.'
-      : state === 'UNKNOWN'
-        ? 'Current structured defensive context is unavailable.'
-        : `${state.replaceAll('_', ' ')} from the current structured defensive context.`;
+    entry.querySelector('.soma-reading-description').textContent = ({
+      QUIET: "Nothing in Cy's immediate situation is currently registering as a threat.",
+      ANTICIPATING: "Something in Cy's situation is starting to feel uncertain.",
+      THREAT_IMMINENT: "Cy's situation is registering as an imminent threat.",
+      THREAT_ONGOING: "Cy's situation is registering as an active, ongoing threat.",
+      UNKNOWN: "Cy's current situation isn't clear right now.",
+    })[state] || "Cy's current situation isn't clear right now.";
 
     const driverList = entry.querySelector('.operational-anxiety-drivers ul');
     driverList.textContent = '';
