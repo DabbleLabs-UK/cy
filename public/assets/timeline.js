@@ -19,6 +19,21 @@ export function formatDuration(seconds) {
   return parts.join(' ');
 }
 
+// The viewer's own clock, not the server's - used to notice when the
+// displayed "LIVE <date>" header has drifted behind the real day (e.g. a
+// single missed 'day' event on a long-running tab) so it can self-correct
+// rather than staying stuck until a manual reload.
+export function londonToday() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const values = {};
+  for (const part of parts) {
+    if (part.type !== 'literal') values[part.type] = part.value;
+  }
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export function shiftDate(date, days) {
   const m = String(date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) throw new Error('date must be YYYY-MM-DD');

@@ -368,6 +368,32 @@ export function officerEventCompatibleLocation(eventType) {
 }
 export const INMATE_SOCIAL_COMPATIBLE_LOCATION = LOCATIONS.WING_OR_LANDING;
 
+const LONDON_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Restart-safe seed for the scheduler's day-rollover watch. prevDate is an
+// in-memory closure variable that does not survive a restart on its own; if
+// it were always re-seeded from "now" at startup, any restart landing
+// between a real midnight and the pre-restart process's own next scheduler
+// tick would permanently skip that day's rollover (the fresh process starts
+// already believing today is today, so date !== prevDate never fires for
+// that transition). Restoring the last date the rollover actually applied -
+// when that has been persisted - closes that gap; a missing/invalid
+// persisted value (fresh install, or upgrading from before this field
+// existed) falls back to the current date exactly as before.
+export function initialRolloverDate(persistedLastRolloverDate, nowDate) {
+  return LONDON_DATE_RE.test(String(persistedLastRolloverDate || '')) ? persistedLastRolloverDate : nowDate;
+}
+
+// Applies one detected day-rollover to vitals in place and returns the new
+// day count. vitals.lastRolloverDate must be updated in the same step that
+// vitals.day is (both persist together), or a crash between the two would
+// reopen exactly the gap initialRolloverDate exists to close.
+export function applyDayRollover(vitals, date) {
+  vitals.day = (vitals.day || 1) + 1;
+  vitals.lastRolloverDate = date;
+  return vitals.day;
+}
+
 // ---- config ---------------------------------------------------------------
 
 async function loadConfig() {
@@ -1849,7 +1875,8 @@ async function main() {
   let noiseThisBurst = false;
   let recentNoise = [false, false];
   let prevMins = null;
-  let prevDate = londonParts().date;
+  let prevDate = initialRolloverDate(vitals.lastRolloverDate, londonParts().date);
+  vitals.lastRolloverDate = prevDate;
   let prevCpu = cpuSnapshot();
 
   // ---- honest per-process attribution (ollama + this runner node) ------------
@@ -4014,9 +4041,9 @@ async function main() {
     resolvePendingInstrumentalIncidents();
 
     if (date !== prevDate) {
-      vitals.day = (vitals.day || 1) + 1;
+      const n = applyDayRollover(vitals, date);
       prevDate = date;
-      emit({ kind: 'day', payload: { n: vitals.day, date } });
+      emit({ kind: 'day', payload: { n, date } });
     }
 
     const asleep = effectiveAsleep(mins);

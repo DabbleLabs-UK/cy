@@ -7,6 +7,7 @@ import {
   endpointLabel,
   formatDuration,
   isLiveDate,
+  londonToday,
   previousDate,
   refreshEndpointTimes,
   shiftDate,
@@ -43,5 +44,15 @@ assert.equal(ambientEventLabel({ name: 'location_transition', text: 'Cy was take
 assert.equal(ambientEventLabel({ name: 'yard_quiet' }), 'a quiet turn around the exercise yard');
 assert.equal(ambientEventLabel({ name: 'cell_search_property_result' }), 'the cell search produced a result');
 assert.equal(ambientEventLabel({ name: 'provider', to: 'deepseek' }), '');
+
+// londonToday() has no injectable clock (it must read the real viewer clock
+// to be any use as a drift self-check), so cross-check its output shape and
+// value against an independent computation of the same instant rather than
+// asserting a fixed date.
+assert.match(londonToday(), /^\d{4}-\d{2}-\d{2}$/);
+{
+  const expected = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+  assert.equal(londonToday(), expected, 'must agree with an independent Europe/London formatter for "now"');
+}
 
 console.log('timeline.test.js: all checks passed');
