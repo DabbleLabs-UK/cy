@@ -70,6 +70,7 @@ import {
   validateDreamOutput,
 } from './dream.js';
 import { createSomaRuntime } from './soma-runtime.js';
+import { restoreStartupSleepHistory } from './sleep-startup.js';
 import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import {
@@ -628,25 +629,12 @@ async function main() {
       console.warn(`[cy] satiety restart history unavailable; retaining INPUT_INCOMPLETE: ${error.message}`);
     }
   }
-  try {
-    const observedSleepHistory = await client.fetchObservedSleepHistory();
-    soma.replayObservedSleepRecords(observedSleepHistory, { now: Date.now() });
-    console.log(`[cy] TPM sleep history: ${observedSleepHistory.length} structured observations replayed`);
-    // The replay only knows about transitions that were actually recorded. If
-    // this runner was down across a scheduled lights-out/lights-on boundary,
-    // nothing could be recorded for it, and the replayed state would otherwise
-    // read as continuous sleep/wake straight through the outage. Mark
-    // continuity unknown instead of letting that false continuity stand.
-    const tpmState = soma.state && soma.state.predictedSleepiness;
-    const restartAtMs = Date.now();
-    if (tpmState && tpmState.continuityKnown && Number.isFinite(tpmState.lastObservedAtMs)
-      && scheduleTransitionCrossed(tpmState.lastObservedAtMs, restartAtMs)) {
-      soma.markThreeProcessContinuityUnknown({ now: restartAtMs, source: 'restart-gap-crossed-unrecorded-schedule-transition' });
-      console.log('[cy] TPM continuity marked unknown: downtime gap crossed an unrecorded schedule transition');
-    }
-  } catch (error) {
-    console.warn(`[cy] TPM sleep history unavailable; remaining CALIBRATING: ${error.message}`);
-  }
+  await restoreStartupSleepHistory({
+    soma,
+    fetchHistory: () => client.fetchObservedSleepHistory(),
+    scheduleTransitionCrossed,
+    now: Date.now(),
+  });
   reportSomaFailure = (failure) => {
     emit({ kind: 'event', payload: { name: 'soma_unavailable', reason: failure.reason, operation: failure.operation } });
     client.kick();
