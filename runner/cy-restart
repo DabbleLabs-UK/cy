@@ -41,27 +41,43 @@ if [ ! -d "$STATE_DIR" ]; then
   exit 1
 fi
 
-NOW_MS=$(date +%s%3N)
-NOW_ISO=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 REQUESTED_BY="${USER:-${USERNAME:-unknown}}"
 
-# Escape backslashes and double quotes for embedding in JSON.
-json_escape() {
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
-REASON_JSON=$(json_escape "$REASON")
-REQUESTED_BY_JSON=$(json_escape "$REQUESTED_BY")
+# DELL WSL's uutils date 0.8.0 expands %s%3N to nanoseconds, not the
+# milliseconds expected by the watchdog. Generate both timestamps from one
+# clock reading and let JSON encode arbitrary reason text safely.
+python3 - "$REQUEST_PATH" "$REASON" "$REQUESTED_BY" <<'PY'
+import datetime
+import json
+import os
+import sys
+import tempfile
+import time
 
-cat > "$REQUEST_PATH" <<EOF
-{
-  "schema": "cy.restart-request",
-  "version": 1,
-  "requestedAtMs": $NOW_MS,
-  "requestedAt": "$NOW_ISO",
-  "reason": "$REASON_JSON",
-  "requestedBy": "$REQUESTED_BY_JSON"
+path, reason, requested_by = sys.argv[1:]
+now_ms = time.time_ns() // 1_000_000
+seconds, milliseconds = divmod(now_ms, 1000)
+requested_at = datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc)
+requested_at = requested_at.replace(microsecond=milliseconds * 1000)
+request = {
+    "schema": "cy.restart-request",
+    "version": 1,
+    "requestedAtMs": now_ms,
+    "requestedAt": requested_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    "reason": reason,
+    "requestedBy": requested_by,
 }
-EOF
+fd, temporary = tempfile.mkstemp(prefix=".restart-request-", suffix=".tmp",
+                              dir=os.path.dirname(path))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as output:
+        json.dump(request, output, ensure_ascii=True, indent=2)
+        output.write("\n")
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PY
 
 echo "cy-restart: restart requested ($REQUEST_PATH)"
 echo "cy-restart: the Cy Runner Watchdog (SYSTEM, runs every ~60s) will action this automatically."
