@@ -371,7 +371,8 @@ export function observeFeedingRecord(state, record) {
 
 function intakeKnowledgeStatus(state) {
   if (!state || !state.records.length) return 'NO_FEEDING_RECORD';
-  if (state.unknownIntervals.length || state.records.some((record) => record.intakeOutcome === 'UNKNOWN')) {
+  if (state.unknownIntervals.some((gap) => gap.resolution !== 'RECONSTRUCTED_FROM_AUTHORITATIVE_LEDGER')
+    || state.records.some((record) => record.intakeOutcome === 'UNKNOWN')) {
     return 'INCOMPLETE';
   }
   return 'COMPLETE';

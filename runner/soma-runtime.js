@@ -6,6 +6,7 @@
 // fallbacks. It never substitutes a fresh state that could look observed.
 
 import * as defaultEngine from './soma.js';
+import { recoverSatietyAfterRestart } from './satiety-restart-recovery.js';
 
 const FALLBACK_ACTION = Object.freeze({
   name: 'observe',
@@ -107,6 +108,14 @@ export function createSomaRuntime(rawState, {
       let result = null;
       mutate('feeding and ingestion ledger', (current) => {
         result = engine.observeSomaFeedingRecord(current, record);
+        return current;
+      });
+      return result;
+    },
+    recoverSatietyFromLedger(records, options) {
+      let result = null;
+      mutate('satiety restart ledger recovery', (current) => {
+        result = recoverSatietyAfterRestart(current, records, options);
         return current;
       });
       return result;
