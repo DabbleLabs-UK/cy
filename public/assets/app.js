@@ -24,7 +24,7 @@ import {
   NARRATIVE_KINDS,
   mergeLiveVitals,
 } from './history-feed.js';
-import { ambientEventLabel, dayLabel, isLiveDate, shiftDate } from './timeline.js';
+import { ambientEventLabel, dayLabel, isLiveDate, londonToday, shiftDate } from './timeline.js';
 import { liveStatusTitle, newestLiveEventMs } from './live-status.js?v=20260915';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
@@ -242,9 +242,16 @@ async function boot() {
   await applyInitialPowerHistory(initialPowerHistory);
 
   // then poll live
+  let ticksSinceDriftCheck = 0;
   setInterval(() => {
     if (liveCursorReady) void poll();
     else void ensureFirstLoad();
+    // Cheap and only needs to catch a stuck header eventually, not instantly -
+    // once a minute is plenty (see checkDateDrift for why this exists at all).
+    if (++ticksSinceDriftCheck >= 60) {
+      ticksSinceDriftCheck = 0;
+      checkDateDrift();
+    }
   }, POLL_MS);
 }
 
@@ -776,20 +783,10 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
       break;
 
     case 'day':
-      // A real local-midnight rollover happened - advance by exactly one from our
-      // own known-correct count rather than trusting the runner's reported number.
+      // A real local-midnight rollover happened.
       if (!bootstrap) {
         const m = String(ev.ts || '').match(/^(\d{4}-\d{2}-\d{2})/);
-        if (m) {
-          currentDate = m[1];
-          if (window.__cyTimeTravel && window.__cyTimeTravel.setToday) {
-            window.__cyTimeTravel.setToday(currentDate);
-          }
-        }
-        resetFeedSurfaces();
-        if (currentDate && pen.beginDay) pen.beginDay(currentDate, currentDate);
-        if (currentDate && window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate, currentDate);
-        setDay(++dayCount);
+        if (m) advanceToDate(m[1]);
       }
       break;
 
@@ -953,6 +950,43 @@ function updateLiveStatusTitle() {
 function setDay(n) {
   const el = $('#day');
   if (el) el.textContent = 'DAY ' + n;
+}
+
+// Shared by the live 'day' rollover event AND the periodic drift self-check
+// below - both mean the same thing: the viewer's displayed date is now
+// known to be wrong and must catch up to newDate. Advances DAY N by the
+// actual elapsed days (not always exactly one) so a tab that drifted more
+// than a single day (e.g. suspended for a long stretch) still lands on the
+// correct count instead of just nudging by one.
+function advanceToDate(newDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(newDate || '')) || newDate === currentDate) return;
+  const elapsedDays = currentDate
+    ? Math.round((Date.parse(newDate + 'T00:00:00Z') - Date.parse(currentDate + 'T00:00:00Z')) / 86400000)
+    : 1;
+  currentDate = newDate;
+  if (window.__cyTimeTravel && window.__cyTimeTravel.setToday) {
+    window.__cyTimeTravel.setToday(currentDate);
+  }
+  resetFeedSurfaces();
+  if (pen.beginDay) pen.beginDay(currentDate, currentDate);
+  if (window.__cyPlain && window.__cyPlain.beginDay) window.__cyPlain.beginDay(currentDate, currentDate);
+  dayCount += Number.isFinite(elapsedDays) && elapsedDays > 0 ? elapsedDays : 1;
+  setDay(dayCount);
+}
+
+// Safety net: the displayed date should normally advance only via a live
+// 'day' event, but that is a single message on a single delivery path (a
+// dropped/delayed event on a long-running tab, a reconnect gap, etc.) - if
+// it is ever missed, nothing else corrects the header on its own. The real
+// calendar date is independently knowable from the viewer's own clock at
+// any time, so re-derive it periodically and self-heal instead of staying
+// stuck until a manual reload. Deliberately NOT run while bootstrapping or
+// reading history, so it can never fight the initial day load or a
+// backscroll view.
+function checkDateDrift() {
+  if (bootstrapping || historyMode || !currentDate) return;
+  const actualToday = londonToday();
+  if (actualToday !== currentDate) advanceToDate(actualToday);
 }
 
 async function fetchInitialPowerHistory() {
