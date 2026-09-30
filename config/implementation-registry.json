@@ -756,7 +756,7 @@
       "display_name": "MODELLED GI / SATIETY PHYSIOLOGY",
       "implementation_status": "IMPLEMENTED",
       "model_spec_id": "martinez-dibbs-integrated-physiological-satiety",
-      "status_note": "Implements the published GI compartments, nutrient transit, CCK, GLP-1, PYY and ghrelin equations with deterministic quasi-Monte-Carlo sampling of published input distributions and separate meal-composition scenarios. Gastric distention is promoted as the public fullness signal; the hormone-composite satiety equation (now computed additively rather than as a PYY*GLP1 product - see sourceAudit.satietyPyyGlp1Interaction) remains as supporting/diagnostic physiology only.",
+      "status_note": "Implements the published GI compartments, nutrient transit, CCK, GLP-1, PYY and ghrelin equations with deterministic quasi-Monte-Carlo sampling of published input distributions and separate meal-composition scenarios. Gastric distention is promoted as the public fullness signal; the hormone-composite satiety equation (published as a PYY*GLP1 product, preserved as printed pending an unresolved product-vs-additive ambiguity - see sourceAudit.satietyPyyGlp1Interaction) remains as supporting/diagnostic physiology only.",
       "data_dependencies": ["ingestion_ledger", "resolved_consumed_energy", "HMPPS_reference_ration"],
       "version": "physiological-satiety-v3",
       "provenance": "config/model-specs/physiological-satiety.json"

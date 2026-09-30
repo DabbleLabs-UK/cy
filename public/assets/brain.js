@@ -85,12 +85,18 @@ const clamp100 = (value) => typeof value === 'number' && Number.isFinite(value) 
 // gastric fullness is a pure function of stomach content volume and never
 // reads hormone state, so - unlike the old satiety range - it needs no
 // ghrelin-artefact degeneracy gate.
+// mL is the primary physical quantity; percent is a secondary, purely
+// visual normalization used only to draw a bar (see the model spec's
+// visualizationEnvelope) and must never be presented as itself a measured
+// fullness percentage.
 function satietyScenarioRange(physiology) {
   const envelope = physiology && physiology.scenarioEnvelope;
-  const minimum = envelope && Number.isFinite(envelope.minimumScenarioMedianPercent) ? envelope.minimumScenarioMedianPercent : null;
-  const maximum = envelope && Number.isFinite(envelope.maximumScenarioMedianPercent) ? envelope.maximumScenarioMedianPercent : null;
-  if (minimum == null || maximum == null) return null;
-  return { minimum, maximum };
+  const minimumMl = envelope && Number.isFinite(envelope.minimumScenarioMedianMl) ? envelope.minimumScenarioMedianMl : null;
+  const maximumMl = envelope && Number.isFinite(envelope.maximumScenarioMedianMl) ? envelope.maximumScenarioMedianMl : null;
+  if (minimumMl == null || maximumMl == null) return null;
+  const minimumPercent = Number.isFinite(envelope.minimumScenarioMedianPercent) ? envelope.minimumScenarioMedianPercent : null;
+  const maximumPercent = Number.isFinite(envelope.maximumScenarioMedianPercent) ? envelope.maximumScenarioMedianPercent : null;
+  return { minimumMl, maximumMl, minimumPercent, maximumPercent };
 }
 
 function activityColor(value) {
@@ -1089,25 +1095,30 @@ export class BrainHud {
         const headline = physiology && physiology.headline;
         const live = physiology && physiology.status === 'LIVE' && headline;
         const estimated = live && headline.status === 'ESTIMATE_AVAILABLE'
-          && Number.isFinite(headline.normalizedPercent);
+          && Number.isFinite(headline.gastricDistentionMl);
         const range = live && !estimated ? satietyScenarioRange(physiology) : null;
-        const low = estimated ? headline.normalizedPercent : range ? range.minimum : null;
-        const high = estimated ? headline.normalizedPercent : range ? range.maximum : null;
-        const point = estimated ? headline.normalizedPercent : range ? (range.minimum + range.maximum) / 2 : null;
+        // mL + band is the primary reading; percent is used only to size the
+        // bar below (a secondary, purely visual normalization - see
+        // visualizationEnvelope in the model spec).
+        const lowMl = estimated ? headline.gastricDistentionMl : range ? range.minimumMl : null;
+        const highMl = estimated ? headline.gastricDistentionMl : range ? range.maximumMl : null;
+        const lowPercent = estimated ? headline.normalizedPercent : range ? range.minimumPercent : null;
+        const highPercent = estimated ? headline.normalizedPercent : range ? range.maximumPercent : null;
+        const pointPercent = Number.isFinite(lowPercent) && Number.isFinite(highPercent) ? (lowPercent + highPercent) / 2 : null;
         row.querySelector('.soma-state-value').textContent = !live ? '--'
-          : estimated ? `${Math.round(point)}% - ${String(headline.band || '').replaceAll('_', ' ')}`
-            : range ? `${Math.round(low)}-${Math.round(high)}%`
+          : estimated ? `${String(headline.band || '').replaceAll('_', ' ')} (~${Math.round(lowMl)} mL)`
+            : range ? `${Math.round(lowMl)}-${Math.round(highMl)} mL`
               : 'ESTIMATE SETTLING';
         row.querySelector('.soma-state-status').textContent = live
           ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
         row.querySelector('.soma-state-trend').textContent = estimated ? 'gastric fullness'
           : range ? 'typical range' : live ? 'recalibrating' : 'waiting on a meal';
-        const left = low != null ? Math.max(0, Math.min(100, low)) : 0;
-        const rightEdge = high != null ? Math.max(left, Math.min(100, high)) : 0;
+        const left = lowPercent != null ? Math.max(0, Math.min(100, lowPercent)) : 0;
+        const rightEdge = highPercent != null ? Math.max(left, Math.min(100, highPercent)) : 0;
         row.querySelector('.soma-state-bar i').style.left = `${left}%`;
-        row.querySelector('.soma-state-bar i').style.width = point != null ? `${Math.max(3, rightEdge - left)}%` : '0';
-        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(point != null ? point / 100 : 0);
-        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means more full after eating (modelled gastric distention).`;
+        row.querySelector('.soma-state-bar i').style.width = pointPercent != null ? `${Math.max(3, rightEdge - left)}%` : '0';
+        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(pointPercent != null ? pointPercent / 100 : 0);
+        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means more full after eating (modelled gastric distention in mL; the bar position is a secondary display-only normalization).`;
         continue;
       }
       if (definition.key === 'sleepiness') {
@@ -1632,8 +1643,8 @@ export class BrainHud {
     const bandLabel = (band) => band ? band.replaceAll('_', ' ') : '';
     const facts = {
       score: !modelLive ? '--'
-        : estimated ? `${Math.round(physiology.headline.normalizedPercent)}% - ${bandLabel(physiology.headline.band)}`
-          : range ? `${Math.round(range.minimum)}-${Math.round(range.maximum)}%`
+        : estimated ? `${bandLabel(physiology.headline.band)} - ${Math.round(physiology.headline.gastricDistentionMl)} mL`
+          : range ? `${Math.round(range.minimumMl)}-${Math.round(range.maximumMl)} mL`
             : 'ESTIMATE SETTLING',
       intake: intake ? `${String(intake.mealType || 'meal').toUpperCase()}, ${Number(intake.consumedEnergyKcal).toFixed(0)} kcal, ${String(intake.portionBasis || 'UNKNOWN').replaceAll('_', ' ')}` : 'NONE RECORDED',
     };
@@ -1655,7 +1666,7 @@ export class BrainHud {
       for (const scenario of (physiology && physiology.scenarios || [])) {
         const item = document.createElement('p');
         const estimateText = scenario.gastricFullness
-          ? `${Math.round(scenario.gastricFullness.normalizedPercent)}% - ${bandLabel(scenario.gastricFullness.band)} (typical range ${Math.round(scenario.gastricFullness.central95Ml.lower)}-${Math.round(scenario.gastricFullness.central95Ml.upper)} mL modelled gastric content)`
+          ? `${bandLabel(scenario.gastricFullness.band)} - ${Math.round(scenario.gastricFullness.medianMl)} mL modelled gastric content (typical range ${Math.round(scenario.gastricFullness.central95Ml.lower)}-${Math.round(scenario.gastricFullness.central95Ml.upper)} mL; display bar ~${Math.round(scenario.gastricFullness.normalizedPercent)}%)`
           : 'unavailable';
         item.textContent = `${scenario.label}: ${estimateText}.`;
         scenarios.appendChild(item);

@@ -86,7 +86,7 @@ const halfLifeRate = (minutes) => -Math.log(0.5) / minutes;
 // engineering value, derived below rather than hand-typed.
 export const GASTRIC_FULLNESS_BAND_THRESHOLDS = Object.freeze({
   emptyMaximumMl: PUBLISHED_PARAMETERS.initialGastricDistentionMl,
-  settlingMaximumMl: 500,
+  fillingMaximumMl: 500,
 });
 
 function largestConfiguredMealEnergyKcal() {
@@ -135,11 +135,13 @@ function computeGastricFullnessEnvelope() {
 
 export const GASTRIC_FULLNESS_ENVELOPE = computeGastricFullnessEnvelope();
 
+// Neutral, purely descriptive band names - no subjective/hedonic judgement
+// (e.g. "comfort") is modelled anywhere in this system.
 export function gastricFullnessBand(distentionMl) {
   if (!Number.isFinite(distentionMl)) return null;
   if (distentionMl <= GASTRIC_FULLNESS_BAND_THRESHOLDS.emptyMaximumMl) return 'EMPTY';
-  if (distentionMl < GASTRIC_FULLNESS_BAND_THRESHOLDS.settlingMaximumMl) return 'SETTLING';
-  if (distentionMl < GASTRIC_FULLNESS_ENVELOPE.referenceFullMl) return 'COMFORTABLY_FULL';
+  if (distentionMl < GASTRIC_FULLNESS_BAND_THRESHOLDS.fillingMaximumMl) return 'FILLING';
+  if (distentionMl < GASTRIC_FULLNESS_ENVELOPE.referenceFullMl) return 'FULL';
   return 'VERY_FULL';
 }
 
@@ -308,20 +310,22 @@ export function gastricDistention(track) {
       * (track.stomach.fatMl + track.stomach.carbohydrateMl);
 }
 
-// The article prints this term as a PYY*GLP1 product, but Table 1 defines
-// cSatiety/dSatiety as independent per-hormone coefficients, which is better
-// supported as an additive effect than a multiplicative interaction - see
-// sourceAudit.satietyPyyGlp1Interaction in the model spec for the full
-// disclosure. This is a diagnostic/composite-only correction: it does not
-// touch the promoted gastric-fullness signal, which never reads hormones.
+// The article prints this term as a PYY*GLP1 product. Table 1 defines
+// cSatiety/dSatiety as independent per-hormone coefficients, which could
+// suggest an additive intent, but that remains an unresolved source
+// inconsistency - see sourceAudit.satietyPyyGlp1Interaction in the model
+// spec. Absent the authors' own implementation, the published product form
+// is preserved as-is (source fidelity under uncertainty, not a claim that
+// either reading is scientifically superior). This is diagnostic/composite
+// only: it does not touch the promoted gastric-fullness signal, which never
+// reads hormones.
 export function satietyFromState({ gastricDistentionMl, cckPM, pyyPM, glp1PM, ghrelinPM }) {
   const gastricCoefficient = gastricDistentionMl <= 296 ? 0
     : gastricDistentionMl < 500 ? PUBLISHED_PARAMETERS.satiety.gastricLow
       : PUBLISHED_PARAMETERS.satiety.gastricHigh;
   return gastricCoefficient * gastricDistentionMl
     + PUBLISHED_PARAMETERS.satiety.cck * cckPM
-    + PUBLISHED_PARAMETERS.satiety.pyy * pyyPM
-    + PUBLISHED_PARAMETERS.satiety.glp1 * glp1PM
+    + PUBLISHED_PARAMETERS.satiety.pyy * pyyPM * PUBLISHED_PARAMETERS.satiety.glp1 * glp1PM
     + PUBLISHED_PARAMETERS.satiety.ghrelin * (PUBLISHED_PARAMETERS.ghrelin.fasting - ghrelinPM);
 }
 

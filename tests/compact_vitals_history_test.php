@@ -46,7 +46,7 @@ $rich = [
             'status' => 'ESTIMATE_AVAILABLE',
             'estimate' => 4.7,
             'central95' => ['lower' => 4.3, 'upper' => 5.1],
-            'band' => 'COMFORTABLY_FULL',
+            'band' => 'FULL',
             'normalizedPercent' => 62.5,
             'normalizedPercentCentral95' => ['lower' => 55.0, 'upper' => 70.0],
         ], 'intakeHistory' => array_fill(0, 5000, str_repeat('meal', 100))],
@@ -86,7 +86,7 @@ compact_expect($compact['satiety'] === [
     'status' => 'ESTIMATE_AVAILABLE', 'estimate' => 4.7, 'minimum' => 4.3, 'maximum' => 5.1,
 ], 'satiety status, estimate, or range was not preserved');
 compact_expect($compact['fullness'] === [
-    'status' => 'ESTIMATE_AVAILABLE', 'band' => 'COMFORTABLY_FULL',
+    'status' => 'ESTIMATE_AVAILABLE', 'band' => 'FULL',
     'percent' => 62.5, 'minimumPercent' => 55.0, 'maximumPercent' => 70.0,
 ], 'fullness status, percent, band, or range was not preserved');
 compact_expect($typicalBytes < 1024, "compact history row exceeded 1 KiB: $typicalBytes");

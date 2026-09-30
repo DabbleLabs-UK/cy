@@ -567,7 +567,7 @@ function modelFacingLine(item) {
     case 'record_status':
       return `[${item.epistemicStatus}] Feeding record: ${value.missedScheduledMeals || 0} missed scheduled meals; intake knowledge ${words(value.intakeKnowledgeStatus)}; ${value.observationGapCount || 0} observation gaps.`;
     case 'physiological_satiety':
-      return `[${item.epistemicStatus}] Gastric fullness estimate: ${finite(value.normalizedPercent, 0)}% of reference full (${words(value.band)}; modelled gastric distention ~${finite(value.gastricDistentionMl, 0)} mL, central 95% ${finite(value.central95Ml?.lower, 0)}-${finite(value.central95Ml?.upper, 0)} mL); input uncertainty ${words(value.inputUncertainty)}. This is a model estimate of stomach fullness after eating, not an observed feeling.`;
+      return `[${item.epistemicStatus}] Gastric fullness estimate: ${words(value.band)}, modelled gastric distention ~${finite(value.gastricDistentionMl, 0)} mL (central 95% ${finite(value.central95Ml?.lower, 0)}-${finite(value.central95Ml?.upper, 0)} mL); display bar ~${finite(value.normalizedPercent, 0)}% of a derived reference-full envelope (a secondary visualization, not itself a measured percentage); input uncertainty ${words(value.inputUncertainty)}. This is a model estimate of stomach fullness after eating, not an observed feeling.`;
     case 'physiological_satiety_unavailable':
       return `[${item.epistemicStatus}] Physiological satiety estimate unavailable: ${words(value)}.`;
     case 'current_social_context':
