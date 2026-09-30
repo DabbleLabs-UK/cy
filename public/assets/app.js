@@ -24,7 +24,7 @@ import {
   NARRATIVE_KINDS,
   mergeLiveVitals,
 } from './history-feed.js';
-import { ambientEventLabel, dayLabel, isLiveDate, londonToday, shiftDate } from './timeline.js';
+import { ambientEventLabel, dayLabel, isLiveDate, liveDateCorrection, londonToday, scheduledRoutineLabel, shiftDate } from './timeline.js';
 import { liveStatusTitle, newestLiveEventMs } from './live-status.js?v=20260915';
 // Registers the <async-select> custom element used by the view switch and the
 // operator pause control below. Side-effect import (it self-defines the element).
@@ -833,6 +833,13 @@ function dispatch(ev, bootstrap, live = !bootstrap) {
 
 function handleAmbient(p, ts, bootstrap = false) {
   const name = p.name || '';
+  const routineLabel = scheduledRoutineLabel(p);
+  if (routineLabel) {
+    postcards.finishAnimations();
+    if (pen.event) pen.event(routineLabel, '', ts, 'prison');
+    if (!bootstrap) pushTicker(routineLabel);
+    return;
+  }
   if (name === 'provider') {
     // the runner switched provider mid-loop: settle any pending switch at once
     // (the frequent vitals tick would also settle it, this is just faster).
@@ -984,9 +991,8 @@ function advanceToDate(newDate) {
 // reading history, so it can never fight the initial day load or a
 // backscroll view.
 function checkDateDrift() {
-  if (bootstrapping || historyMode || !currentDate) return;
-  const actualToday = londonToday();
-  if (actualToday !== currentDate) advanceToDate(actualToday);
+  const correction = liveDateCorrection(currentDate, londonToday(), { bootstrapping, historyMode });
+  if (correction) advanceToDate(correction);
 }
 
 async function fetchInitialPowerHistory() {
