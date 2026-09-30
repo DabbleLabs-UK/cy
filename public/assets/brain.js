@@ -513,6 +513,55 @@ function somaticMarkup(somaticStatus, admin) {
   </section>`;
 }
 
+export function somaticPublicFacts(snapshot, live) {
+  const headline = live && snapshot && snapshot.headline || null;
+  const latest = live && snapshot && snapshot.latestSomaticEvent || null;
+  const stimulus = latest && latest.stimulus || {};
+  const tissue = latest && latest.tissue || {};
+  const body = latest && latest.body || {};
+  const known = (value) => value != null && value !== '' && value !== 'UNKNOWN';
+  // A routine event may explicitly record NONE for tissue damage without
+  // asserting any injury or noxious stimulus. That is not an UNKNOWN event.
+  const hasEventFacts = Boolean(latest && (
+    known(stimulus.id) || known(stimulus.modality)
+    || known(stimulus.status) || stimulus.noxiousStimulus === 'YES'
+    || known(body.site) || known(tissue.injuryId)
+    || known(tissue.injuryStatus)
+    || ['CONFIRMED', 'THREATENED'].includes(tissue.damageStatus)
+  ));
+  const activeInjuries = live && Number.isFinite(snapshot.activeInjuryCount)
+    ? snapshot.activeInjuryCount
+    : live && Array.isArray(snapshot.activeInjuries) ? snapshot.activeInjuries.length : null;
+  const activeStimuli = live && headline && Number.isFinite(headline.activeNoxiousStimulusCount)
+    ? headline.activeNoxiousStimulusCount
+    : live && Array.isArray(snapshot.activeNoxiousStimuli) ? snapshot.activeNoxiousStimuli.length : null;
+  const clear = live && headline && headline.category === 'CLEAR'
+    && activeInjuries === 0 && activeStimuli === 0;
+  return {
+    headline,
+    hasEventFacts,
+    showClearNote: Boolean(clear && !hasEventFacts),
+    facts: {
+      category: headline ? String(headline.category).replaceAll('_', ' ') : 'UNKNOWN',
+      injuries: activeInjuries == null ? 'UNKNOWN' : String(activeInjuries),
+      damage: live ? String(snapshot.tissueDamageStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
+      latest: hasEventFacts ? `${body.site || 'UNKNOWN'} - ${stimulus.modality || 'UNKNOWN'}` : '',
+      'stimulus-status': hasEventFacts ? String(stimulus.status || 'UNKNOWN').replaceAll('_', ' ') : '',
+      'injury-status': hasEventFacts ? String(tissue.injuryStatus || 'UNKNOWN').replaceAll('_', ' ') : '',
+    },
+  };
+}
+
+export function somaticHistoryPresentation(events) {
+  const hasEvents = Array.isArray(events) && events.length > 0;
+  return {
+    showPlot: hasEvents,
+    note: hasEvents
+      ? `${events.length} factual somatic ${events.length === 1 ? 'event' : 'events'}`
+      : 'No bodily harm in this period.',
+  };
+}
+
 function socialContactMarkup(status, setPointStatus, errorStatus, adaptationStatus, toleranceStatus, aversiveStatus, admin) {
   return `<section class="social-contact-card status-${status.status.toLowerCase().replace('_', '-')}">
     <p class="social-contact-explanation">Observed contact, opportunities, confirmed isolation and observation gaps. This is factual social context, not a Loneliness score.</p>
@@ -1577,40 +1626,14 @@ export class BrainHud {
     const snapshot = this.somaticNociceptive;
     const live = this.somaticStatus.status === IMPLEMENTATION_STATUS.IMPLEMENTED
       && snapshot && snapshot.status === 'implemented';
-    const headline = live && snapshot.headline ? snapshot.headline : null;
+    const presentation = somaticPublicFacts(snapshot, live);
+    const { headline, hasEventFacts, facts } = presentation;
     entry.querySelector('.soma-state-value').textContent = headline ? headline.display : 'STATE UNAVAILABLE';
     entry.querySelector('.soma-state-status').textContent = live
       ? 'LIVE' : 'UNAVAILABLE';
     entry.querySelector('summary').title = live
       ? `SOMATIC HARM. ${headline.display}. Structured noxious events and injuries.`
       : 'SOMATIC HARM. Grounded state unavailable.';
-    const latest = live && snapshot.latestSomaticEvent ? snapshot.latestSomaticEvent : null;
-    const latestStimulus = latest && latest.stimulus || {};
-    const latestTissue = latest && latest.tissue || {};
-    const latestBody = latest && latest.body || {};
-    // Not every recorded event is about a stimulus or injury (a routine event
-    // can touch this ledger purely to state "no tissue damage happened").
-    // Showing UNKNOWN for fields the event never claimed anything about
-    // reads as broken data, so only surface these rows when the latest
-    // event actually carries a stimulus or injury fact.
-    const hasEventFacts = latest && (
-      latestBody.site !== 'UNKNOWN'
-      || latestStimulus.modality !== 'UNKNOWN'
-      || latestStimulus.noxiousStimulus === 'YES'
-      || latestTissue.injuryId != null
-      || latestTissue.injuryStatus !== 'UNKNOWN'
-    );
-    const facts = {
-      category: headline ? String(headline.category).replaceAll('_', ' ') : 'UNKNOWN',
-      injuries: live && Number.isFinite(snapshot.activeInjuryCount)
-        ? String(snapshot.activeInjuryCount)
-        : live && Array.isArray(snapshot.activeInjuries)
-          ? String(snapshot.activeInjuries.length) : 'UNKNOWN',
-      damage: live ? String(snapshot.tissueDamageStatus || 'UNKNOWN').replaceAll('_', ' ') : 'UNKNOWN',
-      latest: hasEventFacts ? `${latestBody.site || 'UNKNOWN'} - ${latestStimulus.modality || 'UNKNOWN'}` : '',
-      'stimulus-status': hasEventFacts ? String(latestStimulus.status || 'UNKNOWN').replaceAll('_', ' ') : '',
-      'injury-status': hasEventFacts ? String(latestTissue.injuryStatus || 'UNKNOWN').replaceAll('_', ' ') : '',
-    };
     for (const [key, value] of Object.entries(facts)) {
       const target = card.querySelector(`[data-somatic="${key}"]`);
       if (target) target.textContent = value;
@@ -1618,10 +1641,8 @@ export class BrainHud {
     card.querySelectorAll('.somatic-event-fact').forEach((row) => { row.hidden = !hasEventFacts; });
     const clearNote = card.querySelector('.somatic-clear-note');
     if (clearNote) {
-      clearNote.hidden = hasEventFacts;
-      clearNote.textContent = !live ? 'Bodily state unavailable.'
-        : snapshot.totalSomaticEvents ? 'No recent bodily harm recorded.'
-          : 'No bodily harm has been recorded.';
+      clearNote.hidden = !presentation.showClearNote;
+      clearNote.textContent = 'No recent bodily harm recorded.';
     }
   }
 
@@ -1964,18 +1985,20 @@ export class BrainHud {
       }
       if (scope === 'somatic') {
         const events = Array.isArray(data.events) ? data.events : [];
+        const history = somaticHistoryPresentation(events);
         const chart = entry.querySelector('.soma-history.somatic-history');
-        if (chart) chart.hidden = !events.length;
+        if (chart) chart.hidden = !history.showPlot;
         const axis = entry.querySelector('.somatic-history-axis');
-        if (axis) axis.hidden = !events.length;
-        path.setAttribute('d', events.length
+        if (axis) axis.hidden = !history.showPlot;
+        path.setAttribute('d', history.showPlot
           ? buildCountStepPath(data.points, data.fromMs, data.toMs) : '');
         const markers = entry.querySelector('.somatic-event-markers');
         const timeline = entry.querySelector('.somatic-timeline');
+        markers.hidden = !history.showPlot;
         markers.textContent = '';
         timeline.textContent = '';
-        if (!events.length) {
-          note.textContent = 'No bodily harm in this period.';
+        if (!history.showPlot) {
+          note.textContent = history.note;
           return;
         }
         const span = Math.max(1, data.toMs - data.fromMs);
