@@ -49,6 +49,13 @@ export function isLiveDate(date, today) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) && String(date) === String(today || '');
 }
 
+export function liveDateCorrection(displayedDate, actualDate, { bootstrapping = false, historyMode = false } = {}) {
+  if (bootstrapping || historyMode) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(displayedDate || ''))
+    || !/^\d{4}-\d{2}-\d{2}$/.test(String(actualDate || ''))) return null;
+  return displayedDate === actualDate ? null : actualDate;
+}
+
 export function dayLabel(date) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return String(date || '');
   const d = new Date(date + 'T12:00:00Z');
@@ -179,6 +186,8 @@ export function ambientEventLabel(payload) {
   const p = payload || {};
   const name = String(p.name || '');
   if (!name || ['provider', 'provider_refused', 'regime'].includes(name)) return '';
+  const routine = scheduledRoutineLabel(p);
+  if (routine) return routine;
   if (name === 'social') {
     const who = p.who || 'someone';
     const grudge = p.standing && Number(p.standing.grudge);
@@ -221,4 +230,41 @@ export function ambientEventLabel(payload) {
     cell_search_aftermath_observed: p.text || 'Cy saw the aftermath of the cell search',
   };
   return labels[name] || name.replace(/_/g, ' ');
+}
+
+// Only names and outcome fields emitted by the existing scheduled world
+// producer qualify. Expectations, generic irritations and missing fields do
+// not become a made-up meal or routine in the public chronology.
+export function scheduledRoutineLabel(payload) {
+  const p = payload || {};
+  const name = String(p.name || '');
+  const meal = String(p.meal || '');
+  const outcome = String(p.outcome || '');
+  if (['breakfast', 'lunch', 'tea', 'supper snack'].includes(meal)
+    && ['eaten', 'partial', 'missed', 'refused'].includes(outcome)
+    && name === `${meal}_${outcome}`) {
+    if (outcome === 'eaten') return `${meal} came and Cy ate it`;
+    if (outcome === 'partial') return `${meal} came; Cy ate some`;
+    if (outcome === 'missed') return `${meal} did not reach Cy`;
+    return `${meal} came; Cy did not eat it`;
+  }
+  if (outcome !== name) return '';
+  const routines = {
+    shower: {
+      shower_warm: 'the shower stayed warm',
+      shower_cold: 'the shower ran cold',
+      shower_missed: 'Cy missed his shower turn',
+    },
+    association: {
+      association_quiet_company: 'quiet company at association',
+      association_shared_joke: 'a joke on association',
+      association_kept_apart: 'no room for Cy at association',
+    },
+    phone: {
+      phone_call_connected: "Cy's call connected",
+      phone_no_answer: 'the phone rang out',
+      phone_queue_missed: 'Cy missed the phone queue',
+    },
+  };
+  return routines[String(p.routine || '')]?.[name] || '';
 }
