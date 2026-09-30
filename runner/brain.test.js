@@ -115,10 +115,10 @@ assert.equal(
 assert.doesNotMatch(source, /SUBJECTIVE HUNGER/);
 assert.match(source, /feeding-input-inspector/);
 assert.match(source, /PHYSIOLOGICAL SATIETY/);
-assert.match(source, /<span>10<\/span><strong>MODELLED PHYSIOLOGICAL SATIETY<\/strong><span>1<\/span>/);
+assert.match(source, /<span>FULL<\/span><strong>MODELLED GASTRIC FULLNESS<\/strong><span>EMPTY<\/span>/);
 assert.match(source, /soma-satiety-overall-status">ESTIMATE<\/span>/);
 assert.doesNotMatch(source, /NOT A REPORTED FEELING/);
-assert.match(source, /scope === 'satiety'/);
+assert.match(source, /scope === 'fullness'/);
 assert.match(source, /class="satiety-history-band"/);
 assert.doesNotMatch(source, /HUNGER HISTORY/,
   'the superseded heuristic Hunger graph must not return');

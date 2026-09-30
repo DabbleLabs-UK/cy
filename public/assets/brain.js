@@ -77,23 +77,20 @@ const LEGACY_DERIVED = ['confusion', 'overwhelm', 'numbness', 'paranoia', 'fixat
 const clamp01 = (value) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
 const clamp100 = (value) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
 
-// The satiety model is far more often scenario-bounded (meal composition not
+// The fullness model is far more often scenario-bounded (meal composition not
 // exactly known) than it has one exact estimate, so headline.status stays
 // 'INPUT_UNCERTAIN' most of the time - but a real computed range still
 // exists in scenarioEnvelope/scenarios and should be shown, not hidden
-// behind a bare "uncertain" label. The one case that must NOT be shown as a
-// real range is a numerically degenerate run (e.g. a long-running track set
-// that has drifted outside its physical domain) - the model already flags
-// that itself via each scenario's ghrelin status.
+// behind a bare "uncertain" label. Unlike the retired hormone composite,
+// gastric fullness is a pure function of stomach content volume and never
+// reads hormone state, so - unlike the old satiety range - it needs no
+// ghrelin-artefact degeneracy gate.
 function satietyScenarioRange(physiology) {
   const envelope = physiology && physiology.scenarioEnvelope;
-  const minimum = envelope && Number.isFinite(envelope.minimumScenarioMedian) ? envelope.minimumScenarioMedian : null;
-  const maximum = envelope && Number.isFinite(envelope.maximumScenarioMedian) ? envelope.maximumScenarioMedian : null;
+  const minimum = envelope && Number.isFinite(envelope.minimumScenarioMedianPercent) ? envelope.minimumScenarioMedianPercent : null;
+  const maximum = envelope && Number.isFinite(envelope.maximumScenarioMedianPercent) ? envelope.maximumScenarioMedianPercent : null;
   if (minimum == null || maximum == null) return null;
-  const scenarios = Array.isArray(physiology && physiology.scenarios) ? physiology.scenarios : [];
-  const degenerate = scenarios.some((scenario) => scenario && scenario.ghrelin
-    && scenario.ghrelin.status === 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN');
-  return degenerate ? null : { minimum, maximum };
+  return { minimum, maximum };
 }
 
 function activityColor(value) {
@@ -387,11 +384,11 @@ function circadianHistoryMarkup() {
 
 function satietyHistoryMarkup() {
   return `<div class="soma-reading-history satiety-history-wrap">
-    <div class="soma-ranges" aria-label="Physiological satiety history range">
+    <div class="soma-ranges" aria-label="Gastric fullness history range">
       <button type="button" data-range="1h">1H</button><button type="button" data-range="24h" class="active">24H</button><button type="button" data-range="7d">7D</button>
     </div>
-    <div class="soma-history-axis"><span>10</span><strong>MODELLED PHYSIOLOGICAL SATIETY</strong><span>1</span></div>
-    <svg class="soma-history satiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored physiological satiety range">
+    <div class="soma-history-axis"><span>FULL</span><strong>MODELLED GASTRIC FULLNESS</strong><span>EMPTY</span></div>
+    <svg class="soma-history satiety-history" viewBox="0 0 280 80" preserveAspectRatio="none" role="img" aria-label="Stored gastric fullness range">
       <path class="satiety-history-band"></path><path class="satiety-history-line"></path>
     </svg>
     <p class="soma-history-note">History begins only after the physiological model obtains a clean anchor.</p>
@@ -814,9 +811,10 @@ export class BrainHud {
       entry.innerHTML = `${summary}${detail}`;
       const historyScope = definition.key === 'anxiety' ? 'operational-anxiety'
         : definition.key === 'sleepiness' ? 'sleepiness'
-        : definition.key === 'satiety' ? 'satiety'
+        : definition.key === 'satiety' ? 'fullness'
           : definition.key === 'somaticHarm' ? 'somatic' : 'metric';
-      this._wireReading(entry, historyScope, definition.registryKey || definition.key);
+      const historyKey = definition.key === 'satiety' ? 'fullness' : (definition.registryKey || definition.key);
+      this._wireReading(entry, historyScope, historyKey, definition.registryKey || definition.key);
       if (definition.key === 'sleepiness') this._wireCircadian(entry);
       if (definition.key === 'anxiety') this._wireThreatLearning(entry);
       if (definition.key === 'anxiety') this._wireDefensiveContext(entry);
@@ -901,7 +899,7 @@ export class BrainHud {
     this.measure = { root: this.root.querySelector('.inference-measured'), value: this.root.querySelector('.measure-value') };
   }
 
-  _wireReading(entry, scope, key) {
+  _wireReading(entry, scope, key, registryKey = key) {
     entry.classList.add('soma-reading-entry');
     entry.dataset.readingScope = scope;
     entry.dataset.readingKey = key;
@@ -911,8 +909,8 @@ export class BrainHud {
         this.root.querySelectorAll('details.soma-state-entry, details.soma-region-entry'),
         entry,
       );
-      const registryScope = ['metric', 'operational-anxiety', 'sleepiness', 'satiety', 'somatic'].includes(scope) ? 'soma_variables' : 'brain_regions';
-      const registered = implementationStatus(this.registry, registryScope, key);
+      const registryScope = ['metric', 'operational-anxiety', 'sleepiness', 'satiety', 'fullness', 'somatic'].includes(scope) ? 'soma_variables' : 'brain_regions';
+      const registered = implementationStatus(this.registry, registryScope, registryKey);
       if (scope === 'brain' && !canRenderDynamicActivity(registered.status)) return;
       if (registered.status === IMPLEMENTATION_STATUS.NOT_IMPLEMENTED) return;
       const active = entry.querySelector('.soma-ranges button.active');
@@ -1091,25 +1089,25 @@ export class BrainHud {
         const headline = physiology && physiology.headline;
         const live = physiology && physiology.status === 'LIVE' && headline;
         const estimated = live && headline.status === 'ESTIMATE_AVAILABLE'
-          && Number.isFinite(headline.estimate);
+          && Number.isFinite(headline.normalizedPercent);
         const range = live && !estimated ? satietyScenarioRange(physiology) : null;
-        const low = estimated ? headline.central95.lower : range ? range.minimum : null;
-        const high = estimated ? headline.central95.upper : range ? range.maximum : null;
-        const point = estimated ? headline.estimate : range ? (range.minimum + range.maximum) / 2 : null;
+        const low = estimated ? headline.normalizedPercent : range ? range.minimum : null;
+        const high = estimated ? headline.normalizedPercent : range ? range.maximum : null;
+        const point = estimated ? headline.normalizedPercent : range ? (range.minimum + range.maximum) / 2 : null;
         row.querySelector('.soma-state-value').textContent = !live ? '--'
-          : estimated ? `${point.toFixed(1)} / 10`
-            : range ? `${low.toFixed(1)}-${high.toFixed(1)} / 10`
+          : estimated ? `${Math.round(point)}% - ${String(headline.band || '').replaceAll('_', ' ')}`
+            : range ? `${Math.round(low)}-${Math.round(high)}%`
               : 'ESTIMATE SETTLING';
         row.querySelector('.soma-state-status').textContent = live
           ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
-        row.querySelector('.soma-state-trend').textContent = estimated ? 'typical range'
+        row.querySelector('.soma-state-trend').textContent = estimated ? 'gastric fullness'
           : range ? 'typical range' : live ? 'recalibrating' : 'waiting on a meal';
-        const left = low != null ? Math.max(0, Math.min(100, low * 10)) : 0;
-        const rightEdge = high != null ? Math.max(left, Math.min(100, high * 10)) : 0;
+        const left = low != null ? Math.max(0, Math.min(100, low)) : 0;
+        const rightEdge = high != null ? Math.max(left, Math.min(100, high)) : 0;
         row.querySelector('.soma-state-bar i').style.left = `${left}%`;
         row.querySelector('.soma-state-bar i').style.width = point != null ? `${Math.max(3, rightEdge - left)}%` : '0';
-        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(point != null ? point / 10 : 0);
-        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means greater modelled physiological satiety.`;
+        row.querySelector('.soma-state-bar i').style.backgroundColor = activityColor(point != null ? point / 100 : 0);
+        row.querySelector('summary').title = `${definition.status.displayName}. ${live ? 'LIVE' : 'CALIBRATING'}. Higher means more full after eating (modelled gastric distention).`;
         continue;
       }
       if (definition.key === 'sleepiness') {
@@ -1631,10 +1629,11 @@ export class BrainHud {
     if (overallStatus) overallStatus.textContent = modelLive
       ? 'LIVE' : String(physiology && physiology.status || 'CALIBRATING').replaceAll('_', ' ');
     const intake = physiology && physiology.latestKnownIntake;
+    const bandLabel = (band) => band ? band.replaceAll('_', ' ') : '';
     const facts = {
       score: !modelLive ? '--'
-        : estimated ? `${physiology.headline.estimate.toFixed(1)} / 10`
-          : range ? `${range.minimum.toFixed(1)}-${range.maximum.toFixed(1)} / 10`
+        : estimated ? `${Math.round(physiology.headline.normalizedPercent)}% - ${bandLabel(physiology.headline.band)}`
+          : range ? `${Math.round(range.minimum)}-${Math.round(range.maximum)}%`
             : 'ESTIMATE SETTLING',
       intake: intake ? `${String(intake.mealType || 'meal').toUpperCase()}, ${Number(intake.consumedEnergyKcal).toFixed(0)} kcal, ${String(intake.portionBasis || 'UNKNOWN').replaceAll('_', ' ')}` : 'NONE RECORDED',
     };
@@ -1655,8 +1654,8 @@ export class BrainHud {
       scenarios.textContent = '';
       for (const scenario of (physiology && physiology.scenarios || [])) {
         const item = document.createElement('p');
-        const estimateText = scenario.displaySatiety
-          ? `${scenario.displaySatiety.median.toFixed(2)} / 10 (typical range ${scenario.displaySatiety.central95.lower.toFixed(2)}-${scenario.displaySatiety.central95.upper.toFixed(2)})`
+        const estimateText = scenario.gastricFullness
+          ? `${Math.round(scenario.gastricFullness.normalizedPercent)}% - ${bandLabel(scenario.gastricFullness.band)} (typical range ${Math.round(scenario.gastricFullness.central95Ml.lower)}-${Math.round(scenario.gastricFullness.central95Ml.upper)} mL modelled gastric content)`
           : 'unavailable';
         item.textContent = `${scenario.label}: ${estimateText}.`;
         scenarios.appendChild(item);
@@ -1986,8 +1985,8 @@ export class BrainHud {
           timeline.appendChild(item);
         }
         note.textContent = `${events.length} factual somatic ${events.length === 1 ? 'event' : 'events'} in ${range}. The step line is the stored ACTIVE INJURIES count, not Pain.`;
-      } else if (scope === 'satiety') {
-        const paths = buildCircadianHistoryPaths(data.points, 280, 80, { minimum: 1, maximum: 10 });
+      } else if (scope === 'fullness') {
+        const paths = buildCircadianHistoryPaths(data.points, 280, 80, { minimum: 0, maximum: 100 });
         entry.querySelector('.satiety-history-line').setAttribute('d', paths.estimate);
         entry.querySelector('.satiety-history-band').setAttribute('d', paths.band);
       } else {

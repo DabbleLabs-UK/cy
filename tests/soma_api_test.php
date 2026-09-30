@@ -30,7 +30,8 @@ $state = [
     ],
     'physiologicalSatiety' => [
         'status' => 'LIVE',
-        'headline' => ['status' => 'ESTIMATE_AVAILABLE', 'estimate' => 4.7, 'central95' => ['lower' => 4.3, 'upper' => 5.1]],
+        'headline' => ['status' => 'ESTIMATE_AVAILABLE', 'label' => 'FULLNESS', 'gastricDistentionMl' => 620.4,
+            'central95Ml' => ['lower' => 580.1, 'upper' => 690.7], 'normalizedPercent' => 37.5, 'band' => 'COMFORTABLY_FULL'],
         'subjectiveHunger' => 'NOT_MODELLED',
     ],
     'physiologicalSatietyInspection' => ['rawModelState' => ['ghrelin' => ['median' => -0.468]]],

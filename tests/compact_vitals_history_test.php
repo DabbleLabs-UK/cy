@@ -46,6 +46,9 @@ $rich = [
             'status' => 'ESTIMATE_AVAILABLE',
             'estimate' => 4.7,
             'central95' => ['lower' => 4.3, 'upper' => 5.1],
+            'band' => 'COMFORTABLY_FULL',
+            'normalizedPercent' => 62.5,
+            'normalizedPercentCentral95' => ['lower' => 55.0, 'upper' => 70.0],
         ], 'intakeHistory' => array_fill(0, 5000, str_repeat('meal', 100))],
         'circadianProcessC' => [
             'processCEstimate' => -0.123456,
@@ -69,7 +72,7 @@ $typicalBytes = strlen($json);
 
 compact_expect(array_keys($compact) === [
     'metrics', 'brain', 'anxiety', 'sleepPressure', 'predictedKss',
-    'satiety', 'processC', 'activeInjuryCount',
+    'satiety', 'fullness', 'processC', 'activeInjuryCount',
 ], 'compact history contains an unexpected top-level field');
 compact_expect(array_keys($compact['metrics']) === CAPTIVE_VITALS_HISTORY_METRICS,
     'compact history does not contain exactly the five charted readings');
@@ -82,6 +85,10 @@ compact_expect($compact['processC'] === [
 compact_expect($compact['satiety'] === [
     'status' => 'ESTIMATE_AVAILABLE', 'estimate' => 4.7, 'minimum' => 4.3, 'maximum' => 5.1,
 ], 'satiety status, estimate, or range was not preserved');
+compact_expect($compact['fullness'] === [
+    'status' => 'ESTIMATE_AVAILABLE', 'band' => 'COMFORTABLY_FULL',
+    'percent' => 62.5, 'minimumPercent' => 55.0, 'maximumPercent' => 70.0,
+], 'fullness status, percent, band, or range was not preserved');
 compact_expect($typicalBytes < 1024, "compact history row exceeded 1 KiB: $typicalBytes");
 compact_expect(!str_contains($json, 'memory')
     && !str_contains($json, 'history')
@@ -106,16 +113,20 @@ $calibrating['soma']['physiologicalSatiety']['status'] = 'CALIBRATING';
 compact_expect(captive_compact_vitals_history_payload($calibrating)['satiety'] === [
     'status' => 'CALIBRATING', 'estimate' => null, 'minimum' => null, 'maximum' => null,
 ], 'satiety model status was lost while no estimate was available');
+compact_expect(captive_compact_vitals_history_payload($calibrating)['fullness'] === [
+    'status' => 'CALIBRATING', 'band' => 'UNKNOWN', 'percent' => null, 'minimumPercent' => null, 'maximumPercent' => null,
+], 'fullness model status was lost while no reading was available');
 
 // The common case: meal composition is scenario-bounded (not exactly
 // observed), so headline has no estimate/central95 - but the model is LIVE
 // and has computed a real scenario envelope. History must fall back to it
 // rather than staying permanently null.
 $scenarioBounded = $rich;
-$scenarioBounded['soma']['physiologicalSatiety']['headline'] = ['status' => 'INPUT_UNCERTAIN', 'label' => 'SATIETY - INPUT UNCERTAIN'];
+$scenarioBounded['soma']['physiologicalSatiety']['headline'] = ['status' => 'INPUT_UNCERTAIN', 'label' => 'FULLNESS - INPUT UNCERTAIN'];
 $scenarioBounded['soma']['physiologicalSatiety']['scenarioEnvelope'] = [
     'classification' => 'MEAL-COMPOSITION SCENARIO RANGE',
     'minimumScenarioMedian' => 4.1, 'maximumScenarioMedian' => 6.8,
+    'minimumScenarioMedianPercent' => 40.0, 'maximumScenarioMedianPercent' => 58.0,
 ];
 $scenarioBounded['soma']['physiologicalSatiety']['scenarios'] = [
     ['ghrelin' => ['status' => 'WITHIN_CALIBRATED_PHYSICAL_DOMAIN']],
@@ -125,16 +136,20 @@ $scenarioBounded['soma']['physiologicalSatiety']['scenarios'] = [
 compact_expect(captive_compact_vitals_history_payload($scenarioBounded)['satiety'] === [
     'status' => 'INPUT_UNCERTAIN', 'estimate' => 5.45, 'minimum' => 4.1, 'maximum' => 6.8,
 ], 'scenario-bounded satiety did not fall back to the computed scenario envelope');
+compact_expect(captive_compact_vitals_history_payload($scenarioBounded)['fullness'] === [
+    'status' => 'INPUT_UNCERTAIN', 'band' => 'UNKNOWN', 'percent' => 49.0, 'minimumPercent' => 40.0, 'maximumPercent' => 58.0,
+], 'scenario-bounded fullness did not fall back to the computed scenario envelope');
 
 // A degenerate/saturated model run (e.g. a track set that has run for many
 // days without re-anchoring) can push a hormone outside its physical domain.
 // The model already flags this itself (ghrelinPublicSummary); history must
 // not record that scenario envelope as if it were a trustworthy reading.
 $degenerate = $rich;
-$degenerate['soma']['physiologicalSatiety']['headline'] = ['status' => 'INPUT_UNCERTAIN', 'label' => 'SATIETY - INPUT UNCERTAIN'];
+$degenerate['soma']['physiologicalSatiety']['headline'] = ['status' => 'INPUT_UNCERTAIN', 'label' => 'FULLNESS - INPUT UNCERTAIN'];
 $degenerate['soma']['physiologicalSatiety']['scenarioEnvelope'] = [
     'classification' => 'MEAL-COMPOSITION SCENARIO RANGE',
     'minimumScenarioMedian' => 10, 'maximumScenarioMedian' => 10,
+    'minimumScenarioMedianPercent' => 80.0, 'maximumScenarioMedianPercent' => 80.0,
 ];
 $degenerate['soma']['physiologicalSatiety']['scenarios'] = [
     ['ghrelin' => ['status' => 'MODEL_ARTEFACT_OUTSIDE_PHYSICAL_DOMAIN']],
@@ -144,6 +159,12 @@ $degenerate['soma']['physiologicalSatiety']['scenarios'] = [
 compact_expect(captive_compact_vitals_history_payload($degenerate)['satiety'] === [
     'status' => 'INPUT_UNCERTAIN', 'estimate' => null, 'minimum' => null, 'maximum' => null,
 ], 'a model-artefact scenario envelope was recorded as a trustworthy satiety reading');
+// Unlike the retired hormone composite, gastric fullness never reads hormone
+// state, so a ghrelin artefact must NOT suppress it - it stays a valid,
+// independently-computed physical reading.
+compact_expect(captive_compact_vitals_history_payload($degenerate)['fullness'] === [
+    'status' => 'INPUT_UNCERTAIN', 'band' => 'UNKNOWN', 'percent' => 80.0, 'minimumPercent' => 80.0, 'maximumPercent' => 80.0,
+], 'a hormone-artefact flag incorrectly suppressed an independently-computed fullness reading');
 
 $worstCase = $rich;
 foreach (CAPTIVE_VITALS_HISTORY_METRICS as $name) {
@@ -159,6 +180,9 @@ $worstCase['soma']['physiologicalSatiety']['headline'] = [
     'status' => 'INPUT_INCOMPLETE',
     'estimate' => PHP_FLOAT_MAX,
     'central95' => ['lower' => -PHP_FLOAT_MAX, 'upper' => PHP_FLOAT_MAX],
+    'band' => 'VERY_FULL',
+    'normalizedPercent' => PHP_FLOAT_MAX,
+    'normalizedPercentCentral95' => ['lower' => -PHP_FLOAT_MAX, 'upper' => PHP_FLOAT_MAX],
 ];
 $worstCase['soma']['circadianProcessC'] = [
     'processCEstimate' => PHP_FLOAT_MAX,
