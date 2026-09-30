@@ -111,12 +111,11 @@ assert.equal((source.match(/(?<!function )beginInstrumentalIncident\(/g) || []).
   'exactly the 4 known call sites exist (the definition itself excluded): 2 inside advanceCellSearch (already validated), 2 inside fireSocial/fireOfficer (now gated) - no new bypass was introduced');
 ok('instrumental social/officer openings cannot bypass the same co-presence gate, because they are only reached after it (5)');
 
-// ---- 3/10: the yard path (location-regime.js), the Social substrate, and the cast
-// pickers are byte-for-byte untouched by this fix - proven against the baseline commit
-// this branch was cut from, not by guessing at a regex over the diff. ----
+// ---- 3/10: later world-continuity work may extend location-regime.js, but the
+// yard observation function, Social substrate and cast pickers remain unchanged. ----
 {
   const baseline = '8c5a863';
-  const untouchedFiles = ['social-contact-substrate.js', 'location-regime.js', 'cast.js'];
+  const untouchedFiles = ['social-contact-substrate.js', 'cast.js'];
   let diffOutput = '';
   try {
     diffOutput = execFileSync('git', ['diff', '--stat', baseline, '--', ...untouchedFiles], {
@@ -129,7 +128,20 @@ ok('instrumental social/officer openings cannot bypass the same co-presence gate
   }
   if (diffOutput !== null) {
     assert.equal(diffOutput.trim(), '',
-      `createYardObservation (location-regime.js), the Social substrate, and cast.js's pickers must be byte-for-byte unchanged from baseline; git diff --stat reported: ${diffOutput}`);
+      `the Social substrate and cast pickers must be byte-for-byte unchanged from baseline; git diff --stat reported: ${diffOutput}`);
+    const yardFunction = (text) => {
+      const normalized = text.replace(/\r\n/g, '\n');
+      return normalized.slice(
+        normalized.indexOf('export function createYardObservation('),
+        normalized.indexOf('export function startCellSearchEpisode('),
+      );
+    };
+    const baselineLocation = execFileSync('git', ['show', `${baseline}:runner/location-regime.js`], {
+      cwd: new URL('.', import.meta.url), encoding: 'utf8',
+    });
+    const currentLocation = readFileSync(new URL('./location-regime.js', import.meta.url), 'utf8');
+    assert.equal(yardFunction(currentLocation), yardFunction(baselineLocation),
+      'the actual yard-contact producer remains unchanged while adjacent location lifecycle code evolves');
     ok('the yard contact mechanism, the Social substrate itself, and the cast pickers are provably untouched by this fix (3, 10)');
   } else {
     ok('baseline ref unavailable in this checkout - skipped the git-diff proof for (3, 10); see the direct substrate/reconciliation checks below instead');

@@ -1038,6 +1038,9 @@ function setLocation(locationRegime) {
     CELL: 'CELL',
     EXERCISE_YARD: 'YARD',
     WING_OR_LANDING: 'IN TRANSIT',
+    SHOWER: 'SHOWER',
+    ASSOCIATION: 'ASSOCIATION',
+    PHONE: 'PHONES',
   };
   el.textContent = labels[current.id] || String(current.id).replaceAll('_', ' ');
   el.dataset.location = current.id;
@@ -1064,6 +1067,14 @@ function setMode(mode, cause) {
             ? 'ASLEEP'
             : mode === 'exercise'
               ? 'EXERCISE'
+            : mode === 'shower'
+              ? 'SHOWER'
+            : mode === 'association'
+              ? 'ASSOCIATION'
+            : mode === 'phone'
+              ? 'PHONE'
+            : mode === 'wing_or_landing'
+              ? 'IN TRANSIT'
             : 'JOURNAL';
   el.textContent = label + (cause && (mode === 'letter' || mode === 'warden') ? ' - ' + cause : '');
   el.dataset.mode = mode;
