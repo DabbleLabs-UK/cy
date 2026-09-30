@@ -613,6 +613,18 @@ async function main() {
   let memoryFormationTurns = 0;
   let memoryExpressionBuffer = [];
   const recentWorldHistory = [];
+  if (soma.state && soma.state.physiologicalSatiety
+    && soma.state.physiologicalSatiety.statusReason === 'RUNNER_DOWNTIME_WITH_UNKNOWN_INTAKE') {
+    try {
+      const history = await client.fetchSatietyRecoveryHistory();
+      const recovery = soma.recoverSatietyFromLedger(history.records, {
+        now: Date.now(), historyComplete: history.complete,
+      });
+      console.log(`[cy] satiety restart recovery: ${recovery && recovery.recovered ? 'LIVE' : 'INPUT_INCOMPLETE'}; reason=${recovery && recovery.reason || 'REPLAYED'}; records=${recovery && recovery.replayedRecords || 0}`);
+    } catch (error) {
+      console.warn(`[cy] satiety restart history unavailable; retaining INPUT_INCOMPLETE: ${error.message}`);
+    }
+  }
   try {
     const observedSleepHistory = await client.fetchObservedSleepHistory();
     soma.replayObservedSleepRecords(observedSleepHistory, { now: Date.now() });

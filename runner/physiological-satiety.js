@@ -481,10 +481,8 @@ function markInputIncomplete(state, reason) {
   state.inputUncertainty = [...new Set([...(state.inputUncertainty || []), reason.toLowerCase().replaceAll('_', ' ')])];
 }
 
-export function observePhysiologicalSatietyRecord(state, environmentRecord) {
-  if (!state || !environmentRecord) return { updated: false, reason: 'invalid_record' };
-  const record = ingestionRecordFromEnvironment(environmentRecord);
-  if (!record) return { updated: false, reason: 'not_a_feeding_event' };
+export function observePhysiologicalSatietyIntake(state, record) {
+  if (!state || !record) return { updated: false, reason: 'invalid_record' };
   if (state.intakeHistory.some((item) => item.eventId === record.eventId)) {
     return { updated: false, reason: 'duplicate_event' };
   }
@@ -527,6 +525,14 @@ export function observePhysiologicalSatietyRecord(state, environmentRecord) {
   });
   state.intakeHistory = state.intakeHistory.slice(-128);
   return { updated: true, status: state.status, record: clone(record) };
+}
+
+export function observePhysiologicalSatietyRecord(state, environmentRecord) {
+  if (!state || !environmentRecord) return { updated: false, reason: 'invalid_record' };
+  const record = ingestionRecordFromEnvironment(environmentRecord);
+  return record
+    ? observePhysiologicalSatietyIntake(state, record)
+    : { updated: false, reason: 'not_a_feeding_event' };
 }
 
 function rangeFor(tracks, getter) {

@@ -17,6 +17,7 @@ import { appendFile, readFile, writeFile, rename, mkdir } from 'node:fs/promises
 import { dirname, join } from 'node:path';
 
 import { clampSpeed } from './tempo.js';
+import { ingestionRecordFromEnvironment } from './feeding-homeostasis.js';
 
 const FLUSH_MS = 2000;
 // Poll the inbox on its own fast timer so a posted postcard is delivered within
@@ -272,6 +273,44 @@ export class Client {
     if (!res.ok) throw new Error(`sleep history HTTP ${res.status}`);
     const data = await res.json();
     return Array.isArray(data.records) ? data.records : [];
+  }
+
+  async fetchSatietyRecoveryHistory() {
+    if (this.config.dryRun) return { complete: false, records: [] };
+    const res = await fetch(`${this.config.apiBase}/api/satiety-recovery-history.php`, {
+      method: 'GET',
+      headers: { 'X-Cy-Key': this.config.ingestKey },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`satiety recovery history HTTP ${res.status}`);
+    const data = await res.json();
+    const queued = [];
+    let queueComplete = true;
+    try {
+      const raw = await readFile(this.queuePath, 'utf8');
+      for (const line of raw.split('\n').filter((item) => item.trim())) {
+        let event;
+        try { event = JSON.parse(line); } catch { queueComplete = false; break; }
+        if (event.kind !== 'world_event_record') continue;
+        const payload = event.payload;
+        const intake = payload && payload.feeding && payload.feeding.ledger && payload.feeding.ledger.record;
+        if (intake && intake.schema === 'cy.ingestion-record') queued.push(intake);
+        else if (payload && payload.world_event && payload.world_event.archetype_id === 'meal') {
+          const derived = ingestionRecordFromEnvironment(payload);
+          if (derived) queued.push(derived);
+          else queueComplete = false;
+        }
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') queueComplete = false;
+    }
+    return {
+      complete: data.complete === true && data.ok === true && queueComplete,
+      records: Array.isArray(data.records)
+        ? data.records.map((record) => record && record.schema === 'cy.environment-record'
+          ? ingestionRecordFromEnvironment(record) || record : record).concat(queued)
+        : [],
+    };
   }
 
   async _memoryRequest(action, payload = {}) {
