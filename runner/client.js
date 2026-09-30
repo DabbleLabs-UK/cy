@@ -31,6 +31,7 @@ const INBOX_MS = 3000;
 // tiny and onTempo only fires on an actual change, so a faster poll is cheap.
 const TEMPO_MS = 3000;
 const MAX_BACKOFF_MS = 60000;
+const STOP_FLUSH_PASSES = 3;
 
 // MariaDB DATETIME(3) string, e.g. "2026-08-17 19:30:00.123".
 export function tsNow(d = new Date()) {
@@ -92,7 +93,7 @@ export class Client {
     this._flushTimer = null;
     this._inboxTimer = null;
     this._tempoTimer = null;
-    this._flushing = false;
+    this._flushPromise = null;
     this._memorySourceWork = Promise.resolve();
     this._stopped = false;
   }
@@ -106,8 +107,8 @@ export class Client {
   // Priority flush for latency-sensitive events (the public inference LED). Sends
   // the pending batch NOW instead of waiting up to FLUSH_MS, so a state the viewer
   // is watching for lands within a poll rather than a batch window. If a flush is
-  // already in flight the guard inside flush() makes this a no-op and the event
-  // rides the next scheduled flush - still bounded by FLUSH_MS. Best-effort.
+  // already in flight, callers share that work and the event rides the next
+  // scheduled flush. Best-effort.
   kick() {
     if (this._stopped) return;
     this.flush().catch(() => {});
@@ -128,62 +129,104 @@ export class Client {
     clearInterval(this._flushTimer);
     clearInterval(this._inboxTimer);
     clearInterval(this._tempoTimer);
-    await this.flush().catch(() => {});
+    // An active flush may have left a later batch in memory. Give later batches
+    // a bounded chance to send, then queue any remainder for the next runner.
+    for (let pass = 0; pass < STOP_FLUSH_PASSES; pass += 1) {
+      await this.flush();
+      if (!this.batch.length) break;
+    }
+    if (this.batch.length) await this._queuePendingBatch();
+    if (this.batch.length) throw new Error('events arrived during final shutdown queue write');
     await this.drainMemorySourceQueue().catch(() => {});
   }
 
-  async flush() {
-    if (this._flushing) return;
-    this._flushing = true;
-    try {
-      if (this.batch.length === 0 && this.backoff === 0) return;
+  flush() {
+    if (this._flushPromise) return this._flushPromise;
+    this._flushPromise = this._flushPending().finally(() => {
+      this._flushPromise = null;
+    });
+    return this._flushPromise;
+  }
+
+  async _flushPending() {
+    if (this.batch.length === 0 && this.backoff === 0) return;
+
+    if (this.config.dryRun) {
       const events = this.batch;
       this.batch = [];
-
-      if (this.config.dryRun) {
-        if (events.length) await this._appendEvents(this.eventsPath, events);
-        return;
+      if (events.length) {
+        try {
+          await this._appendEvents(this.eventsPath, events);
+        } catch (err) {
+          this.batch = events.concat(this.batch);
+          throw err;
+        }
       }
+      return;
+    }
 
-      // Live: try to drain the disk queue first, then this batch.
+    // The older disk queue owns delivery priority. Do not remove the new batch
+    // from memory until the drain has succeeded. If it fails, append the new
+    // batch after the old queue so a later retry preserves event order.
+    try {
       await this._drainQueue();
-      if (events.length) await this._send(events);
     } catch (err) {
-      // handled inside _send/_drainQueue by re-queuing; nothing to do
-    } finally {
-      this._flushing = false;
+      this.lastError = String(err && err.message ? err.message : err);
+      await this._queuePendingBatch();
+      return;
+    }
+
+    const events = this.batch;
+    this.batch = [];
+    if (!events.length) return;
+    try {
+      await this._send(events);
+    } catch (err) {
+      this.lastError = String(err && err.message ? err.message : err);
+      await this._queueEvents(events);
+      this.backoff = Math.min(MAX_BACKOFF_MS, this.backoff ? this.backoff * 2 : 2000);
+    }
+  }
+
+  async _queuePendingBatch() {
+    const events = this.batch;
+    this.batch = [];
+    if (events.length) await this._queueEvents(events);
+  }
+
+  async _queueEvents(events) {
+    try {
+      await this._appendEvents(this.queuePath, events);
+    } catch (err) {
+      // Disk persistence failed too: the events are still owned in memory and
+      // shutdown must report failure rather than pretending they were saved.
+      this.batch = events.concat(this.batch);
+      throw err;
     }
   }
 
   async _send(events) {
-    try {
-      const res = await fetch(`${this.config.apiBase}/api/ingest.php`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Cy-Key': this.config.ingestKey,
-        },
-        body: JSON.stringify({ events }),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!res.ok) throw new Error(`ingest HTTP ${res.status}`);
-      this.backoff = 0;
-      this.lastError = null;
-    } catch (err) {
-      this.lastError = String(err && err.message ? err.message : err);
-      // Persist to disk queue and back off. Never lose the events.
-      await this._appendEvents(this.queuePath, events);
-      this.backoff = Math.min(MAX_BACKOFF_MS, this.backoff ? this.backoff * 2 : 2000);
-      throw err;
-    }
+    const res = await fetch(`${this.config.apiBase}/api/ingest.php`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cy-Key': this.config.ingestKey,
+      },
+      body: JSON.stringify({ events }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`ingest HTTP ${res.status}`);
+    this.backoff = 0;
+    this.lastError = null;
   }
 
   async _drainQueue() {
     let raw;
     try {
       raw = await readFile(this.queuePath, 'utf8');
-    } catch {
-      return; // no queue file
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return; // no queue file
+      throw err;
     }
     const lines = raw.split('\n').filter((l) => l.trim());
     if (!lines.length) return;
