@@ -576,20 +576,26 @@ uses the full energy; NONE, REFUSED and UNAVAILABLE add zero; an exact partial
 portion scales energy exactly; categorical partial and UNKNOWN intake do not
 become an invented amount and make the model input incomplete.
 
-The public SATIETY/FULLNESS detail contains a compact gastric-fullness range
-(distention in mL, a 0-100% normalized reading against a derived reference-full
-envelope, and a qualitative band), latest intake and its nutrition basis.
-Feeding history and model limitations remain behind secondary disclosures.
-Private structured event IDs, the complete ledger and the hormone-composite
-score are omitted from the public snapshot. The owner-only inspector exposes
-the full ledger, source IDs, model compartments, hormones (including the
-composite satiety score), parameter provenance and uncertainty.
+The public SATIETY/FULLNESS detail contains a compact gastric-fullness range:
+distention in mL (the primary physical quantity) and a neutral descriptive
+band (EMPTY/FILLING/FULL/VERY_FULL - no comfort judgement is modelled), plus
+a secondary 0-100% normalized reading against a derived reference-full
+envelope used only to draw a display bar, latest intake and its nutrition
+basis. Feeding history and model limitations remain behind secondary
+disclosures. Private structured event IDs, the complete ledger and the
+hormone-composite score are omitted from the public snapshot. The owner-only
+inspector exposes the full ledger, source IDs, model compartments, hormones
+(including the composite satiety score, computed with the published PYY*GLP1
+product term as printed - see sourceAudit.satietyPyyGlp1Interaction for the
+unresolved product-vs-additive ambiguity), parameter provenance and
+uncertainty.
 
 Soma can read the factual `feeding` snapshot and the separate gastric-fullness
 range. Once LIVE, the latter enters the grounded prose projection as a MODEL
-ESTIMATE with its percent/band and input uncertainty. The assembler does not
-say that Cy is hungry. Fullness does not create an appraisal, select attention
-or action, activate a brain analogy, or alter the legacy Hunger number.
+ESTIMATE with its mL/band (plus the secondary display percent) and input
+uncertainty. The assembler does not say that Cy is hungry. Fullness does not
+create an appraisal, select attention or action, activate a brain analogy, or
+alter the legacy Hunger number.
 
 ### Published GI and gut-hormone model
 

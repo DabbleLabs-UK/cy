@@ -29,12 +29,14 @@ const event = (id, mealType, intakeOutcome, consumed, portionCategory, portionFr
     } } },
   }));
 
-// A. The gastric/hormone recurrence is unchanged; the composite's PYY/GLP1
-// term is now additive (Table 1 supports independent effects, not a product -
-// see sourceAudit.satietyPyyGlp1Interaction). This is diagnostic-only: it
-// never touches the promoted gastric-fullness signal.
+// A. The gastric/hormone recurrence is unchanged; the composite's PYY*GLP1
+// term is preserved as printed (product form) - Table 1's coefficient
+// definitions leave the product-vs-additive question an unresolved source
+// inconsistency (see sourceAudit.satietyPyyGlp1Interaction), not something
+// to silently "fix". This is diagnostic-only: it never touches the promoted
+// gastric-fullness signal.
 assert.equal(satietyFromState({ gastricDistentionMl: 400, cckPM: 2, pyyPM: 3, glp1PM: 4, ghrelinPM: 100 }),
-  0.0025 * 400 + 1.2 * 2 + 0.08 * 3 + 0.2 * 4 + 0.02 * 10);
+  0.0025 * 400 + 1.2 * 2 + 0.08 * 3 * 0.2 * 4 + 0.02 * 10);
 const recurrence = createModelTrack({ relativeFatFraction: 0.1, fatDensityGPerMl: 0.7,
   carbohydrateDensityGPerMl: 0.117, mealEatingRateKcalPerMin: 28.7, snackEatingRateKcalPerMin: 3.3 });
 Object.assign(recurrence.stomach, { fatMl: 4, carbohydrateMl: 5 });
@@ -98,7 +100,7 @@ assert.ok(breakfastSnapshot.scenarios.every((item) => item.publishedInputDistrib
 assert.ok(breakfastSnapshot.scenarios.every((item) => Object.hasOwn(item, 'displaySatiety') === false));
 assert.ok(breakfastSnapshot.scenarios.every((item) => item.gastricFullness.central95Ml.lower <= item.gastricFullness.medianMl
   && item.gastricFullness.medianMl <= item.gastricFullness.central95Ml.upper));
-assert.ok(breakfastSnapshot.scenarios.every((item) => ['EMPTY', 'SETTLING', 'COMFORTABLY_FULL', 'VERY_FULL'].includes(item.gastricFullness.band)));
+assert.ok(breakfastSnapshot.scenarios.every((item) => ['EMPTY', 'FILLING', 'FULL', 'VERY_FULL'].includes(item.gastricFullness.band)));
 assert.equal(Object.hasOwn(breakfastSnapshot.scenarioEnvelope, 'midpoint'), false);
 assert.ok(Object.hasOwn(breakfastSnapshot.scenarioEnvelope, 'minimumScenarioMedianMl'));
 const admin = physiologicalSatietyInspection(breakfast);
@@ -123,7 +125,7 @@ assert.equal(exactSnapshot.headline.label, 'FULLNESS');
 assert.ok(Number.isFinite(exactSnapshot.headline.gastricDistentionMl));
 assert.ok(exactSnapshot.headline.gastricDistentionMl >= GASTRIC_FULLNESS_ENVELOPE.baselineMl);
 assert.ok(Number.isFinite(exactSnapshot.headline.normalizedPercent));
-assert.ok(['EMPTY', 'SETTLING', 'COMFORTABLY_FULL', 'VERY_FULL'].includes(exactSnapshot.headline.band));
+assert.ok(['EMPTY', 'FILLING', 'FULL', 'VERY_FULL'].includes(exactSnapshot.headline.band));
 assert.equal(Object.hasOwn(exactSnapshot.headline, 'estimate'), false);
 
 // H/I/J. Supper snack is a real unresolved-until-observed event and the food gap is below 14h.
@@ -197,9 +199,9 @@ assert.equal(GASTRIC_FULLNESS_ENVELOPE.baselineMl, 296);
 assert.ok(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl > 500);
 assert.equal(gastricDistention(createModelTrack({})), 296);
 assert.equal(gastricFullnessBand(296), 'EMPTY');
-assert.equal(gastricFullnessBand(297), 'SETTLING');
-assert.equal(gastricFullnessBand(499.99), 'SETTLING');
-assert.equal(gastricFullnessBand(500), 'COMFORTABLY_FULL');
+assert.equal(gastricFullnessBand(297), 'FILLING');
+assert.equal(gastricFullnessBand(499.99), 'FILLING');
+assert.equal(gastricFullnessBand(500), 'FULL');
 assert.equal(gastricFullnessBand(GASTRIC_FULLNESS_ENVELOPE.referenceFullMl), 'VERY_FULL');
 assert.equal(gastricFullnessNormalized(296).percent, 0);
 assert.equal(gastricFullnessNormalized(296).capped, false);
