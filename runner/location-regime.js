@@ -13,12 +13,18 @@ export const LOCATIONS = Object.freeze({
   CELL: 'CELL',
   EXERCISE_YARD: 'EXERCISE_YARD',
   WING_OR_LANDING: 'WING_OR_LANDING',
+  SHOWER: 'SHOWER',
+  ASSOCIATION: 'ASSOCIATION',
+  PHONE: 'PHONE',
 });
 
 export const LOCATION_CONTEXT_IDS = Object.freeze({
   CELL: 'cell',
   EXERCISE_YARD: 'exercise_yard',
   WING_OR_LANDING: 'wing',
+  SHOWER: 'shower',
+  ASSOCIATION: 'association',
+  PHONE: 'phone',
 });
 
 export { EXERCISE_REGIME };
@@ -37,6 +43,21 @@ export const SEARCH_STAGES = Object.freeze([
 export const SEARCH_STAGE_MIN_MS = 15 * 1000;
 export const MAX_OBSERVATION_GAPS = 20;
 export const YARD_OBSERVATION_INTERVAL_MS = 15 * 60 * 1000;
+export const ROUTINE_DURATIONS_MS = Object.freeze({
+  shower: 15 * 60 * 1000,
+  association: 30 * 60 * 1000,
+  phone: 10 * 60 * 1000,
+});
+const ROUTINE_LOCATIONS = Object.freeze({
+  shower: LOCATIONS.SHOWER,
+  association: LOCATIONS.ASSOCIATION,
+  phone: LOCATIONS.PHONE,
+});
+const ROUTINE_ARRIVALS = Object.freeze({
+  shower: 'Cy was taken for his shower turn',
+  association: 'Cy was let out for association',
+  phone: 'Cy reached the phones',
+});
 
 // The stable defensive-context identity a lockdown always opens and later
 // resolves under, regardless of which episode instance produced it.
@@ -127,6 +148,8 @@ function initialLocation(nowMs, date, minutes, asleep) {
       last_observation_at: new Date(nowMs).toISOString(),
     } : null,
     exerciseEpisodes: [],
+    activeRoutineEpisode: null,
+    routineEpisodes: [],
     searchEpisode: null,
     lockdownEpisode: null,
     observationGaps: [],
@@ -157,6 +180,25 @@ export function reconcileLocationRegimeState(saved, {
     ? out.observationGaps.slice(-MAX_OBSERVATION_GAPS) : [];
   out.exerciseEpisodes = Array.isArray(out.exerciseEpisodes)
     ? out.exerciseEpisodes.slice(-14) : [];
+  out.routineEpisodes = Array.isArray(out.routineEpisodes)
+    ? out.routineEpisodes.slice(-42) : [];
+  if (!out.activeRoutineEpisode
+    || !ROUTINE_LOCATIONS[out.activeRoutineEpisode.routine]
+    || out.activeRoutineEpisode.status !== 'ACTIVE'
+    || !out.activeRoutineEpisode.scheduled_end_at
+    || !out.activeRoutineEpisode.id) out.activeRoutineEpisode = null;
+  if (out.activeRoutineEpisode
+    && locationId !== ROUTINE_LOCATIONS[out.activeRoutineEpisode.routine]) {
+    const orphan = out.activeRoutineEpisode;
+    const stored = out.routineEpisodes.find((episode) => episode.id === orphan.id);
+    if (stored) Object.assign(stored, { status: 'INTERRUPTED', ended_at: new Date(nowMs).toISOString() });
+    out.observationGaps.push({
+      started_at: orphan.started_at, detected_at: new Date(nowMs).toISOString(),
+      reason: 'routine episode disagreed with authoritative location', resolution: locationId,
+    });
+    out.observationGaps = out.observationGaps.slice(-MAX_OBSERVATION_GAPS);
+    out.activeRoutineEpisode = null;
+  }
   if (out.searchEpisode && (!out.searchEpisode.id || !VALID_STAGES.has(out.searchEpisode.stage))) {
     out.searchEpisode = null;
   }
@@ -222,7 +264,41 @@ export function reconcileRegimeLocation(stateValue, {
   const state = reconcileLocationRegimeState(stateValue, { nowMs, date, minutes, asleep });
   const events = [];
   const at = new Date(nowMs).toISOString();
-  const shouldBeYard = !asleep && isExerciseMinutes(minutes);
+  const lockdownActive = state.lockdownEpisode?.status === 'ACTIVE';
+  const routine = state.activeRoutineEpisode;
+  if (routine && state.current.id === ROUTINE_LOCATIONS[routine.routine]) {
+    if (nowMs < Date.parse(routine.scheduled_end_at) && !lockdownActive) {
+      state.current.regime_activity = `ROUTINE_${routine.routine.toUpperCase()}`;
+      return { state, events, nextTransition: nextRegimeTransition(minutes) };
+    }
+    const returned = movementEvent({
+      episodeId: routine.id, from: state.current.id, to: LOCATIONS.CELL,
+      summary: 'Cy was returned to his cell after the routine',
+      provenance: lockdownActive ? 'LOCKDOWN_INTERRUPTED_ROUTINE' : 'FICTIONAL_REGIME_SCHEDULE',
+      occurredAt: at,
+    });
+    events.push(returned);
+    setLocation(state, LOCATIONS.CELL, returned, returned.world.movement.transition_provenance);
+    routine.status = 'COMPLETE';
+    routine.ended_at = at;
+    const stored = state.routineEpisodes.find((item) => item.id === routine.id);
+    if (stored) Object.assign(stored, clone(routine));
+    state.activeRoutineEpisode = null;
+  } else if (Object.values(ROUTINE_LOCATIONS).includes(state.current.id)) {
+    state.observationGaps.push({
+      started_at: state.current.entered_at, detected_at: at,
+      reason: 'routine location had no matching active episode', resolution: LOCATIONS.CELL,
+    });
+    state.observationGaps = state.observationGaps.slice(-MAX_OBSERVATION_GAPS);
+    const recovered = movementEvent({
+      episodeId: `routine-recovery:${date}`, from: state.current.id, to: LOCATIONS.CELL,
+      summary: 'Cy was returned to his cell after the recorded routine',
+      provenance: 'DETERMINISTIC_RESTART_RECOVERY', occurredAt: at,
+    });
+    events.push(recovered);
+    setLocation(state, LOCATIONS.CELL, recovered, 'DETERMINISTIC_RESTART_RECOVERY');
+  }
+  const shouldBeYard = !asleep && !lockdownActive && isExerciseMinutes(minutes);
   const isYard = state.current.id === LOCATIONS.EXERCISE_YARD;
   const isTransit = state.current.id === LOCATIONS.WING_OR_LANDING;
   if (isTransit) {
@@ -294,9 +370,61 @@ export function reconcileRegimeLocation(stateValue, {
     state.activeExerciseEpisode = null;
     state.activeRegimeEpisode = null;
   } else {
-    state.current.regime_activity = currentRegimeActivity(minutes, { asleep });
+    state.current.regime_activity = lockdownActive ? 'LOCKDOWN' : currentRegimeActivity(minutes, { asleep });
   }
+  if (lockdownActive) state.current.regime_activity = 'LOCKDOWN';
   return { state, events, nextTransition: nextRegimeTransition(minutes) };
+}
+
+export function canStartScheduledRoutine(state, date, routine) {
+  if (!ROUTINE_LOCATIONS[routine]) return false;
+  if (state?.current?.id !== LOCATIONS.CELL) return false;
+  if (state.lockdownEpisode?.status === 'ACTIVE' || state.searchEpisode?.status === 'ACTIVE') return false;
+  if (state.activeRoutineEpisode?.status === 'ACTIVE') return false;
+  return !(state.routineEpisodes || []).some((episode) => episode.id === `routine:${date}:${routine}`);
+}
+
+export function startScheduledRoutineEpisode(stateValue, {
+  nowMs = Date.now(), date, routine, outcome,
+} = {}) {
+  const state = clone(stateValue);
+  if (!canStartScheduledRoutine(state, date, routine)
+    || !String(outcome || '').startsWith(`${routine}_`)) {
+    return { state, started: false, event: null };
+  }
+  const at = new Date(nowMs).toISOString();
+  const id = `routine:${date}:${routine}`;
+  // A missed turn is a real outcome, but cannot assert that Cy physically
+  // attended a shower or reached a phone that he never got to use.
+  if (outcome === 'shower_missed' || outcome === 'phone_queue_missed') {
+    state.routineEpisodes = [...(state.routineEpisodes || []), {
+      id, date, routine, outcome, status: 'COMPLETE', started_at: null,
+      scheduled_end_at: null, ended_at: at, event_ids: [],
+    }].slice(-42);
+    return { state, started: false, event: null };
+  }
+  const event = movementEvent({
+    episodeId: id, from: LOCATIONS.CELL, to: ROUTINE_LOCATIONS[routine],
+    summary: ROUTINE_ARRIVALS[routine],
+    provenance: 'FICTIONAL_REGIME_SCHEDULE', occurredAt: at,
+  });
+  const episode = {
+    id, date, routine, outcome, status: 'ACTIVE', started_at: at,
+    scheduled_end_at: new Date(nowMs + ROUTINE_DURATIONS_MS[routine]).toISOString(),
+    ended_at: null, event_ids: [],
+  };
+  state.activeRoutineEpisode = episode;
+  state.routineEpisodes = [...(state.routineEpisodes || []), clone(episode)].slice(-42);
+  setLocation(state, ROUTINE_LOCATIONS[routine], event, 'FICTIONAL_REGIME_SCHEDULE');
+  state.current.regime_activity = `ROUTINE_${routine.toUpperCase()}`;
+  return { state, started: true, event };
+}
+
+export function awgLocationEligible(locationState) {
+  if (locationState?.lockdownEpisode?.status === 'ACTIVE') return false;
+  if (locationState?.searchEpisode?.status === 'ACTIVE') return false;
+  return [LOCATIONS.CELL, LOCATIONS.EXERCISE_YARD, LOCATIONS.WING_OR_LANDING]
+    .includes(locationState?.current?.id);
 }
 
 export function availableExpressiveActions(locationState, cadence = {}, { silenceAvailable = true } = {}) {
@@ -312,9 +440,8 @@ export function availableExpressiveActions(locationState, cadence = {}, { silenc
 export function eventAllowedAtLocation(eventType, locationState) {
   const type = clean(eventType).toLowerCase();
   const location = locationState && locationState.current && locationState.current.id;
-  if (location === LOCATIONS.EXERCISE_YARD) {
-    if (['journal', 'draw', 'drawing', 'sleep', 'injury_cell', 'cell_search_present'].includes(type)) return false;
-  }
+  if (location !== LOCATIONS.CELL
+    && ['journal', 'draw', 'drawing', 'sleep', 'injury_cell', 'cell_search_present'].includes(type)) return false;
   if (location === LOCATIONS.CELL && ['yard_interaction', 'yard_quiet'].includes(type)) return false;
   return true;
 }
@@ -464,7 +591,11 @@ export function advanceCellSearchEpisode(stateValue, {
     summary = 'The search of Cy\'s cell began';
   } else if (episode.stage === 'SEARCH_ONGOING') {
     next = 'PROPERTY_RESULT';
-    const object = (Array.isArray(objects) ? objects : []).find((item) => item && item.id === episode.object_id);
+    const object = (Array.isArray(objects) ? objects : []).find((item) => item
+      && item.id === episode.object_id
+      && item.location === 'cell'
+      && (item.status === 'ACTIVE'
+        || (item.type === 'message' && item.status === 'DELIVERED' && isCurrentMessageObject(item))));
     episode.property_result = object ? 'EXISTING_OBJECT_INSPECTED' : 'NOTHING_FOUND';
     summary = object ? 'Officers examined an existing item in the cell' : 'The search found nothing';
     actionOpportunity = object && episode.cy_present_at_start ? 'HAND_OVER_OR_WITHHOLD' : null;
@@ -593,17 +724,29 @@ export function advanceLockdownEpisode(stateValue, { nowMs = Date.now() } = {}) 
   return { state, released: true, event: lockdownStageEvent(episode, { stage: 'RELEASED', nowMs }) };
 }
 
-export function registerEpisodeEvent(stateValue, eventId, { locationSource = false } = {}) {
+export function registerEpisodeEvent(stateValue, eventId, {
+  locationSource = false, routineEpisodeId = null,
+} = {}) {
   const state = clone(stateValue);
   const id = clean(eventId);
   if (!id) return state;
   if (state.activeExerciseEpisode) state.activeExerciseEpisode.event_ids.push(id);
   if (state.activeRegimeEpisode) state.activeRegimeEpisode.event_ids.push(id);
+  if (state.activeRoutineEpisode && !state.activeRoutineEpisode.event_ids.includes(id)) {
+    state.activeRoutineEpisode.event_ids.push(id);
+  }
   if (state.searchEpisode) state.searchEpisode.linked_event_ids.push(id);
   if (state.lockdownEpisode) state.lockdownEpisode.linked_event_ids.push(id);
   const stored = state.activeExerciseEpisode
     && state.exerciseEpisodes.find((item) => item.id === state.activeExerciseEpisode.id);
   if (stored) Object.assign(stored, clone(state.activeExerciseEpisode));
+  const storedRoutine = state.routineEpisodes?.find((item) =>
+    item.id === (routineEpisodeId || state.activeRoutineEpisode?.id));
+  if (storedRoutine && state.activeRoutineEpisode?.id === storedRoutine.id) {
+    Object.assign(storedRoutine, clone(state.activeRoutineEpisode));
+  } else if (storedRoutine && !storedRoutine.event_ids.includes(id)) {
+    storedRoutine.event_ids.push(id);
+  }
   if (locationSource) state.current.source_event_id = id;
   return state;
 }

@@ -168,7 +168,9 @@ import {
   YARD_OBSERVATION_INTERVAL_MS,
   advanceCellSearchEpisode,
   advanceLockdownEpisode,
+  awgLocationEligible,
   availableExpressiveActions,
+  canStartScheduledRoutine,
   createYardObservation,
   eventAllowedAtLocation,
   locationContextId,
@@ -179,6 +181,7 @@ import {
   registerEpisodeEvent,
   startCellSearchEpisode,
   startLockdownEpisode,
+  startScheduledRoutineEpisode,
 } from './location-regime.js';
 import {
   MEMORY_EXPRESSION_BATCH_LIMIT,
@@ -442,9 +445,9 @@ const isAsleep = isSleepWindow;
 const REGIME = [
   { mins: 6 * 60 + 30, phase: 'lights_on', label: 'lights on. the strip light. awake whether you want to be or not.' },
   { mins: 7 * 60 + 30, phase: 'unlock_slop', label: 'unlock and slop. doors off, breakfast such as it is.' },
-  { mins: 8 * 60 + 30, phase: 'work_assoc', label: 'work or association. out of the cell, among them.' },
+  { mins: 8 * 60 + 30, phase: 'work_assoc', label: 'work or association may be available, depending on the actual movement record.' },
   { mins: 11 * 60 + 45, phase: 'lunch_bangup', label: 'lunch and bang-up. fed and locked back in.' },
-  { mins: EXERCISE_REGIME.startMinutes, phase: 'exercise_yard', label: 'exercise period. on the yard.' },
+  { mins: EXERCISE_REGIME.startMinutes, phase: 'exercise_yard', label: 'exercise is scheduled; the actual location record says whether it happened.' },
   { mins: EXERCISE_REGIME.endMinutes, phase: 'return_to_cell', label: 'exercise ended. returned to the cell.' },
   { mins: 16 * 60 + 45, phase: 'tea', label: 'tea. the last hot thing of the day.' },
   { mins: 17 * 60 + 30, phase: 'bangup_night', label: 'banged up for the night. that is you til morning.' },
@@ -1095,7 +1098,13 @@ async function main() {
       cyObserved: event.cyObserved !== false,
       dreamEligible: event.cyObserved !== false,
     });
-    vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, record.world_event.id, { locationSource });
+    vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, record.world_event.id, {
+      locationSource,
+      routineEpisodeId: event.world?.movement?.episode_id || null,
+    });
+    // A world episode transition must survive a runner restart at its actual
+    // stage, not wait for the ordinary checkpoint interval.
+    urgentVitalsDirty = true;
     return record;
   }
 
@@ -1199,6 +1208,7 @@ async function main() {
   }
 
   function beginLockdown(now) {
+    if (vitals.locationRegime.current.id !== LOCATIONS.CELL) return false;
     const started = startLockdownEpisode(vitals.locationRegime, {
       nowMs: now,
       makeId: (prefix) => `${prefix}-${randomUUID()}`,
@@ -4004,8 +4014,10 @@ async function main() {
   }
 
   function fireScheduled(slot, now) {
+    const clock = londonParts(new Date(now));
+    if (slot.kind === 'routine' && !canStartScheduledRoutine(vitals.locationRegime, clock.date, slot.routine)) return;
     const mealId = slot.kind === 'meal'
-      ? `${londonParts(new Date(now)).date}:${slot.meal}`
+      ? `${clock.date}:${slot.meal}`
       : null;
     let expectedRecord = null;
     if (mealId) {
@@ -4018,6 +4030,16 @@ async function main() {
       });
     }
     const event = materialiseScheduledEvent(slot, Math.random, { mealId });
+    if (slot.kind === 'routine') {
+      const started = startScheduledRoutineEpisode(vitals.locationRegime, {
+        nowMs: now, date: clock.date, routine: slot.routine, outcome: event.name,
+      });
+      vitals.locationRegime = started.state;
+      if (started.started) {
+        const movement = captureEpisodeEvent(started.event, { locationSource: true });
+        publishEpisodeEvent(started.event, movement);
+      }
+    }
     if (expectedRecord) {
       event.world.context = event.world.context || {};
       event.world.context.previous_event_ids = [expectedRecord.world_event.id];
@@ -4028,6 +4050,12 @@ async function main() {
       world: event.world,
       observation: event.observation,
     });
+    if (slot.kind === 'routine') {
+      vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, structured.world_event.id, {
+        routineEpisodeId: `routine:${clock.date}:${slot.routine}`,
+      });
+      urgentVitalsDirty = true;
+    }
     const provisional = event.provisional || {};
     recordIncident('environment', {
       text: event.text,
@@ -4082,7 +4110,9 @@ async function main() {
     prevMins = mins;
 
     const phase = currentRegime(mins).phase;
-    if (vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD) return;
+    // These random ambient/cell producers have no grounded off-cell contract.
+    // Routine visits and yard time already have their own structured events.
+    if (vitals.locationRegime.current.id !== LOCATIONS.CELL) return;
     // wing noise: sparse texture, rate-limited (awake and asleep both routed here)
     maybeWingNoise(now, asleep, phase, mins);
     if (!asleep && vitals.locationRegime.current.id === LOCATIONS.CELL
@@ -4481,6 +4511,11 @@ async function main() {
 
   async function runAwgDuringIdle(idleBudgetMs, awgReservation = null) {
     const nowMs = Date.now();
+    // Brief routine movements, active searches and lockdowns defer background
+    // world generation; they do not consume its cadence or reservation.
+    if (!awgLocationEligible(vitals.locationRegime)) {
+      return { status: 'SKIPPED', reason: 'LOCATION_REGIME_UNAVAILABLE' };
+    }
     const memoryPriorityPending = autobiographicalMemory
       ? autobiographicalMemory.hasPriorityWork() : false;
     const eligibility = shouldRunAwg(vitals.worldSimulation, {
@@ -4911,9 +4946,11 @@ async function main() {
         continue;
       }
       if (vitals.locationRegime.current.id !== LOCATIONS.CELL) {
-        if (currentMode !== 'exercise') {
-          emit({ kind: 'mode', payload: { from: currentMode, to: 'exercise' } });
-          currentMode = 'exercise';
+        const awayMode = vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD
+          ? 'exercise' : vitals.locationRegime.current.id.toLowerCase();
+        if (currentMode !== awayMode) {
+          emit({ kind: 'mode', payload: { from: currentMode, to: awayMode } });
+          currentMode = awayMode;
           client.kick();
         }
         // Exercise polling is intentionally short and interruptible. It is not
@@ -4956,8 +4993,8 @@ async function main() {
         emit({ kind: 'mode', payload: { from: 'paused', to: 'journal' } });
         client.kick(); // priority flush: the admin control is waiting on this
       }
-      if (currentMode === 'exercise') {
-        emit({ kind: 'mode', payload: { from: 'exercise', to: 'journal' } });
+      if (['exercise', 'shower', 'association', 'phone', 'wing_or_landing'].includes(currentMode)) {
+        emit({ kind: 'mode', payload: { from: currentMode, to: 'journal' } });
         client.kick();
       }
       const mode = 'journal';

@@ -7,16 +7,21 @@ import {
   LOCKDOWN_CONTEXT_ID,
   LOCKDOWN_MAX_DURATION_MS,
   LOCKDOWN_MIN_DURATION_MS,
+  ROUTINE_DURATIONS_MS,
   advanceCellSearchEpisode,
   advanceLockdownEpisode,
+  awgLocationEligible,
   availableExpressiveActions,
+  canStartScheduledRoutine,
   createYardObservation,
   eventAllowedAtLocation,
   nextRegimeTransition,
   reconcileLocationRegimeState,
   reconcileRegimeLocation,
+  registerEpisodeEvent,
   startCellSearchEpisode,
   startLockdownEpisode,
+  startScheduledRoutineEpisode,
   markSearchPropertyAction,
 } from './location-regime.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
@@ -60,6 +65,117 @@ test('restart in transit resolves deterministically and records an observation g
   assert.equal(recovered.state.current.id, LOCATIONS.CELL);
   assert.equal(recovered.events[0].world.movement.transition_provenance, 'DETERMINISTIC_RESTART_RECOVERY');
   assert.equal(recovered.state.observationGaps.length, 1);
+});
+
+test('scheduled shower, association and phone have one physical location and one dated episode each', () => {
+  for (const routine of ['shower', 'association', 'phone']) {
+    const outcome = routine === 'shower' ? 'shower_cold'
+      : routine === 'association' ? 'association_shared_joke' : 'phone_no_answer';
+    const began = startScheduledRoutineEpisode(cell(), { nowMs: AT, date: DAY, routine, outcome });
+    assert.equal(began.started, true);
+    assert.equal(began.state.current.id, LOCATIONS[routine.toUpperCase()]);
+    assert.equal(began.event.world.movement.from_location, LOCATIONS.CELL);
+    assert.equal(availableExpressiveActions(began.state, { journal: true, draw: true }).length, 0);
+    assert.equal(eventAllowedAtLocation('journal', began.state), false);
+    assert.equal(awgLocationEligible(began.state), false);
+    const saved = JSON.parse(JSON.stringify(began.state));
+    const restored = reconcileLocationRegimeState(saved, { nowMs: AT + 1000, date: DAY, minutes: 10 * 60 });
+    const midway = reconcileRegimeLocation(restored, {
+      nowMs: AT + ROUTINE_DURATIONS_MS[routine] - 1000, date: DAY, minutes: 10 * 60,
+    });
+    assert.equal(midway.state.current.id, LOCATIONS[routine.toUpperCase()]);
+    assert.equal(midway.events.length, 0);
+    const ended = reconcileRegimeLocation(midway.state, {
+      nowMs: AT + ROUTINE_DURATIONS_MS[routine], date: DAY, minutes: 10 * 60,
+    });
+    assert.equal(ended.state.current.id, LOCATIONS.CELL);
+    assert.deepEqual(ended.events.map((event) => event.world.movement.to_location), [LOCATIONS.CELL]);
+    assert.equal(ended.state.routineEpisodes[0].status, 'COMPLETE');
+    assert.equal(canStartScheduledRoutine(ended.state, DAY, routine), false);
+    const again = reconcileRegimeLocation(ended.state, {
+      nowMs: AT + ROUTINE_DURATIONS_MS[routine] + 1000, date: DAY, minutes: 10 * 60,
+    });
+    assert.equal(again.events.length, 0, 'a restarted or repeated tick cannot duplicate the return');
+  }
+});
+
+test('a mismatched restored routine cannot block future movement forever', () => {
+  const started = startScheduledRoutineEpisode(cell(), {
+    nowMs: AT, date: DAY, routine: 'shower', outcome: 'shower_warm',
+  }).state;
+  started.current.id = LOCATIONS.CELL;
+  const restored = reconcileLocationRegimeState(JSON.parse(JSON.stringify(started)), {
+    nowMs: AT + 1000, date: DAY, minutes: 12 * 60,
+  });
+  assert.equal(restored.activeRoutineEpisode, null);
+  assert.equal(restored.routineEpisodes[0].status, 'INTERRUPTED');
+  assert.equal(restored.observationGaps.length, 1);
+  assert.equal(canStartScheduledRoutine(restored, DAY, 'association'), true);
+});
+
+test('missed turns are recorded once without claiming physical attendance', () => {
+  for (const [routine, outcome] of [['shower', 'shower_missed'], ['phone', 'phone_queue_missed']]) {
+    const missed = startScheduledRoutineEpisode(cell(), { nowMs: AT, date: DAY, routine, outcome });
+    assert.equal(missed.started, false);
+    assert.equal(missed.state.current.id, LOCATIONS.CELL);
+    assert.equal(missed.state.routineEpisodes[0].status, 'COMPLETE');
+    assert.equal(canStartScheduledRoutine(missed.state, DAY, routine), false);
+  }
+});
+
+test('routine entry, outcome and return keep stable event provenance without duplicate links', () => {
+  const begun = startScheduledRoutineEpisode(cell(), {
+    nowMs: AT, date: DAY, routine: 'shower', outcome: 'shower_warm',
+  });
+  let state = registerEpisodeEvent(begun.state, 'movement-in', {
+    locationSource: true, routineEpisodeId: begun.state.activeRoutineEpisode.id,
+  });
+  state = registerEpisodeEvent(state, 'shower-outcome', {
+    routineEpisodeId: begun.state.activeRoutineEpisode.id,
+  });
+  const ended = reconcileRegimeLocation(state, {
+    nowMs: AT + ROUTINE_DURATIONS_MS.shower, date: DAY, minutes: 12 * 60,
+  });
+  state = registerEpisodeEvent(ended.state, 'movement-out', {
+    locationSource: true, routineEpisodeId: begun.state.activeRoutineEpisode.id,
+  });
+  state = registerEpisodeEvent(state, 'movement-out', {
+    routineEpisodeId: begun.state.activeRoutineEpisode.id,
+  });
+  assert.deepEqual(state.routineEpisodes[0].event_ids, ['movement-in', 'shower-outcome', 'movement-out']);
+});
+
+test('lockdown prevents yard and scheduled movement without suppressing unrelated future AWG', () => {
+  const locked = startLockdownEpisode(cell(), { nowMs: AT, durationMs: 30 * 60 * 1000 }).state;
+  assert.equal(canStartScheduledRoutine(locked, DAY, 'association'), false);
+  assert.equal(awgLocationEligible(locked), false);
+  const yardWindow = reconcileRegimeLocation(locked, {
+    nowMs: AT + 1000, date: DAY, minutes: 14 * 60 + 30,
+  });
+  assert.equal(yardWindow.state.current.id, LOCATIONS.CELL);
+  assert.equal(yardWindow.state.current.regime_activity, 'LOCKDOWN');
+  assert.equal(yardWindow.events.length, 0);
+  const released = advanceLockdownEpisode(yardWindow.state, { nowMs: AT + 30 * 60 * 1000 });
+  const exercise = reconcileRegimeLocation(released.state, {
+    nowMs: AT + 30 * 60 * 1000, date: DAY, minutes: 14 * 60 + 35,
+  });
+  assert.equal(exercise.state.current.id, LOCATIONS.EXERCISE_YARD);
+  assert.equal(awgLocationEligible(exercise.state), true);
+});
+
+test('active cell search blocks routine departure and removed property cannot be found again', () => {
+  const object = { id: 'object-1', status: 'ACTIVE', location: 'cell', holderId: 'cy' };
+  const started = startCellSearchEpisode(cell(), { nowMs: AT, objects: [object] });
+  assert.equal(canStartScheduledRoutine(started.state, DAY, 'shower'), false);
+  assert.equal(awgLocationEligible(started.state), false);
+  const ongoing = advanceCellSearchEpisode(started.state, { nowMs: AT + 20_000 });
+  const searching = advanceCellSearchEpisode(ongoing.state, { nowMs: AT + 40_000 });
+  const confiscated = { ...object, status: 'CONFISCATED', location: 'officer_desk', holderId: 'proctor' };
+  const result = advanceCellSearchEpisode(searching.state, {
+    nowMs: AT + 60_000, objects: [confiscated],
+  });
+  assert.equal(result.state.searchEpisode.property_result, 'NOTHING_FOUND');
+  assert.equal(result.actionOpportunity, null);
 });
 
 test('yard suppresses cell expressive actions and cell-only incidents', () => {
