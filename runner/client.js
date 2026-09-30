@@ -272,7 +272,10 @@ export class Client {
     });
     if (!res.ok) throw new Error(`sleep history HTTP ${res.status}`);
     const data = await res.json();
-    return Array.isArray(data.records) ? data.records : [];
+    if (!data || data.ok !== true || !Array.isArray(data.records)) {
+      throw new Error('malformed sleep history response');
+    }
+    return data.records;
   }
 
   async fetchSatietyRecoveryHistory() {
