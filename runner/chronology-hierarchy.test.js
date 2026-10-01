@@ -120,6 +120,21 @@ assert.equal(interruption.container.children.length, 3,
 interruption.add('instrumental_situation', 2, 'Miss Bailey gave Cy an unrelated order');
 assert.equal(interruption.container.children.length, 4, 'another actor is not silently absorbed into the search');
 
+const passingNotice = makeFeed();
+passingNotice.add('cell_search_initiated', 0, "Mr Proctor arrived at Cy's cell to begin a search");
+passingNotice.add('cell_search_cy_instruction', 1, 'Mr Proctor instructed Cy to stand aside');
+passingNotice.add('cell_search_search_ongoing', 2, 'The search began');
+passingNotice.add('overheard', 2, '', {}, 'something half-heard down the wing');
+passingNotice.add('cell_search_property_result', 3, 'The search found nothing');
+passingNotice.add('cell_search_search_complete', 4, 'The officers completed the cell search');
+passingNotice.add('cell_search_aftermath_observed', 5, 'The search ended and Cy remained in the cell');
+assert.equal(passingNotice.container.children.length, 1,
+  'one incidental wing notice does not split a completed search into several cards');
+assert.equal(passingNotice.container.children[0].children[1].children.length, 7,
+  'the wing notice remains accessible at its original place inside the expanded search');
+assert.equal(passingNotice.container.children[0].children[1].children[3].children[1].children[0].textContent,
+  'something half-heard down the wing');
+
 // Replaying a paginated day rebuilds from the same ordered events. A boundary
 // between pages does not duplicate an event or join two distinct searches.
 const paged = makeFeed();

@@ -37,6 +37,13 @@ function actorFromSearch(text) {
 
 function nextSearchState(unit, record) {
   const p = record.payload;
+  // A passing wing/tray notice can land between stages of one real search.
+  // Keep at most two such notices inside that search's ordered detail rather
+  // than letting one incidental tick fragment the completed episode.
+  if (record.type === 'ambient') {
+    if (unit.stageIndex === SEARCH_STAGES.length - 1 || unit.instrumental || unit.incidentalCount >= 2) return null;
+    return { stageIndex: unit.stageIndex, instrumental: null, incidentalCount: unit.incidentalCount + 1 };
+  }
   if (record.type === 'search-stage') {
     const index = SEARCH_STAGES.indexOf(String(p.name || ''));
     if (index <= unit.stageIndex || unit.stageIndex === SEARCH_STAGES.length - 1 || unit.instrumental) return null;
@@ -186,6 +193,7 @@ export class ChronologyHierarchy {
       if (unit.type === 'search') {
         unit.stageIndex = nextState.stageIndex;
         unit.instrumental = nextState.instrumental;
+        unit.incidentalCount = nextState.incidentalCount ?? unit.incidentalCount;
       }
       appendStep(unit, record);
       refreshGroup(unit);
@@ -194,7 +202,7 @@ export class ChronologyHierarchy {
     if (record.type === 'search-start') {
       const search = {
         type: 'search', items: [record], lastMs: timestampMs(record.ts),
-        stageIndex: 0, instrumental: null, actor: actorFromSearch(payload.text),
+        stageIndex: 0, instrumental: null, incidentalCount: 0, actor: actorFromSearch(payload.text),
       };
       this.container.appendChild(makeGroup(search));
       appendStep(search, record);
