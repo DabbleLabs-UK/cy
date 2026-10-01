@@ -18,6 +18,16 @@ CREATE TABLE events (
     INDEX idx_kind_ts (kind, ts)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- A runner-assigned identity follows each delivery through memory, disk queue
+-- and retry. Claiming it in the same transaction as all ingest effects makes
+-- a committed batch safe to resend after its HTTP acknowledgement is lost.
+-- Legacy events without an identity remain accepted during rolling deploys.
+CREATE TABLE ingest_delivery_receipts (
+    delivery_id BINARY(16) PRIMARY KEY,
+    kind VARCHAR(24) NOT NULL,
+    accepted_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Private, latest-only diagnostics that are too detailed for five-second
 -- historical vitals. Upserted by channel so storage does not grow with time.
 CREATE TABLE soma_diagnostic_latest (

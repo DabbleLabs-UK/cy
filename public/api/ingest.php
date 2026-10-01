@@ -29,6 +29,10 @@ try {
     $db->beginTransaction();
 
     $insert = $db->prepare('INSERT INTO events (ts, kind, payload) VALUES (:ts, :kind, :payload)');
+    $receiptInsert = $db->prepare(
+        'INSERT INTO ingest_delivery_receipts (delivery_id, kind)
+         VALUES (UNHEX(:delivery_hex), :kind)'
+    );
     $environmentInsert = $db->prepare(
         'INSERT INTO environment_events (event_id, occurred_at, event_type, event_family, record)
          VALUES (:event_id, :occurred_at, :event_type, :event_family, :record)
@@ -143,6 +147,31 @@ try {
         $kind = (string)$event['kind'];
         if ($kind === '' || strlen($kind) > 24) {
             throw new InvalidArgumentException('invalid kind');
+        }
+        // This identity belongs to one enqueue, not to its content or timestamp.
+        // Claim it inside the same transaction as every side effect so a lost
+        // HTTP acknowledgement cannot replay a committed event or restore stale
+        // latest-state upserts over newer state. Old runners without IDs remain
+        // accepted during the rolling deployment.
+        if (array_key_exists('delivery_id', $event)) {
+            $deliveryId = $event['delivery_id'];
+            if (!is_string($deliveryId) || !preg_match(
+                '/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i',
+                $deliveryId
+            )) {
+                throw new InvalidArgumentException('invalid delivery_id');
+            }
+            try {
+                $receiptInsert->execute([
+                    ':delivery_hex' => str_replace('-', '', $deliveryId),
+                    ':kind' => $kind,
+                ]);
+            } catch (PDOException $e) {
+                if ((int)($e->errorInfo[1] ?? 0) !== 1062) {
+                    throw $e;
+                }
+                continue; // exactly this delivery was already committed
+            }
         }
 
         // Detailed Soma diagnostics are private and latest-only. They must not
