@@ -162,7 +162,6 @@ const generation = prepareSomaGeneration(runtime, {
 const vitals = { cognition: runtime.state };
 const zoneC = buildDirectives(vitals, 'journal', {
   groundedSoma: generation.groundedDirective,
-  provisionalCognition: generation.provisionalDirective,
 });
 const prompt = buildPrompt('', 'journal', null, zoneC);
 assert.match(prompt, /<PRIVATE_CURRENT_FACTS>/);
@@ -244,7 +243,8 @@ assert.equal(broken.directive(), '');
 assert.equal(broken.snapshot().status, 'unavailable');
 assert.match(broken.snapshot().reason, /instrumented update failure/);
 assert.match(prepareSomaGeneration(broken).groundedDirective, /No current grounded facts are available/);
-assert.equal(prepareSomaGeneration(broken).provisionalMemoryCandidate, null);
+assert.deepEqual(Object.keys(prepareSomaGeneration(broken)).sort(),
+  ['groundedContext', 'groundedDirective']);
 assert.equal(failures.length, 1);
 assert.deepEqual(
   Object.fromEntries(Object.entries(options({ cognition: broken.state }, 2, 'journal')).filter(([key]) => !['stop', 'num_ctx', 'num_thread'].includes(key))),
@@ -274,7 +274,6 @@ const scenario = {
   },
   journal: {
     groundedSomaContext: generation.groundedDirective,
-    provisionalCognitiveContext: generation.provisionalDirective,
   },
   afterOwnOutput: {
     expression: engine.somaSnapshot(runtime.state).expression,
