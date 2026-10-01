@@ -266,10 +266,11 @@ export function reconcileRegimeLocation(stateValue, {
   const at = new Date(nowMs).toISOString();
   const lockdownActive = state.lockdownEpisode?.status === 'ACTIVE';
   const routine = state.activeRoutineEpisode;
+  let completedRoutineEpisode = null;
   if (routine && state.current.id === ROUTINE_LOCATIONS[routine.routine]) {
     if (nowMs < Date.parse(routine.scheduled_end_at) && !lockdownActive) {
       state.current.regime_activity = `ROUTINE_${routine.routine.toUpperCase()}`;
-      return { state, events, nextTransition: nextRegimeTransition(minutes) };
+      return { state, events, completedRoutineEpisode, nextTransition: nextRegimeTransition(minutes) };
     }
     const returned = movementEvent({
       episodeId: routine.id, from: state.current.id, to: LOCATIONS.CELL,
@@ -279,8 +280,9 @@ export function reconcileRegimeLocation(stateValue, {
     });
     events.push(returned);
     setLocation(state, LOCATIONS.CELL, returned, returned.world.movement.transition_provenance);
-    routine.status = 'COMPLETE';
+    routine.status = lockdownActive ? 'INTERRUPTED' : 'COMPLETE';
     routine.ended_at = at;
+    if (!lockdownActive) completedRoutineEpisode = clone(routine);
     const stored = state.routineEpisodes.find((item) => item.id === routine.id);
     if (stored) Object.assign(stored, clone(routine));
     state.activeRoutineEpisode = null;
@@ -373,7 +375,7 @@ export function reconcileRegimeLocation(stateValue, {
     state.current.regime_activity = lockdownActive ? 'LOCKDOWN' : currentRegimeActivity(minutes, { asleep });
   }
   if (lockdownActive) state.current.regime_activity = 'LOCKDOWN';
-  return { state, events, nextTransition: nextRegimeTransition(minutes) };
+  return { state, events, completedRoutineEpisode, nextTransition: nextRegimeTransition(minutes) };
 }
 
 export function canStartScheduledRoutine(state, date, routine) {

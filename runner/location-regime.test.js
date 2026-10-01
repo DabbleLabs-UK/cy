@@ -75,6 +75,7 @@ test('scheduled shower, association and phone have one physical location and one
     assert.equal(began.started, true);
     assert.equal(began.state.current.id, LOCATIONS[routine.toUpperCase()]);
     assert.equal(began.event.world.movement.from_location, LOCATIONS.CELL);
+    assert.equal(began.event.summary.includes('slot ended'), false);
     assert.equal(availableExpressiveActions(began.state, { journal: true, draw: true }).length, 0);
     assert.equal(eventAllowedAtLocation('journal', began.state), false);
     assert.equal(awgLocationEligible(began.state), false);
@@ -85,10 +86,12 @@ test('scheduled shower, association and phone have one physical location and one
     });
     assert.equal(midway.state.current.id, LOCATIONS[routine.toUpperCase()]);
     assert.equal(midway.events.length, 0);
+    assert.equal(midway.completedRoutineEpisode, null);
     const ended = reconcileRegimeLocation(midway.state, {
       nowMs: AT + ROUTINE_DURATIONS_MS[routine], date: DAY, minutes: 10 * 60,
     });
     assert.equal(ended.state.current.id, LOCATIONS.CELL);
+    assert.equal(ended.completedRoutineEpisode.outcome, outcome);
     assert.deepEqual(ended.events.map((event) => event.world.movement.to_location), [LOCATIONS.CELL]);
     assert.equal(ended.state.routineEpisodes[0].status, 'COMPLETE');
     assert.equal(canStartScheduledRoutine(ended.state, DAY, routine), false);
@@ -96,7 +99,21 @@ test('scheduled shower, association and phone have one physical location and one
       nowMs: AT + ROUTINE_DURATIONS_MS[routine] + 1000, date: DAY, minutes: 10 * 60,
     });
     assert.equal(again.events.length, 0, 'a restarted or repeated tick cannot duplicate the return');
+    assert.equal(again.completedRoutineEpisode, null, 'a completed outcome is emitted once');
   }
+});
+
+test('an interrupted routine cannot claim its selected full-slot outcome', () => {
+  const began = startScheduledRoutineEpisode(cell(), {
+    nowMs: AT, date: DAY, routine: 'phone', outcome: 'phone_call_connected',
+  });
+  const locked = startLockdownEpisode(began.state, { nowMs: AT + 1000, durationMs: 30_000 }).state;
+  const interrupted = reconcileRegimeLocation(locked, {
+    nowMs: AT + 1000, date: DAY, minutes: 12 * 60,
+  });
+  assert.equal(interrupted.completedRoutineEpisode, null);
+  assert.equal(interrupted.state.routineEpisodes[0].status, 'INTERRUPTED');
+  assert.equal(interrupted.state.current.id, LOCATIONS.CELL);
 });
 
 test('a mismatched restored routine cannot block future movement forever', () => {

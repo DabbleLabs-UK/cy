@@ -6,6 +6,7 @@ import {
   chooseRoutineEvent,
   mealExpectation,
   materialiseScheduledEvent,
+  materialiseRoutineOutcome,
 } from './environment.js';
 
 assert.ok(PRISON_SCHEDULE.some((slot) => slot.kind === 'meal' && slot.meal === 'breakfast'));
@@ -76,6 +77,19 @@ const supportive = chooseRoutineEvent('association', () => 0.5);
 assert.equal(supportive.provisional.social.quality, 'supportive');
 assert.ok(supportive.provisional.appraisal.affiliation > 0.5);
 assert.equal(supportive.archetypeId, 'friendly_interaction');
+for (const [routine, name] of [
+  ['phone', 'phone_no_answer'],
+  ['phone', 'phone_call_connected'],
+  ['shower', 'shower_warm'],
+  ['association', 'association_quiet_company'],
+]) {
+  const picked = chooseRoutineEvent(routine, () => 0);
+  const restored = materialiseRoutineOutcome(name);
+  assert.equal(restored.name, name);
+  assert.equal(restored.world.context.location, routine);
+  assert.equal(picked.name.startsWith(`${routine}_`), true);
+}
+assert.throws(() => materialiseRoutineOutcome('phone_nonexistent'), /unknown prison routine outcome/);
 
 const interrupted = materialiseScheduledEvent({ kind: 'sleep', mins: 0 });
 assert.equal(interrupted.provisional.body.sleep.outcome, 'started');
