@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 function makeEl(tag) {
   const el = {
@@ -101,5 +102,19 @@ assert.equal(col.children[1].tag, 'details');
 assert.equal(col.children[1].children[1].children.length, 2);
 plain.handle({ kind: 'text', ts: '2026-09-09 19:03:00', payload: { mode: 'journal', s: 'my own thought' } }, true);
 assert.equal(col.children[2]._classes.has('pl-block-text'), true, 'plain journal remains standalone');
+
+const realSearches = JSON.parse(readFileSync(new URL('./fixtures/chronology-searches-2026-10-01.json', import.meta.url)));
+plain.reset();
+plain.beginDay('2026-10-01', '2026-10-01');
+for (const event of realSearches) plain.handle(event, true);
+assert.deepEqual(col.children.slice(1).map((group) => group.children[1].children.length), [10, 9],
+  'the real public search records form two separate plain-view groups');
+plain.handle({ kind: 'text', ts: '2026-10-01 23:49:11', payload: { mode: 'journal', s: 'a thought' } }, true);
+assert.equal(col.children[3]._classes.has('pl-block-text'), true, 'journal after the real searches stays standalone');
+plain.reset();
+plain.beginDay('2026-10-01', '2026-10-01');
+plain.handle(realSearches[7], true);
+assert.equal(col.children[1].children.length, 2,
+  'a standalone plain-view search step does not repeat its own title as detail');
 
 console.log('plain-feed.test.js: all checks passed');

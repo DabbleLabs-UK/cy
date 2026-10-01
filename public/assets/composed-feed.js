@@ -8,7 +8,7 @@ import { Pen } from './pen.js';
 import { applyDreamLayout, makeDreamSvg, renderDreamSketch } from './dream-view.js';
 import { bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 import { createJumpToLatest } from './jump-to-latest.js';
-import { ChronologyHierarchy } from './chronology-hierarchy.js';
+import { ChronologyHierarchy, nonDuplicateEventDetail } from './chronology-hierarchy.js';
 
 // One person has one hand. Each visible writing object owns its own Pen renderer,
 // but they all reserve this shared lane so only the earliest unfinished object can
@@ -290,10 +290,11 @@ export class ComposedFeed {
     title.className = 'cy-event-title';
     title.textContent = '[' + String(label || 'event') + ']';
     block.appendChild(title);
-    if (detail) {
+    const extraDetail = nonDuplicateEventDetail(label, detail);
+    if (extraDetail) {
       const body = document.createElement('div');
       body.className = 'cy-event-detail';
-      body.textContent = String(detail);
+      body.textContent = extraDetail;
       block.appendChild(body);
     }
     if (image) {

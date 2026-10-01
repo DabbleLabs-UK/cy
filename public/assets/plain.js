@@ -28,7 +28,7 @@ import { sketchToPaths, sketchBounds } from './pen.js';
 import { makeDreamSvg, renderDreamSketch } from './dream-view.js';
 import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 import { createJumpToLatest } from './jump-to-latest.js';
-import { ChronologyHierarchy } from './chronology-hierarchy.js';
+import { ChronologyHierarchy, nonDuplicateEventDetail } from './chronology-hierarchy.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
@@ -405,10 +405,11 @@ function singleEvent(label, detail, ts, kind) {
   title.className = 'pl-event-title';
   title.textContent = '[' + String(label) + ']';
   b.el.appendChild(title);
-  if (detail) {
+  const extraDetail = nonDuplicateEventDetail(label, detail);
+  if (extraDetail) {
     const body = document.createElement('div');
     body.className = 'pl-event-detail';
-    body.textContent = String(detail);
+    body.textContent = extraDetail;
     b.el.appendChild(body);
   }
   return b.el;
