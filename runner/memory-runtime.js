@@ -15,7 +15,9 @@ import {
   formatAutobiographicalMemory,
   parseFormationResponse,
   parseSurfacingDecision,
+  sanitizeCyExpressionSource,
 } from './autobiographical-memory.js';
+import { sanitizeCharacterContext } from './warden.js';
 
 const PREPARED_TTL_MS = 15 * 60 * 1000;
 const BACKGROUND_TIMEOUT_MS = 120000;
@@ -38,7 +40,7 @@ function stableContext(value = {}) {
     // is fetched, ranked or selected, so including them would only fragment
     // prepared-set caching for no behavioural benefit.
     querySourceType: value.querySourceType ? String(value.querySourceType).slice(0, 32) : null,
-    recentExpressionText: String(value.recentExpressionText || '').trim().slice(0, 2000),
+    recentExpressionText: sanitizeCharacterContext(value.recentExpressionText).trim().slice(0, 2000),
   };
 }
 
@@ -131,6 +133,7 @@ export class AutobiographicalMemoryRuntime {
   }
 
   async queueSource(source) {
+    source = sanitizeCyExpressionSource(source);
     if (!source || !source.sourceId || !source.sourceType) return { queued: false };
     this.pendingSourceWrites += 1;
     this.priorityPending = true;
@@ -427,9 +430,19 @@ export class AutobiographicalMemoryRuntime {
   }
 
   async processFormation(job, queueDepthBefore = 0) {
-    const source = job.source || {};
+    const source = sanitizeCyExpressionSource(job.source || {});
     const started = this.now();
     const provider = this.providerInfo() || {};
+    if (!source) {
+      await this.client.completeMemorySource({
+        job_id: Number(job.id), result_category: 'NOTHING', memory_id: null,
+        provider: provider.id || provider.provider, model: provider.model,
+        prompt_chars: 0, latency_ms: this.now() - started,
+        queue_depth_before: Number(queueDepthBefore) || 0,
+        retry_delay_seconds: RETRY_DELAY_SECONDS, error: null,
+      });
+      return { status: 'NOTHING', memoryId: null };
+    }
     let call = null;
     let category = 'ERROR';
     let memoryId = null;

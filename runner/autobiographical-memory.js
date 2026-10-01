@@ -5,6 +5,8 @@
 // subjective, versioned and provenance-bearing. Privacy is filtered before any
 // candidate can enter a model prompt.
 
+import { sanitizeCharacterContext } from './warden.js';
+
 export const MEMORY_TYPES = Object.freeze([
   'EPISODIC', 'PERSON', 'MOTIF', 'UNRESOLVED_THREAD', 'SEMANTIC',
 ]);
@@ -68,7 +70,7 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
       const crossVisitor = currentVisitorId !== null
         && memory.privacyScope === 'PUBLIC_RECALLABLE'
         && memory.subjectVisitorId !== currentVisitorId;
-      const content = crossVisitor ? memory.publicSummary : memory.content;
+      const content = sanitizeCharacterContext(crossVisitor ? memory.publicSummary : memory.content);
       if (!content) return null;
       return {
         id: memory.id,
@@ -78,7 +80,8 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
         epistemicStatus: 'SUBJECTIVE_AUTOBIOGRAPHICAL_MEMORY',
         consistencyStatus: memory.consistencyStatus || 'UNCERTAIN',
         content: assertPromptSafe(String(content).replace(INTERNAL_ID_REPLACE, '[private reference]')),
-        publicSummary: memory.publicSummary || null,
+        publicSummary: memory.publicSummary
+          ? sanitizeCharacterContext(memory.publicSummary) || null : null,
         tags: list(memory.tags, null, 12),
         reasons: list(memory.reasons, [
           'SAME_PERSON', 'SAME_PLACE', 'SHARED_ENTITIES', 'SIMILAR_SUBJECT',
@@ -90,13 +93,15 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
 }
 
 export function buildFormationRequest(source, existing = [], groundedContext = null) {
+  const expression = sanitizeCyExpressionSource(source);
+  if (!expression) throw new Error('empty Cy expression after character-boundary sanitisation');
   const safeSource = {
-    sourceType: source.sourceType,
-    occurredAt: source.occurredAt,
-    text: source.text,
-    sourceVisibility: source.sourceVisibility || 'INTERNAL_ONLY',
-    participantLabel: source.participantLabel || null,
-    tags: list(source.tags, null, 12),
+    sourceType: expression.sourceType,
+    occurredAt: expression.occurredAt,
+    text: expression.text,
+    sourceVisibility: expression.sourceVisibility || 'INTERNAL_ONLY',
+    participantLabel: expression.participantLabel || null,
+    tags: list(expression.tags, null, 12),
   };
   assertPromptSafe(safeSource);
   const candidates = filterMemoriesBeforePrompt(existing, {
@@ -246,7 +251,9 @@ export function parseSurfacingDecision(raw, candidates) {
 }
 
 export function formatAutobiographicalMemory(memories) {
-  const visible = (memories || []).slice(0, MEMORY_SURFACE_LIMIT);
+  const visible = (memories || []).map((memory) => ({
+    ...memory, content: sanitizeCharacterContext(memory.content),
+  })).filter((memory) => memory.content).slice(0, MEMORY_SURFACE_LIMIT);
   if (!visible.length) return '';
   const lines = [
     '<AUTOBIOGRAPHICAL_MEMORY>',
@@ -317,7 +324,7 @@ export function sourceFromPostcard(postcard, environmentEventId) {
 }
 
 export function sourceFromExpression(text, sourceId, occurredAt = null) {
-  const content = String(text || '').trim();
+  const content = sanitizeExpressionParagraphs(text);
   if (!content || !sourceId) return null;
   return {
     sourceType: 'CY_EXPRESSION', sourceId, occurredAt,
@@ -339,7 +346,7 @@ export function sourceFromDreamExpression(fragments, sourceId, occurredAt = null
 }
 
 export function sourceFromReply(text, postcard, environmentEventId, occurredAt = null) {
-  const content = String(text || '').trim();
+  const content = sanitizeExpressionParagraphs(text);
   if (!content || !postcard || !postcard.id || !postcard.visitor_id) return null;
   return {
     sourceType: 'CY_REPLY', sourceId: `postcard-reply:${postcard.id}`, occurredAt,
@@ -349,6 +356,21 @@ export function sourceFromReply(text, postcard, environmentEventId, occurredAt =
     linkedSourceIds: environmentEventId ? [environmentEventId] : [],
     tags: ['cy-expression', 'postcard', 'reply'],
   };
+}
+
+// A batch of Cy's already-published bursts uses blank lines as its durable
+// boundary. A tainted burst may have a sound prefix; subsequent independent
+// bursts can also be retained. Never edit the historical source row itself.
+function sanitizeExpressionParagraphs(text) {
+  return String(text || '').split(/\n\s*\n/)
+    .map((paragraph) => sanitizeCharacterContext(paragraph).trim())
+    .filter(Boolean).join('\n\n');
+}
+
+export function sanitizeCyExpressionSource(source) {
+  if (!source || !['CY_EXPRESSION', 'CY_REPLY'].includes(source.sourceType)) return source;
+  const text = sanitizeExpressionParagraphs(source.text);
+  return text ? { ...source, text } : null;
 }
 
 export const MEMORY_MODEL_BOUNDARIES = Object.freeze({

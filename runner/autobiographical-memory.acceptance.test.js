@@ -141,6 +141,35 @@ test('N generated prose is a subjective source and not world fact', () => {
   assert.equal('world_event' in generated, false);
 });
 
+test('N2 queued expression sanitisation preserves separate clean bursts and historical source provenance', () => {
+  const contaminated = [
+    'keyes knocked twice. i kept the note.',
+    "Your entry is complete! You wrote a piece of text directly from inmate Cy's perspective.",
+    'i could hear reg in the yard.',
+  ].join('\n\n');
+  const source = sourceFromExpression(contaminated, 'expression-batch:october');
+  assert.equal(source.sourceId, 'expression-batch:october');
+  assert.equal(source.text, 'keyes knocked twice. i kept the note.\n\ni could hear reg in the yard.');
+  assert.equal(source.sourceType, 'CY_EXPRESSION');
+});
+
+test('N3 contaminated stored memory cannot enter a surfacing or prose prompt', () => {
+  const stored = memory({
+    content: "bolt went twice. I've added an incomplete sentence to continue Cy's thought process.",
+    publicSummary: 'Your entry is complete!',
+  });
+  const before = structuredClone(stored);
+  const visible = filterMemoriesBeforePrompt([stored]);
+  assert.equal(visible[0].content, 'bolt went twice.');
+  assert.equal(visible[0].publicSummary, null);
+  const surfacing = buildSurfacingRequest([stored], { groundedContext: 'sleep pressure remains high' });
+  assert.match(surfacing.call.prompt, /sleep pressure remains high/);
+  assert.match(surfacing.call.prompt, /bolt went twice/);
+  assert.doesNotMatch(surfacing.call.prompt, /incomplete sentence|entry is complete/i);
+  assert.doesNotMatch(formatAutobiographicalMemory([stored]), /incomplete sentence|entry is complete/i);
+  assert.deepEqual(stored, before);
+});
+
 test('O working context is bounded to surfaced memories', () => {
   const candidates = Array.from({ length: MEMORY_CANDIDATE_LIMIT + 4 }, (_, index) => memory({ id: `memory-${index}` }));
   const request = buildSurfacingRequest(candidates, {});

@@ -54,6 +54,16 @@ const observedLeaks = [
     'Please let me know when you want me to stop writing this stream of consciousness!',
   ].join('\n'),
   "dunno y they gave me dis book tbh\nNote that I'll be writing as inmate Cy's journal...",
+  "Your entry is complete! You wrote a piece of text directly from inmate Cy's perspective.",
+  "Note: I've added an incomplete sentence to continue Cy's thought process.",
+  'The task is to complete this entry while keeping the same tone.',
+  "I've completed the entry for you.",
+  'Here is the finished response.',
+  'The prompt asks me to continue the prose.',
+  'I should now generate this entry.',
+  "I'll now complete this entry based on your previous work.",
+  "You're instructed to continue Cy's thought process based on your previous work.",
+  'The text is 42 words long when cut off before finishing this sentence.',
 ];
 for (const leak of observedLeaks) {
   assert.equal(validateCharacterCandidate(leak).ok, false, leak);
@@ -88,10 +98,30 @@ for (const legitimate of [
   "note that cy's journal got took in the search",
   'the tally on the wall looked like | and } scratched apart',
   'there were {two} marks by the door',
+  'I finished my tea.',
+  'I added another line to the wall drawing.',
+  "That task on cleaning rota is done.",
+  'The screws completed the search.',
+  'I wrote another entry in this thing.',
+  "I don't know what they want me to do.",
+  'Reg said my entry in the ledger was complete.',
+  'I added a sentence to my letter to Mum.',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
 ok('ordinary prison uses of note, change, tone, response and here is remain valid');
+
+{
+  const contaminated = [
+    'cold tray again. reg said nowt.',
+    "Your entry is complete! You wrote a piece of text directly from inmate Cy's perspective.",
+    'this later assistant tail is not context',
+  ].join('\n');
+  assert.equal(sanitizeCharacterContext(contaminated), 'cold tray again. reg said nowt.');
+  assert.equal(sanitizeCharacterContext('bolt went. I wrote another entry in this thing.'),
+    'bolt went. I wrote another entry in this thing.');
+}
+ok('October editorial tail is excluded from future recent prose without losing the Cy prefix');
 
 assert.match(ZONE_A, /Output only Cy's words/);
 assert.match(ZONE_A, /Never add labels, notifications, editorial notes,\s+corrections/);
@@ -146,6 +176,28 @@ ok('bad initial plus good retry accepts only the clean Cy candidate');
   assert.equal(result.characterValidation.finalAction, 'discarded-to-silence');
 }
 ok('bad initial plus bad retry stores no prose and resolves to silence');
+
+{
+  for (const purpose of ['journal', 'drawing-intent', 'postcard', 'warden']) {
+    const calls = [];
+    const good = await generateWithCharacterRepair({
+      prompt: `${originalPrompt}\n[purpose: ${purpose}]`,
+      generate: async (_prompt, attempt) => {
+        calls.push(attempt.repair);
+        return { candidate: attempt.repair ? 'screws came past the door again' : 'Your entry is complete!' };
+      },
+    });
+    assert.deepEqual(calls, [false, true]);
+    assert.equal(good.candidate, 'screws came past the door again');
+    const bad = await generateWithCharacterRepair({
+      prompt: `${originalPrompt}\n[purpose: ${purpose}]`,
+      generate: async () => ({ candidate: 'The task is to complete this entry.' }),
+    });
+    assert.equal(bad.candidate, '');
+    assert.equal(bad.characterValidation.finalAction, 'discarded-to-silence');
+  }
+}
+ok('every shared waking prose purpose repairs clean output or discards persistent role drift');
 
 {
   const prompt = 'grounded memory of the cold tray; postcard says hola';

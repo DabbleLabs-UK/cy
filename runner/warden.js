@@ -242,6 +242,20 @@ const ASSISTANT_FRAME = [
   /\bi(?:'|\u2019)?m\s+(?:glad|happy)\s+(?:we(?:'|\u2019)?ve|we\s+have|you(?:'|\u2019)?ve|you\s+have)\s+got\s+(?:some\s+)?context\b/i,
   /\b(?:this|your|the)\s+(?:entry|response|text|passage|writing)\b[^\n]{0,100}\b(?:captures?|matches?|maintains?)\s+(?:cy(?:'|\u2019)?s\s+)?(?:tone|voice|style)\b/i,
   /\byou(?:'|\u2019)?ve\s+(?:really\s+)?(?:captured|matched|nailed)\b[^\n]{0,100}\b(?:tone|voice|style)\b/i,
+  // A few October journal bursts addressed an editor instead of speaking as
+  // Cy. Match the writing-task relationship, not words such as "entry",
+  // "finished" or "added" on their own: Cy can use those in his own diary.
+  /\byour\s+(?:journal\s+)?entry\s+is\s+complete\b/i,
+  /\byou\s+wrote\s+a\s+(?:piece\s+of\s+)?text\s+directly\s+from\s+(?:inmate\s+)?cy(?:'|\u2019)?s\s+perspective\b/i,
+  /\bi(?:\s+have|(?:'|\u2019)ve)\s+added\s+an?\s+incomplete\s+sentence\b/i,
+  /\bi(?:\s+have|(?:'|\u2019)ve)\s+(?:completed|finished|generated|edited)\s+(?:this|the|your)\s+(?:entry|response|text|passage)\s+for\s+you\b/i,
+  /\bthe\s+task\s+is\s+to\s+(?:complete|continue|write|generate|edit)\s+(?:this|the|your)\s+(?:entry|response|text|passage)\b/i,
+  /\b(?:the|this)\s+prompt\s+asks\s+me\s+to\b/i,
+  /\b(?:i(?:'|\u2019)?ll|i\s+will|i\s+should)\s+now\s+(?:complete|continue|write|generate|edit)\s+(?:this|the|your)\s+(?:entry|response|text|passage)\b/i,
+  /\b(?:you(?:'|\u2019)?re|you\s+are)\s+instructed\s+to\s+continue\s+cy(?:'|\u2019)?s\s+thought\s+process\b/i,
+  /\b(?:i(?:'|\u2019)?ve|i\s+have)\s+added\b[^\n]{0,100}\b(?:cy(?:'|\u2019)?s\s+thought\s+process|to\s+continue\s+cy)\b/i,
+  /(?:^|\n)\s*here\s+is\s+the\s+finished\s+(?:entry|response|text|passage)\b/i,
+  /\bthe\s+text\s+is\s+\d+\s+words?\s+long\b/i,
   // Prompt headings are instructions supplied to the model, never Cy prose.
   /(?:^|\n)\s*(?:THE WING, RIGHT NOW|ON THE WING)\s*:/i,
 ];
