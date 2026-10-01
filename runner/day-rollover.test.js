@@ -11,6 +11,10 @@
 
 import assert from 'node:assert/strict';
 import { applyDayRollover, initialRolloverDate } from './run.js';
+import {
+  acknowledgeDayRollovers, dayRolloverDeliveryId, pendingDayRollovers,
+  persistDayRollover, stageDayRollover,
+} from './day-rollover.js';
 
 // A. Normal case: the persisted date already matches today (the previous
 // process detected the rollover itself, or this is the same day it started
@@ -79,6 +83,39 @@ assert.equal(initialRolloverDate('30-09-2026', '2026-09-30'), '2026-09-30');
   // a second tick moments later must NOT re-fire
   const rolledAgain = prevDate !== nowDateAfterRestart;
   assert.equal(rolledAgain, false, 'must not double-fire on the very next tick');
+}
+
+// The logical date, not the timing of a process restart, identifies a day
+// delivery. A checkpoint must commit before publication can begin.
+assert.equal(dayRolloverDeliveryId('2026-10-01'), dayRolloverDeliveryId('2026-10-01'));
+assert.notEqual(dayRolloverDeliveryId('2026-10-01'), dayRolloverDeliveryId('2026-10-02'));
+{
+  const vitals = { day: 50, lastRolloverDate: '2026-09-30' };
+  const calls = [];
+  const event = await persistDayRollover(vitals, '2026-10-01', '2026-10-01 00:00:00.000',
+    async () => { calls.push('checkpoint'); }, () => { calls.push('publish'); });
+  assert.deepEqual(calls, ['checkpoint', 'publish']);
+  assert.equal(vitals.day, 51);
+  assert.equal(pendingDayRollovers(vitals).length, 1);
+  assert.equal(event.delivery_id, dayRolloverDeliveryId('2026-10-01'));
+  assert.equal(stageDayRollover(vitals, '2026-10-01', event.ts), event);
+  assert.equal(vitals.day, 51, 'retry after failed checkpoint never increments twice');
+  assert.equal(acknowledgeDayRollovers(vitals, [event]), true);
+  assert.equal(pendingDayRollovers(vitals).length, 0);
+  assert.equal(acknowledgeDayRollovers(vitals, [event]), false);
+}
+{
+  const vitals = { day: 50, lastRolloverDate: '2026-09-30' };
+  let published = false;
+  await assert.rejects(persistDayRollover(vitals, '2026-10-01', '2026-10-01 00:00:00.000',
+    async () => { throw new Error('checkpoint interrupted'); }, () => { published = true; }));
+  assert.equal(published, false, 'failed checkpoint may not publish');
+  assert.equal(vitals.day, 51);
+  assert.equal(pendingDayRollovers(vitals).length, 1);
+  await persistDayRollover(vitals, '2026-10-01', '2026-10-01 00:00:05.000',
+    async () => {}, () => { published = true; });
+  assert.equal(published, true);
+  assert.equal(vitals.day, 51);
 }
 
 console.log('day-rollover.test.js: all checks passed');

@@ -152,6 +152,13 @@ import {
 import { generateWithCharacterRepair } from './character-output.js';
 import { Client, tsNow } from './client.js';
 import {
+  acknowledgeDayRollovers,
+  initialRolloverDate,
+  pendingDayRollovers,
+  persistDayRollover,
+} from './day-rollover.js';
+export { applyDayRollover, initialRolloverDate } from './day-rollover.js';
+import {
   BackgroundTempoGate,
   InferenceTempoPacer,
   tempoIdleMs,
@@ -372,32 +379,6 @@ export function officerEventCompatibleLocation(eventType) {
 }
 export const INMATE_SOCIAL_COMPATIBLE_LOCATION = LOCATIONS.WING_OR_LANDING;
 
-const LONDON_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// Restart-safe seed for the scheduler's day-rollover watch. prevDate is an
-// in-memory closure variable that does not survive a restart on its own; if
-// it were always re-seeded from "now" at startup, any restart landing
-// between a real midnight and the pre-restart process's own next scheduler
-// tick would permanently skip that day's rollover (the fresh process starts
-// already believing today is today, so date !== prevDate never fires for
-// that transition). Restoring the last date the rollover actually applied -
-// when that has been persisted - closes that gap; a missing/invalid
-// persisted value (fresh install, or upgrading from before this field
-// existed) falls back to the current date exactly as before.
-export function initialRolloverDate(persistedLastRolloverDate, nowDate) {
-  return LONDON_DATE_RE.test(String(persistedLastRolloverDate || '')) ? persistedLastRolloverDate : nowDate;
-}
-
-// Applies one detected day-rollover to vitals in place and returns the new
-// day count. vitals.lastRolloverDate must be updated in the same step that
-// vitals.day is (both persist together), or a crash between the two would
-// reopen exactly the gap initialRolloverDate exists to close.
-export function applyDayRollover(vitals, date) {
-  vitals.day = (vitals.day || 1) + 1;
-  vitals.lastRolloverDate = date;
-  return vitals.day;
-}
-
 // ---- config ---------------------------------------------------------------
 
 async function loadConfig() {
@@ -589,6 +570,12 @@ async function main() {
   // use the immediate atomic path, preserving the pre-existing worst-case event
   // exposure while avoiding full-state writes for every telemetry tick.
   let urgentVitalsDirty = false;
+  client.onDelivered = (events) => {
+    if (acknowledgeDayRollovers(vitals, events)) urgentVitalsDirty = true;
+  };
+  // The checkpoint owns any day event that was not yet acknowledged. Requeue
+  // it with its original identity before ordinary client delivery starts.
+  for (const event of pendingDayRollovers(vitals)) client.enqueueDayRollover(event);
   const DURABLE_STATE_EVENT_KINDS = new Set([
     'day',
     'draw_saved',
@@ -1887,6 +1874,7 @@ async function main() {
   let prevMins = null;
   let prevDate = initialRolloverDate(vitals.lastRolloverDate, londonParts().date);
   vitals.lastRolloverDate = prevDate;
+  let dayRolloverInFlight = false;
   let prevCpu = cpuSnapshot();
 
   // ---- honest per-process attribution (ollama + this runner node) ------------
@@ -4060,7 +4048,7 @@ async function main() {
   }
 
   // ---- deterministic environment scheduler (runs each vitals tick) ----
-  function scheduler(now) {
+  async function scheduler(now) {
     const { date, mins } = londonParts(new Date(now));
 
     // An opportunity opened during the previous world tick resolves before any
@@ -4068,10 +4056,21 @@ async function main() {
     // so a restart resumes this continuation instead of inferring an outcome.
     resolvePendingInstrumentalIncidents();
 
-    if (date !== prevDate) {
-      const n = applyDayRollover(vitals, date);
+    if (date !== prevDate && !dayRolloverInFlight) {
+      dayRolloverInFlight = true;
+      try {
+        // Commit day/date and its public outbox entry together. A crash after
+        // this write can replay the identified event; before it, neither
+        // consequence is durable. Never publish an uncheckpointed rollover.
+        await persistDayRollover(vitals, date, tsNow(new Date(now)),
+          () => saveVitals(vitalsPath, vitals), (event) => client.enqueueDayRollover(event));
+      } catch (error) {
+        reportPersistenceError('day rollover save', error);
+        return;
+      } finally {
+        dayRolloverInFlight = false;
+      }
       prevDate = date;
-      emit({ kind: 'day', payload: { n, date } });
     }
 
     const asleep = effectiveAsleep(mins);
@@ -4150,7 +4149,7 @@ async function main() {
     const { mins } = londonParts(new Date(now));
     const asleep = effectiveAsleep(mins);
     tick(vitals, { asleep, now });
-    scheduler(now);
+    await scheduler(now);
     const homeostasisAsleep = processSAsleep(now, asleep);
     syncSleepHomeostasisObservation(now, homeostasisAsleep);
     soma.tick({
