@@ -351,17 +351,6 @@ body.cy-paused::after {
   gap: 14px;
   padding: 14px;
   align-items: start;
-  transition: grid-template-columns 0.22s ease;
-}
-/* Expanded Soma: the four promoted subsystems plus their history charts need
-   real room to read at normal desktop distance. Widening this column alone
-   (rather than a full separate layout mode) keeps every other panel exactly
-   where a returning visitor expects it. The centre column keeps a real
-   minimum so the chronology never becomes cramped in exchange. */
-@media (min-width: 1181px) {
-  .layout.soma-expanded {
-    grid-template-columns: clamp(480px, 40vw, 640px) minmax(420px, 1fr) clamp(260px, 20vw, 340px);
-  }
 }
 .col { min-width: 0; }
 .col-brain { grid-area: soma; }
@@ -383,32 +372,6 @@ body.cy-paused::after {
   margin-bottom: 8px;
   border-bottom: 1px dashed var(--line);
   padding-bottom: 6px;
-}
-.panel-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.soma-expand-toggle {
-  flex: 0 0 auto;
-  font: 10px var(--mono, inherit);
-  letter-spacing: 0.14em;
-  color: #a7c9dd;
-  background: transparent;
-  border: 1px solid rgba(167, 201, 221, 0.4);
-  border-radius: 3px;
-  padding: 4px 8px;
-  cursor: pointer;
-}
-.soma-expand-toggle:hover { color: #d6e8f3; border-color: rgba(167, 201, 221, 0.7); }
-.soma-expand-toggle:focus-visible { outline: 2px solid #6fb2ff; outline-offset: 2px; }
-.soma-expand-toggle[aria-expanded="true"] { color: #0c1013; background: #a7c9dd; border-color: #a7c9dd; }
-/* Below the point the grid stops being a fixed-width three-column board, a
-   wider Soma column has nothing to expand into, so the control is hidden
-   rather than left as a dead affordance. */
-@media (max-width: 1180px) {
-  .soma-expand-toggle { display: none; }
 }
 
 /* The three machine-control cards begin as compact title bars. Native details
@@ -934,10 +897,6 @@ body.cy-paused::after {
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
-@media (min-width: 1181px) {
-  .layout.soma-expanded .soma-overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-
 /* Subtle exit into the deep-dive documentation surface: intentionally quiet
    so it never competes with Cy's live state above it. */
 .soma-how-it-works-link {
