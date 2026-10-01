@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { ZONE_A, buildDirectives, buildPrompt, completionBudget, completionDirective } from './prompt.js';
+import { sanitizeCharacterContext, stripMalformedProseControls } from './warden.js';
 
 assert.match(
   ZONE_A,
@@ -36,8 +38,37 @@ const picturePrompt = buildPrompt('', 'postcard', {
   image_path: '/uploads/postcard.webp',
   caption: 'a blue boat under a bridge',
 });
-assert.match(picturePrompt, /begin by reacting to one concrete detail from their\nwords or picture/);
+assert.match(picturePrompt, /react to one concrete detail from their words or picture/);
 assert.match(picturePrompt, /a picture: a blue boat under a bridge/);
+
+for (const body of ['hola', 'holaaaaa', 'hello', 'hey', 'alright?']) {
+  const prompt = buildPrompt('', 'postcard', { from_name: 'Mae', body });
+  assert.ok(prompt.includes(`[on the other side, in their hand:] "${body}"`), body);
+  assert.match(prompt, /If it is just a greeting or social opening, answer that naturally/);
+  assert.match(prompt, /Do not demand a question or invent a detail/);
+}
+const statementPrompt = buildPrompt('', 'postcard', { from_name: 'Mae', body: 'the rain has stopped' });
+assert.match(statementPrompt, /react to one concrete detail from their words or picture/);
+assert.match(questionPrompt, /Begin with a direct answer to a question they\nasked/);
+
+const priorCorrespondence = sanitizeCharacterContext('last card said the tea was cold |}| and bill kept the book');
+const memoryDirective = stripMalformedProseControls('i remember the book |} from yesterday');
+const grounded = buildDirectives({}, 'postcard', {
+  sharedContext: `RECENT CY EXPRESSION: ${priorCorrespondence}\nAUTOBIOGRAPHICAL MEMORY: ${memoryDirective}\nGROUNDED SOMA: sleep pressure live`,
+});
+const correspondencePrompt = buildPrompt(priorCorrespondence, 'postcard', {
+  from_name: 'Mae', body: 'hello again - how is the book?',
+}, grounded);
+assert.doesNotMatch(correspondencePrompt, /\|\}/);
+assert.match(correspondencePrompt, /bill kept the book/);
+assert.match(correspondencePrompt, /i remember the book/);
+assert.match(correspondencePrompt, /GROUNDED SOMA: sleep pressure live/);
+assert.match(correspondencePrompt, /hello again - how is the book\?/);
+const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
+assert.match(runSource, /recentExpression: contextText\(\)\.slice\(-640\)/);
+assert.match(runSource, /content: stripMalformedProseControls\(memory\.content \|\| memory\.publicSummary\)/);
+assert.match(runSource, /autobiographicalMemory: stripMalformedProseControls\(memory\.directive\)/);
+assert.match(runSource, /emit\(\{ kind: 'postcard_out', payload:/);
 
 const length = completionDirective(45);
 assert.match(length, /about 31 words/);

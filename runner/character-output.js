@@ -5,7 +5,7 @@
 // the rejected text back to the model: the retry receives the original Cy/world
 // prompt plus one short output-only instruction.
 
-import { assistantFrameHits, looksLikeAssistantFrame } from './warden.js';
+import { assistantFrameHits, looksLikeAssistantFrame, malformedProseControlHits } from './warden.js';
 
 export const CHARACTER_REPAIR_INSTRUCTION =
   "Return only the inmate's next in-character text. No commentary about writing, " +
@@ -17,11 +17,15 @@ export function characterRepairPrompt(originalPrompt) {
 
 export function validateCharacterCandidate(candidate) {
   const text = String(candidate || '');
-  if (!looksLikeAssistantFrame(text)) return { ok: true, reasons: [] };
-  const hits = assistantFrameHits(text);
+  const malformedControls = malformedProseControlHits(text);
+  const hasAssistantFrame = looksLikeAssistantFrame(text);
+  if (!hasAssistantFrame && malformedControls.length === 0) return { ok: true, reasons: [] };
+  const hits = hasAssistantFrame ? assistantFrameHits(text) : [];
+  if (hasAssistantFrame && hits.length === 0) hits.push('assistant/meta writing frame');
+  if (malformedControls.length) hits.push('malformed prose control fragment');
   return {
     ok: false,
-    reasons: hits.length ? hits : ['assistant/meta writing frame'],
+    reasons: hits,
   };
 }
 
