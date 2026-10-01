@@ -25,7 +25,11 @@ try {
         $days = history_day_index($db);
         $builtThrough = history_cursor($db);
     } catch (PDOException $e) {
-        // Index tables absent (un-migrated) - degrade to an empty, honest answer.
+        // Only absent migration 004 tables are a compatibility case. A broken
+        // query or schema must reach the server-error response below.
+        if (($e->errorInfo[0] ?? null) !== '42S02' || ($e->errorInfo[1] ?? null) !== 1146) {
+            throw $e;
+        }
         captive_json_response(['ok' => true, 'built_through' => 0, 'days' => []]);
     }
 
@@ -36,5 +40,6 @@ try {
         'days' => $days,
     ]);
 } catch (Throwable $e) {
+    header('Cache-Control: no-store');
     captive_error_response('internal error', 500);
 }
