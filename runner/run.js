@@ -77,8 +77,10 @@ import {
   buildExpressiveChoiceRequest,
   chooseExpressiveAction,
   expressiveCadenceAvailability,
+  eligibleExpressionGap,
   reconcileExpressiveCadence,
   recordExpressiveDrawing,
+  recordExpressiveDrawingFailure,
   recordExpressiveJournal,
   EXPRESSIVE_SILENCE_COOLDOWN_MS,
 } from './expressive-choice.js';
@@ -1863,6 +1865,8 @@ async function main() {
   const pendingPostcards = [];
   const pendingWarden = [];
   const pendingDrawRequests = []; // postcards that asked him to draw something
+  let expressionEligibleSinceMs = 0;
+  let lastPublishedWakingExpressionMs = 0;
   // ambient cues armed by the scheduler, consumed once by the next generation
   let officerCue = null; // { key, ev, until }
   let overheardCue = null; // { item, misheard, until }
@@ -3375,7 +3379,10 @@ async function main() {
       system: ZONE_A, prompt: p1, opts: o1, mode: 'journal', purpose: 'drawing', attempt: 'drawing-intent',
       timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
     });
-    if (r1.aborted) return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
+    if (r1.aborted) {
+      vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
+      return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
+    }
     const line = (r1.full || '').trim();
     // the decision line is itself real journal text; whether the DSL below renders or
     // not, a cycle that put a line on the page counts as emitted, never empty.
@@ -3391,6 +3398,7 @@ async function main() {
       // stage 1 gave prose, not a subject: no drawing this time, the line still stands.
       await logDrawFail('unusable', line);
       vitals.lastDrawMs = now;
+      vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
       return decisionEmitted ? 'emitted' : 'empty';
     }
     // the caption is the SHORT subject, never the journal prose that preceded it.
@@ -3424,6 +3432,7 @@ async function main() {
       // was cut off). Skip the garnish; the decision line already stands.
       await logDrawFail('empty', baseRaw);
       vitals.lastDrawMs = now;
+      vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
       return decisionEmitted ? 'emitted' : 'empty';
     }
     const baseVal = validateDrawing(parseStrokes(baseRaw).strokes, { min: MIN_STROKES, maxText: 1 });
@@ -3431,6 +3440,7 @@ async function main() {
       // too few real strokes, or it degenerated into transcribed words - discard it.
       await logDrawFail('unusable', baseRaw);
       vitals.lastDrawMs = now;
+      vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
       return decisionEmitted ? 'emitted' : 'empty';
     }
 
@@ -3492,7 +3502,8 @@ async function main() {
 
     vitals.lastDrawMs = now;
     vitals.lastDrawSubject = subject;
-    vitals.expressiveCadence = recordExpressiveDrawing();
+    vitals.expressiveCadence = recordExpressiveDrawing(vitals.expressiveCadence);
+    lastPublishedWakingExpressionMs = Date.now();
     vitals.monotony = clamp((vitals.monotony || 0) - 0.15); // drawing is something happening
     return 'emitted';
   }
@@ -4920,6 +4931,7 @@ async function main() {
       // context is lost. Plain sleep (NOT idleSilently) so a queued postcard does
       // not spin the loop and keep the CPU up - that would defeat the exercise.
       if (client.paused) {
+        expressionEligibleSinceMs = 0;
         if (currentMode !== 'paused') {
           emit({ kind: 'mode', payload: { from: currentMode, to: 'paused' } });
           currentMode = 'paused';
@@ -4929,10 +4941,12 @@ async function main() {
         continue;
       }
       if (pendingWarden.length) {
+        expressionEligibleSinceMs = 0;
         await doWarden(pendingWarden.shift());
         continue;
       }
       if (vitals.locationRegime.current.id !== LOCATIONS.CELL) {
+        expressionEligibleSinceMs = 0;
         const awayMode = vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD
           ? 'exercise' : vitals.locationRegime.current.id.toLowerCase();
         if (currentMode !== awayMode) {
@@ -4946,6 +4960,7 @@ async function main() {
         continue;
       }
       if (pendingPostcards.length) {
+        expressionEligibleSinceMs = 0;
         await doPostcard(pendingPostcards.shift());
         continue;
       }
@@ -4958,6 +4973,7 @@ async function main() {
       // own prompt, sampling and rendering), so dream incoherence never touches
       // the waking coherence rules.
       if (asleep) {
+        expressionEligibleSinceMs = 0;
         if (currentMode !== 'dream') {
           const wasPaused = currentMode === 'paused';
           emit({ kind: 'mode', payload: { from: currentMode, to: 'dream' } });
@@ -4992,6 +5008,13 @@ async function main() {
       // subjective layer chooses only among real outward expressive capabilities.
       // A queued drawing request is external rather than autonomous and still wins.
       const nowMs = Date.now();
+      if (!expressionEligibleSinceMs) expressionEligibleSinceMs = nowMs;
+      const expressionGap = eligibleExpressionGap({
+        nowMs,
+        eligibleSinceMs: expressionEligibleSinceMs,
+        lastPublishedMs: lastPublishedWakingExpressionMs,
+        tempoSpeed: client.tempo.speed,
+      });
       const hasDrawRequest = pendingDrawRequests.length > 0;
       const cognition = prepareSomaGeneration(soma, {
         now: nowMs,
@@ -5023,7 +5046,7 @@ async function main() {
         continue;
       }
 
-      const cadence = expressiveCadenceAvailability(vitals.expressiveCadence);
+      const cadence = expressiveCadenceAvailability(vitals.expressiveCadence, { nowMs });
       const lastSilenceAtMs = Number(soma.state && soma.state.action
         && soma.state.action.lastSilenceAtMs) || 0;
       const silenceAvailable = !lastSilenceAtMs
@@ -5046,6 +5069,8 @@ async function main() {
         currentIncidentContext: choiceContext.ok ? '' : incidentContext,
         provisionalMemoryCandidate: null,
         availableActions,
+        drawingPhase: cadence.phase,
+        prolongedEligibleGap: expressionGap.prolonged,
       });
       // Include the action-selection call in the visible cycle's measured work.
       // It uses the same provider as prose, so omitting it made a nominal 30%
@@ -5239,6 +5264,7 @@ async function main() {
       else if (refusedGen) await recordOutcome('refused'); // provider refused (visible outcome)
       else if (burstEmitted.trim()) {
         vitals.expressiveCadence = recordExpressiveJournal(vitals.expressiveCadence);
+        lastPublishedWakingExpressionMs = Date.now();
         await recordOutcome('emitted');
       }
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
