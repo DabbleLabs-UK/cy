@@ -218,11 +218,7 @@ window.CY = {
 
   <aside class="col col-brain">
     <div class="panel">
-      <div class="panel-title panel-title-row">
-        <span>SOMA</span>
-        <button type="button" id="soma-expand-toggle" class="soma-expand-toggle"
-          aria-expanded="false" aria-controls="brain">EXPAND</button>
-      </div>
+      <div class="panel-title">SOMA</div>
       <div id="brain"></div>
     </div>
     <div class="panel memory-panel">
