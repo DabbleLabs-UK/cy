@@ -13,7 +13,8 @@
 // and the inbox is read from state/inbox.json (if present), then consumed so the
 // same letter is not delivered twice.
 
-import { appendFile, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
+import { appendFile, readFile, writeFile, rename, mkdir, open } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 
 import { clampSpeed } from './tempo.js';
@@ -32,6 +33,7 @@ const INBOX_MS = 3000;
 const TEMPO_MS = 3000;
 const MAX_BACKOFF_MS = 60000;
 const STOP_FLUSH_PASSES = 3;
+const MAX_QUEUE_QUARANTINE_BYTES = 8 * 1024 * 1024;
 
 // MariaDB DATETIME(3) string, e.g. "2026-08-17 19:30:00.123".
 export function tsNow(d = new Date()) {
@@ -48,6 +50,8 @@ export class Client {
     this.stateDir = stateDir;
     this.eventsPath = join(stateDir, 'events.jsonl');
     this.queuePath = join(stateDir, 'queue.jsonl');
+    this.queueQuarantinePath = join(stateDir, 'queue.quarantine.json');
+    this._queueQuarantineMaxBytes = MAX_QUEUE_QUARANTINE_BYTES;
     this.memorySourcesPath = join(stateDir, 'memory-sources.jsonl');
     this.inboxPath = join(stateDir, 'inbox.json');
     this.tempoPath = join(stateDir, 'tempo.json');
@@ -196,7 +200,7 @@ export class Client {
 
   async _queueEvents(events) {
     try {
-      await this._appendEvents(this.queuePath, events);
+      await this._appendQueueEvents(events);
     } catch (err) {
       // Disk persistence failed too: the events are still owned in memory and
       // shutdown must report failure rather than pretending they were saved.
@@ -223,23 +227,56 @@ export class Client {
   async _drainQueue() {
     let raw;
     try {
-      raw = await readFile(this.queuePath, 'utf8');
+      raw = await readFile(this.queuePath);
     } catch (err) {
       if (err && err.code === 'ENOENT') return; // no queue file
       throw err;
     }
-    const lines = raw.split('\n').filter((l) => l.trim());
-    if (!lines.length) return;
+    if (!raw.length) return;
     const queued = [];
-    for (const l of lines) {
+    const validLines = [];
+    const malformed = [];
+    const decoder = new TextDecoder('utf-8', { fatal: true });
+    let start = 0;
+    for (let end = 0; end <= raw.length; end += 1) {
+      if (end < raw.length && raw[end] !== 10) continue;
+      if (end === start && end === raw.length) break;
+      const line = raw.subarray(start, end < raw.length ? end + 1 : end);
       try {
-        queued.push(JSON.parse(l));
-      } catch {
-        /* skip corrupt line */
+        const event = JSON.parse(decoder.decode(line));
+        if (!event || typeof event !== 'object' || Array.isArray(event)) {
+          throw new Error('NOT_EVENT_OBJECT');
+        }
+        queued.push(event);
+        validLines.push(line);
+      } catch (error) {
+        malformed.push({
+          offset: start,
+          bytes: line,
+          reason: error && error.message === 'NOT_EVENT_OBJECT' ? 'NOT_EVENT_OBJECT'
+            : error instanceof TypeError ? 'INVALID_UTF8' : 'MALFORMED_JSON',
+        });
+      }
+      start = end + 1;
+    }
+    if (malformed.length) {
+      try {
+        const result = await this._quarantineQueueLines(malformed);
+        const compact = Buffer.concat(validLines);
+        const terminated = compact.length && compact[compact.length - 1] !== 10
+          ? Buffer.concat([compact, Buffer.from('\n')]) : compact;
+        await this._atomicReplace(this.queuePath, terminated);
+        console.warn(`[cy] queue: quarantined ${malformed.length} malformed record(s) in ${this.queueQuarantinePath}` +
+          (result.evicted ? `; ${result.evicted} oldest quarantine record(s) expired at the size limit` : '') +
+          (result.truncated ? `; ${result.truncated} oversized record(s) retained as bounded prefixes` : ''));
+      } catch (error) {
+        console.error(`[cy] queue: quarantine failed; active queue retained: ${error.message}`);
+        throw error;
       }
     }
     if (!queued.length) {
-      await writeFile(this.queuePath, '');
+      if (!malformed.length) await writeFile(this.queuePath, '');
+      this.backoff = 0;
       return;
     }
     // Send in chunks so one huge backlog does not build a 50MB body.
@@ -260,6 +297,85 @@ export class Client {
     // Whole queue delivered - clear it.
     await writeFile(this.queuePath, '');
     this.backoff = 0;
+  }
+
+  async _quarantineQueueLines(malformed) {
+    let state = {
+      schema: 'cy.queue-quarantine.v1',
+      evictedRecords: 0,
+      evictedRawBytes: 0,
+      entries: [],
+    };
+    try {
+      state = JSON.parse(await readFile(this.queueQuarantinePath, 'utf8'));
+      if (state.schema !== 'cy.queue-quarantine.v1' || !Array.isArray(state.entries)) {
+        throw new Error('unrecognised queue quarantine format');
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    const maxBytes = this._queueQuarantineMaxBytes;
+    const maxRawEntryBytes = Math.floor(maxBytes / 2);
+    let truncated = 0;
+    for (const item of malformed) {
+      const stored = item.bytes.subarray(0, maxRawEntryBytes);
+      if (stored.length < item.bytes.length) truncated += 1;
+      state.entries.push({
+        at: new Date().toISOString(),
+        offset: item.offset,
+        reason: item.reason,
+        rawBytes: item.bytes.length,
+        sha256: createHash('sha256').update(item.bytes).digest('hex'),
+        rawBase64: stored.toString('base64'),
+        truncated: stored.length < item.bytes.length,
+      });
+    }
+    let evicted = 0;
+    let body = JSON.stringify(state) + '\n';
+    while (Buffer.byteLength(body) > maxBytes && state.entries.length > 1) {
+      const oldest = state.entries.shift();
+      state.evictedRecords += 1;
+      state.evictedRawBytes += oldest.rawBytes;
+      evicted += 1;
+      body = JSON.stringify(state) + '\n';
+    }
+    if (Buffer.byteLength(body) > maxBytes) {
+      throw new Error('queue quarantine size limit cannot hold one record');
+    }
+    await this._atomicReplace(this.queueQuarantinePath, body);
+    return { evicted, truncated };
+  }
+
+  async _atomicReplace(path, data) {
+    const temporary = `${path}.tmp`;
+    const handle = await open(temporary, 'w');
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await rename(temporary, path);
+  }
+
+  async _appendQueueEvents(events) {
+    await mkdir(dirname(this.queuePath), { recursive: true });
+    let separator = '';
+    let handle;
+    try {
+      handle = await open(this.queuePath, 'r');
+      const { size } = await handle.stat();
+      if (size) {
+        const tail = Buffer.alloc(1);
+        await handle.read(tail, 0, 1, size - 1);
+        if (tail[0] !== 10) separator = '\n';
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    } finally {
+      if (handle) await handle.close();
+    }
+    await this._appendEvents(this.queuePath, events, separator);
   }
 
   async pollInbox() {
@@ -591,9 +707,9 @@ export class Client {
     if (changed && this.onTempo) this.onTempo(next);
   }
 
-  async _appendEvents(path, events) {
+  async _appendEvents(path, events, prefix = '') {
     await mkdir(dirname(path), { recursive: true });
-    const body = events.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    const body = prefix + events.map((e) => JSON.stringify(e)).join('\n') + '\n';
     await appendFile(path, body);
   }
 }
