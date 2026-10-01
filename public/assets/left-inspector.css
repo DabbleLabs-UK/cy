@@ -1,0 +1,99 @@
+/* One quiet left index, with an adjoining desktop inspector. The original
+   instrument content is retained inside each body, never copied or reflowed. */
+.cy-left-inspector-ready .brainhud { gap: 5px; }
+.cy-left-inspector-ready .soma-overview,
+.cy-left-inspector-ready .memory-panel > .panel-title { display: none; }
+.cy-other-readings { display: grid; gap: 5px; }
+.cy-inspector-item { min-width: 0; position: relative; }
+.cy-inspector-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #354553;
+  border-radius: 3px;
+  background: #141b22;
+  color: #c0d0da;
+  cursor: pointer;
+  text-align: left;
+  font: 10px var(--mono);
+}
+.cy-inspector-head:hover { background: #1b2933; border-color: #658296; }
+.cy-inspector-head:focus-visible,
+.cy-inspector-close:focus-visible { outline: 2px solid #8fb9d4; outline-offset: 2px; }
+.cy-inspector-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.08em; }
+.cy-inspector-value { min-width: 0; max-width: 17ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e0e8ee; font-weight: 500; text-align: right; }
+.cy-inspector-item.is-active > .cy-inspector-head { background: #1b2933; border-color: #718c9d; color: #ecf3f7; }
+.cy-inspector-body[hidden] { display: none !important; }
+.cy-inspector-body {
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid #718c9d;
+  border-radius: 0 5px 5px 5px;
+  background: #141c24;
+  box-shadow: 8px 18px 32px rgba(0, 0, 0, 0.62);
+  color: var(--tel);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.cy-inspector-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  z-index: 1;
+  margin: -8px -10px 10px 14px;
+  border: 1px solid #536d7e;
+  border-radius: 3px;
+  padding: 4px 8px;
+  background: #1b2933;
+  color: #c9dbe5;
+  cursor: pointer;
+  font: 9px var(--mono);
+  letter-spacing: 0.1em;
+}
+.cy-inspector-body > .soma-state-entry,
+.cy-inspector-body > .soma-legacy-quarantine { width: 100%; }
+.cy-left-inspector-ready .soma-anxiety-promoted,
+.cy-left-inspector-ready .soma-sleep-pressure-promoted,
+.cy-left-inspector-ready .soma-satiety-promoted,
+.cy-left-inspector-ready .soma-harm-promoted { border-bottom: 0; margin-bottom: 0; }
+.cy-left-inspector-ready .memory-panel { padding-block: 6px; }
+.cy-inspector-body .panel { margin: 0; }
+.cy-inspector-body .soma-history { width: 100%; }
+
+@media (min-width: 1181px) {
+  .cy-inspector-item.is-active { z-index: 24; }
+  .cy-inspector-item.is-active > .cy-inspector-head {
+    position: relative;
+    z-index: 27;
+    border-right: 0;
+    border-radius: 3px 0 0 3px;
+  }
+  .cy-inspector-body {
+    position: fixed;
+    z-index: 26;
+    left: var(--cy-inspector-left);
+    top: var(--cy-inspector-top);
+    width: calc(100vw - var(--cy-inspector-left) - 14px);
+    max-height: calc(100vh - var(--cy-inspector-top) - 14px);
+  }
+}
+
+@media (max-width: 1180px) {
+  .cy-inspector-body {
+    position: static;
+    width: 100%;
+    max-height: min(72vh, 740px);
+    margin-top: -1px;
+    border-radius: 0 0 5px 5px;
+  }
+  .cy-inspector-item.is-active > .cy-inspector-head { border-radius: 3px 3px 0 0; }
+}
+
+@media (max-width: 760px) {
+  .cy-inspector-body { padding: 14px 12px; max-width: 100%; }
+  .cy-inspector-value { max-width: 14ch; }
+}

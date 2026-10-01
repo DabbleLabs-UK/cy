@@ -124,6 +124,7 @@ function cy_import_map(): string
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/timetravel.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('postcard-layout.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('shell-layout.css'), ENT_QUOTES) ?>">
+<link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/left-inspector.css'), ENT_QUOTES) ?>">
 <?php if ($isAdmin): ?>
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('world-inspection.css'), ENT_QUOTES) ?>">
 <?php endif; ?>
