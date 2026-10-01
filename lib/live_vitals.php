@@ -14,9 +14,12 @@ function captive_latest_vitals_row(PDO $db): ?array
         if (is_array($row)) {
             return $row;
         }
-    } catch (PDOException) {
-        // Migration 019 may not yet exist during the first half of a rolling
-        // deployment. Fall through to the append-only historical sample.
+    } catch (PDOException $e) {
+        // Only an absent migration 019 table permits the historical fallback.
+        // Other failures must not make stale vitals appear current.
+        if (($e->errorInfo[0] ?? null) !== '42S02' || ($e->errorInfo[1] ?? null) !== 1146) {
+            throw $e;
+        }
     }
 
     $row = $db->query(
