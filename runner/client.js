@@ -14,7 +14,7 @@
 // same letter is not delivered twice.
 
 import { appendFile, readFile, writeFile, rename, mkdir, open } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 
 import { clampSpeed } from './tempo.js';
@@ -105,7 +105,11 @@ export class Client {
   // Queue an event. ts is stamped here if the caller did not set one.
   enqueue(event) {
     if (!event.ts) event.ts = tsNow();
-    this.batch.push(event);
+    // An enqueue is a new logical delivery. Retries reuse this ID from the
+    // owned batch or disk queue; a later enqueue, even of the same object,
+    // must not be mistaken for the earlier delivery.
+    event.delivery_id = randomUUID();
+    this.batch.push({ ...event });
   }
 
   // Priority flush for latency-sensitive events (the public inference LED). Sends
@@ -199,6 +203,9 @@ export class Client {
   }
 
   async _queueEvents(events) {
+    for (const event of events) {
+      if (!event.delivery_id) event.delivery_id = randomUUID();
+    }
     try {
       await this._appendQueueEvents(events);
     } catch (err) {
@@ -236,6 +243,7 @@ export class Client {
     const queued = [];
     const validLines = [];
     const malformed = [];
+    let assignedLegacyIds = false;
     const decoder = new TextDecoder('utf-8', { fatal: true });
     let start = 0;
     for (let end = 0; end <= raw.length; end += 1) {
@@ -246,6 +254,10 @@ export class Client {
         const event = JSON.parse(decoder.decode(line));
         if (!event || typeof event !== 'object' || Array.isArray(event)) {
           throw new Error('NOT_EVENT_OBJECT');
+        }
+        if (!event.delivery_id) {
+          event.delivery_id = randomUUID();
+          assignedLegacyIds = true;
         }
         queued.push(event);
         validLines.push(line);
@@ -259,18 +271,23 @@ export class Client {
       }
       start = end + 1;
     }
-    if (malformed.length) {
+    if (malformed.length || assignedLegacyIds) {
       try {
-        const result = await this._quarantineQueueLines(malformed);
-        const compact = Buffer.concat(validLines);
+        const result = malformed.length
+          ? await this._quarantineQueueLines(malformed) : null;
+        const compact = assignedLegacyIds
+          ? Buffer.from(queued.map((event) => JSON.stringify(event)).join('\n') + '\n')
+          : Buffer.concat(validLines);
         const terminated = compact.length && compact[compact.length - 1] !== 10
           ? Buffer.concat([compact, Buffer.from('\n')]) : compact;
         await this._atomicReplace(this.queuePath, terminated);
-        console.warn(`[cy] queue: quarantined ${malformed.length} malformed record(s) in ${this.queueQuarantinePath}` +
-          (result.evicted ? `; ${result.evicted} oldest quarantine record(s) expired at the size limit` : '') +
-          (result.truncated ? `; ${result.truncated} oversized record(s) retained as bounded prefixes` : ''));
+        if (malformed.length) {
+          console.warn(`[cy] queue: quarantined ${malformed.length} malformed record(s) in ${this.queueQuarantinePath}` +
+            (result.evicted ? `; ${result.evicted} oldest quarantine record(s) expired at the size limit` : '') +
+            (result.truncated ? `; ${result.truncated} oversized record(s) retained as bounded prefixes` : ''));
+        }
       } catch (error) {
-        console.error(`[cy] queue: quarantine failed; active queue retained: ${error.message}`);
+        console.error(`[cy] queue: quarantine/identity upgrade failed; active queue retained: ${error.message}`);
         throw error;
       }
     }
