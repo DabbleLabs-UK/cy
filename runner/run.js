@@ -146,6 +146,7 @@ import {
   repeatsWithinBurst,
   sanitize,
   sanitizeCharacterContext,
+  stripMalformedProseControls,
   stateNotationHits,
   stripAssistantContaminatedTail,
   stripScaffold,
@@ -2933,7 +2934,7 @@ async function main() {
         id: `memory:${memory.id}`, sourceId: `memory:${memory.id}`, section: 'autobiographical_memory',
         provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
         privacyScope: memory.privacyScope || 'INTERNAL_ONLY', senderId: memory.subjectVisitorId || null,
-        priority: 70, content: memory.content || memory.publicSummary,
+        priority: 70, content: stripMalformedProseControls(memory.content || memory.publicSummary),
       });
     }
     if (!forAwg && actionOptions.length) {
@@ -3032,7 +3033,7 @@ async function main() {
     const ctx = {
       groundedSoma: grounded.directive,
       groundedSomaContext: grounded.context,
-      autobiographicalMemory: memory.directive,
+      autobiographicalMemory: stripMalformedProseControls(memory.directive),
       autobiographicalMemoryInspection: memory.inspection,
     };
     const brokered = buildBrokerContext(CONTEXT_CONSUMERS.CY_PROSE, {

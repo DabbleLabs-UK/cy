@@ -8,7 +8,11 @@ import {
   validateCharacterCandidate,
 } from './character-output.js';
 import { ZONE_A } from './prompt.js';
-import { sanitizeCharacterContext, stripAssistantContaminatedTail } from './warden.js';
+import {
+  sanitizeCharacterContext,
+  stripAssistantContaminatedTail,
+  stripMalformedProseControls,
+} from './warden.js';
 
 let checks = 0;
 const ok = (message) => { checks++; console.log('  ok - ' + message); };
@@ -56,6 +60,13 @@ for (const leak of observedLeaks) {
 }
 ok('the exact observed rewrite/rephrase/instruction/critique patterns are rejected');
 
+for (const leak of ['wot u mean hola? |}', 'c ya stev |}|', 'tea went cold |}}']) {
+  const validation = validateCharacterCandidate(leak);
+  assert.equal(validation.ok, false, leak);
+  assert.ok(validation.reasons.includes('malformed prose control fragment'));
+}
+ok('observed malformed separator family is rejected before waking prose publication');
+
 for (const legitimate of [
   'note from reg says keyes came by twice',
   'heard a change in his tone when the bolt went',
@@ -75,6 +86,8 @@ for (const legitimate of [
   'i wrote a new name by the door so keyes sees it',
   "i'll be writing reg's name down soon as keyes goes",
   "note that cy's journal got took in the search",
+  'the tally on the wall looked like | and } scratched apart',
+  'there were {two} marks by the door',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
@@ -133,6 +146,38 @@ ok('bad initial plus good retry accepts only the clean Cy candidate');
   assert.equal(result.characterValidation.finalAction, 'discarded-to-silence');
 }
 ok('bad initial plus bad retry stores no prose and resolves to silence');
+
+{
+  const prompt = 'grounded memory of the cold tray; postcard says hola';
+  const calls = [];
+  const good = await generateWithCharacterRepair({
+    prompt,
+    generate: async (sentPrompt) => {
+      calls.push(sentPrompt);
+      return { candidate: calls.length === 1 ? 'wot u mean hola? |}' : 'hola. bit quiet in here today.' };
+    },
+  });
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].startsWith(prompt));
+  assert.equal(good.candidate, 'hola. bit quiet in here today.');
+
+  const bad = await generateWithCharacterRepair({
+    prompt,
+    generate: async () => ({ candidate: 'more marks |} in the margin' }),
+  });
+  assert.equal(bad.candidate, '');
+  assert.equal(bad.characterValidation.finalAction, 'discarded-to-silence');
+}
+ok('malformed postcard candidate is repaired once or discarded, never published unchanged');
+
+{
+  const historical = 'wot u mean hola? |}| still thinkin bout it |}';
+  assert.equal(stripMalformedProseControls(historical), 'wot u mean hola? still thinkin bout it ');
+  assert.equal(sanitizeCharacterContext(historical), 'wot u mean hola? still thinkin bout it');
+  assert.equal(stripMalformedProseControls('saw | and } beside {two} scratches'),
+    'saw | and } beside {two} scratches');
+}
+ok('historical malformed fragments leave future context without deleting surrounding prose');
 
 {
   const contaminated = [

@@ -286,13 +286,24 @@ export function stripAssistantContaminatedTail(s) {
   return first ? text.slice(0, first.index).trimEnd() : text;
 }
 
+// This malformed separator has appeared in generated Cy prose (not in any
+// postcard format). Keep it out of historical prose supplied to later prompts
+// without deleting the surrounding words or changing the public archive.
+export function malformedProseControlHits(s) {
+  return [...String(s || '').matchAll(/\|\}[|{}]*/g)].map((match) => match[0]);
+}
+
+export function stripMalformedProseControls(s) {
+  return String(s || '').replace(/\|\}[|{}]*/g, '').replace(/[ \t]{2,}/g, ' ');
+}
+
 // Apply the character boundary whenever recent prose is read for a new prompt,
 // not only once during startup. This keeps an already-published historical event
 // untouched while preventing any missed meta tail from becoming self-reinforcing
 // Zone B / recent_expression context.
 export function sanitizeCharacterContext(s) {
   const safePrefix = stripAssistantContaminatedTail(sanitize(String(s || '')));
-  return stripScaffold(safePrefix).trimEnd();
+  return stripMalformedProseControls(stripScaffold(safePrefix)).trimEnd();
 }
 
 // STATE-NOTATION LEAK. The compressed vitals notation from the volatile prompt
