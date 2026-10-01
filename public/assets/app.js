@@ -16,6 +16,7 @@ import { Power } from './power.js';
 import { Tempo } from './tempo.js';
 import { PostcardArchive } from './postcard-archive.js';
 import { MemoryPanel } from './memory.js';
+import { LeftInspector } from './left-inspector.js';
 import {
   advanceStreamCursor,
   fetchDayPage,
@@ -47,6 +48,7 @@ const $ = (sel) => document.querySelector(sel);
 let pen, postcards, brain, hud, power, tempo;
 let postcardArchive;
 let memoryPanel;
+let leftInspector;
 let postcardWait = null;
 let lastSeq = 0;
 let lastLiveVitalsTimestamp = null;
@@ -190,6 +192,7 @@ async function boot() {
     admin: !!CFG.admin,
   });
   memoryPanel = new MemoryPanel($('#memory'), CFG.memory, CFG.memoryInspection);
+  leftInspector = new LeftInspector(document);
   hud = new Hud({ host: $('#host'), mail: $('#mail') });
   const powerEl = $('#power');
   if (powerEl) power = new Power(powerEl);
@@ -347,6 +350,7 @@ function resetFeedSurfaces() {
   if (pen && pen.reset) pen.reset();
   if (window.__cyPlain && window.__cyPlain.reset) window.__cyPlain.reset();
   if (brain && brain.reset) brain.reset();
+  if (leftInspector) leftInspector.refresh();
   if (hud && hud.reset) hud.reset();
 }
 
