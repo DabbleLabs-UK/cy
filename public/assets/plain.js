@@ -28,11 +28,13 @@ import { sketchToPaths, sketchBounds } from './pen.js';
 import { makeDreamSvg, renderDreamSketch } from './dream-view.js';
 import { ambientEventLabel, bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 import { createJumpToLatest } from './jump-to-latest.js';
+import { ChronologyHierarchy } from './chronology-hierarchy.js';
 
 // ---- module state -------------------------------------------------------
 let root = null;      // #plain
 let scrollEl = null;  // the scrolling region
 let colEl = null;     // the centred reading column blocks live in
+let eventHierarchy = null;
 let jumpControl = null;
 let font = null;      // Hershey font, for the 'T' label strokes in drawings
 
@@ -90,6 +92,7 @@ function buildShell() {
 
   colEl = document.createElement('div');
   colEl.className = 'pl-col';
+  eventHierarchy = new ChronologyHierarchy(colEl);
   scrollEl.appendChild(colEl);
   root.appendChild(scrollEl);
 
@@ -180,7 +183,7 @@ function handle(ev, bootstrap) {
     case 'event': {
       const label = ambientEventLabel(p);
       if (label && !['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives'].includes(String(p.name || ''))) {
-        addEvent(label, p.text || p.detail || '', ev.ts, 'event');
+        addEvent(label, p.text || p.detail || '', ev.ts, 'event', p);
       }
       break;
     }
@@ -390,8 +393,12 @@ function addFanMail(p, ts) {
   }
 }
 
-function addEvent(label, detail, ts, kind) {
+function addEvent(label, detail, ts, kind, payload = {}) {
   finalizeText(ts);
+  return eventHierarchy.add({ payload, label, detail, ts }, () => singleEvent(label, detail, ts, kind));
+}
+
+function singleEvent(label, detail, ts, kind) {
   const b = makeBlock(kind || 'event');
   addEndpoint(b.el, ts, 'event', 'point');
   const title = document.createElement('div');
@@ -404,6 +411,7 @@ function addEvent(label, detail, ts, kind) {
     body.textContent = String(detail);
     b.el.appendChild(body);
   }
+  return b.el;
 }
 
 function beginDay(date, today = '') {
@@ -650,6 +658,7 @@ function setScrollTop(top, following) {
 
 function reset() {
   colEl.textContent = '';
+  eventHierarchy.reset();
   curText = null;
   openReply = null;
   pendingReply = null;

@@ -92,4 +92,14 @@ plain.handle({
 assert.equal(col.children.length, 5, 'plain dream drawing integrates into the same block');
 assert.equal(dream.children[1].children[0].children.length, 1, 'plain dream field owns the drawing SVG');
 
+plain.reset();
+plain.beginDay('2026-09-09', '2026-09-09');
+plain.handle({ kind: 'event', ts: '2026-09-09 19:00:00', payload: { name: 'no_eggs' } }, true);
+plain.handle({ kind: 'event', ts: '2026-09-09 19:02:00', payload: { name: 'cold_tea' } }, true);
+assert.equal(col.children.length, 2, 'plain view also groups a short ambient run');
+assert.equal(col.children[1].tag, 'details');
+assert.equal(col.children[1].children[1].children.length, 2);
+plain.handle({ kind: 'text', ts: '2026-09-09 19:03:00', payload: { mode: 'journal', s: 'my own thought' } }, true);
+assert.equal(col.children[2]._classes.has('pl-block-text'), true, 'plain journal remains standalone');
+
 console.log('plain-feed.test.js: all checks passed');

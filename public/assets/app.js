@@ -840,7 +840,7 @@ function handleAmbient(p, ts, bootstrap = false) {
   const routineLabel = scheduledRoutineLabel(p);
   if (routineLabel) {
     postcards.finishAnimations();
-    if (pen.event) pen.event(routineLabel, '', ts, 'prison');
+    if (pen.event) pen.event(routineLabel, '', ts, 'prison', '', p);
     if (!bootstrap) pushTicker(routineLabel);
     return;
   }
@@ -871,7 +871,7 @@ function handleAmbient(p, ts, bootstrap = false) {
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
     const label = g > 0.7 ? `bad blood with ${who}` : `${who} on the spur`;
     postcards.finishAnimations();
-    if (pen.event) pen.event(label, p.detail || '', ts, 'prison');
+    if (pen.event) pen.event(label, p.detail || '', ts, 'prison', '', p);
     if (!bootstrap) pushTicker(label);
     return;
   }
@@ -880,21 +880,21 @@ function handleAmbient(p, ts, bootstrap = false) {
     const g = p.standing && typeof p.standing.grudge === 'number' ? p.standing.grudge : 0;
     const label = g > 0.7 ? `bad blood with ${who}` : `${who} on the wing`;
     postcards.finishAnimations();
-    if (pen.event) pen.event(label, p.detail || '', ts, 'prison');
+    if (pen.event) pen.event(label, p.detail || '', ts, 'prison', '', p);
     if (!bootstrap) pushTicker(label);
     return;
   }
   if (name === 'overheard') {
     const label = ambientEventLabel(p);
     postcards.finishAnimations();
-    if (pen.event && label) pen.event(label, p.text || '', ts, 'prison');
+    if (pen.event && label) pen.event(label, p.text || '', ts, 'prison', '', p);
     if (!bootstrap) pushTicker(label);
     return;
   }
   if (['instrumental_situation', 'instrumental_action', 'instrumental_outcome'].includes(name)) {
     const label = p.text || name.replaceAll('_', ' ');
     postcards.finishAnimations();
-    if (pen.event) pen.event(label, '', ts, 'prison');
+    if (pen.event) pen.event(label, '', ts, 'prison', '', p);
     if (!bootstrap) pushTicker(label);
     return;
   }
@@ -904,7 +904,7 @@ function handleAmbient(p, ts, bootstrap = false) {
     const eventKind = name === 'location_transition' ? 'movement'
       : name.startsWith('yard_') ? 'yard' : 'search';
     postcards.finishAnimations();
-    if (pen.event && label) pen.event(label, p.text || '', ts, eventKind);
+    if (pen.event && label) pen.event(label, p.text || '', ts, eventKind, '', p);
     if (!bootstrap && label) pushTicker(label);
     return;
   }
@@ -932,7 +932,7 @@ function handleAmbient(p, ts, bootstrap = false) {
     // do not duplicate their generic precursor impulse as a second block.
     if (pen.event && !['letter_arrives', 'letter_hostile', 'image_arrives', 'news_arrives'].includes(name)) {
       postcards.finishAnimations();
-      pen.event(ambientEventLabel(p) || nice[name], p.text || p.detail || '', ts, 'prison');
+      pen.event(ambientEventLabel(p) || nice[name], p.text || p.detail || '', ts, 'prison', '', p);
     }
     if (!bootstrap) pushTicker(nice[name]);
   }
