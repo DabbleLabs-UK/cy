@@ -25,6 +25,7 @@ CREATE TABLE events (
 CREATE TABLE ingest_delivery_receipts (
     delivery_id BINARY(16) PRIMARY KEY,
     kind VARCHAR(24) NOT NULL,
+    world_mirror_conflict TINYINT(1) NOT NULL DEFAULT 0,
     accepted_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -410,6 +411,8 @@ CREATE TABLE world_threads (
     thread_id VARCHAR(160) PRIMARY KEY,
     thread_type VARCHAR(80) NOT NULL,
     state VARCHAR(16) NOT NULL,
+    revision BIGINT UNSIGNED NULL,
+    transition_id CHAR(36) NULL,
     summary VARCHAR(800) NOT NULL,
     participants JSON NOT NULL,
     source_event_ids JSON NOT NULL,
@@ -428,6 +431,8 @@ CREATE TABLE world_objects (
     holder_id VARCHAR(80) NULL,
     location VARCHAR(80) NOT NULL,
     status VARCHAR(24) NOT NULL,
+    revision BIGINT UNSIGNED NULL,
+    transition_id CHAR(36) NULL,
     message_state JSON NULL,
     visibility JSON NOT NULL,
     source_event_id VARCHAR(160) NOT NULL,

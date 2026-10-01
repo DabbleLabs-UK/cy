@@ -60,6 +60,7 @@ export class Client {
     this.onInbox = null;
     this.onTempo = null;
     this.onDelivered = null;
+    this.onWorldMirrorConflict = null;
     // Fired from pollTempo the moment the operator pause flag TRANSITIONS, so the
     // runner can cut the in-flight burst and confirm the pause/resume at once
     // rather than at the end of the current 30-60s generation.
@@ -239,8 +240,49 @@ export class Client {
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) throw new Error(`ingest HTTP ${res.status}`);
+    const response = typeof res.json === 'function' ? await res.json() : {};
+    if (response.world_mirror_conflicts?.length) {
+      this.onWorldMirrorConflict?.(response.world_mirror_conflicts);
+    }
     this.backoff = 0;
     this.lastError = null;
+  }
+
+  async fetchWorldMirror() {
+    if (this.config.dryRun) return { objects: [], threads: [] };
+    const res = await fetch(`${this.config.apiBase}/api/world-mirror.php`, {
+      headers: { 'X-Cy-Key': this.config.ingestKey },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`world mirror HTTP ${res.status}`);
+    const body = await res.json();
+    if (!body || !Array.isArray(body.objects) || !Array.isArray(body.threads)) {
+      throw new Error('malformed world mirror response');
+    }
+    return body;
+  }
+
+  async republishWorldMirror(records) {
+    if (this.config.dryRun || !records.length) return;
+    const events = records.map(({ kind, entity }) => ({
+      ts: tsNow(), kind: kind === 'object' ? 'world_object_record' : 'world_thread_record',
+      payload: entity,
+      // A checkpoint-backed republish is the same logical transition each
+      // time. It need not occupy the ordinary retry queue: the checkpoint is
+      // already durable and startup/reconnect reconciliation repeats it.
+      delivery_id: entity.transitionId,
+    }));
+    const res = await fetch(`${this.config.apiBase}/api/ingest.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Cy-Key': this.config.ingestKey },
+      body: JSON.stringify({ events }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) throw new Error(`world mirror republish HTTP ${res.status}`);
+    const response = await res.json();
+    if (response.world_mirror_conflicts?.length) {
+      throw new Error('world mirror transition conflict during republish');
+    }
   }
 
   async _drainQueue() {
@@ -322,6 +364,10 @@ export class Client {
         signal: AbortSignal.timeout(20000),
       });
       if (!res.ok) throw new Error(`queue drain HTTP ${res.status}`);
+      const response = typeof res.json === 'function' ? await res.json() : {};
+      if (response.world_mirror_conflicts?.length) {
+        this.onWorldMirrorConflict?.(response.world_mirror_conflicts);
+      }
       this.onDelivered?.(slice);
     }
     // Whole queue delivered - clear it.
