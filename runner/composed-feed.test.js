@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ambientEventLabel } from '../public/assets/timeline.js';
 
 function makeEl(tag) {
   const el = {
@@ -136,6 +137,32 @@ assert.equal(grouped.flow.children[0].children[1].children.length, 2);
 grouped.beginEntry('2026-09-09 10:17:00', 'journal');
 grouped.write('a thought after the search', 'journal');
 assert.equal(grouped.flow.children[1]._classes.has('cy-journal-entry'), true, 'journal stays outside the group');
+
+const realSearches = JSON.parse(await readFile(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'chronology-searches-2026-10-01.json')));
+const liveSearchRoot = makeEl('div');
+const liveSearchFeed = new ComposedFeed(liveSearchRoot, { chars: [] });
+liveSearchFeed.setInstant(true);
+for (const event of realSearches) {
+  const p = event.payload;
+  liveSearchFeed.event(ambientEventLabel(p), p.name.startsWith('cell_search_') ? p.text : '',
+    event.ts, 'search', '', p);
+}
+assert.deepEqual(liveSearchFeed.flow.children.map((block) => block.children[1].children.length), [10, 9],
+  'the actual public search payloads group through the handwritten feed');
+liveSearchFeed.reset();
+for (const event of realSearches) {
+  const p = event.payload;
+  liveSearchFeed.event(ambientEventLabel(p), p.name.startsWith('cell_search_') ? p.text : '',
+    event.ts, 'search', '', p);
+}
+assert.deepEqual(liveSearchFeed.flow.children.map((block) => block.children[1].children.length), [10, 9],
+  'replaying an older page reconstructs the same two groups');
+const singleSearchStep = new ComposedFeed(makeEl('div'), { chars: [] });
+singleSearchStep.setInstant(true);
+singleSearchStep.event('The search found nothing', 'The search found nothing.',
+  '2026-10-01 23:43:33.973', 'search', '', realSearches[7].payload);
+assert.equal(singleSearchStep.flow.children[0].children.length, 2,
+  'a standalone search card does not print its own title again as detail');
 
 chronology.beginEntry('2026-09-09 10:25:00', 'dream');
 assert.ok(chronology.current.block._classes.has('cy-dream-field'), 'legacy dream text uses the distinct dream field');

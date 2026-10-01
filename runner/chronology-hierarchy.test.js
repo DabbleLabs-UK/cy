@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ChronologyHierarchy } from '../public/assets/chronology-hierarchy.js';
+import { ChronologyHierarchy, nonDuplicateEventDetail } from '../public/assets/chronology-hierarchy.js';
+import { ambientEventLabel } from '../public/assets/timeline.js';
 
 function element(tag) {
   const node = {
@@ -64,7 +65,7 @@ assert.deepEqual(searchGroup.children[1].children.map((row) => row.children[1].c
   'The officers completed the cell search',
   'The cell search ended and Cy remained in the cell',
 ]);
-assert.equal(searchGroup.children[0].children[1].textContent, 'Cell searched - nothing found; Cy refused an instruction');
+assert.equal(searchGroup.children[0].children[1].textContent, 'Cell searched by Mr Proctor - nothing found; Cy refused an instruction');
 assert.equal(searchGroup.children[1].children[0].children[1].children.length, 1,
   'title and identical detail are not duplicated inside expansion');
 search.add('cell_search_initiated', 5, "Miss Bailey arrived at Cy's cell to begin a search");
@@ -80,7 +81,7 @@ property.add('instrumental_action', 3, 'The situation resolved via hand over ite
 property.add('instrumental_outcome', 3, 'Cy handed it over; Mr Proctor took the item', {
   action: 'action:hand_over_item', consequence: 'item_transferred_search_ended',
 });
-assert.equal(property.container.children[0].children[0].children[1].textContent, 'Cell searched - item taken',
+assert.equal(property.container.children[0].children[0].children[1].textContent, 'Cell searched by Mr Proctor - item taken',
   'the consequential property outcome stays in the collapsed summary');
 
 const ambient = makeFeed();
@@ -160,6 +161,48 @@ assert.deepEqual(replayed.container.children[0].children[1].children.map((row) =
 const late = paged.add('cell_search_initiated', 6, "Miss Bailey arrived at Cy's cell to begin a search");
 assert.equal(paged.container.children[0].children[1].children.length, 5, 'a live second search cannot mutate the first');
 assert.equal(paged.container.children[1], late);
+
+// Public range.php records from two consecutive production searches. These
+// have a distinct environment_event_id per stage, not one shared search ID.
+const realSearches = JSON.parse(readFileSync(new URL('./fixtures/chronology-searches-2026-10-01.json', import.meta.url)));
+function addReal(feed, event) {
+  const { payload, ts } = event;
+  const label = ambientEventLabel(payload);
+  const detail = payload.name.startsWith('cell_search_') ? payload.text || '' : '';
+  return feed.hierarchy.add({ payload, label, detail, ts }, () => {
+    const single = element('section');
+    single.textContent = label;
+    feed.container.appendChild(single);
+    return single;
+  });
+}
+const real = makeFeed();
+for (const event of realSearches) addReal(real, event);
+assert.equal(real.container.children.length, 2, 'both real searches form separate units');
+assert.deepEqual(real.container.children.map((group) => group.children[1].children.length), [10, 9]);
+assert.equal(real.container.children[0].children[0].children[1].textContent,
+  'Cell searched by Mr Proctor - nothing found; Cy refused an instruction');
+assert.equal(real.container.children[1].children[0].children[1].textContent,
+  'Cell searched by Miss Trace - nothing found');
+assert.deepEqual(real.container.children.flatMap((group) => group.children[1].children.map((row) => row.children[0].textContent)),
+  realSearches.map((event) => event.ts.slice(11, 19)), 'expansion preserves all original step times and order');
+const realLive = makeFeed();
+for (const event of realSearches.slice(0, 6)) addReal(realLive, event);
+assert.equal(realLive.container.children.length, 1, 'the live search starts as one pending unit');
+for (const event of realSearches.slice(6)) addReal(realLive, event);
+assert.deepEqual(realLive.container.children.map((group) => group.children[1].children.length), [10, 9],
+  'later live arrivals extend the correct episode without duplication');
+realLive.barrier('journal');
+assert.equal(realLive.container.children.length, 3, 'journal stays separate after both searches');
+const realPaged = makeFeed();
+for (const event of realSearches.slice(0, 13)) addReal(realPaged, event);
+for (const event of realSearches.slice(13)) addReal(realPaged, event);
+assert.deepEqual(realPaged.container.children.map((group) => group.children[1].children.length), [10, 9],
+  'a page boundary inside the second search keeps the ordered two-unit result');
+assert.equal(nonDuplicateEventDetail('[The search found nothing]', 'The search found nothing.'), '',
+  'brackets and terminal punctuation do not turn repeated title text into new detail');
+assert.equal(nonDuplicateEventDetail('The search found nothing', 'The search found nothing, but an item was logged'),
+  'The search found nothing, but an item was logged', 'a genuinely different detail remains visible');
 
 const css = readFileSync(new URL('../public/assets/style.css', import.meta.url), 'utf8');
 assert.match(css, /\.cy-chronology-group-head:focus-visible/, 'keyboard focus is visible');

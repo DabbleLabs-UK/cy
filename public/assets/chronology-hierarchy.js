@@ -35,6 +35,16 @@ function actorFromSearch(text) {
   return match ? match[1] : '';
 }
 
+// Public search labels often are the event text verbatim. Keep a separate
+// detail only when it adds information, including on a standalone stage card.
+export function nonDuplicateEventDetail(label, detail) {
+  const value = String(detail || '');
+  if (!value.trim()) return '';
+  const comparable = (text) => String(text || '').trim().replace(/^\[|\]$/g, '')
+    .replace(/\s+/g, ' ').replace(/[.!?]+$/g, '').toLowerCase();
+  return comparable(label) === comparable(value) ? '' : value;
+}
+
 function nextSearchState(unit, record) {
   const p = record.payload;
   // A passing wing/tray notice can land between stages of one real search.
@@ -88,8 +98,11 @@ function outcomeText(unit) {
       if (p.action === 'action:refuse_instruction') refused = true;
     }
   }
-  const base = result ? `Cell searched - ${result}` : 'Cell search underway';
-  return refused ? `${base}; Cy refused an instruction` : base;
+  const completed = unit.stageIndex === SEARCH_STAGES.length - 1 || result === 'item taken' || result === 'item kept';
+  const actor = unit.actor ? ` by ${unit.actor}` : '';
+  const base = completed ? `Cell searched${actor}` : `Cell search${actor} underway`;
+  const summary = result ? `${base} - ${result}` : base;
+  return refused ? `${summary}; Cy refused an instruction` : summary;
 }
 
 function groupLabel(unit) {
@@ -143,10 +156,11 @@ function appendStep(unit, record) {
   words.appendChild(title);
   // Several existing search cards repeat the exact same text as title and body.
   // Keep the fact once, while retaining genuinely additional detail.
-  if (record.detail && record.detail.trim() !== record.label.trim()) {
+  const extraDetail = nonDuplicateEventDetail(record.label, record.detail);
+  if (extraDetail) {
     const detail = document.createElement('span');
     detail.className = 'cy-chronology-step-detail';
-    detail.textContent = record.detail;
+    detail.textContent = extraDetail;
     words.appendChild(detail);
   }
   row.appendChild(time);
