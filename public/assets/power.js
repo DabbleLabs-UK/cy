@@ -129,27 +129,42 @@ export class Power {
   // rather than with flush time. Each point carries the window's min/max/mean watts.
   push(p, tsMs) {
     if (!p) return;
-    this.points.push(this._point(p, tsMs));
-    this._trim();
-    this._render();
+    this._merge([...this.points, this._point(p, tsMs)]);
   }
 
   // Replace the one-sample day bootstrap with the rolling history fetched by the
   // dedicated API. Merge anything already received live, deduplicate by measured
   // time, and render once instead of repainting hundreds of times during startup.
   loadHistory(events) {
-    const byTime = new Map();
+    const history = [];
     for (const event of events || []) {
       const payload = event && event.payload ? event.payload : event;
       if (!payload) continue;
       const fallback = event && event.ts ? parseTs(event.ts) : NaN;
-      const point = this._point(payload, fallback);
-      byTime.set(point.t, point);
+      history.push(this._point(payload, fallback));
     }
-    // Existing points are newer than, or equal to, the database response and win
-    // a duplicate timestamp so the headline cannot move backwards during boot.
-    for (const point of this.points) byTime.set(point.t, point);
-    this.points = [...byTime.values()].sort((a, b) => a.t - b.t);
+    // Keep existing live readings after history for equal-time ties.
+    this._merge([...history, ...this.points]);
+  }
+
+  _merge(points) {
+    const seen = new Set();
+    const merged = [];
+    for (const point of points) {
+      // A replay of the same normalized measurement is one point. Distinct
+      // readings can share a millisecond (for example across a restart), so
+      // timestamp alone is not a safe deduplication key.
+      const key = JSON.stringify([
+        point.t, point.w, point.wmin, point.wmax, point.winst,
+        point.cost, point.cph, point.kwh,
+      ]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(point);
+    }
+    // Stable sorting preserves arrival precedence for distinct equal-time
+    // readings while ensuring the last point is always the newest measurement.
+    this.points = merged.sort((a, b) => a.t - b.t);
     this._trim();
     this._render();
   }
