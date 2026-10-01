@@ -69,15 +69,15 @@ function captive_postcard_inflight_replies(PDO $db): int
 
 /**
  * A reply claim which never completed is retained, but it is not attempted or
- * presented as a fresh arrival again. fan_final is the existing terminal class
- * for mail that reached the reply path without producing a usable reply.
+ * presented as a fresh reply again. Clear its abandoned claim so the existing
+ * fan-mail lane can screen it and publish one terminal archive receipt.
  */
 function captive_postcard_expire_stale_claims(PDO $db): int
 {
     $claimTtl = max(60, CY_REPLY_CLAIM_TTL_SECONDS);
     return (int)$db->exec(
         "UPDATE postcards
-         SET mail_class = 'fan_final'
+         SET mail_class = 'fan_final', delivered_at = NULL
          WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
            AND delivered_at IS NOT NULL
            AND delivered_at < DATE_SUB(NOW(), INTERVAL {$claimTtl} SECOND)"
