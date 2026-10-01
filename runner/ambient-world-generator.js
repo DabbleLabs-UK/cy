@@ -155,6 +155,51 @@ function canonicalCastId(value) {
   return CAST_ID_BY_LABEL.get(label) || null;
 }
 
+// Names in objective evidence must agree with the machine participant IDs.
+// A third person may be the subject of conversation without being present.
+const CAST_NAME_ALIASES = [...new Map([
+  ['Cy', 'cy'],
+  ...[...CAST, ...OFFICERS].flatMap((entry) => [
+    [entry.name, entry.key],
+    ...(entry.name.includes(' ') ? [[entry.name.split(' ').slice(1).join(' '), entry.key]] : []),
+  ]),
+]).entries()]
+  .sort((a, b) => b[0].length - a[0].length);
+const CAST_NAME_PATTERN = new RegExp(
+  `(?<![A-Za-z])(?:${CAST_NAME_ALIASES.map(([name]) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![A-Za-z])`,
+  'g',
+);
+const CAST_ID_BY_NAME = new Map(CAST_NAME_ALIASES);
+
+function castIdentityErrors(text, participants, candidate) {
+  const source = clean(text, 1200);
+  const names = [...source.matchAll(CAST_NAME_PATTERN)].map((match) => ({
+    name: match[0], castId: CAST_ID_BY_NAME.get(match[0]), index: match.index,
+  }));
+  const errors = [];
+  for (let index = 0; index < names.length; index += 1) {
+    const current = names[index];
+    const previous = names[index - 1];
+    if (previous && previous.castId !== current.castId
+      && /^\s+$/.test(source.slice(previous.index + previous.name.length, current.index))) {
+      errors.push('CONFLATED_CAST_IDENTITY');
+    }
+    if (participants.has(current.castId)) continue;
+    const before = source.slice(0, current.index);
+    // "Fisher asked Cy about Bill" reports a subject, not Bill's presence.
+    if (/\b(?:about|regarding|concerning)\s+$/i.test(before)) continue;
+    // A world-only delivery may name its recipient without making that person
+    // an observer. A later read may identify the recorded sender as provenance.
+    const messageActions = (candidate.objects || []).map((object) => object?.messageAction).filter(Boolean);
+    if (/\b(?:to|for)\s+$/i.test(before)
+      && messageActions.some((action) => id(action.recipientId) === current.castId)) continue;
+    if (/\bfrom\s+$/i.test(before)
+      && messageActions.some((action) => id(action.senderId) === current.castId)) continue;
+    errors.push('NAMED_CAST_NOT_PARTICIPANT');
+  }
+  return errors;
+}
+
 function fallbackActionClass(event) {
   const source = normaliseSummary(event && (event.summary
     || event.objective && event.objective.summary));
@@ -745,6 +790,8 @@ export function buildAwgCall(contextRendering, {
       '- Choose one epistemic branch: OBSERVED uses only a cy/CY_* observation; WORLD_ONLY excludes cy from both participants and observations.',
       '- Use observerId world only with WORLD_ONLY; cy only with CY_*; other cast only with CAST_ONLY.',
       '- Include every actor, speaker, observer and active object owner/holder in participants.',
+      '- Cast names are separate identities: Bill and Fisher are different people. Do not combine two cast names into one person.',
+      '- Names of people acting or present in objective and observation summaries must match participants. A non-participant may only be mentioned as the subject of talk (for example, Fisher asked Cy about Bill).',
       '- Exception: a WORLD_ONLY message delivery may set recipient/holder cy without making Cy a participant or implying awareness.',
       '- If Cy participates directly, include a truthful CY_* observation; WORLD_ONLY means Cy did not participate or perceive it.',
       '- Spoken conversation is not a message object. Leave objects empty unless a concrete persistent physical item is created, moved or changed.',
@@ -1123,6 +1170,9 @@ export function validateAwgCandidate(candidateValue, stateValue, {
   if (!observations.length) errors.push('OBSERVABILITY_REQUIRED');
   observations.forEach((observation) => validateObservation(observation, errors));
   const participantSet = new Set(participants);
+  for (const text of [candidate.objective?.summary, ...observations.map((item) => item?.summary)]) {
+    errors.push(...castIdentityErrors(text, participantSet, candidate));
+  }
   observations.forEach((observation) => {
     const observerId = id(observation && observation.observerId);
     const access = clean(observation && observation.access).toUpperCase();

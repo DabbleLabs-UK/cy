@@ -170,7 +170,7 @@ import {
   READ_CHARS_PER_SEC,
 } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
-import { PRISON_SCHEDULE, mealExpectation, materialiseScheduledEvent } from './environment.js';
+import { PRISON_SCHEDULE, mealExpectation, materialiseRoutineOutcome, materialiseScheduledEvent } from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import {
   EXERCISE_REGIME,
@@ -1143,6 +1143,12 @@ async function main() {
       nowMs: now, date, minutes: mins, asleep,
     });
     vitals.locationRegime = reconciled.state;
+    // The chosen result is durable in the routine episode, but cannot become
+    // observed world evidence until the visit actually ends.
+    if (reconciled.completedRoutineEpisode) {
+      const episode = reconciled.completedRoutineEpisode;
+      recordScheduledOutcome(materialiseRoutineOutcome(episode.outcome), episode.id);
+    }
     for (const event of reconciled.events) {
       const record = captureEpisodeEvent(event, { locationSource: true });
       publishEpisodeEvent(event, record);
@@ -4064,8 +4070,15 @@ async function main() {
       if (started.started) {
         const movement = captureEpisodeEvent(started.event, { locationSource: true });
         publishEpisodeEvent(started.event, movement);
+        urgentVitalsDirty = true;
+        return;
       }
     }
+    recordScheduledOutcome(event, slot.kind === 'routine'
+      ? `routine:${clock.date}:${slot.routine}` : null, expectedRecord);
+  }
+
+  function recordScheduledOutcome(event, routineEpisodeId = null, expectedRecord = null) {
     if (expectedRecord) {
       event.world.context = event.world.context || {};
       event.world.context.previous_event_ids = [expectedRecord.world_event.id];
@@ -4076,9 +4089,9 @@ async function main() {
       world: event.world,
       observation: event.observation,
     });
-    if (slot.kind === 'routine') {
+    if (routineEpisodeId) {
       vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, structured.world_event.id, {
-        routineEpisodeId: `routine:${clock.date}:${slot.routine}`,
+        routineEpisodeId,
       });
       urgentVitalsDirty = true;
     }

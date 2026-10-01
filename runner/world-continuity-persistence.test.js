@@ -33,11 +33,14 @@ test('sectioned checkpoint preserves routine location and staged search across r
     });
     assert.equal(restarted.locationRegime.current.id, LOCATIONS.SHOWER);
     assert.equal(restarted.locationRegime.activeRoutineEpisode.outcome, 'shower_warm');
+    assert.equal(restarted.locationRegime.routineEpisodes[0].event_ids.length, 0,
+      'the selected outcome is not yet world evidence during the visit');
     const returned = reconcileRegimeLocation(restarted.locationRegime, {
       nowMs: now + 15 * 60_000, date, minutes: 9 * 60 + 30,
     });
     restarted.locationRegime = returned.state;
     assert.equal(returned.events.length, 1);
+    assert.equal(returned.completedRoutineEpisode.outcome, 'shower_warm');
     assert.equal(restarted.locationRegime.current.id, LOCATIONS.CELL);
 
     const object = { id: 'note-1', type: 'note', status: 'ACTIVE', location: 'cell', holderId: 'cy' };
@@ -62,6 +65,9 @@ test('sectioned checkpoint preserves routine location and staged search across r
     const secondRestart = await loadVitals(path);
     assert.equal(secondRestart.locationRegime.searchEpisode.stage, 'SEARCH_ONGOING');
     assert.equal(secondRestart.locationRegime.routineEpisodes[0].status, 'COMPLETE');
+    assert.equal(reconcileRegimeLocation(secondRestart.locationRegime, {
+      nowMs: now + 21 * 60_000, date, minutes: 9 * 60 + 36,
+    }).completedRoutineEpisode, null, 'restart after completion cannot replay the outcome');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

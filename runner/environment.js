@@ -280,7 +280,13 @@ const ROUTINES = {
 export function chooseRoutineEvent(routine, rnd = Math.random) {
   const choices = ROUTINES[routine];
   if (!choices || !choices.length) throw new Error(`unknown prison routine: ${routine}`);
-  const chosen = pick(choices, rnd);
+  return materialiseRoutineOutcome(pick(choices, rnd).name);
+}
+
+export function materialiseRoutineOutcome(outcome) {
+  const routine = String(outcome || '').split('_')[0];
+  const chosen = ROUTINES[routine]?.find((entry) => entry.name === outcome);
+  if (!chosen) throw new Error(`unknown prison routine outcome: ${outcome}`);
   const { effects = [], social = null, appraisal = {}, ...worldFacing } = chosen;
   const facts = routineFacts(routine, chosen.name, chosen.text);
   return {

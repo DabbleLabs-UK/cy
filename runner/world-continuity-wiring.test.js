@@ -11,6 +11,14 @@ test('the scheduler uses the persisted location for genuine routine outcomes and
   assert.match(scheduled, /materialiseScheduledEvent\(slot, Math\.random, \{ mealId \}\)/);
   assert.match(scheduled, /startScheduledRoutineEpisode\(vitals\.locationRegime/);
   assert.match(scheduled, /if \(started\.started\) \{[\s\S]*?captureEpisodeEvent\(started\.event/);
+  const arrival = scheduled.slice(scheduled.indexOf('if (started.started) {'), scheduled.indexOf('function recordScheduledOutcome('));
+  assert.match(arrival, /publishEpisodeEvent\(started\.event, movement\);[\s\S]*?return;/);
+  assert.ok(arrival.indexOf('return;') < arrival.indexOf('recordScheduledOutcome(event,'),
+    'a successful arrival cannot publish the selected completion outcome');
+  const location = runner.slice(runner.indexOf('function processLocationRegime('), runner.indexOf('function beginCellSearch('));
+  assert.ok(location.indexOf('recordScheduledOutcome(materialiseRoutineOutcome(episode.outcome), episode.id)')
+    < location.indexOf('for (const event of reconciled.events)'),
+  'the completed outcome is published before the return movement');
   const tick = runner.slice(runner.indexOf('function scheduler(now)'), runner.indexOf('// ---- vitals tick every tickMs'));
   assert.ok(tick.indexOf('processLocationRegime(now, date, mins, asleep)') < tick.indexOf('advanceCellSearch(now)'));
   assert.match(tick, /if \(vitals\.locationRegime\.current\.id !== LOCATIONS\.CELL\) return;/);

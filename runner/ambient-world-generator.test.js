@@ -528,6 +528,7 @@ test('J: an existing thread can continue', () => {
   const later = NOW + AWG_CADENCE_MS;
   const continuation = candidate({
     decision: 'CONTINUATION',
+    participants: ['reg', 'cy', 'daemon'],
     occurredAt: new Date(later).toISOString(),
     resolved: true,
     objective: { eventType: 'note_questioned', summary: 'Daemon asked Cy whether the note reached him.' },
@@ -539,6 +540,60 @@ test('J: an existing thread can continue', () => {
   assert.equal(validation.valid, true);
   const result = applyAwgCandidate(opening.state, validation, { makeId: (prefix) => `${prefix}-2`, acceptedAt: continuation.occurredAt });
   assert.equal(result.state.threads[0].state, 'RESOLVED');
+});
+
+test('objective cast identities cannot contradict participants or combine distinct people', () => {
+  const base = candidate({
+    eventFamily: 'SOCIAL_REQUEST', participants: ['cy', 'fisher'], location: 'cell',
+    objective: { eventType: 'cy_asks_question', summary: 'Cy asks Fisher about missing items in the cell.' },
+    objects: [],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Fisher answered Cy in the cell.' }],
+    thread: { action: 'NONE', id: null, type: null, summary: null, nextEligibleAt: null },
+    resolved: true,
+  });
+  const check = (summary) => validateAwgCandidate({
+    ...base, objective: { ...base.objective, summary },
+  }, null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'] });
+  assert.equal(check(base.objective.summary).valid, true);
+  assert.ok(check('Cy asks Bill about missing items in the cell.').errors.includes('NAMED_CAST_NOT_PARTICIPANT'));
+  assert.ok(check('Cy asks Bill Fisher about missing items in the cell.').errors.includes('CONFLATED_CAST_IDENTITY'));
+  assert.equal(check('Fisher asks Cy about Bill.').valid, true);
+  assert.equal(check('Fisher asks Cy about Sam.').valid, true);
+  assert.ok(validateAwgCandidate({
+    ...base,
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Bill answered Cy in the cell.' }],
+  }, null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'] })
+    .errors.includes('NAMED_CAST_NOT_PARTICIPANT'));
+});
+
+test('invalid cast identity is discarded before world or memory publication', async () => {
+  const proposed = proposal({
+    eventFamily: 'SOCIAL_REQUEST', participants: ['cy', 'fisher'],
+    objective: { eventType: 'cy_asks_question', summary: 'Cy asks Bill Fisher about missing items in the cell.' },
+    objects: [],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Fisher answered Cy in the cell.' }],
+    thread: { action: 'NONE', id: null, summary: null },
+  });
+  const run = async (summary, state = null, nowMs = NOW) => runAmbientWorldCycle({
+    state, nowMs, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    currentLocation: 'cell', plausibleCastIds: ['fisher'],
+    generate: async () => JSON.stringify({
+      ...proposed, objective: { ...proposed.objective, summary },
+    }),
+  });
+  const rejected = await run(proposed.objective.summary);
+  assert.equal(rejected.status, 'REJECTED');
+  assert.ok(rejected.validation.errors.includes('CONFLATED_CAST_IDENTITY'));
+  assert.deepEqual(rejected.run.createdWorldEventIds, []);
+  assert.deepEqual(rejected.state.recentAccepted, []);
+  assert.equal(rejected.state.objects.length, 0);
+  const stillRejected = await run(proposed.objective.summary, rejected.state, NOW + AWG_CADENCE_MS);
+  assert.equal(stillRejected.status, 'REJECTED');
+  assert.deepEqual(stillRejected.run.createdWorldEventIds, []);
+  const valid = await run('Cy asks Fisher about missing items in the cell.', rejected.state, NOW + AWG_CADENCE_MS);
+  assert.equal(valid.status, 'ACCEPTED');
+  const runner = await readFile(new URL('./run.js', import.meta.url), 'utf8');
+  assert.match(runner, /if \(result\.status !== 'ACCEPTED'\) return result;/);
 });
 
 test('K: duplicate event is rejected within dedupe window', () => {
