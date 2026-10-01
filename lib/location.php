@@ -19,7 +19,9 @@ function captive_location_api_payload(?array $row): array
     $current = is_array($state) && isset($state['current']) && is_array($state['current'])
         ? $state['current'] : null;
     $valid = $current !== null
-        && in_array($current['id'] ?? null, ['CELL', 'EXERCISE_YARD', 'WING_OR_LANDING'], true)
+        && in_array($current['id'] ?? null, [
+            'CELL', 'EXERCISE_YARD', 'WING_OR_LANDING', 'SHOWER', 'ASSOCIATION', 'PHONE',
+        ], true)
         && is_string($current['entered_at'] ?? null)
         && is_string($current['regime_activity'] ?? null);
     $publicState = null;
