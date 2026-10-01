@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { InferenceCancellationError } from './inference-cancellation.js';
+import { compareWorldEntities } from './world-mirror.js';
 
 import {
   AWG_CADENCE_MS,
@@ -559,6 +560,162 @@ test('L: object consistency rejects a confiscated object becoming active', () =>
     objects: [candidate().objects[0], { ...candidate().objects[0], location: 'cell' }],
   }), null, { nowMs: NOW });
   assert.ok(duplicateObject.errors.includes('DUPLICATE_OBJECT_ID'));
+});
+
+test('a new physical object cannot begin already confiscated', () => {
+  const raw = proposal({
+    eventFamily: 'OBJECT_TRANSFER',
+    participants: ['cy', 'fisher'],
+    objective: { eventType: 'object_confiscation', summary: 'Fisher confiscated an item from Cy in the cell.' },
+    objects: [{ id: null, type: 'contraband_item', ownerId: 'cy', holderId: 'fisher', status: 'CONFISCATED', messageAction: null }],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Cy saw Fisher take an item.' }],
+    thread: { action: 'NONE', id: null, summary: null },
+  });
+  const materialised = materialiseAwgProposal(raw, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'],
+    makeId: (prefix) => `${prefix}-new`,
+  });
+  assert.ok(validateAwgCandidate(materialised, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'],
+  }).errors.includes('NEW_OBJECT_UNAVAILABLE_STATUS'));
+  const disguised = materialiseAwgProposal({
+    ...raw, objects: [{ ...raw.objects[0], status: 'ACTIVE' }],
+  }, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'],
+    makeId: (prefix) => `${prefix}-disguised`,
+  });
+  assert.ok(validateAwgCandidate(disguised, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['fisher'],
+  }).errors.includes('NEW_OBJECT_CONFISCATION_REQUIRES_EXISTING'));
+});
+
+test('ordinary new object begins active at the event location with its selected holder', () => {
+  const raw = proposal({
+    eventFamily: 'OBJECT_TRANSFER', participants: ['cy', 'reg'],
+    objective: { eventType: 'item_found', summary: 'Cy found a note in the cell.' },
+    objects: [{ id: null, type: 'note', ownerId: 'reg', holderId: 'cy', status: 'ACTIVE', messageAction: null }],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Cy saw the note in the cell.' }],
+    thread: { action: 'NONE', id: null, summary: null },
+  });
+  const materialised = materialiseAwgProposal(raw, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'],
+    makeId: (prefix) => `${prefix}-new`,
+  });
+  assert.equal(materialised.objects[0].location, 'cell');
+  assert.equal(materialised.objects[0].holderId, 'cy');
+  assert.equal(materialised.objects[0].status, 'ACTIVE');
+  const validation = validateAwgCandidate(materialised, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg'],
+  });
+  assert.equal(validation.valid, true, validation.errors.join(', '));
+  const applied = applyAwgCandidate(null, validation, { makeId: (prefix) => `${prefix}-new`, acceptedAt: materialised.occurredAt });
+  assert.equal(applied.state.objects[0].revision, 1);
+  assert.equal(applied.state.objects[0].sourceEventId, applied.event.id);
+});
+
+test('existing-object confiscation is one revisioned physical transfer, and a retry does not reapply it', async () => {
+  const prior = {
+    id: 'object-existing', type: 'permitted_item', ownerId: 'cy', holderId: 'cy',
+    location: 'cell', status: 'ACTIVE', sourceEventId: 'world-original',
+    revision: 3, transitionId: '00000000-0000-4000-8000-000000000003',
+  };
+  const state = reconcileWorldSimulationState({ objects: [prior] });
+  const raw = proposal({
+    eventFamily: 'OBJECT_TRANSFER', participants: ['cy', 'proctor'],
+    objective: { eventType: 'object_confiscation', summary: 'Mr Proctor confiscated Cy\'s item in the cell.' },
+    objects: [{ id: prior.id, type: prior.type, ownerId: 'cy', holderId: 'proctor', status: 'CONFISCATED', messageAction: null }],
+    observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Cy saw Mr Proctor take the item.' }],
+    thread: { action: 'NONE', id: null, summary: null },
+  });
+  const candidate = materialiseAwgProposal(raw, state, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['proctor'],
+  });
+  assert.equal(candidate.objects[0].location, 'officer_desk');
+  const validation = validateAwgCandidate(candidate, state, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['proctor'],
+  });
+  assert.equal(validation.valid, true, validation.errors.join(', '));
+  const first = await runAmbientWorldCycle({
+    state, nowMs: NOW, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    currentLocation: 'cell', plausibleCastIds: ['proctor'],
+    generate: async () => JSON.stringify(raw),
+    makeId: (prefix) => `${prefix}-first`,
+  });
+  assert.equal(first.status, 'ACCEPTED', first.run?.rejectionReason);
+  const current = first.state.objects[0];
+  assert.equal(current.id, prior.id);
+  assert.equal(current.sourceEventId, prior.sourceEventId);
+  assert.equal(current.ownerId, prior.ownerId);
+  assert.equal(current.holderId, 'proctor');
+  assert.equal(current.location, 'officer_desk');
+  assert.equal(current.status, 'CONFISCATED');
+  assert.equal(current.revision, 4);
+  assert.notEqual(current.transitionId, prior.transitionId);
+  assert.equal(compareWorldEntities('object', current, structuredClone(current)), 'SAME');
+  const retry = await runAmbientWorldCycle({
+    state: first.state, nowMs: NOW + 1000, idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    currentLocation: 'cell', plausibleCastIds: ['proctor'],
+    generate: async () => JSON.stringify(raw),
+  });
+  assert.equal(retry.status, 'SKIPPED');
+  assert.equal(retry.state.objects[0].revision, 4);
+  const laterReplay = await runAmbientWorldCycle({
+    state: first.state, nowMs: NOW + AWG_CADENCE_MS + 1000,
+    idleBudgetMs: AWG_MIN_IDLE_BUDGET_MS,
+    currentLocation: 'cell', plausibleCastIds: ['proctor'],
+    generate: async () => JSON.stringify(raw),
+  });
+  assert.equal(laterReplay.status, 'FAILED');
+  assert.equal(laterReplay.error, 'INVALID_OBJECT_REFERENCE');
+  assert.equal(laterReplay.state.objects[0].revision, 4);
+});
+
+test('unavailable objects are absent from AWG choices and cannot be reused by ID', () => {
+  const objects = [
+    { id: 'object-active', type: 'note', ownerId: 'cy', holderId: 'cy', location: 'cell', status: 'ACTIVE' },
+    { id: 'object-delivered', type: 'note', ownerId: 'reg', holderId: 'cy', location: 'cell', status: 'DELIVERED' },
+    { id: 'object-missing', type: 'note', ownerId: 'cy', holderId: null, location: 'cell', status: 'MISSING' },
+    { id: 'object-confiscated', type: 'contraband_item', ownerId: 'cy', holderId: 'fisher', location: 'cell', status: 'CONFISCATED' },
+    { id: 'object-retired', type: 'note', ownerId: 'cy', holderId: 'cy', location: 'cell', status: 'RETIRED' },
+  ];
+  const state = reconcileWorldSimulationState({ objects });
+  const facts = selectAwgGenerationFacts(state, { currentLocation: 'cell', plausibleCastIds: ['reg', 'fisher'], nowMs: NOW });
+  assert.deepEqual(facts.objects.map((object) => object.id), ['object-active', 'object-delivered']);
+  const format = buildAwgProposalFormat(state, { currentLocation: 'cell', plausibleCastIds: ['reg', 'fisher'], nowMs: NOW });
+  assert.deepEqual(format.oneOf[1].properties.objects.items.properties.id.enum,
+    [null, 'object-active', 'object-delivered']);
+  const prompt = buildAwgCall('', { state, currentLocation: 'cell', plausibleCastIds: ['reg', 'fisher'], nowMs: NOW }).prompt;
+  assert.doesNotMatch(prompt, /object-confiscated|object-retired|object-missing/);
+  assert.throws(() => materialiseAwgProposal(proposal({
+    objects: [{ id: 'object-confiscated', type: 'contraband_item', ownerId: 'cy', holderId: 'fisher', status: 'ACTIVE', messageAction: null }],
+  }), state, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['reg', 'fisher'] }), /INVALID_OBJECT_REFERENCE/);
+});
+
+test('resolving an object-transfer thread does not implicitly mutate its object', () => {
+  const object = {
+    id: 'object-note-1', type: 'note', ownerId: 'reg', holderId: 'cy',
+    location: 'landing', status: 'ACTIVE', sourceEventId: 'world-prior',
+  };
+  const state = reconcileWorldSimulationState({
+    objects: [object], threads: [{
+      id: 'thread-note-1', type: 'OBJECT_TRANSFER', state: 'OPEN', participants: ['reg', 'cy'],
+      sourceEventIds: ['world-prior'], nextEligibleAt: null,
+    }],
+  });
+  const value = candidate({
+    decision: 'CONTINUATION', eventFamily: 'OBJECT_TRANSFER',
+    occurredAt: new Date(NOW).toISOString(),
+    objective: { eventType: 'object_transfer_resolved', summary: 'Reg and Cy ended the note exchange on the landing.' },
+    objects: [],
+    resolved: true,
+    thread: { action: 'RESOLVE', id: 'thread-note-1', type: 'OBJECT_TRANSFER', summary: 'The exchange ended.', nextEligibleAt: null },
+    continuationOf: { threadId: 'thread-note-1', eventIds: ['world-prior'] },
+  });
+  const validation = validateAwgCandidate(value, state, { nowMs: NOW, currentLocation: 'landing', plausibleCastIds: ['reg'] });
+  assert.equal(validation.valid, true, validation.errors.join(', '));
+  const result = applyAwgCandidate(state, validation, { makeId: (prefix) => `${prefix}-resolved`, acceptedAt: value.occurredAt });
+  assert.equal(result.state.threads[0].state, 'RESOLVED');
+  assert.deepEqual(result.state.objects[0], object);
 });
 
 test('retired object tombstone prevents a model proposal from recreating its ID', () => {
