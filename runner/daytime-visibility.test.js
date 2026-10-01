@@ -27,7 +27,7 @@ assert.equal(scheduledRoutineLabel({ name: 'lunch_expected', meal: 'lunch', outc
   'an expected-only meal never appears as an actual lunch');
 
 const app = await readFile(fileURLToPath(new URL('../public/assets/app.js', import.meta.url)), 'utf8');
-assert.match(app, /const routineLabel = scheduledRoutineLabel\(p\);\s*if \(routineLabel\) \{[\s\S]*?pen\.event\(routineLabel, '', ts, 'prison'\);[\s\S]*?return;/,
+assert.match(app, /const routineLabel = scheduledRoutineLabel\(p\);\s*if \(routineLabel\) \{[\s\S]*?pen\.event\(routineLabel, '', ts, 'prison', '', p\);[\s\S]*?return;/,
   'the handwritten center view adds one existing routine event and stops before any generic fallback');
 assert.match(app, /case 'postcard_in':/);
 assert.match(app, /case 'text':/);

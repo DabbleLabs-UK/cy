@@ -8,6 +8,7 @@ import { Pen } from './pen.js';
 import { applyDreamLayout, makeDreamSvg, renderDreamSketch } from './dream-view.js';
 import { bindEndpointTime, dayLabel, formatDuration, isLiveDate, shiftDate, shiftTimestamp, timestampMs } from './timeline.js';
 import { createJumpToLatest } from './jump-to-latest.js';
+import { ChronologyHierarchy } from './chronology-hierarchy.js';
 
 // One person has one hand. Each visible writing object owns its own Pen renderer,
 // but they all reserve this shared lane so only the earliest unfinished object can
@@ -67,6 +68,7 @@ export class ComposedFeed {
     this.scrollEl.className = 'cy-scroll';
     this.flow = document.createElement('div');
     this.flow.className = 'cy-flow';
+    this.eventHierarchy = new ChronologyHierarchy(this.flow);
     this.scrollEl.appendChild(this.flow);
     this.root.appendChild(this.scrollEl);
     this.jumpControl = createJumpToLatest(this.root, this.scrollEl, () => this.scrollToEnd());
@@ -270,9 +272,16 @@ export class ComposedFeed {
     this.current = null;
   }
 
-  event(label, detail, ts, kind = 'event', image = '') {
+  event(label, detail, ts, kind = 'event', image = '', payload = {}) {
     this.finishAnimations();
     this.closeEntry(ts);
+    const block = this.eventHierarchy.add({ payload, label, detail, ts }, () =>
+      this._singleEvent(label, detail, ts, kind, image));
+    this._follow();
+    return block;
+  }
+
+  _singleEvent(label, detail, ts, kind, image) {
     const block = document.createElement('section');
     block.className = 'cy-event-block cy-event-' + kind;
     block.dataset.kind = kind;
@@ -296,7 +305,6 @@ export class ComposedFeed {
       block.appendChild(img);
     }
     this.flow.appendChild(block);
-    this._follow();
     return block;
   }
 
@@ -504,6 +512,7 @@ export class ComposedFeed {
     this.dreamDrawings.clear();
     this.legacyDreamSeq = 0;
     this.current = null;
+    this.eventHierarchy.reset();
     this.lane.reset();
     this.flow.textContent = '';
     this._setScrollTop(0, true);

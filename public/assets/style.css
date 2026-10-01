@@ -627,6 +627,48 @@ body.cy-paused::after {
 .cy-event-yard { border-left-color: #6ca37e; background: #17231b; }
 .cy-event-search { border-left-color: #c28b55; background: #292016; }
 .cy-event-image { display: block; max-width: min(100%, 300px); max-height: 240px; margin-top: 10px; border: 5px solid #f7f0de; box-shadow: 0 4px 14px rgba(48, 37, 20, 0.18); }
+.cy-chronology-group {
+  min-width: 0;
+  border: 1px solid #303b44;
+  border-left: 2px solid #657785;
+  border-radius: 2px;
+  background: #171d22;
+  color: #aebbc4;
+  font: 11px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+.cy-flow > .cy-chronology-group { margin: 9px 28px; }
+.pl-col > .cy-chronology-group { margin: 9px 0; }
+.cy-chronology-search { border-left-color: #a77d54; }
+.cy-chronology-ambient { border-left-color: #526371; background: #141a1f; }
+.cy-chronology-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  padding: 7px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.cy-chronology-group-head::-webkit-details-marker { display: none; }
+.cy-chronology-group-head::before { content: '+'; color: #8296a3; }
+.cy-chronology-group[open] > .cy-chronology-group-head::before { content: '-'; }
+.cy-chronology-group-head:hover { background: rgba(105, 134, 151, 0.1); }
+.cy-chronology-group-head:focus-visible { outline: 2px solid #9bc1d6; outline-offset: 2px; }
+.cy-chronology-group-time { flex: 0 0 auto; color: #8495a0; font-variant-numeric: tabular-nums; }
+.cy-chronology-group-label { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.cy-chronology-group-cue { flex: 0 0 auto; color: #748b99; font: 9px var(--mono); letter-spacing: 0.08em; }
+.cy-chronology-steps { border-top: 1px solid #303b44; padding: 4px 10px 7px; }
+.cy-chronology-step { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 9px; padding: 5px 0; }
+.cy-chronology-step + .cy-chronology-step { border-top: 1px dotted #35414a; }
+.cy-chronology-step time { color: #8194a2; font-variant-numeric: tabular-nums; }
+.cy-chronology-step-words { min-width: 0; overflow-wrap: anywhere; }
+.cy-chronology-step-detail { display: block; margin-top: 3px; color: #8fa1ad; white-space: pre-wrap; }
+@media (max-width: 520px) {
+  .cy-flow > .cy-chronology-group { margin-inline: 12px; }
+  .cy-chronology-group-head { flex-wrap: wrap; gap: 4px 8px; }
+  .cy-chronology-group-cue { margin-left: auto; }
+  .cy-chronology-step { grid-template-columns: 4.5em minmax(0, 1fr); gap: 6px; }
+}
 .cy-flow > .pcard-obj { align-self: center; margin: 20px 12px; flex: 0 0 auto; }
 
 /* The ink is decoration painted on top of the real text: it must not eat the

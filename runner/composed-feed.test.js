@@ -121,6 +121,22 @@ assert.equal(chronology.flow.children[1].dataset.kind, 'prison');
 assert.equal(chronology.flow.children[1].children[1].textContent, '[the cell is searched]');
 assert.equal(chronology.flow.children[1]._classes.has('cy-journal-entry'), false, 'event records never receive journal paper');
 
+const groupedRoot = makeEl('div');
+const grouped = new ComposedFeed(groupedRoot, { chars: [] });
+grouped.setInstant(true);
+grouped.event("Mr Proctor arrived at Cy's cell to begin a search", '', '2026-09-09 10:15:00', 'search', '', {
+  name: 'cell_search_initiated', text: "Mr Proctor arrived at Cy's cell to begin a search",
+});
+grouped.event('The search found nothing', '', '2026-09-09 10:16:00', 'search', '', {
+  name: 'cell_search_property_result', text: 'The search found nothing',
+});
+assert.equal(grouped.flow.children.length, 1, 'the handwritten view groups successive search stages');
+assert.equal(grouped.flow.children[0].tag, 'details');
+assert.equal(grouped.flow.children[0].children[1].children.length, 2);
+grouped.beginEntry('2026-09-09 10:17:00', 'journal');
+grouped.write('a thought after the search', 'journal');
+assert.equal(grouped.flow.children[1]._classes.has('cy-journal-entry'), true, 'journal stays outside the group');
+
 chronology.beginEntry('2026-09-09 10:25:00', 'dream');
 assert.ok(chronology.current.block._classes.has('cy-dream-field'), 'legacy dream text uses the distinct dream field');
 assert.equal(chronology.current.block._classes.has('cy-journal-entry'), false, 'dream writing is not presented as a journal entry');
