@@ -228,6 +228,8 @@ import {
   shouldRunAwg,
 } from './ambient-world-generator.js';
 import { normaliseMessageState } from './message-object-lifecycle.js';
+import { advanceWorldEntity, compactAcknowledgedRetiredObjects,
+  synchronizeWorldMirror } from './world-mirror.js';
 import {
   reconcileInstrumentalAgencyState,
   openInstrumentalOpportunity,
@@ -568,6 +570,30 @@ async function main() {
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
+  let worldMirrorReady = !!config.dryRun;
+  client.onWorldMirrorConflict = (conflicts) => {
+    worldMirrorReady = false;
+    console.error(`[cy] world mirror conflict; dependent world work held: ${JSON.stringify(conflicts)}`);
+  };
+  let worldMirrorSyncPending = null;
+  async function syncWorldMirror() {
+    if (worldMirrorReady || worldMirrorSyncPending) return worldMirrorSyncPending;
+    worldMirrorSyncPending = (async () => {
+      const world = await synchronizeWorldMirror(vitals.worldSimulation, client, async (next) => {
+        vitals.worldSimulation = reconcileWorldSimulationState(next);
+        await saveVitals(vitalsPath, vitals);
+      });
+      vitals.worldSimulation = reconcileWorldSimulationState(world);
+      worldMirrorReady = true;
+      console.log('[cy] world mirror synchronized');
+    })().catch((error) => {
+      console.error(`[cy] world mirror not synchronized; dependent world work held: ${error.message}`);
+    }).finally(() => { worldMirrorSyncPending = null; });
+    return worldMirrorSyncPending;
+  }
+  const worldMirrorSyncTimer = setInterval(() => {
+    if (!worldMirrorReady) void syncWorldMirror();
+  }, 30_000);
   // Routine drift is checkpointed with bounded write-behind. Events that alter
   // durable world/conversation continuity request the next five-second tick to
   // use the immediate atomic path, preserving the pre-existing worst-case event
@@ -575,6 +601,9 @@ async function main() {
   let urgentVitalsDirty = false;
   client.onDelivered = (events) => {
     if (acknowledgeDayRollovers(vitals, events)) urgentVitalsDirty = true;
+    if (worldMirrorReady && compactAcknowledgedRetiredObjects(vitals.worldSimulation, events)) {
+      urgentVitalsDirty = true;
+    }
   };
   // The checkpoint owns any day event that was not yet acknowledged. Requeue
   // it with its original identity before ordinary client delivery starts.
@@ -588,6 +617,7 @@ async function main() {
     'postcard_in',
     'postcard_out',
     'world_object_record',
+    'world_thread_record',
   ]);
   const emit = (ev) => {
     if (ev && DURABLE_STATE_EVENT_KINDS.has(ev.kind)) urgentVitalsDirty = true;
@@ -1153,6 +1183,7 @@ async function main() {
   }
 
   function beginCellSearch(now, { actor = null } = {}) {
+    if (!worldMirrorReady) return false;
     const officer = actor || OFFICERS[Math.floor(Math.random() * OFFICERS.length)] || { key: 'proctor', name: 'Mr Proctor' };
     const started = startCellSearchEpisode(vitals.locationRegime, {
       nowMs: now,
@@ -1169,6 +1200,7 @@ async function main() {
   }
 
   function advanceCellSearch(now) {
+    if (!worldMirrorReady) return;
     const advanced = advanceCellSearchEpisode(vitals.locationRegime, {
       nowMs: now,
       objects: vitals.worldSimulation.objects,
@@ -1266,6 +1298,11 @@ async function main() {
 
   function resolvePendingInstrumentalIncidents() {
     const pending = takePendingInstrumentalOpportunities(vitals.instrumentalAgency);
+    if (!worldMirrorReady) {
+      const held = pending.filter((item) => item.archetypeId === 'cell_search_handover');
+      vitals.instrumentalAgency.pending.unshift(...held);
+      pending.splice(0, pending.length, ...pending.filter((item) => item.archetypeId !== 'cell_search_handover'));
+    }
     for (const opportunity of pending) {
       const resolutionTimestamp = tsNow();
       const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: resolutionTimestamp });
@@ -1312,6 +1349,7 @@ async function main() {
             object.location = 'officer_desk';
             object.status = 'CONFISCATED';
             object.updatedAt = resolutionTimestamp;
+            Object.assign(object, advanceWorldEntity(object));
             emit({ kind: 'world_object_record', payload: object });
           }
         }
@@ -4509,6 +4547,7 @@ async function main() {
   }, POWER_SAMPLE_MS);
 
   async function runAwgDuringIdle(idleBudgetMs, awgReservation = null) {
+    if (!worldMirrorReady) return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED' };
     const nowMs = Date.now();
     // Brief routine movements, active searches and lockdowns defer background
     // world generation; they do not consume its cadence or reservation.
@@ -4561,6 +4600,12 @@ async function main() {
         admittedAwgSlot: true,
       }),
     });
+    // An ingest conflict or reconnect gate can close while background inference
+    // is running. Its candidate is not allowed to mutate an unsynchronized
+    // world merely because it was admitted earlier.
+    if (!worldMirrorReady) {
+      return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED' };
+    }
     vitals.worldSimulation = result.state;
     if (result.run) {
       emit({
@@ -4602,7 +4647,8 @@ async function main() {
     });
     result.applied.event.environmentEventId = record.world_event.id;
     for (const change of result.applied.changes) {
-      const thread = vitals.worldSimulation.threads.find((item) => item.id === change.threadId);
+      const thread = [...vitals.worldSimulation.threads, ...vitals.worldSimulation.terminalThreads]
+        .find((item) => item.id === change.threadId);
       if (thread) emit({ kind: 'world_thread_record', payload: thread });
     }
     for (const object of vitals.worldSimulation.objects.filter((item) => item.updatedAt === result.run.ranAt)) {
@@ -5444,6 +5490,7 @@ async function main() {
     generationCancellation.abortAll('SHUTDOWN');
     if (autobiographicalMemory) autobiographicalMemory.stop();
     clearInterval(tickTimer);
+    clearInterval(worldMirrorSyncTimer);
     clearInterval(hostTimer);
     clearInterval(powerTimer);
     try {
@@ -5495,6 +5542,7 @@ async function main() {
   process.on('SIGTERM', () => logLifecycle('SIGTERM received'));
 
   client.start();
+  if (!worldMirrorReady) void syncWorldMirror();
   console.log(`[cy] runner up. dryRun=${config.dryRun} model=${config.model} threads=${config.threads}`);
   console.log(`[cy] state dir: ${STATE_DIR}`);
   // Observability: the character cost of each prompt zone. Zone A is fixed and

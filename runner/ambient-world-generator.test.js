@@ -561,6 +561,15 @@ test('L: object consistency rejects a confiscated object becoming active', () =>
   assert.ok(duplicateObject.errors.includes('DUPLICATE_OBJECT_ID'));
 });
 
+test('retired object tombstone prevents a model proposal from recreating its ID', () => {
+  const state = reconcileWorldSimulationState({
+    terminalObjects: [{ id: 'object-note-1', type: 'note', status: 'RETIRED',
+      revision: 2, transitionId: '00000000-0000-4000-8000-000000000002' }],
+  });
+  const result = validateAwgCandidate(candidate(), state, { nowMs: NOW });
+  assert.ok(result.errors.includes('RETIRED_OBJECT_REFERENCE'));
+});
+
 test('a Cy observation requires Cy to be an explicit participant', () => {
   const result = validateAwgCandidate(candidate({
     participants: ['reg'],

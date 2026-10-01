@@ -15,6 +15,7 @@ import { test } from 'node:test';
 import { reconcileWorldSimulationState } from '../runner/ambient-world-generator.js';
 import { Client } from '../runner/client.js';
 import { loadVitals, saveVitals } from '../runner/vitals.js';
+import { baselineLegacyWorldMirror, synchronizeWorldMirror } from '../runner/world-mirror.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const enabled = process.env.CY_TEST_DB_ISOLATED === '1';
@@ -64,12 +65,17 @@ async function startPhp(webRoot, port) {
 
 function world(suffix, terminal) {
   const updatedAt = terminal ? '2026-10-01T04:02:00.000Z' : '2026-10-01T04:00:00.000Z';
+  const revision = terminal ? 2 : 1;
+  const caseId = { 'checkpoint-ahead': '1', 'sql-ahead': '2',
+    'sql-ahead-fallback': '3', 'lost-ack': '4' }[suffix];
+  const transitionId = `00000000-0000-4000-8000-000000000${caseId}0${revision}`;
   return reconcileWorldSimulationState({
     objects: [{
       id: `object:mirror-${suffix}`, type: 'permitted_item', ownerId: 'cy',
       holderId: terminal ? 'officer' : 'cy', location: terminal ? 'property_store' : 'cell',
       status: terminal ? 'RETIRED' : 'ACTIVE', visibility: [],
       sourceEventId: `world:mirror-${suffix}`, updatedAt,
+      revision, transitionId,
     }],
     threads: [{
       id: `thread:mirror-${suffix}`, type: 'OBJECT_TRANSFER',
@@ -81,6 +87,7 @@ function world(suffix, terminal) {
       nextEligibleAt: null,
       resolution: terminal ? { at: updatedAt, eventId: `world:mirror-${suffix}-closed` } : null,
       visibility: [], createdAt: '2026-10-01T04:00:00.000Z', updatedAt,
+      revision, transitionId: `00000000-0000-4000-8000-000000000${caseId}1${revision}`,
     }],
   });
 }
@@ -112,7 +119,8 @@ async function checkpoint(stateDir, state) {
 async function recoveredStatus(stateDir) {
   const vitals = await loadVitals(join(stateDir, 'vitals.json'));
   const state = reconcileWorldSimulationState(vitals.worldSimulation);
-  return { object: state.objects[0].status, thread: state.threads[0].state };
+  return { object: (state.objects[0] || state.terminalObjects[0]).status,
+    thread: (state.threads[0] || state.terminalThreads[0]).state };
 }
 
 test('checkpoint and SQL world mirrors reconverge across both crash orders and lost acknowledgement',
@@ -130,6 +138,7 @@ test('checkpoint and SQL world mirrors reconverge across both crash orders and l
       await mkdir(join(webRoot, 'public/api'), { recursive: true });
       await mkdir(join(webRoot, 'config'), { recursive: true });
       await cp(join(root, 'public/api/ingest.php'), join(webRoot, 'public/api/ingest.php'));
+      await cp(join(root, 'public/api/world-mirror.php'), join(webRoot, 'public/api/world-mirror.php'));
       await writeFile(join(webRoot, 'config/config.php'), `<?php return [
         'db' => ['host' => '127.0.0.1;port=${dbPort}', 'name' => '${dbName}',
           'user' => 'root', 'pass' => '', 'charset' => 'utf8mb4'],
@@ -157,7 +166,8 @@ test('checkpoint and SQL world mirrors reconverge across both crash orders and l
           enqueueMirror(client, terminal);
           // Hard crash: do not call stop(), which would flush the memory batch.
           const restarted = clientFor(base, stateDir);
-          await restarted.flush();
+          await synchronizeWorldMirror((await loadVitals(join(stateDir, 'vitals.json'))).worldSimulation,
+            restarted, (next) => checkpoint(stateDir, next));
         } else if (suffix === 'sql-ahead') {
           // An emitted object change can reach SQL before the next urgent tick.
           // A previous-generation checkpoint fallback creates the same order.
@@ -165,7 +175,8 @@ test('checkpoint and SQL world mirrors reconverge across both crash orders and l
           await client.flush();
           // Crash before the new checkpoint is committed.
           const restarted = clientFor(base, stateDir);
-          await restarted.flush();
+          await synchronizeWorldMirror((await loadVitals(join(stateDir, 'vitals.json'))).worldSimulation,
+            restarted, (next) => checkpoint(stateDir, next));
         } else if (suffix === 'sql-ahead-fallback') {
           await checkpoint(stateDir, terminal);
           enqueueMirror(client, terminal);
@@ -174,7 +185,8 @@ test('checkpoint and SQL world mirrors reconverge across both crash orders and l
           // generation, even though SQL has already committed the newer state.
           await writeFile(join(stateDir, 'vitals-v2', 'current.json'), '{broken');
           const restarted = clientFor(base, stateDir);
-          await restarted.flush();
+          await synchronizeWorldMirror((await loadVitals(join(stateDir, 'vitals.json'))).worldSimulation,
+            restarted, (next) => checkpoint(stateDir, next));
         } else {
           await checkpoint(stateDir, terminal);
           enqueueMirror(client, terminal);
@@ -214,6 +226,120 @@ test('checkpoint and SQL world mirrors reconverge across both crash orders and l
       const divergent = ['checkpoint-ahead', 'sql-ahead', 'sql-ahead-fallback']
         .filter((order) => JSON.stringify(observed[order]) !== JSON.stringify({ checkpoint: terminal, sql: terminal }));
       assert.deepEqual(divergent, [], 'both committed stores must converge after bounded recovery');
+
+      // A new delivery of an older logical state is not the same delivery-ID
+      // replay. Entity revisions, not receipts, must protect the mirror.
+      const replayDir = join(webRoot, 'state-checkpoint-ahead');
+      const staleClient = clientFor(base, replayDir);
+      enqueueMirror(staleClient, world('checkpoint-ahead', false));
+      await staleClient.flush();
+      assert.deepEqual(mirrorStatus('checkpoint-ahead'), terminal);
+      assert.equal(sql("SELECT revision FROM world_objects WHERE object_id = 'object:mirror-checkpoint-ahead'"), '2');
+
+      const legacy = world('checkpoint-ahead', false);
+      for (const entity of [...legacy.objects, ...legacy.threads]) {
+        delete entity.revision;
+        delete entity.transitionId;
+      }
+      const legacyClient = clientFor(base, replayDir);
+      enqueueMirror(legacyClient, legacy);
+      await legacyClient.flush();
+      assert.deepEqual(mirrorStatus('checkpoint-ahead'), terminal,
+        'unversioned queued records must not overwrite versioned rows');
+
+      const conflicting = world('checkpoint-ahead', true);
+      conflicting.objects[0].transitionId = '00000000-0000-4000-8000-000000000099';
+      const conflictClient = clientFor(base, replayDir);
+      const conflicts = [];
+      conflictClient.onWorldMirrorConflict = (items) => conflicts.push(...items);
+      conflictClient.enqueue({ kind: 'world_object_record', payload: conflicting.objects[0] });
+      await conflictClient.flush();
+      assert.deepEqual(conflicts, [{ kind: 'object', id: 'object:mirror-checkpoint-ahead' }]);
+      assert.deepEqual(mirrorStatus('checkpoint-ahead'), terminal);
+
+      const later = world('checkpoint-ahead', true).objects[0];
+      later.revision = 3;
+      later.transitionId = '00000000-0000-4000-8000-000000000093';
+      const laterClient = clientFor(base, replayDir);
+      laterClient.enqueue({ kind: 'world_object_record', payload: later });
+      await laterClient.flush();
+      assert.equal(sql("SELECT revision FROM world_objects WHERE object_id = 'object:mirror-checkpoint-ahead'"), '3',
+        'a genuinely later same-content transition must not be collapsed');
+
+      const reopenedObject = { ...later, revision: 4, status: 'ACTIVE',
+        transitionId: '00000000-0000-4000-8000-000000000094' };
+      const reopenedThread = { ...world('checkpoint-ahead', true).threads[0],
+        revision: 3, state: 'OPEN',
+        transitionId: '00000000-0000-4000-8000-000000000193' };
+      const resurrectionClient = clientFor(base, replayDir);
+      const resurrectionConflicts = [];
+      resurrectionClient.onWorldMirrorConflict = (items) => resurrectionConflicts.push(...items);
+      resurrectionClient.enqueue({ kind: 'world_object_record', payload: reopenedObject });
+      resurrectionClient.enqueue({ kind: 'world_thread_record', payload: reopenedThread });
+      await resurrectionClient.flush();
+      assert.deepEqual(resurrectionConflicts, [
+        { kind: 'object', id: 'object:mirror-checkpoint-ahead' },
+        { kind: 'thread', id: 'thread:mirror-checkpoint-ahead' },
+      ], 'a newer but impossible terminal reversal must be reported');
+      assert.deepEqual(mirrorStatus('checkpoint-ahead'), terminal);
+
+      const privateApi = await fetch(`${base}/api/world-mirror.php`);
+      assert.equal(privateApi.status, 401, 'complete world mirror must require runner authentication');
+      const allowedApi = await fetch(`${base}/api/world-mirror.php`, {
+        headers: { 'X-Cy-Key': 'disposable-test-key' },
+      });
+      assert.equal(allowedApi.status, 200);
+      const completeMirror = await allowedApi.json();
+      assert.equal(completeMirror.objects.length, 4);
+      assert.equal(completeMirror.threads.length, 4);
+
+      // Rehearse the legacy cutover only in this disposable database. A
+      // disagreement must be reported and explicitly selected before either
+      // store is assigned matching baseline transition identities.
+      const migrationDir = join(webRoot, 'state-legacy-rehearsal');
+      const legacyInitial = world('checkpoint-ahead', false);
+      legacyInitial.objects[0].id = 'object:legacy-rehearsal';
+      legacyInitial.threads[0].id = 'thread:legacy-rehearsal';
+      for (const entity of [...legacyInitial.objects, ...legacyInitial.threads]) {
+        delete entity.revision;
+        delete entity.transitionId;
+      }
+      await checkpoint(migrationDir, legacyInitial);
+      const migrationClient = clientFor(base, migrationDir);
+      enqueueMirror(migrationClient, legacyInitial);
+      await migrationClient.flush();
+      assert.equal(migrationClient.lastError, null, 'legacy fixture must reach disposable SQL');
+      const legacyTerminal = structuredClone(legacyInitial);
+      legacyTerminal.objects[0].status = 'RETIRED';
+      legacyTerminal.threads[0].state = 'RESOLVED';
+      legacyTerminal.threads[0].resolution = { at: '2026-10-01T04:02:00.000Z' };
+      await checkpoint(migrationDir, legacyTerminal);
+      const remoteLegacy = await migrationClient.fetchWorldMirror();
+      const matchingRemote = {
+        objects: remoteLegacy.objects.filter((item) => item.id === 'object:legacy-rehearsal'),
+        threads: remoteLegacy.threads.filter((item) => item.id === 'thread:legacy-rehearsal'),
+      };
+      const rehearsal = baselineLegacyWorldMirror(legacyTerminal, matchingRemote);
+      assert.equal(rehearsal.baseline, null);
+      assert.equal(rehearsal.disagreements.length, 2);
+      let seed = 1;
+      const approved = baselineLegacyWorldMirror(legacyTerminal, matchingRemote, {
+        'object:object:legacy-rehearsal': 'LOCAL',
+        'thread:thread:legacy-rehearsal': 'LOCAL',
+      }, () => `00000000-0000-4000-8000-${String(seed++).padStart(12, '0')}`);
+      await checkpoint(migrationDir, approved.baseline);
+      enqueueMirror(migrationClient, approved.baseline);
+      await migrationClient.flush();
+      assert.equal(migrationClient.lastError, null, 'approved baseline must reach disposable SQL');
+      const afterBaseline = await migrationClient.fetchWorldMirror();
+      assert.equal(afterBaseline.objects.find((item) => item.id === 'object:legacy-rehearsal').revision, 1);
+      assert.equal(afterBaseline.threads.find((item) => item.id === 'thread:legacy-rehearsal').revision, 1);
+      const staleLegacyClient = clientFor(base, migrationDir);
+      enqueueMirror(staleLegacyClient, legacyInitial);
+      await staleLegacyClient.flush();
+      const afterOldReplay = await migrationClient.fetchWorldMirror();
+      assert.equal(afterOldReplay.objects.find((item) => item.id === 'object:legacy-rehearsal').status, 'RETIRED');
+      assert.equal(afterOldReplay.threads.find((item) => item.id === 'thread:legacy-rehearsal').state, 'RESOLVED');
     } finally {
       globalThis.fetch = realFetch;
       if (server && server.exitCode === null && server.signalCode === null) {

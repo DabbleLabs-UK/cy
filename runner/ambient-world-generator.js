@@ -14,6 +14,7 @@ import {
   messageStatusForAction,
   normaliseMessageState,
 } from './message-object-lifecycle.js';
+import { advanceWorldEntity, compactTerminalThread, worldEntityRevision } from './world-mirror.js';
 
 export const AWG_SCHEMA = 'cy.ambient-world-candidate';
 export const AWG_SCHEMA_VERSION = 1;
@@ -337,14 +338,20 @@ export function reconcileWorldSimulationState(saved) {
     const message = normaliseMessageState(object && object.message);
     return message ? { ...object, message } : object;
   }) : [];
+  for (const entity of [...objects, ...(source.terminalObjects || []),
+    ...(source.threads || []), ...(source.terminalThreads || [])]) {
+    worldEntityRevision(entity, { allowLegacy: true });
+  }
   return {
     schema: WORLD_SIMULATION_SCHEMA,
     version: WORLD_SIMULATION_VERSION,
     lastRunAt: clean(source.lastRunAt) || null,
     lastAcceptedAt: clean(source.lastAcceptedAt) || null,
-    threads: Array.isArray(source.threads) ? clone(source.threads).slice(-AWG_MAX_OPEN_THREADS * 3) : [],
+    threads: Array.isArray(source.threads) ? clone(source.threads) : [],
+    terminalThreads: Array.isArray(source.terminalThreads) ? clone(source.terminalThreads) : [],
     // Objects are durable world state. Do not silently discard old objects by count.
     objects,
+    terminalObjects: Array.isArray(source.terminalObjects) ? clone(source.terminalObjects) : [],
     recentAccepted: Array.isArray(source.recentAccepted) ? clone(source.recentAccepted).slice(-AWG_RECENT_EVENT_LIMIT) : [],
     recentRuns: Array.isArray(source.recentRuns) ? clone(source.recentRuns).slice(-AWG_RECENT_RUN_LIMIT) : [],
   };
@@ -933,6 +940,9 @@ function validateObject(object, state, errors, {
   if (!AWG_KNOWN_LOCATIONS.includes(clean(object.location))) errors.push('UNKNOWN_OBJECT_LOCATION');
   if (!AWG_OBJECT_STATUSES.includes(clean(object.status).toUpperCase())) errors.push('INVALID_OBJECT_STATUS');
   const existing = state.objects.find((item) => item.id === objectId);
+  if (state.terminalObjects.some((item) => item.id === objectId)) {
+    errors.push('RETIRED_OBJECT_REFERENCE');
+  }
   const isMessage = clean(object.type).toLowerCase() === 'message';
   const transition = object.messageAction;
   const action = clean(transition && transition.action).toUpperCase();
@@ -1265,7 +1275,7 @@ export function applyAwgCandidate(stateValue, validation, {
   const action = clean(candidate.thread && candidate.thread.action).toUpperCase() || 'NONE';
   let affectedThreadId = event.sourceThreadId;
   if (action === 'OPEN') {
-    const thread = {
+    const thread = advanceWorldEntity({
       id: id(candidate.thread.id) || id(makeId('thread')),
       type: clean(candidate.thread.type, 80) || candidate.eventFamily,
       createdAt: acceptedAt,
@@ -1277,7 +1287,7 @@ export function applyAwgCandidate(stateValue, validation, {
       nextEligibleAt: clean(candidate.thread.nextEligibleAt) || null,
       resolution: null,
       visibility: clone(candidate.observations),
-    };
+    });
     state.threads.push(thread);
     affectedThreadId = thread.id;
     changes.push({ action: 'OPEN', threadId: thread.id });
@@ -1294,6 +1304,7 @@ export function applyAwgCandidate(stateValue, validation, {
         thread.state = 'RESOLVED';
         thread.resolution = { at: acceptedAt, eventId, summary: event.summary };
       }
+      Object.assign(thread, advanceWorldEntity(thread));
       changes.push({ action, threadId });
     }
   }
@@ -1310,7 +1321,7 @@ export function applyAwgCandidate(stateValue, validation, {
       cyObservation: validation.cyObservation,
       acceptedAt,
     }) : null;
-    const value = {
+    const value = advanceWorldEntity({
       id: objectId,
       type: clean(object.type, 80),
       ownerId: object.ownerId == null ? null : id(object.ownerId),
@@ -1323,13 +1334,25 @@ export function applyAwgCandidate(stateValue, validation, {
       visibility: clone(candidate.observations),
       sourceEventId: existing ? existing.sourceEventId : eventId,
       updatedAt: acceptedAt,
-    };
+    });
+    if (existing) {
+      const prior = worldEntityRevision(existing, { allowLegacy: true });
+      if (prior) {
+        value.revision = prior.revision + 1;
+      }
+    }
     if (existing) Object.assign(existing, value);
     else state.objects.push(value);
   }
   state.lastAcceptedAt = acceptedAt;
   state.recentAccepted = [...state.recentAccepted, event].slice(-AWG_RECENT_EVENT_LIMIT);
-  state.threads = state.threads.slice(-AWG_MAX_OPEN_THREADS * 3);
+  if (state.threads.length > AWG_MAX_OPEN_THREADS * 3) {
+    const overflow = state.threads.length - AWG_MAX_OPEN_THREADS * 3;
+    const retired = state.threads.filter((thread) => thread.state === 'RESOLVED').slice(0, overflow);
+    state.terminalThreads.push(...retired.map(compactTerminalThread));
+    const retiredIds = new Set(retired.map((thread) => thread.id));
+    state.threads = state.threads.filter((thread) => !retiredIds.has(thread.id));
+  }
   return { state, accepted: true, event, changes, cyObserved: validation.cyObserved, cyObservation: validation.cyObservation };
 }
 

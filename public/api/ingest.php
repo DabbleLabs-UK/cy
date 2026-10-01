@@ -99,32 +99,51 @@ try {
          ON DUPLICATE KEY UPDATE validation_status = VALUES(validation_status),
              rejection_reason = VALUES(rejection_reason), total_latency_ms = VALUES(total_latency_ms)'
     );
+    // The row lock below handles the ordinary single-runner path. Keep the
+    // upsert itself conditional as well: an in-flight republish and queue drain
+    // can both observe a missing row before either insert commits.
+    $worldMirrorAdvanceSql = '(VALUES(revision) > COALESCE(revision, 0)
+        OR (revision IS NULL AND VALUES(revision) IS NULL))';
+    $worldMirrorAssignment = static function (string $field, string $advance): string {
+        return "$field = IF($advance, VALUES($field), $field)";
+    };
+    $threadAdvance = "($worldMirrorAdvanceSql AND (state <> 'RESOLVED' OR VALUES(state) = 'RESOLVED'))";
+    $objectAdvance = "($worldMirrorAdvanceSql AND (status <> 'RETIRED' OR VALUES(status) = 'RETIRED'))";
     $worldThreadUpsert = $db->prepare(
         'INSERT INTO world_threads
-            (thread_id, thread_type, state, summary, participants, source_event_ids,
+            (thread_id, thread_type, state, revision, transition_id, summary, participants, source_event_ids,
              next_eligible_at, resolution, visibility, created_at, updated_at)
          VALUES
-            (:thread_id, :thread_type, :state, :summary, :participants, :source_event_ids,
+            (:thread_id, :thread_type, :state, :revision, :transition_id, :summary, :participants, :source_event_ids,
              :next_eligible_at, :resolution, :visibility, :created_at, :updated_at)
-         ON DUPLICATE KEY UPDATE thread_type = VALUES(thread_type), state = VALUES(state),
-             summary = VALUES(summary), participants = VALUES(participants),
-             source_event_ids = VALUES(source_event_ids), next_eligible_at = VALUES(next_eligible_at),
-             resolution = VALUES(resolution), visibility = VALUES(visibility), updated_at = VALUES(updated_at)'
+         ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(
+             static fn(string $field): string => $worldMirrorAssignment($field, $threadAdvance), [
+             'thread_type', 'state', 'summary', 'participants', 'source_event_ids',
+             'next_eligible_at', 'resolution', 'visibility', 'updated_at',
+             'transition_id', 'revision',
+         ]))
     );
     $worldObjectUpsert = $db->prepare(
         'INSERT INTO world_objects
-            (object_id, object_type, owner_id, holder_id, location, status,
+            (object_id, object_type, owner_id, holder_id, location, status, revision, transition_id,
              message_state, visibility, source_event_id, created_at, updated_at)
          VALUES
-            (:object_id, :object_type, :owner_id, :holder_id, :location, :status,
+            (:object_id, :object_type, :owner_id, :holder_id, :location, :status, :revision, :transition_id,
              :message_state, :visibility, :source_event_id, :created_at, :updated_at)
-         ON DUPLICATE KEY UPDATE object_type = VALUES(object_type), owner_id = VALUES(owner_id),
-             holder_id = VALUES(holder_id), location = VALUES(location), status = VALUES(status),
-             message_state = VALUES(message_state),
-             visibility = VALUES(visibility), source_event_id = VALUES(source_event_id),
-             updated_at = VALUES(updated_at)'
+         ON DUPLICATE KEY UPDATE ' . implode(', ', array_map(
+             static fn(string $field): string => $worldMirrorAssignment($field, $objectAdvance), [
+             'object_type', 'owner_id', 'holder_id', 'location', 'status', 'message_state',
+             'visibility', 'source_event_id', 'updated_at', 'transition_id', 'revision',
+         ]))
+    );
+    $worldThreadVersion = $db->prepare(
+        'SELECT revision, transition_id, state FROM world_threads WHERE thread_id = :id FOR UPDATE'
+    );
+    $worldObjectVersion = $db->prepare(
+        'SELECT revision, transition_id, status FROM world_objects WHERE object_id = :id FOR UPDATE'
     );
     $inserted = 0;
+    $worldMirrorConflicts = [];
     $lastVitalsHistoryAtMs = null;
     $lastVitalsHistoryLoaded = false;
     $liveVitalsUpsert = $db->prepare(
@@ -265,8 +284,22 @@ try {
             $record = is_array($event['payload'])
                 ? captive_world_thread_validate($event['payload'])
                 : throw new InvalidArgumentException('invalid world thread record');
+            $worldThreadVersion->execute([':id' => $record['id']]);
+            try {
+                $existing = $worldThreadVersion->fetch(PDO::FETCH_ASSOC) ?: null;
+                $order = captive_world_mirror_order($existing, $record);
+                if ($order === 'APPLY' && $existing && $existing['state'] === 'RESOLVED'
+                    && $record['state'] !== 'RESOLVED') {
+                    throw new WorldMirrorConflictException('resolved thread cannot reopen');
+                }
+            } catch (WorldMirrorConflictException) {
+                $worldMirrorConflicts[] = ['kind' => 'thread', 'id' => $record['id']];
+                continue;
+            }
+            if ($order !== 'APPLY') continue;
             $worldThreadUpsert->execute([
                 ':thread_id' => $record['id'], ':thread_type' => $record['type'], ':state' => $record['state'],
+                ':revision' => $record['revision'], ':transition_id' => $record['transition_id'],
                 ':summary' => $record['summary'], ':participants' => json_encode($record['participants']),
                 ':source_event_ids' => json_encode($record['source_event_ids']),
                 ':next_eligible_at' => captive_world_datetime($record['next_eligible_at']),
@@ -275,6 +308,15 @@ try {
                 ':created_at' => captive_world_datetime($record['created_at']),
                 ':updated_at' => captive_world_datetime($record['updated_at']),
             ]);
+            $worldThreadVersion->execute([':id' => $record['id']]);
+            try {
+                $after = captive_world_mirror_order($worldThreadVersion->fetch(PDO::FETCH_ASSOC) ?: null, $record);
+                if ($record['revision'] !== null && $after === 'APPLY') {
+                    throw new WorldMirrorConflictException('world thread upsert did not apply');
+                }
+            } catch (WorldMirrorConflictException) {
+                $worldMirrorConflicts[] = ['kind' => 'thread', 'id' => $record['id']];
+            }
             continue;
         }
 
@@ -282,16 +324,39 @@ try {
             $record = is_array($event['payload'])
                 ? captive_world_object_validate($event['payload'])
                 : throw new InvalidArgumentException('invalid world object record');
+            $worldObjectVersion->execute([':id' => $record['id']]);
+            try {
+                $existing = $worldObjectVersion->fetch(PDO::FETCH_ASSOC) ?: null;
+                $order = captive_world_mirror_order($existing, $record);
+                if ($order === 'APPLY' && $existing && $existing['status'] === 'RETIRED'
+                    && $record['status'] !== 'RETIRED') {
+                    throw new WorldMirrorConflictException('retired object cannot reactivate');
+                }
+            } catch (WorldMirrorConflictException) {
+                $worldMirrorConflicts[] = ['kind' => 'object', 'id' => $record['id']];
+                continue;
+            }
+            if ($order !== 'APPLY') continue;
             $updated = captive_world_datetime($record['updated_at']);
             $worldObjectUpsert->execute([
                 ':object_id' => $record['id'], ':object_type' => $record['type'],
                 ':owner_id' => $record['owner_id'], ':holder_id' => $record['holder_id'],
                 ':location' => $record['location'], ':status' => $record['status'],
+                ':revision' => $record['revision'], ':transition_id' => $record['transition_id'],
                 ':message_state' => $record['message_state'] === null
                     ? null : json_encode($record['message_state']),
                 ':visibility' => json_encode($record['visibility']), ':source_event_id' => $record['source_event_id'],
                 ':created_at' => $updated, ':updated_at' => $updated,
             ]);
+            $worldObjectVersion->execute([':id' => $record['id']]);
+            try {
+                $after = captive_world_mirror_order($worldObjectVersion->fetch(PDO::FETCH_ASSOC) ?: null, $record);
+                if ($record['revision'] !== null && $after === 'APPLY') {
+                    throw new WorldMirrorConflictException('world object upsert did not apply');
+                }
+            } catch (WorldMirrorConflictException) {
+                $worldMirrorConflicts[] = ['kind' => 'object', 'id' => $record['id']];
+            }
             continue;
         }
 
@@ -472,7 +537,15 @@ try {
     // table on an un-migrated deploy must never break ingestion.
     captive_admin_record_ingest_ip($db, captive_admin_client_ip());
 
-    captive_json_response(['ok' => true, 'inserted' => $inserted, 'now' => $maxSeq]);
+    captive_json_response([
+        'ok' => true, 'inserted' => $inserted, 'now' => $maxSeq,
+        'world_mirror_conflicts' => $worldMirrorConflicts,
+    ]);
+} catch (WorldMirrorConflictException $e) {
+    if (isset($db) && $db->inTransaction()) {
+        $db->rollBack();
+    }
+    captive_error_response('world mirror conflict', 409);
 } catch (InvalidArgumentException $e) {
     if (isset($db) && $db->inTransaction()) {
         $db->rollBack();

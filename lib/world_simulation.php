@@ -1,6 +1,36 @@
 <?php
 declare(strict_types=1);
 
+class WorldMirrorConflictException extends RuntimeException {}
+
+function captive_world_mirror_version(array $payload): array
+{
+    $revision = $payload['revision'] ?? null;
+    $transitionId = $payload['transitionId'] ?? null;
+    if ($revision === null && $transitionId === null) {
+        return ['revision' => null, 'transition_id' => null];
+    }
+    if (!is_int($revision) || $revision < 1 || !is_string($transitionId)
+        || !preg_match('/\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z/i', $transitionId)) {
+        throw new InvalidArgumentException('invalid world mirror revision');
+    }
+    return ['revision' => $revision, 'transition_id' => strtolower($transitionId)];
+}
+
+function captive_world_mirror_order(?array $existing, array $incoming): string
+{
+    if ($existing === null) return 'APPLY';
+    $oldRevision = $existing['revision'] === null ? null : (int)$existing['revision'];
+    $newRevision = $incoming['revision'];
+    if ($newRevision === null) return $oldRevision === null ? 'APPLY' : 'STALE';
+    if ($oldRevision === null || $newRevision > $oldRevision) return 'APPLY';
+    if ($newRevision < $oldRevision) return 'STALE';
+    if (strcasecmp((string)$existing['transition_id'], (string)$incoming['transition_id']) !== 0) {
+        throw new WorldMirrorConflictException('equal world revision has a different transition ID');
+    }
+    return 'SAME';
+}
+
 // Private side-channel validation for context/AWG inspection records. These
 // helpers validate storage shape only. Authoritative candidate validation occurs
 // deterministically in runner/ambient-world-generator.js before these payloads
@@ -103,6 +133,7 @@ function captive_awg_run_validate(array $payload): array
 
 function captive_world_thread_validate(array $payload): array
 {
+    $mirror = captive_world_mirror_version($payload);
     $state = captive_required_text($payload, 'state', 16);
     if (!in_array($state, ['OPEN', 'RESOLVED'], true)) {
         throw new InvalidArgumentException('invalid world thread state');
@@ -119,11 +150,13 @@ function captive_world_thread_validate(array $payload): array
         'visibility' => captive_json_array($payload['visibility'] ?? [], 'visibility'),
         'created_at' => captive_required_text($payload, 'createdAt', 40),
         'updated_at' => captive_required_text($payload, 'updatedAt', 40),
+        ...$mirror,
     ];
 }
 
 function captive_world_object_validate(array $payload): array
 {
+    $mirror = captive_world_mirror_version($payload);
     return [
         'id' => captive_required_text($payload, 'id', 160),
         'type' => captive_required_text($payload, 'type', 80),
@@ -136,5 +169,6 @@ function captive_world_object_validate(array $payload): array
         'visibility' => captive_json_array($payload['visibility'] ?? [], 'visibility'),
         'source_event_id' => captive_required_text($payload, 'sourceEventId', 160),
         'updated_at' => captive_required_text($payload, 'updatedAt', 40),
+        ...$mirror,
     ];
 }
