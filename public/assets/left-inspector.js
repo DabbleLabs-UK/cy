@@ -42,25 +42,39 @@ export class LeftInspector {
       this.wrap(brain.querySelector(selector), label, valueSelector);
     }
 
-    // Previously these five readings were nested inside a large legacy card.
-    // Give each its own compact head, while leaving its original detail intact.
+    // Keep non-promoted readings inspectable without presenting them as peers
+    // of the four current inner-state readings. Move the original DOM, not a
+    // copy, so live values and the existing detail/history bindings survive.
     const legacy = brain.querySelector('.soma-legacy-quarantine');
     const readout = legacy?.querySelector('.soma-public-readout');
     if (readout) {
-      let index = brain.querySelector('.cy-other-readings');
-      if (!index) {
-        index = document.createElement('div');
+      let section = brain.querySelector('.cy-supporting-readings');
+      if (!section) {
+        section = document.createElement('details');
+        section.className = 'cy-supporting-readings';
+        const summary = document.createElement('summary');
+        summary.textContent = 'SUPPORTING STATE / DIAGNOSTICS';
+        const index = document.createElement('div');
         index.className = 'cy-other-readings';
-        brain.insertBefore(index, brain.querySelector('.soma-how-it-works-link'));
+        section.append(summary, index);
+        brain.insertBefore(section, brain.querySelector('.soma-how-it-works-link'));
+        section.addEventListener('toggle', () => {
+          if (!section.open && this.active && section.contains(this.active.wrapper)) this.close();
+        });
       }
+      const index = section.querySelector('.cy-other-readings');
       for (const entry of [...readout.querySelectorAll(':scope > .soma-state-entry')]) {
         index.appendChild(entry);
         const label = entry.querySelector('.soma-state-label')?.textContent.trim() || entry.dataset.metric;
         this.wrap(entry, label, '.soma-state-value');
       }
+      this.wrap(legacy, 'PREVIOUS MODELS / DIAGNOSTICS', null, 'PROVISIONAL');
+      const legacyItem = legacy.closest('.cy-inspector-item');
+      if (legacyItem && legacyItem.parentNode !== index) index.appendChild(legacyItem);
+    } else {
+      this.wrap(legacy, 'PREVIOUS MODELS / DIAGNOSTICS', null, 'PROVISIONAL');
     }
 
-    this.wrap(legacy, 'PREVIOUS MODELS / DIAGNOSTICS', null, 'PROVISIONAL');
     this.wrap(this.root.querySelector('#memory'), 'AUTOBIOGRAPHICAL MEMORY', '.memory-status strong', 'MEMORY');
     this.wrap(this.root.querySelector('.world-inspection-panel'), 'CONTEXT / WORLD INSPECTION', null, 'ADMIN');
     document.body.classList.add('cy-left-inspector-ready');

@@ -1,9 +1,25 @@
 /* One quiet left index, with an adjoining desktop inspector. The original
    instrument content is retained inside each body, never copied or reflowed. */
 .cy-left-inspector-ready .brainhud { gap: 5px; }
-.cy-left-inspector-ready .soma-overview,
 .cy-left-inspector-ready .memory-panel > .panel-title { display: none; }
-.cy-other-readings { display: grid; gap: 5px; }
+.cy-left-inspector-ready .col-brain > .panel:first-child > .panel-title { display: none; }
+.cy-left-inspector-ready .soma-overview { padding: 0; margin: 0 0 3px; border: 0; }
+.cy-left-inspector-ready .soma-overview-title { margin: 0; }
+.cy-left-inspector-ready .soma-overview-grid { display: none; }
+.cy-supporting-readings > summary {
+  min-height: 32px;
+  padding: 8px 10px;
+  border: 1px solid #354553;
+  border-radius: 3px;
+  background: #111820;
+  color: #8fa4b1;
+  cursor: pointer;
+  font: 10px var(--mono);
+  letter-spacing: 0.08em;
+}
+.cy-supporting-readings > summary:hover { background: #1b2933; }
+.cy-supporting-readings > summary:focus-visible { outline: 2px solid #8fb9d4; outline-offset: 2px; }
+.cy-other-readings { display: grid; gap: 5px; margin: 5px 0 0 6px; padding-left: 8px; border-left: 1px solid #354553; }
 .cy-inspector-item { min-width: 0; position: relative; }
 .cy-inspector-head {
   display: grid;
