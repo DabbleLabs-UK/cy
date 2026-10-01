@@ -1,7 +1,7 @@
 // Opt-in only: use an isolated, disposable MariaDB instance, never a CY database.
 // CY_TEST_DB_ISOLATED=1 requires CY_TEST_DB_DEFAULTS, CY_TEST_DB_PORT,
 // CY_TEST_MARIADB_BIN and CY_TEST_PHP_BIN.
-// Intentionally red on current lineage; do not merge until a convergence fix exists.
+// This test uses only a disposable local MariaDB instance and PHP server.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -256,6 +256,26 @@ test('checkpoint and SQL world mirrors reconverge across both crash orders and l
       await conflictClient.flush();
       assert.deepEqual(conflicts, [{ kind: 'object', id: 'object:mirror-checkpoint-ahead' }]);
       assert.deepEqual(mirrorStatus('checkpoint-ahead'), terminal);
+
+      const conflictDelivery = '00000000-0000-4000-8000-000000000098';
+      const conflictBody = JSON.stringify({ events: [{
+        ts: '2026-10-01 04:03:00.000', kind: 'world_object_record',
+        delivery_id: conflictDelivery, payload: conflicting.objects[0],
+      }] });
+      const sendConflict = () => realFetch(`${base}/api/ingest.php`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json',
+          'X-Cy-Key': 'disposable-test-key' }, body: conflictBody,
+      });
+      const firstConflictResponse = await sendConflict();
+      assert.equal(firstConflictResponse.status, 200);
+      // The first HTTP response is intentionally not consumed by the runner.
+      const retriedConflictResponse = await sendConflict();
+      const retriedConflict = await retriedConflictResponse.json();
+      assert.deepEqual(retriedConflict.world_mirror_conflicts,
+        [{ kind: 'object', id: 'object:mirror-checkpoint-ahead' }],
+        'the durable delivery receipt must replay a lost conflict result');
+      assert.equal(sql(`SELECT world_mirror_conflict FROM ingest_delivery_receipts
+        WHERE delivery_id = UNHEX('${conflictDelivery.replaceAll('-', '')}')`), '1');
 
       const later = world('checkpoint-ahead', true).objects[0];
       later.revision = 3;

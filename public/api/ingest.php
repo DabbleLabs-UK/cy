@@ -33,6 +33,14 @@ try {
         'INSERT INTO ingest_delivery_receipts (delivery_id, kind)
          VALUES (UNHEX(:delivery_hex), :kind)'
     );
+    $receiptConflictRead = $db->prepare(
+        'SELECT world_mirror_conflict FROM ingest_delivery_receipts
+         WHERE delivery_id = UNHEX(:delivery_hex) FOR UPDATE'
+    );
+    $receiptConflictMark = $db->prepare(
+        'UPDATE ingest_delivery_receipts SET world_mirror_conflict = 1
+         WHERE delivery_id = UNHEX(:delivery_hex)'
+    );
     $environmentInsert = $db->prepare(
         'INSERT INTO environment_events (event_id, occurred_at, event_type, event_family, record)
          VALUES (:event_id, :occurred_at, :event_type, :event_family, :record)
@@ -144,6 +152,13 @@ try {
     );
     $inserted = 0;
     $worldMirrorConflicts = [];
+    $reportWorldMirrorConflict = static function (string $kind, string $id, ?string $deliveryId)
+        use (&$worldMirrorConflicts, $receiptConflictMark): void {
+        $worldMirrorConflicts[] = ['kind' => $kind, 'id' => $id];
+        if ($deliveryId !== null) {
+            $receiptConflictMark->execute([':delivery_hex' => str_replace('-', '', $deliveryId)]);
+        }
+    };
     $lastVitalsHistoryAtMs = null;
     $lastVitalsHistoryLoaded = false;
     $liveVitalsUpsert = $db->prepare(
@@ -172,6 +187,7 @@ try {
         // HTTP acknowledgement cannot replay a committed event or restore stale
         // latest-state upserts over newer state. Old runners without IDs remain
         // accepted during the rolling deployment.
+        $deliveryId = null;
         if (array_key_exists('delivery_id', $event)) {
             $deliveryId = $event['delivery_id'];
             if (!is_string($deliveryId) || !preg_match(
@@ -188,6 +204,15 @@ try {
             } catch (PDOException $e) {
                 if ((int)($e->errorInfo[1] ?? 0) !== 1062) {
                     throw $e;
+                }
+                $receiptConflictRead->execute([':delivery_hex' => str_replace('-', '', $deliveryId)]);
+                $receipt = $receiptConflictRead->fetch(PDO::FETCH_ASSOC);
+                if ($receipt && (int)$receipt['world_mirror_conflict'] === 1
+                    && in_array($kind, ['world_object_record', 'world_thread_record'], true)) {
+                    $worldMirrorConflicts[] = [
+                        'kind' => $kind === 'world_object_record' ? 'object' : 'thread',
+                        'id' => (string)($event['payload']['id'] ?? '?'),
+                    ];
                 }
                 continue; // exactly this delivery was already committed
             }
@@ -293,7 +318,7 @@ try {
                     throw new WorldMirrorConflictException('resolved thread cannot reopen');
                 }
             } catch (WorldMirrorConflictException) {
-                $worldMirrorConflicts[] = ['kind' => 'thread', 'id' => $record['id']];
+                $reportWorldMirrorConflict('thread', $record['id'], $deliveryId);
                 continue;
             }
             if ($order !== 'APPLY') continue;
@@ -315,7 +340,7 @@ try {
                     throw new WorldMirrorConflictException('world thread upsert did not apply');
                 }
             } catch (WorldMirrorConflictException) {
-                $worldMirrorConflicts[] = ['kind' => 'thread', 'id' => $record['id']];
+                $reportWorldMirrorConflict('thread', $record['id'], $deliveryId);
             }
             continue;
         }
@@ -333,7 +358,7 @@ try {
                     throw new WorldMirrorConflictException('retired object cannot reactivate');
                 }
             } catch (WorldMirrorConflictException) {
-                $worldMirrorConflicts[] = ['kind' => 'object', 'id' => $record['id']];
+                $reportWorldMirrorConflict('object', $record['id'], $deliveryId);
                 continue;
             }
             if ($order !== 'APPLY') continue;
@@ -355,7 +380,7 @@ try {
                     throw new WorldMirrorConflictException('world object upsert did not apply');
                 }
             } catch (WorldMirrorConflictException) {
-                $worldMirrorConflicts[] = ['kind' => 'object', 'id' => $record['id']];
+                $reportWorldMirrorConflict('object', $record['id'], $deliveryId);
             }
             continue;
         }

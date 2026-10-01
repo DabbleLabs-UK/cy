@@ -156,6 +156,10 @@ test('committed mixed ingest and a lost response replay every category independe
       const migration = await readFile(join(root, 'sql/024_ingest_delivery_receipts.sql'), 'utf8');
       mysql(migration, dbName);
       mysql(migration, dbName); // additive and safe to rerun during rollout
+      // The current ingest endpoint also uses migration 025's durable mirror
+      // conflict result on receipts; restore that additive column after the
+      // migration-024 idempotency rehearsal above.
+      mysql('ALTER TABLE ingest_delivery_receipts ADD COLUMN world_mirror_conflict TINYINT(1) NOT NULL DEFAULT 0 AFTER kind', dbName);
       mysql(`INSERT INTO visitors (visitor_id, first_seen, last_seen) VALUES
         ('1234567890abcdef1234567890abcdef', NOW(), NOW());
         INSERT INTO postcards (id, posted_at, delivered_at, mail_class) VALUES

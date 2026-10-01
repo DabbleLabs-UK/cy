@@ -25,6 +25,7 @@ CREATE TABLE events (
 CREATE TABLE ingest_delivery_receipts (
     delivery_id BINARY(16) PRIMARY KEY,
     kind VARCHAR(24) NOT NULL,
+    world_mirror_conflict TINYINT(1) NOT NULL DEFAULT 0,
     accepted_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
