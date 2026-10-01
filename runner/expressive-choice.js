@@ -28,41 +28,97 @@ export const EXPRESSIVE_CHOICE_RETRY_COUNT = 0;
 // Existing silence capability gate, retained as an engineering scheduling constraint.
 export const EXPRESSIVE_SILENCE_COOLDOWN_MS = 15 * 60 * 1000;
 
-// ENGINEERING / PRESENTATION CADENCE. These are user-selected output-mix bounds,
-// not psychological or Soma parameters. A spontaneous drawing is unavailable
-// until ten completed journal entries have accumulated, remains a model-selectable
-// option through fourteen, and becomes due before a sixteenth journal entry can
-// start. Only a successfully rendered drawing resets the counter.
+// ENGINEERING / PRESENTATION CADENCE. These are output-mix opportunities, not
+// psychological or Soma parameters. The journal count keeps the existing early
+// drawing opportunity at full tempo. Time supplies a separate opportunity when
+// prose is slower. A failed drawing cools down drawing only, never writing.
 export const EXPRESSIVE_DRAW_MIN_JOURNALS = 10;
 export const EXPRESSIVE_DRAW_MAX_JOURNALS = 15;
+export const EXPRESSIVE_DRAW_OPPORTUNITY_MIN_MS = 75 * 60 * 1000;
+export const EXPRESSIVE_DRAW_OPPORTUNITY_SPREAD_MS = 60 * 60 * 1000;
+export const EXPRESSIVE_DRAW_RETRY_BASE_MS = 3 * 60 * 1000;
+export const EXPRESSIVE_DRAW_RETRY_MAX_MS = 30 * 60 * 1000;
+export const EXPRESSIVE_GAP_BASE_MS = 90 * 60 * 1000;
+
+function nonnegativeTimestamp(value) {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
 
 export function reconcileExpressiveCadence(value) {
   const journalsSinceDraw = Number.isInteger(value && value.journalsSinceDraw)
-    && value.journalsSinceDraw >= 0 ? value.journalsSinceDraw : 0;
-  return { journalsSinceDraw };
+    && value.journalsSinceDraw >= 0
+    ? Math.min(value.journalsSinceDraw, EXPRESSIVE_DRAW_MAX_JOURNALS) : 0;
+  const consecutiveDrawFailures = Number.isInteger(value && value.consecutiveDrawFailures)
+    && value.consecutiveDrawFailures >= 0
+    ? Math.min(value.consecutiveDrawFailures, 10) : 0;
+  return {
+    journalsSinceDraw,
+    nextDrawOpportunityAtMs: nonnegativeTimestamp(value && value.nextDrawOpportunityAtMs),
+    drawRetryNotBeforeMs: nonnegativeTimestamp(value && value.drawRetryNotBeforeMs),
+    consecutiveDrawFailures,
+  };
 }
 
-export function expressiveCadenceAvailability(value) {
+export function expressiveCadenceAvailability(value, { nowMs = Date.now() } = {}) {
   const state = reconcileExpressiveCadence(value);
+  const dueByJournal = state.journalsSinceDraw >= EXPRESSIVE_DRAW_MIN_JOURNALS;
+  const dueByTime = state.nextDrawOpportunityAtMs > 0
+    && nowMs >= state.nextDrawOpportunityAtMs;
+  const retryReady = nowMs >= state.drawRetryNotBeforeMs;
   return {
-    journal: state.journalsSinceDraw < EXPRESSIVE_DRAW_MAX_JOURNALS,
-    draw: state.journalsSinceDraw >= EXPRESSIVE_DRAW_MIN_JOURNALS,
-    phase: state.journalsSinceDraw >= EXPRESSIVE_DRAW_MAX_JOURNALS
-      ? 'DRAW_DUE'
-      : state.journalsSinceDraw >= EXPRESSIVE_DRAW_MIN_JOURNALS
-        ? 'DRAW_ELIGIBLE'
-        : 'JOURNAL_INTERVAL',
+    journal: true,
+    draw: retryReady && (dueByJournal || dueByTime),
+    phase: !retryReady && (dueByJournal || dueByTime)
+      ? 'DRAW_COOLDOWN'
+      : state.journalsSinceDraw >= EXPRESSIVE_DRAW_MAX_JOURNALS || dueByTime
+        ? 'DRAW_PREFERRED'
+        : dueByJournal ? 'DRAW_ELIGIBLE' : 'JOURNAL_INTERVAL',
   };
 }
 
 export function recordExpressiveJournal(value) {
   const state = reconcileExpressiveCadence(value);
-  state.journalsSinceDraw++;
+  state.journalsSinceDraw = Math.min(EXPRESSIVE_DRAW_MAX_JOURNALS, state.journalsSinceDraw + 1);
   return state;
 }
 
-export function recordExpressiveDrawing() {
-  return { journalsSinceDraw: 0 };
+export function recordExpressiveDrawing(value, { nowMs = Date.now(), random = Math.random } = {}) {
+  const state = reconcileExpressiveCadence(value);
+  const draw = Math.min(1, Math.max(0, Number(random()) || 0));
+  return {
+    ...state,
+    journalsSinceDraw: 0,
+    nextDrawOpportunityAtMs: nowMs + EXPRESSIVE_DRAW_OPPORTUNITY_MIN_MS
+      + Math.floor(draw * EXPRESSIVE_DRAW_OPPORTUNITY_SPREAD_MS),
+    drawRetryNotBeforeMs: 0,
+    consecutiveDrawFailures: 0,
+  };
+}
+
+export function recordExpressiveDrawingFailure(value, { nowMs = Date.now() } = {}) {
+  const state = reconcileExpressiveCadence(value);
+  const failures = Math.min(10, state.consecutiveDrawFailures + 1);
+  return {
+    ...state,
+    consecutiveDrawFailures: failures,
+    drawRetryNotBeforeMs: nowMs + Math.min(
+      EXPRESSIVE_DRAW_RETRY_MAX_MS,
+      EXPRESSIVE_DRAW_RETRY_BASE_MS * (2 ** (failures - 1)),
+    ),
+  };
+}
+
+// Time since an actually published waking journal/sketch, counting only the
+// current continuous eligible period. Low tempo scales the threshold rather
+// than bypassing the inference-duty quiet owed by each model request.
+export function eligibleExpressionGap({ nowMs = Date.now(), eligibleSinceMs, lastPublishedMs = 0, tempoSpeed = 30 } = {}) {
+  const speed = Math.min(100, Math.max(1, Math.round(Number(tempoSpeed) || 30)));
+  const thresholdMs = Math.max(30 * 60 * 1000,
+    Math.round(EXPRESSIVE_GAP_BASE_MS * 30 / speed));
+  const since = nonnegativeTimestamp(eligibleSinceMs);
+  const latest = Math.max(since, nonnegativeTimestamp(lastPublishedMs));
+  const elapsedMs = since ? Math.max(0, nowMs - latest) : 0;
+  return { prolonged: since > 0 && elapsedMs >= thresholdMs, elapsedMs, thresholdMs };
 }
 
 export const EXPRESSIVE_ACTIONS = Object.freeze({
@@ -116,6 +172,8 @@ export function buildExpressiveChoiceRequest({
   currentIncidentContext = '',
   provisionalMemoryCandidate = null,
   availableActions = [],
+  drawingPhase = 'JOURNAL_INTERVAL',
+  prolongedEligibleGap = false,
 } = {}) {
   const actions = normaliseAvailableActions(availableActions);
   const incident = cleanText(currentIncidentContext);
@@ -149,6 +207,8 @@ export function buildExpressiveChoiceRequest({
     provisionalMemoryCandidate: memory,
     availableActions: actions,
     allowedFocusRefs: unique(allowedFocusRefs),
+    drawingPhase,
+    prolongedEligibleGap: !!prolongedEligibleGap,
   };
 }
 
@@ -159,6 +219,15 @@ export function expressiveChoiceModelCall(request) {
     provisional_memory_candidate: request.provisionalMemoryCandidate || '[NONE SUPPLIED]',
     available_expressive_actions: request.availableActions,
     allowed_focus_refs: request.allowedFocusRefs,
+    expression_timing: {
+      drawing_phase: request.drawingPhase,
+      prolonged_eligible_waking_gap: request.prolongedEligibleGap,
+      guidance: request.prolongedEligibleGap
+        ? 'It has been a long eligible waking interval without a published journal or sketch. Consider grounded ordinary experience for writing or drawing; silence remains valid. Do not invent an external event.'
+        : request.drawingPhase === 'DRAW_PREFERRED'
+          ? 'A sketch opportunity is due. Prefer a grounded sketch when it fits; writing and silence remain valid.'
+          : 'Choose among available forms from grounded current context. No publication quota.',
+    },
     output_schema: {
       action: request.availableActions.map((item) => item.id).join(' | '),
       focusRefs: 'array containing only allowed_focus_refs; may be empty',
