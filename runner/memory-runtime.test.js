@@ -472,3 +472,78 @@ test('a fresh runtime after restart reports no repeats and does not crash on can
   });
   assert.deepEqual(recorded[0].inspection.repeatedFromPreviousGenerationIds, []);
 });
+
+test('a pre-fix pending Cy expression is cleaned before retrieval, formation and prompt assembly', async () => {
+  const queries = [];
+  const prompts = [];
+  const completed = [];
+  const source = {
+    sourceType: 'CY_EXPRESSION', sourceId: 'expression-batch:legacy',
+    text: "the bolt went twice.\n\nYour entry is complete!\n\ni kept Reg's note.",
+    sourceVisibility: 'INTERNAL_ONLY', tags: ['cy-expression'],
+  };
+  const before = structuredClone(source);
+  const r = runtime({
+    client: {
+      async queryMemories(value) { queries.push(value); return { candidates: [] }; },
+      async completeMemorySource(value) { completed.push(value); },
+    },
+    generate: async (call) => { prompts.push(call.prompt); return '{"decision":"NOTHING"}'; },
+  });
+  const result = await r.processFormation({ id: 71, source });
+  assert.equal(result.status, 'NOTHING');
+  assert.equal(queries[0].query.text, "the bolt went twice.\n\ni kept Reg's note.");
+  assert.match(prompts[0], /the bolt went twice/);
+  assert.match(prompts[0], /i kept Reg's note/);
+  assert.doesNotMatch(prompts[0], /entry is complete/i);
+  assert.equal(completed[0].result_category, 'NOTHING');
+  assert.deepEqual(source, before);
+});
+
+test('new Cy reply sources are cleaned before durable enqueue without changing the caller object', async () => {
+  const queued = [];
+  const r = runtime({ client: {
+    async enqueueMemorySource(value) { queued.push(value); return { queued: true }; },
+  } });
+  r.schedule = () => {};
+  const source = {
+    sourceType: 'CY_REPLY', sourceId: 'postcard-reply:old',
+    text: "reg's words stayed with me. The task is to complete this entry.",
+  };
+  const before = structuredClone(source);
+  await r.queueSource(source);
+  assert.equal(queued[0].text, "reg's words stayed with me.");
+  assert.deepEqual(source, before);
+  assert.deepEqual(await r.queueSource({ ...source, text: 'Your entry is complete!' }), { queued: false });
+  assert.equal(queued.length, 1);
+});
+
+test('an entirely editorial pending Cy expression completes without model work', async () => {
+  const completed = [];
+  const r = runtime({
+    client: { async completeMemorySource(value) { completed.push(value); } },
+    generate: async () => { throw new Error('model must not receive editorial text'); },
+  });
+  const result = await r.processFormation({
+    id: 72, source: {
+      sourceType: 'CY_EXPRESSION', sourceId: 'expression-batch:editorial',
+      text: 'Your entry is complete!',
+    },
+  });
+  assert.equal(result.status, 'NOTHING');
+  assert.equal(completed[0].job_id, 72);
+});
+
+test('old queued surfacing context loses assistant-role provenance before querying', async () => {
+  const queried = [];
+  const r = runtime({ client: {
+    async queryMemories(value) { queried.push(value); return { candidates: [] }; },
+  } });
+  await r.processSurfacing({
+    id: 73, subject_visitor_id: null, context: {
+      text: 'cell search', groundedContext: 'sleep pressure remains high',
+      recentExpressionText: "the bolt went twice. I've added an incomplete sentence to continue Cy's thought process.",
+    },
+  });
+  assert.equal(queried[0].recentExpressionText, 'the bolt went twice.');
+});

@@ -2934,7 +2934,7 @@ async function main() {
         id: `memory:${memory.id}`, sourceId: `memory:${memory.id}`, section: 'autobiographical_memory',
         provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
         privacyScope: memory.privacyScope || 'INTERNAL_ONLY', senderId: memory.subjectVisitorId || null,
-        priority: 70, content: stripMalformedProseControls(memory.content || memory.publicSummary),
+        priority: 70, content: sanitizeCharacterContext(memory.content || memory.publicSummary),
       });
     }
     if (!forAwg && actionOptions.length) {
