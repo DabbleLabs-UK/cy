@@ -105,6 +105,8 @@ const FORBIDDEN_KEYS = new Set([
 
 const KNOWN_CAST_IDS = new Set(['cy', 'cy:7734', ...CAST.map((item) => item.key), ...OFFICERS.map((item) => item.key)]);
 const KNOWN_OBSERVER_IDS = new Set(['world', ...KNOWN_CAST_IDS]);
+const OFFICER_IDS = new Set(OFFICERS.map((item) => item.key));
+const AVAILABLE_OBJECT_STATUSES = new Set(['ACTIVE', 'DELIVERED']);
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -440,10 +442,15 @@ function compatibleThreadFamilies(thread) {
   return AWG_EVENT_FAMILIES.includes(threadType) ? [threadType] : [];
 }
 
+function isAwgUsableObject(object) {
+  return object && AVAILABLE_OBJECT_STATUSES.has(clean(object.status).toUpperCase())
+    && isCurrentMessageObject(object);
+}
+
 function compatibleAwgObjects(state, currentLocation) {
   const location = clean(currentLocation);
   return state.objects.filter((object) => (
-    (!location || clean(object.location) === location) && isCurrentMessageObject(object)
+    (!location || clean(object.location) === location) && isAwgUsableObject(object)
   ));
 }
 
@@ -742,6 +749,9 @@ export function buildAwgCall(contextRendering, {
       '- If Cy participates directly, include a truthful CY_* observation; WORLD_ONLY means Cy did not participate or perceive it.',
       '- Spoken conversation is not a message object. Leave objects empty unless a concrete persistent physical item is created, moved or changed.',
       '- For non-message objects set messageAction null and provide status. For messages set status null; code derives physical status from messageAction.',
+      '- A new non-message object must start ACTIVE. Do not invent an object whose first state is confiscated or missing.',
+      '- CONFISCATED is only for an existing available item actually seized by a participating officer. Set that officer as holder; code moves the item to officer_desk after the event.',
+      '- If an inmate takes an item, that is an ordinary transfer, not institutional confiscation. Never reuse an unavailable object ID.',
       '- A messageAction names sender, recipient and a contentClaimIndex. CREATE or DELIVER may create a genuinely new physical message with id null.',
       '- DELIVER requires meaningful content. READ, RESOLVE and RETIRE must reference an existing message ID and normally advance it rather than create another object.',
       '- Holder=cy does not by itself mean Cy observed receipt or knows the contents. Observation access establishes knowledge separately.',
@@ -831,12 +841,13 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
     assertProposalKeys(claim, new Set(['speakerId', 'content', 'truthStatus']), 'INFORMATION_CLAIM');
     if (!allowedCast.has(id(claim.speakerId))) throw new Error('UNKNOWN_CLAIM_SPEAKER');
   }
+  const usableObjectIds = new Set(compatibleAwgObjects(state, currentLocation).map((object) => object.id));
   const objects = requireArray(proposal.objects, 'OBJECTS').map((object) => {
     assertProposalKeys(object, new Set([
       'id', 'type', 'ownerId', 'holderId', 'status', 'messageAction',
     ]), 'OBJECT');
     const objectId = object.id == null ? null : id(object.id);
-    if (objectId && !state.objects.some((entry) => entry.id === objectId)) {
+    if (objectId && !usableObjectIds.has(objectId)) {
       throw new Error('INVALID_OBJECT_REFERENCE');
     }
     const type = clean(object.type).toLowerCase();
@@ -853,15 +864,17 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
           ? object.messageAction.contentClaimIndex : null,
       };
     }
+    const status = type === 'message'
+      ? messageStatusForAction(messageAction && messageAction.action)
+      : clean(object.status).toUpperCase();
     return {
       id: objectId || id((makeId || ((prefix) => `${prefix}:${nowMs}`))('object')),
       type,
       ownerId: object.ownerId == null ? null : id(object.ownerId),
       holderId: object.holderId == null ? null : id(object.holderId),
-      location: clean(currentLocation),
-      status: type === 'message'
-        ? messageStatusForAction(messageAction && messageAction.action)
-        : clean(object.status).toUpperCase(),
+      location: objectId && type !== 'message' && status === 'CONFISCATED'
+        ? 'officer_desk' : clean(currentLocation),
+      status,
       messageAction,
     };
   });
@@ -940,12 +953,18 @@ function validateObject(object, state, errors, {
   if (!AWG_KNOWN_LOCATIONS.includes(clean(object.location))) errors.push('UNKNOWN_OBJECT_LOCATION');
   if (!AWG_OBJECT_STATUSES.includes(clean(object.status).toUpperCase())) errors.push('INVALID_OBJECT_STATUS');
   const existing = state.objects.find((item) => item.id === objectId);
-  if (state.terminalObjects.some((item) => item.id === objectId)) {
-    errors.push('RETIRED_OBJECT_REFERENCE');
-  }
+  const status = clean(object.status).toUpperCase();
   const isMessage = clean(object.type).toLowerCase() === 'message';
   const transition = object.messageAction;
   const action = clean(transition && transition.action).toUpperCase();
+  const resolvedMessageRetirement = isMessage && action === 'RETIRE'
+    && normaliseMessageState(existing && existing.message)?.lifecycleState === 'RESOLVED';
+  if (existing && !isAwgUsableObject(existing) && !resolvedMessageRetirement) {
+    errors.push('UNAVAILABLE_OBJECT_REFERENCE');
+  }
+  if (state.terminalObjects.some((item) => item.id === objectId)) {
+    errors.push('RETIRED_OBJECT_REFERENCE');
+  }
   const cyObservation = (candidate && candidate.observations || []).find((observation) => (
     id(observation && observation.observerId) === 'cy'
   ));
@@ -1025,6 +1044,10 @@ function validateObject(object, state, errors, {
     errors.push('MESSAGE_ACTION_ON_NON_MESSAGE');
   }
   if (!existing) {
+    if (!isMessage && status !== 'ACTIVE') errors.push('NEW_OBJECT_UNAVAILABLE_STATUS');
+    if (!isMessage && /confiscat|seiz/i.test(
+      `${candidate && candidate.objective && candidate.objective.eventType || ''} ${candidate && candidate.objective && candidate.objective.summary || ''}`,
+    )) errors.push('NEW_OBJECT_CONFISCATION_REQUIRES_EXISTING');
     if (object.ownerId != null && !participants.has(id(object.ownerId))) {
       errors.push('OBJECT_OWNER_NOT_PARTICIPANT');
     }
@@ -1049,6 +1072,18 @@ function validateObject(object, state, errors, {
       `${candidate && candidate.eventFamily || ''} ${candidate && candidate.objective && candidate.objective.eventType || ''} ${candidate && candidate.objective && candidate.objective.summary || ''}`,
     );
     if (changedLocation && !transferMeaning) errors.push('OBJECT_LOCATION_CONTRADICTION');
+    if (!isMessage && status === 'CONFISCATED') {
+      if (!OFFICER_IDS.has(id(object.holderId)) || !participants.has(id(object.holderId))) {
+        errors.push('CONFISCATION_OFFICER_REQUIRED');
+      }
+      if (clean(existing.location) !== clean(candidate && candidate.location)) {
+        errors.push('OBJECT_NOT_AT_EVENT_LOCATION');
+      }
+      if (clean(object.location) !== 'officer_desk') errors.push('CONFISCATION_DESTINATION_CONTRADICTION');
+      if (!/confiscat|seiz/i.test(
+        `${candidate && candidate.objective && candidate.objective.eventType || ''} ${candidate && candidate.objective && candidate.objective.summary || ''}`,
+      )) errors.push('CONFISCATION_EVIDENCE_REQUIRED');
+    }
   }
   if (clean(object.status).toUpperCase() === 'DELIVERED' && object.holderId == null) {
     errors.push('DELIVERED_OBJECT_HOLDER_REQUIRED');
