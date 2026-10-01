@@ -59,6 +59,7 @@ export class Client {
     this.backoff = 0;
     this.onInbox = null;
     this.onTempo = null;
+    this.onDelivered = null;
     // Fired from pollTempo the moment the operator pause flag TRANSITIONS, so the
     // runner can cut the in-flight burst and confirm the pause/resume at once
     // rather than at the end of the current 30-60s generation.
@@ -109,6 +110,15 @@ export class Client {
     // owned batch or disk queue; a later enqueue, even of the same object,
     // must not be mistaken for the earlier delivery.
     event.delivery_id = randomUUID();
+    this.batch.push({ ...event });
+  }
+
+  // A checkpointed day rollover already owns its stable delivery identity.
+  // Do not mint another ID when replaying that outbox entry after a restart.
+  enqueueDayRollover(event) {
+    if (event.kind !== 'day' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(event.delivery_id || '')) {
+      throw new Error('identified day rollover required');
+    }
     this.batch.push({ ...event });
   }
 
@@ -165,6 +175,7 @@ export class Client {
       if (events.length) {
         try {
           await this._appendEvents(this.eventsPath, events);
+          this.onDelivered?.(events);
         } catch (err) {
           this.batch = events.concat(this.batch);
           throw err;
@@ -189,6 +200,7 @@ export class Client {
     if (!events.length) return;
     try {
       await this._send(events);
+      this.onDelivered?.(events);
     } catch (err) {
       this.lastError = String(err && err.message ? err.message : err);
       await this._queueEvents(events);
@@ -310,6 +322,7 @@ export class Client {
         signal: AbortSignal.timeout(20000),
       });
       if (!res.ok) throw new Error(`queue drain HTTP ${res.status}`);
+      this.onDelivered?.(slice);
     }
     // Whole queue delivered - clear it.
     await writeFile(this.queuePath, '');
