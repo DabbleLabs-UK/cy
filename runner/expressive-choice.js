@@ -14,6 +14,7 @@ export const EXPRESSIVE_CHOICE_CLASSIFICATION = Object.freeze([
   'NOT_SCIENTIFIC_PSYCHOLOGICAL_MODEL',
 ]);
 export const EXPRESSIVE_CHOICE_MECHANISM = 'MODEL-MEDIATED SUBJECTIVE CHARACTER CHOICE';
+export const EXPRESSIVE_SINGLE_OPTION_MECHANISM = 'DETERMINISTIC SINGLE AVAILABLE ACTION - ENGINEERING';
 export const EXPRESSIVE_CHOICE_FALLBACK_CLASSIFICATION = 'EXPRESSIVE CHOICE FALLBACK - ENGINEERING';
 export const EXPRESSIVE_CHOICE_FALLBACK_ACTION = 'journal';
 
@@ -303,11 +304,31 @@ export async function chooseExpressiveAction(request, { generate } = {}) {
   });
 }
 
+// A single available form is not a character decision. Avoid spending an
+// inference request and shared lease asking the model to return the sole ID.
+// Multiple forms retain the existing subjective chooser and its fallback.
+export async function selectAvailableExpressiveAction(request, options = {}) {
+  const actions = request && Array.isArray(request.availableActions)
+    ? request.availableActions : [];
+  if (actions.length === 0) return null;
+  if (actions.length > 1) return chooseExpressiveAction(request, options);
+  return expressiveChoiceInspection(request, {
+    action: actions[0].id,
+    focusRefs: [],
+    reasonType: 'engineering_single_option',
+    selectionMechanism: EXPRESSIVE_SINGLE_OPTION_MECHANISM,
+    classification: ['ENGINEERING_SINGLE_AVAILABLE_ACTION'],
+    fallbackUsed: false,
+    fallback: null,
+  });
+}
+
 export function expressiveChoiceInspection(request, decision) {
   return {
     schema: EXPRESSIVE_CHOICE_SCHEMA,
     version: EXPRESSIVE_CHOICE_VERSION,
-    classification: [...EXPRESSIVE_CHOICE_CLASSIFICATION],
+    classification: decision.classification
+      ? [...decision.classification] : [...EXPRESSIVE_CHOICE_CLASSIFICATION],
     availableActions: request.availableActions,
     groundedContextSupplied: request.groundedContext,
     groundedDirectiveSupplied: request.groundedDirective,

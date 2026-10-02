@@ -17,8 +17,28 @@ export function createSharedOllamaClient(baseUrl, { fetchImpl = fetch } = {}) {
   if (!root) return null;
 
   return {
-    async acquire({ purpose = 'unknown', signal = null, onLost = () => {}, preemptible = false } = {}) {
+    async acquire({ purpose = 'unknown', signal = null, onLost = () => {},
+      preemptible = false, observeOwner = false } = {}) {
       if (signal && signal.aborted) throw abortError();
+      // One bounded diagnostic snapshot, not polling. Failure to read /health
+      // must never prevent the real fail-closed lease request from proceeding.
+      let ownerAtRequest = null;
+      if (observeOwner) {
+        try {
+          const health = await fetchImpl(`${root}/health`, { signal: AbortSignal.timeout(250) });
+          if (health.ok) {
+            const state = await health.json();
+            if (state && state.active) {
+              ownerAtRequest = {
+                client: String(state.active.client || ''),
+                purpose: String(state.active.purpose || ''),
+              };
+            }
+          }
+        } catch {
+          // Optional observation only; arbiter acquisition retains its own rules.
+        }
+      }
       const response = await fetchImpl(`${root}/v1/acquire`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,6 +86,7 @@ export function createSharedOllamaClient(baseUrl, { fetchImpl = fetch } = {}) {
         id,
         profile,
         waitMs: Math.max(0, Number(grant.waitMs) || 0),
+        ownerAtRequest,
         async release() {
           if (released) return;
           released = true;
