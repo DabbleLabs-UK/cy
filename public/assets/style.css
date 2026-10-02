@@ -658,16 +658,16 @@ body.cy-paused::after {
 .cy-chronology-group-label { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .cy-chronology-group-cue { flex: 0 0 auto; color: #748b99; font: 9px var(--mono); letter-spacing: 0.08em; }
 .cy-chronology-steps { border-top: 1px solid #303b44; padding: 4px 10px 7px; }
-.cy-chronology-step { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 9px; padding: 5px 0; }
+.cy-chronology-step { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 9px; padding: 5px 0; }
 .cy-chronology-step + .cy-chronology-step { border-top: 1px dotted #35414a; }
-.cy-chronology-step time { color: #8194a2; font-variant-numeric: tabular-nums; }
+.cy-chronology-step time { color: #8194a2; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cy-chronology-step-words { min-width: 0; overflow-wrap: anywhere; }
 .cy-chronology-step-detail { display: block; margin-top: 3px; color: #8fa1ad; white-space: pre-wrap; }
 @media (max-width: 520px) {
   .cy-flow > .cy-chronology-group { margin-inline: 12px; }
   .cy-chronology-group-head { flex-wrap: wrap; gap: 4px 8px; }
   .cy-chronology-group-cue { margin-left: auto; }
-  .cy-chronology-step { grid-template-columns: 4.5em minmax(0, 1fr); gap: 6px; }
+  .cy-chronology-step { gap: 6px; }
 }
 .cy-flow > .pcard-obj { align-self: center; margin: 20px 12px; flex: 0 0 auto; }
 

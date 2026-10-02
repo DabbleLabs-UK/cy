@@ -577,3 +577,18 @@ test('pending memory context removes the newer separator and editorial tail befo
   });
   assert.equal(queried[0].recentExpressionText, 'nick took ages with the keys dont know why');
 });
+
+test('pending memory surfacing context removes the October thought-label control leak', async () => {
+  const queried = [];
+  const r = runtime({ client: {
+    async queryMemories(value) { queried.push(value); return { candidates: [] }; },
+  } });
+  await r.processSurfacing({
+    id: 75, subject_visitor_id: null, context: {
+      text: 'cell search', groundedContext: 'the door closed',
+      recentExpressionText: "counted them tiles |]>|[Cy's thoughts]|) dont wanna believe |) |[Cy's thoughts]|[",
+    },
+  });
+  assert.doesNotMatch(queried[0].recentExpressionText, /cy'?s thoughts|\|[()\[\]<>]/i);
+  assert.match(queried[0].recentExpressionText, /counted them tiles/);
+});

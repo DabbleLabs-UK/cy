@@ -108,7 +108,6 @@ export function sanitize(s) {
     .replace(/<\|[^\n]*$/g, '') // unclosed control token running to end
     .replace(/\|?(?:im_start|im_end|eot_id|sysmsg_\d+|start_header_id|end_header_id|begin_of_text)\|?/gi, '')
     .replace(/<\|+|\|+>/g, '') // stray <| or |>
-    .replace(/(^|\s)\|(\s|$)/g, '$1$2') // isolated pipe
     // HTML/XML-ish markup the model leaks into prose: opening/closing tags with or
     // without attributes, doubled closers ('<br>>'), and a tag truncated at the end
     // of the chunk ('<b', '</br'). Tag-like = '<' + optional '/' + a LETTER, so a
@@ -313,18 +312,35 @@ export function stripAssistantContaminatedTail(s) {
 // single pipe-enclosed mark is not enough to identify a control fragment.
 const MALFORMED_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}\|(?:\|+[ \t]*>?|[ \t]*>)/g;
 
+// These are prompt/citation wrappers, not prison punctuation. The model has
+// echoed them with different bracket and pipe closers, including after a
+// repair. Match the structural wrapper and its role label rather than one
+// spelling of the leaked sequence. An ordinary bracket, pipe or > by itself
+// remains valid prose.
+const PROMPT_CONTROL_LEAKS = [
+  /\|?\[[ \t]*(?:cy(?:['\u2019]?s)?|inmate(?:['\u2019]?s)?)\s+(?:thoughts?|journal|writing)\s*(?:\]|\))?(?:[ \t]*\|[()\[\]<>|]*)?/gi,
+  /\|[ \t]*(?:cy(?:['\u2019]?s)?|inmate(?:['\u2019]?s)?)\s+(?:thoughts?|journal|writing)\s*\|[()\[\]<>|]*/gi,
+  /<\/?(?:SHARED_CONTEXT|SYSTEM|PRIVATE_CURRENT_FACTS|AUTOBIOGRAPHICAL_MEMORY|GROUNDED_SOMA|CURRENT_CONTEXT)\b[^>\n]*>/gi,
+  /\bSECTION[ \t]+(?:mandatory_current_state|grounded_soma|recent_events|recent_expression)\b/gi,
+  /\[[ \t]*(?:OBSERVED BY CY|WORLD FACT|MODEL ESTIMATE|SCHEDULE ESTIMATE|OBSERVED FACT|SUBJECTIVE MEMORY|NOT MODELLED|C\d+)[ \t]*\]/gi,
+  /\[[ \t]*(?:write only|return only)\b[^\]\n]*\]/gi,
+  /\|[()\[\]<>|]+|[()\[\]<>]\|[()\[\]<>|]*/g,
+];
+
 export function malformedProseControlHits(s) {
   return [
     ...String(s || '').matchAll(/\|\}[|{}]*/g),
     ...String(s || '').matchAll(MALFORMED_PROSE_CONTROL),
+    ...PROMPT_CONTROL_LEAKS.flatMap((pattern) => [...String(s || '').matchAll(pattern)]),
   ].sort((a, b) => a.index - b.index).map((match) => match[0]);
 }
 
 export function stripMalformedProseControls(s) {
-  return String(s || '')
+  let text = String(s || '')
     .replace(/\|\}[|{}]*/g, '')
-    .replace(MALFORMED_PROSE_CONTROL, '')
-    .replace(/[ \t]{2,}/g, ' ');
+    .replace(MALFORMED_PROSE_CONTROL, '');
+  for (const pattern of PROMPT_CONTROL_LEAKS) text = text.replace(pattern, '');
+  return text.replace(/[ \t]{2,}/g, ' ');
 }
 
 // Apply the character boundary whenever recent prose is read for a new prompt,

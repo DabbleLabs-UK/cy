@@ -170,6 +170,18 @@ test('N3 contaminated stored memory cannot enter a surfacing or prose prompt', (
   assert.deepEqual(stored, before);
 });
 
+test('N4 real October journal control labels cannot enter memory formation or surfacing', () => {
+  const leaked = "nowt else matters |]>|[Cy's thoughts]|) dont wanna believe |) |[Cy's thoughts]|[ wut is he on aboot?";
+  const formed = sourceFromExpression(leaked, 'expression-batch:october-2');
+  assert.doesNotMatch(formed.text, /cy'?s thoughts|\|[()\[\]<>]/i);
+  const stored = memory({ content: leaked, publicSummary: leaked });
+  const visible = filterMemoriesBeforePrompt([stored]);
+  const surfaced = buildSurfacingRequest([stored], { groundedContext: 'the door closed' });
+  assert.doesNotMatch(visible[0].content, /cy'?s thoughts|\|[()\[\]<>]/i);
+  assert.doesNotMatch(surfaced.call.prompt, /cy'?s thoughts|\|[()\[\]<>]/i);
+  assert.doesNotMatch(formatAutobiographicalMemory([stored]), /cy'?s thoughts|\|[()\[\]<>]/i);
+});
+
 test('O working context is bounded to surfaced memories', () => {
   const candidates = Array.from({ length: MEMORY_CANDIDATE_LIMIT + 4 }, (_, index) => memory({ id: `memory-${index}` }));
   const request = buildSurfacingRequest(candidates, {});

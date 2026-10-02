@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ChronologyHierarchy, nonDuplicateEventDetail } from '../public/assets/chronology-hierarchy.js';
-import { ambientEventLabel } from '../public/assets/timeline.js';
+import { ambientEventLabel, refreshEndpointTimes, timestampMs } from '../public/assets/timeline.js';
 
 function element(tag) {
   const node = {
-    tag, children: [], parentNode: null, attributes: {}, _text: '',
+    tag, children: [], parentNode: null, attributes: {}, dataset: {}, isConnected: true, _text: '',
     appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
     removeChild(child) { this.children.splice(this.children.indexOf(child), 1); child.parentNode = null; return child; },
     setAttribute(name, value) { this.attributes[name] = value; },
@@ -14,7 +14,10 @@ function element(tag) {
   };
   return node;
 }
-globalThis.document = { createElement: element };
+globalThis.document = {
+  createElement: element,
+  createTextNode(value) { const node = element('#text'); node.textContent = value; return node; },
+};
 
 function makeFeed() {
   const container = element('div');
@@ -184,8 +187,24 @@ assert.equal(real.container.children[0].children[0].children[1].textContent,
   'Cell searched by Mr Proctor - nothing found; Cy refused an instruction');
 assert.equal(real.container.children[1].children[0].children[1].textContent,
   'Cell searched by Miss Trace - nothing found');
-assert.deepEqual(real.container.children.flatMap((group) => group.children[1].children.map((row) => row.children[0].textContent)),
+const realSteps = real.container.children.flatMap((group) => group.children[1].children.map((row) => row.children[0]));
+assert.deepEqual(realSteps.map((time) => time.dataset.cyEndpointClock),
   realSearches.map((event) => event.ts.slice(11, 19)), 'expansion preserves all original step times and order');
+const firstGroupTime = real.container.children[0].children[0].children[0];
+assert.equal(firstGroupTime.children[0].tag, 'time', 'collapsed search binds its first timestamp');
+assert.equal(firstGroupTime.children[2].tag, 'time', 'collapsed search range binds its last timestamp');
+const ambientGroupTime = ambient.container.children[0].children[0].children[0];
+assert.equal(ambientGroupTime.children[0].tag, 'time', 'collapsed ambient group binds its first timestamp');
+assert.equal(ambientGroupTime.children[2].tag, 'time', 'collapsed ambient range binds its last timestamp');
+const now = timestampMs('2026-10-02 20:00:00');
+refreshEndpointTimes(now);
+const agesAtNow = [firstGroupTime.children[0], firstGroupTime.children[2],
+  ambientGroupTime.children[0], ambientGroupTime.children[2], ...realSteps].map((time) => time.textContent);
+assert.ok(agesAtNow.every((age) => /\(\d/.test(age)), 'every grouped and expanded timestamp shows elapsed age');
+refreshEndpointTimes(now + 1000);
+assert.ok([firstGroupTime.children[0], firstGroupTime.children[2],
+  ambientGroupTime.children[0], ambientGroupTime.children[2], ...realSteps]
+  .every((time, index) => time.textContent !== agesAtNow[index]), 'all grouped and expanded ages tick live');
 const realLive = makeFeed();
 for (const event of realSearches.slice(0, 6)) addReal(realLive, event);
 assert.equal(realLive.container.children.length, 1, 'the live search starts as one pending unit');
@@ -207,6 +226,8 @@ assert.equal(nonDuplicateEventDetail('The search found nothing', 'The search fou
 const css = readFileSync(new URL('../public/assets/style.css', import.meta.url), 'utf8');
 assert.match(css, /\.cy-chronology-group-head:focus-visible/, 'keyboard focus is visible');
 assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.cy-chronology-step/, 'mobile layout has compact steps');
+assert.match(css, /\.cy-chronology-step \{[^}]*grid-template-columns: max-content minmax\(0, 1fr\)/,
+  'expanded event ages receive their full timestamp width');
 assert.match(css, /\.cy-chronology-group-label[^}]*overflow-wrap: anywhere/, 'long wording cannot force horizontal overflow');
 
 console.log('chronology-hierarchy.test.js: all checks passed');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ambientEventLabel } from '../public/assets/timeline.js';
+import { ambientEventLabel, refreshEndpointTimes, timestampMs } from '../public/assets/timeline.js';
 
 function makeEl(tag) {
   const el = {
@@ -17,6 +17,7 @@ function makeEl(tag) {
     scrollTop: 0,
     scrollHeight: 1000,
     clientHeight: 500,
+    getBoundingClientRect() { return { width: 500, height: 500 }; },
     classList: {
       add: (c) => el._classes.add(c),
       remove: (c) => el._classes.delete(c),
@@ -40,6 +41,7 @@ function makeEl(tag) {
 globalThis.document = {
   createElement: (tag) => makeEl(tag),
   createElementNS: (_ns, tag) => makeEl(tag),
+  createTextNode: (value) => { const node = makeEl('#text'); node.textContent = value; return node; },
 };
 
 const { ComposedFeed, HandwritingLane } = await import('../public/assets/composed-feed.js');
@@ -120,6 +122,8 @@ chronology.write('after search', 'journal');
 assert.equal(chronology.flow.children.length, 3, 'ambient events remain between surrounding writing periods');
 assert.equal(chronology.flow.children[1].dataset.kind, 'prison');
 assert.equal(chronology.flow.children[1].children[1].textContent, '[the cell is searched]');
+assert.match(chronology.flow.children[1].children[0].children[0].textContent, /^10:15:00 \(/,
+  'standalone public event retains its elapsed age');
 assert.equal(chronology.flow.children[1]._classes.has('cy-journal-entry'), false, 'event records never receive journal paper');
 
 const groupedRoot = makeEl('div');
@@ -134,6 +138,9 @@ grouped.event('The search found nothing', '', '2026-09-09 10:16:00', 'search', '
 assert.equal(grouped.flow.children.length, 1, 'the handwritten view groups successive search stages');
 assert.equal(grouped.flow.children[0].tag, 'details');
 assert.equal(grouped.flow.children[0].children[1].children.length, 2);
+assert.match(grouped.flow.children[0].children[0].children[0].children[0].textContent, /^10:15:00 \(/);
+assert.match(grouped.flow.children[0].children[0].children[0].children[2].textContent, /^10:16:00 \(/);
+assert.match(grouped.flow.children[0].children[1].children[0].children[0].textContent, /^10:15:00 \(/);
 grouped.beginEntry('2026-09-09 10:17:00', 'journal');
 grouped.write('a thought after the search', 'journal');
 assert.equal(grouped.flow.children[1]._classes.has('cy-journal-entry'), true, 'journal stays outside the group');
@@ -264,6 +271,16 @@ assert.ok(entry.children[0]._classes.has('cy-moment-start'), 'writing shows its 
 assert.ok(entry.children[2]._classes.has('cy-moment-end'), 'writing shows its end endpoint');
 assert.match(entry.children[0].children[0].textContent, /^20:15:45 \(/);
 assert.match(entry.children[2].children[0].textContent, /^20:20:48 \(/);
+const journalAge = entry.children[0].children[0];
+const beforeTick = journalAge.textContent;
+refreshEndpointTimes(timestampMs('2026-09-10 20:15:46'));
+assert.notEqual(journalAge.textContent, beforeTick, 'journal timestamp age remains live');
+const sketchFeed = new ComposedFeed(makeEl('div'), { chars: [] });
+sketchFeed.setInstant(true);
+globalThis.window = { addEventListener() {}, removeEventListener() {} };
+sketchFeed.draw({ strokes: [] }, '2026-09-09 20:22:00', false);
+assert.match(sketchFeed.flow.children[0].children[0].children[0].textContent, /^20:22:00 \(/,
+  'standalone sketch retains its elapsed-age endpoint');
 assert.equal(spans.flow.children[0].children.length, 3, 'day banner exposes previous, chooser, and next controls');
 const historyActions = spans.flow.children[0].children[2];
 assert.ok(historyActions._classes.has('cy-day-actions'), 'history day groups its forward and live actions');
