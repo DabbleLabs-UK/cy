@@ -532,6 +532,22 @@ test('an entirely editorial pending Cy expression completes without model work',
   });
   assert.equal(result.status, 'NOTHING');
   assert.equal(completed[0].job_id, 72);
+  const newer = await r.processFormation({
+    id: 75, source: {
+      sourceType: 'CY_EXPRESSION', sourceId: 'expression-batch:editorial-new',
+      text: '(Cy breaks off here with Nick sorting his things)',
+    },
+  });
+  assert.equal(newer.status, 'NOTHING');
+  assert.equal(completed[1].job_id, 75);
+  const markerOnly = await r.processFormation({
+    id: 76, source: {
+      sourceType: 'CY_EXPRESSION', sourceId: 'expression-batch:marker-only',
+      text: '|...|| >',
+    },
+  });
+  assert.equal(markerOnly.status, 'NOTHING');
+  assert.equal(completed[2].job_id, 76);
 });
 
 test('old queued surfacing context loses assistant-role provenance before querying', async () => {
@@ -546,4 +562,18 @@ test('old queued surfacing context loses assistant-role provenance before queryi
     },
   });
   assert.equal(queried[0].recentExpressionText, 'the bolt went twice.');
+});
+
+test('pending memory context removes the newer separator and editorial tail before surfacing', async () => {
+  const queried = [];
+  const r = runtime({ client: {
+    async queryMemories(value) { queried.push(value); return { candidates: [] }; },
+  } });
+  await r.processSurfacing({
+    id: 74, subject_visitor_id: null, context: {
+      text: 'cell search', groundedContext: 'sleep pressure remains high',
+      recentExpressionText: 'nick took ages with the keys |...|| > dont know why (Cy breaks off here with Nick sorting his things)',
+    },
+  });
+  assert.equal(queried[0].recentExpressionText, 'nick took ages with the keys dont know why');
 });
