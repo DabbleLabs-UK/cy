@@ -1,4 +1,4 @@
-// tempo.js - the viewer-driven generation duty cycle.
+// tempo.js - inference pacing and the viewer-driven waking expression tempo.
 //
 // Tempo decides how much deliberate SILENCE follows each completed generation.
 // The model always streams at its natural speed; tempo does not alter token rate.
@@ -7,18 +7,17 @@
 //   idle = b * (100 / s - 1)
 //   actual duty = b / (b + idle) = s / 100
 //
-// Do not cap that idle by speed. The former cap turned a displayed 31% setting
-// into roughly 94% for a three-minute local generation, making the control, cost
-// estimate, and power trace contradict one another. Long low-duty waits remain
+// The uncapped equation remains for background work. Long low-duty waits remain
 // interruptible by new mail, owner notices, shutdown, and a tempo change.
 //
-// NB: public/assets/tempo.js mirrors this maths client-side (it cannot import a
-// runner module), so the viewer can preview the cadence live while dragging the
-// slider. Keep the two in step if the equation changes.
+// This exact duty calculation remains for background work. Waking expression
+// uses the bounded mapping below because its separate choice and prose calls
+// otherwise compound into long gaps. The public Tempo control must describe
+// that waking mapping, not claim it is a literal inference duty percentage.
 
 // ---- reading-speed cap (backpressure, not a timer) -------------------------
 //
-// Tempo (above) throttles by DUTY CYCLE - at speed=100 it inserts zero idle, so a
+// At speed=100 Tempo inserts zero deliberate idle, so a
 // burst runs as fast as the provider allows. On local ollama that was self-limiting
 // (~55s TTFT); on a fast provider (DeepSeek) it is not, and the client pen renderer
 // draws at a fixed stroke rate anyway, so anything generated far ahead of the reader
@@ -59,6 +58,34 @@ export function tempoIdleMs(burstMs, speed) {
   return Math.max(0, Math.round(b * (100 / s - 1)));
 }
 
+// Waking expression uses Tempo as a visible pace, not a hard model-duty quota.
+// A normal cycle makes both a short choice call and a prose call. On DELL those
+// calls already occupy several minutes; charging each the full duty-cycle rest
+// made a 30% setting much quieter than its visible journal target. Retain a
+// short, speed-scaled rest between independent calls and after each cycle,
+// including rejected candidates. A successful chooser and its immediate journal
+// are one visible cycle, so they do not pay the rest twice. The opportunity
+// clock below prevents a fast provider from spinning.
+export function wakingTempoIdleMs(burstMs, speed) {
+  const s = clampSpeed(speed);
+  if (s >= 100) return 0;
+  return Math.min(tempoIdleMs(burstMs, s), Math.round(75_000 * 30 / s));
+}
+
+// Start-to-start target for autonomous waking expression. Completion remains
+// bounded by real provider latency, lease contention and prose validation;
+// this is an opportunity clock, never a promise to publish bad output.
+export function wakingOpportunityIntervalMs(speed) {
+  return Math.round(90_000 * 100 / clampSpeed(speed));
+}
+
+export function wakingOpportunityWaitMs(lastStartedAtMs, nowMs, speed) {
+  const last = Number(lastStartedAtMs);
+  const now = Number(nowMs);
+  if (!Number.isFinite(last) || last <= 0 || !Number.isFinite(now) || last > now) return 0;
+  return Math.max(0, last + wakingOpportunityIntervalMs(speed) - now);
+}
+
 // The effective gap a viewer perceives between bursts at `speed`, given a
 // representative burst duration: the burst plus the deliberate idle after it.
 // This is the number the panels turn into "about every Ns".
@@ -84,7 +111,7 @@ export function remainingTempoIdleMs(burstMs, speed, quietAlreadyMs = 0) {
   return Math.max(0, tempoIdleMs(burstMs, speed) - Math.max(0, Number(quietAlreadyMs) || 0));
 }
 
-// Tempo is a machine-duty control, so one logical Cy cycle must not hide several
+// Inference pacing is per request, so one logical Cy cycle must not hide several
 // back-to-back model requests inside a single long busy block. Record the most
 // recently completed provider request and make the next one pay that request's
 // remaining quiet first. The cycle tail uses the same remainder, so this moves
@@ -94,19 +121,23 @@ export class InferenceTempoPacer {
     this.last = null;
   }
 
-  record(startedAtMs, endedAtMs) {
+  record(startedAtMs, endedAtMs, { purpose = null, result = null } = {}) {
     if (startedAtMs === null || startedAtMs === undefined
       || endedAtMs === null || endedAtMs === undefined) return;
     const start = Number(startedAtMs);
     const end = Number(endedAtMs);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return;
-    this.last = { endedAtMs: end, busyMs: Math.max(0, end - start) };
+    this.last = { endedAtMs: end, busyMs: Math.max(0, end - start), purpose, result };
   }
 
-  remaining(nowMs, speed) {
+  followingSuccessfulChoice() {
+    return this.last?.purpose === 'expressive_choice' && this.last.result === 'nonempty';
+  }
+
+  remaining(nowMs, speed, idleFor = tempoIdleMs) {
     if (!this.last) return 0;
     const elapsedQuietMs = Math.max(0, Number(nowMs) - this.last.endedAtMs);
-    return remainingTempoIdleMs(this.last.busyMs, speed, elapsedQuietMs);
+    return Math.max(0, idleFor(this.last.busyMs, speed) - elapsedQuietMs);
   }
 }
 

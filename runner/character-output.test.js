@@ -443,7 +443,9 @@ ok('new marker and editorial candidates use one repair or silence for every waki
   const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
   assert.match(runSource, /const guarded = await generateWithCharacterRepair\(/);
   assert.match(runSource, /const r1 = await streamGenerate\(\{[\s\S]*?purpose: 'drawing', attempt: 'drawing-intent'/);
-  assert.match(runSource, /const r = await streamGenerate\(\{[\s\S]*?attempt: forceEmit \? 'forced-after-repeats'/);
+  assert.match(runSource, /if \(discards >= MAX_DISCARDS\) \{[\s\S]*?await logCapHit\(mode, discards\);[\s\S]*?break;/);
+  assert.match(runSource, /contextTail: tail,[\s\S]*?allowRepeat,[\s\S]*?attempt: discards \? `near-repeat-retry-\$\{discards\}`/);
+  assert.doesNotMatch(runSource, /forced-after-repeats|contextTail: forceEmit \? undefined : tail/);
 }
 ok('normal journal and drawing-intent call the shared validated waking-prose generator');
 

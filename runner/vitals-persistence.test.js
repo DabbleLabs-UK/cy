@@ -233,6 +233,27 @@ await withTemp('cy-vitals-j-', async (_dir, path) => {
   assert.equal(vitalsPersistenceStatus(vitals).skippedUnchangedSaveCount, 2);
 });
 
+// J2. The waking expression opportunity clock survives two real sectioned
+// checkpoint/restart cycles; an overdue restart cannot create a catch-up burst.
+await withTemp('cy-vitals-j2-', async (_dir, path) => {
+  const first = await loadVitals(path);
+  first.expressiveCadence = {
+    journalsSinceDraw: 2,
+    nextDrawOpportunityAtMs: 0,
+    drawRetryNotBeforeMs: 0,
+    consecutiveDrawFailures: 0,
+    lastOpportunityAtMs: 1_750_000_000_000,
+    lastPublishedAtMs: 1_749_999_800_000,
+  };
+  await saveVitals(path, first);
+  const second = await loadVitals(path);
+  assert.deepEqual(second.expressiveCadence, first.expressiveCadence);
+  second.expressiveCadence.lastOpportunityAtMs += 300_000;
+  await saveVitals(path, second);
+  const third = await loadVitals(path);
+  assert.deepEqual(third.expressiveCadence, second.expressiveCadence);
+});
+
 // K. Changing one tiny inline field rewrites only the layout index and manifests.
 await withTemp('cy-vitals-k-', async (_dir, path) => {
   const vitals = await loadVitals(path);
