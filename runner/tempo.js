@@ -62,8 +62,10 @@ export function tempoIdleMs(burstMs, speed) {
 // A normal cycle makes both a short choice call and a prose call. On DELL those
 // calls already occupy several minutes; charging each the full duty-cycle rest
 // made a 30% setting much quieter than its visible journal target. Retain a
-// short, speed-scaled rest between calls, including rejected candidates, while
-// the separate opportunity clock below prevents a fast provider from spinning.
+// short, speed-scaled rest between independent calls and after each cycle,
+// including rejected candidates. A successful chooser and its immediate journal
+// are one visible cycle, so they do not pay the rest twice. The opportunity
+// clock below prevents a fast provider from spinning.
 export function wakingTempoIdleMs(burstMs, speed) {
   const s = clampSpeed(speed);
   if (s >= 100) return 0;
@@ -119,13 +121,17 @@ export class InferenceTempoPacer {
     this.last = null;
   }
 
-  record(startedAtMs, endedAtMs) {
+  record(startedAtMs, endedAtMs, { purpose = null, result = null } = {}) {
     if (startedAtMs === null || startedAtMs === undefined
       || endedAtMs === null || endedAtMs === undefined) return;
     const start = Number(startedAtMs);
     const end = Number(endedAtMs);
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return;
-    this.last = { endedAtMs: end, busyMs: Math.max(0, end - start) };
+    this.last = { endedAtMs: end, busyMs: Math.max(0, end - start), purpose, result };
+  }
+
+  followingSuccessfulChoice() {
+    return this.last?.purpose === 'expressive_choice' && this.last.result === 'nonempty';
   }
 
   remaining(nowMs, speed, idleFor = tempoIdleMs) {

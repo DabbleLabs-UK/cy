@@ -78,6 +78,18 @@ assert.equal(requestPacer.remaining(141000, 30, wakingTempoIdleMs), 75000,
   'completed rejected or ordinary waking inference has a short bounded rest');
 assert.equal(requestPacer.remaining(216000, 30, wakingTempoIdleMs), 0,
   'a rejected candidate can be retried without a multi-minute duty wait');
+requestPacer.record(220000, 360000, { purpose: 'expressive_choice', result: 'nonempty' });
+assert.equal(requestPacer.followingSuccessfulChoice(), true,
+  'a successful chooser can flow directly into its journal within one visible cycle');
+requestPacer.record(360000, 500000, { purpose: 'journal', result: 'candidate' });
+assert.equal(requestPacer.followingSuccessfulChoice(), false,
+  'the journal then earns its own bounded rest before another cycle');
+requestPacer.record(500000, 510000, { purpose: 'expressive_choice', result: 'empty' });
+assert.equal(requestPacer.followingSuccessfulChoice(), false,
+  'a failed chooser cannot bypass pacing for a fallback journal');
+requestPacer.record(510000, 520000, { purpose: 'ambient_world_generation', result: 'nonempty' });
+assert.equal(requestPacer.followingSuccessfulChoice(), false,
+  'intervening background inference invalidates the chooser-journal pairing');
 
 const gate = new BackgroundTempoGate();
 const gateNow = 1_000_000;
@@ -140,6 +152,10 @@ assert.match(runSource, /const burstStart = cycleInferenceStart;/,
   'action-selection inference is included in the measured visible burst');
 assert.match(runSource, /waitForInferenceTempo\(ac\.signal, purpose \|\| mode\)[\s\S]*?inferenceCoordinator\.acquire/,
   'streaming requests pay inter-request tempo before taking the provider slot');
+assert.match(runSource, /purpose === 'journal' && inferenceTempoPacer\.followingSuccessfulChoice\(\)/,
+  'only the journal following a successful chooser skips the duplicate within-cycle rest');
+assert.match(runSource, /inferenceTempoPacer\.record\(startedAtMs, Date\.now\(\), \{ purpose, result: requestResult \}\)/,
+  'the raw chooser records its purpose and outcome for the pairing rule');
 assert.match(runSource, /if \(!background && !awgInReservedIdle\) await waitForInferenceTempo\(ac\.signal, purpose\)[\s\S]*?inferenceCoordinator\.acquire/,
   'foreground non-streaming requests pay inter-request tempo before taking the provider slot');
 assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining/,

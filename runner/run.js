@@ -781,6 +781,10 @@ async function main() {
     // Incoming human/operator work stays responsive. Its completed request still
     // establishes pacing for whatever model work follows it.
     if (purpose === 'postcard' || purpose === 'warden') return 0;
+    // The action chooser and its directly following journal are one visible
+    // expression cycle. Only a successful immediately preceding chooser earns
+    // this exemption; failed or intervening requests retain normal pacing.
+    if (purpose === 'journal' && inferenceTempoPacer.followingSuccessfulChoice()) return 0;
     const idleFor = ['expressive_choice', 'journal', 'drawing'].includes(purpose)
       ? wakingTempoIdleMs : tempoIdleMs;
     let remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed, idleFor);
@@ -2510,7 +2514,7 @@ async function main() {
         if (hostLease) await hostLease.release();
         if (!lease) return;
         const endedAtMs = Date.now();
-        inferenceTempoPacer.record(t0, endedAtMs);
+        inferenceTempoPacer.record(t0, endedAtMs, { purpose: purpose || mode, result: transportResult });
         lease.finish({
           result: transportResult,
           ttft_ms: ttftMs,
@@ -2805,7 +2809,7 @@ async function main() {
         : ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
       if (lease) {
-        inferenceTempoPacer.record(startedAtMs, Date.now());
+        inferenceTempoPacer.record(startedAtMs, Date.now(), { purpose, result: requestResult });
         lease.finish({
           result: requestResult,
           output_chars: outputChars,
