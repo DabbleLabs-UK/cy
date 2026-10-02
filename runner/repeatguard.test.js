@@ -83,7 +83,7 @@ const directives = buildDirectives(v, 'journal', { bans: 'BANS. x', form: 'FORM:
 assert.ok(!directives.includes(note), 'legacy notation is excluded from the live volatile block');
 const ctx = 'same ceiling again. tray came cold, bill on the twos kicking off';
 const prompt = buildPrompt(ctx, 'journal', null, directives);
-const cue = '[write only the next private thought as Cy. keep his rough lower-case prison voice, but make each thought understandable on a first or second read; do not omit words needed to tell who or what you mean. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
+const cue = 'Continue the next private thought in the same rough lower-case prison voice. Make it understandable on a first or second read; do not omit words needed to tell who or what you mean. No polished standard English, semicolons, analysis, explanation, or commentary about the material. Begin with the thought itself.';
 assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
 const iCue = prompt.lastIndexOf(cue);
 assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');

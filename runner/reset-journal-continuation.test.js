@@ -29,6 +29,19 @@ assert.equal(await readFile(worldPath, 'utf8'), '{"cell":"CELL"}');
 assert.equal(await readFile(memoryPath, 'utf8'), '{"memories":["real event remains"]}');
 console.log('  ok - stale derived continuation is backed up and cleared; world/memory remain intact');
 
+const assistantTail = Buffer.from(JSON.stringify({
+  ts: '2026-10-02 22:16:32.411',
+  s: "bill just shakes hea... Please note that I'll be writing for Cy, following these guidelines.",
+}) + '\n');
+await writeFile(contextPath, assistantTail);
+const assistantBackup = join(dir, 'backups', 'assistant-tail.jsonl');
+await resetJournalContinuation({ contextPath, backupPath: assistantBackup, expectedSha256: hash(assistantTail) });
+assert.deepEqual(await readFile(assistantBackup), assistantTail);
+assert.equal(JSON.parse(await readFile(contextPath, 'utf8')).s, '');
+assert.equal(await readFile(worldPath, 'utf8'), '{"cell":"CELL"}');
+assert.equal(await readFile(memoryPath, 'utf8'), '{"memories":["real event remains"]}');
+console.log('  ok - observed derived assistant tail is hash-guarded, backed up, and cleared');
+
 await writeFile(contextPath, original);
 await assert.rejects(resetJournalContinuation({
   contextPath, backupPath: join(dir, 'backups', 'stale.jsonl'), expectedSha256: hash(Buffer.from('old')),
@@ -47,5 +60,5 @@ await writeFile(contextPath, '{"ts":"later","s":"Bill went to his cell."}\n');
 await assert.rejects(resetJournalContinuation({
   contextPath, backupPath: join(dir, 'backups', 'unrelated.jsonl'),
   expectedSha256: hash(await readFile(contextPath)),
-}), /expected derived fixation is absent/);
+}), /expected derived fixation or assistant tail is absent/);
 console.log('  ok - unrelated continuation cannot be cleared by this one-time operation');

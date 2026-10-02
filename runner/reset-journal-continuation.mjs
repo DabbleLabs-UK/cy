@@ -19,8 +19,12 @@ export async function resetJournalContinuation({
   const lines = original.toString('utf8').split('\n').filter((line) => line.trim());
   if (lines.length !== 1) throw new Error('unexpected continuation record format');
   const record = JSON.parse(lines[0]);
-  if (typeof record.s !== 'string' || !record.s.includes('47') || !/til(?:e|ing)/i.test(record.s)) {
-    throw new Error('expected derived fixation is absent; refusing reset');
+  const oldExampleFixation = typeof record.s === 'string'
+    && record.s.includes('47') && /til(?:e|ing)/i.test(record.s);
+  const observedAssistantTail = typeof record.s === 'string'
+    && /please note that i(?:'|\u2019)ll be writing for cy, following these guidelines/i.test(record.s);
+  if (!oldExampleFixation && !observedAssistantTail) {
+    throw new Error('expected derived fixation or assistant tail is absent; refusing reset');
   }
 
   await mkdir(dirname(backupPath), { recursive: true });

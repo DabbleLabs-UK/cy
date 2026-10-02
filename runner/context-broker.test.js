@@ -6,6 +6,7 @@ import {
   buildContextPacket,
   createContextItem,
   renderContextPacket,
+  renderWakingJournalContextPacket,
 } from './context-broker.js';
 
 function item(id, overrides = {}) {
@@ -123,4 +124,24 @@ test('model-facing rendering excludes raw source and sender identifiers', () => 
   });
   const rendered = renderContextPacket(packet);
   assert.doesNotMatch(rendered, /visitor-secret|event-secret/);
+});
+
+test('waking journal preserves grounded facts and memory without echoable XML controls', () => {
+  const packet = buildContextPacket({
+    consumer: CONTEXT_CONSUMERS.CY_PROSE,
+    items: [
+      item('place', { section: 'mandatory_current_state', provenanceClass: 'WORLD FACT',
+        content: 'Cy is in CELL after the search.' }),
+      item('soma', { section: 'grounded_soma', provenanceClass: 'MODEL ESTIMATE',
+        content: '<PRIVATE_CURRENT_FACTS>\nSleep-pressure estimate 0.87.\n</PRIVATE_CURRENT_FACTS>' }),
+      item('memory', { section: 'autobiographical_memory', provenanceClass: 'SUBJECTIVE MEMORY',
+        knowledgeScope: 'CY_BELIEVES', content: 'Cy remembers Reg at the door.' }),
+    ],
+  });
+  const journal = renderWakingJournalContextPacket(packet);
+  assert.match(journal, /Cy is in CELL after the search/);
+  assert.match(journal, /Sleep-pressure estimate 0\.87/);
+  assert.match(journal, /subjective memory: Cy remembers Reg at the door/);
+  assert.doesNotMatch(journal, /<\/?[A-Z_]+|\[C\d+\]|SECTION |<\|im_/);
+  assert.match(renderContextPacket(packet), /<SHARED_CONTEXT/);
 });

@@ -222,6 +222,7 @@ import {
   CONTEXT_CONSUMERS,
   createContextItem,
   inspectContextPacket,
+  renderWakingJournalContextPacket,
   safeBuildContext,
 } from './context-broker.js';
 import {
@@ -3048,9 +3049,11 @@ async function main() {
       databaseQueries: Number(options.databaseQueries) || 0,
     }, options.fallback || '');
     if (result.ok) {
-      const inspection = inspectContextPacket(result.packet);
+      const rendering = options.wakingJournalContext
+        ? renderWakingJournalContextPacket(result.packet) : result.rendering;
+      const inspection = inspectContextPacket(result.packet, rendering);
       emit({ kind: 'context_inspection', payload: { generation_ref: generationRef, ...inspection } });
-      return { ...result, inspection };
+      return { ...result, rendering, inspection };
     }
     console.error(`[cy] shared context broker failed for ${consumer}: ${result.error}`);
     return result;
@@ -5267,6 +5270,7 @@ async function main() {
         const ctx = buildCtx(cognition, {
           generationRef: `journal-prose:${nowMs}`,
           incidentContext,
+          wakingJournalContext: true,
         });
         burstGroundedContext = ctx.groundedSomaContext;
         burstGroundedDirective = ctx.groundedSoma;

@@ -770,7 +770,7 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
   // continues from, so the directives can sit last without being echoed.
   const cue = mode === 'sleep'
     ? '[half under. a fragment surfaces:]'
-    : '[write only the next private thought as Cy. keep his rough lower-case prison voice, but make each thought understandable on a first or second read; do not omit words needed to tell who or what you mean. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
+    : 'Continue the next private thought in the same rough lower-case prison voice. Make it understandable on a first or second read; do not omit words needed to tell who or what you mean. No polished standard English, semicolons, analysis, explanation, or commentary about the material. Begin with the thought itself.';
   if (!ctxBlock) {
     // nothing written yet: directives, then the opening seed continues the stream.
     return (zoneC ? zoneC + '\n\n' : '') + 'day begins. the ceiling. same ceiling. ';
