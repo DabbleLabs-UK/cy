@@ -63,7 +63,7 @@ class FakeElement {
   getAttribute(name) { return this.attributes[name]; }
   addEventListener(name, callback) { this.listeners[name] = callback; }
   removeEventListener(name) { delete this.listeners[name]; }
-  getBoundingClientRect() { return { left: 20, right: 350, top: 110, bottom: 142 }; }
+  getBoundingClientRect() { return this.rect || { left: 20, right: 350, top: 110, bottom: 142 }; }
   focus() { this.focused = true; }
   contains(node) { for (let current = node; current; current = current.parentNode) if (current === this) return true; return false; }
 }
@@ -85,18 +85,22 @@ const column = new FakeElement();
 column.scrollTop = 0;
 const header = new FakeElement();
 header.getBoundingClientRect = () => ({ bottom: 45 });
+const layout = new FakeElement();
+layout.getBoundingClientRect = () => ({ top: 59 });
 const root = {
   brain: null,
   querySelector(selector) {
     return selector === '.col-brain' ? column : selector === '#topbar' ? header
+      : selector === '.layout' ? layout
       : selector === '#brain' ? this.brain : null;
   },
 };
 const browserWindow = {
   innerWidth: 1400,
   innerHeight: 900,
-  addEventListener() {},
-  removeEventListener() {},
+  listeners: {},
+  addEventListener(name, callback) { this.listeners[name] = callback; },
+  removeEventListener(name) { delete this.listeners[name]; },
   requestAnimationFrame: (callback) => callback(),
 };
 const inspector = new LeftInspector(root, browserWindow);
@@ -128,10 +132,14 @@ assert.equal(firstItem.body.hidden, false);
 assert.equal(firstItem.head.getAttribute('aria-expanded'), 'true');
 assert.equal(firstItem.wrapper.classList.contains('is-active'), true);
 assert.equal(firstItem.body.style.properties['--cy-inspector-left'], '349px');
-assert.equal(firstItem.body.style.properties['--cy-inspector-top'], '110px');
+assert.equal(firstItem.body.style.properties['--cy-inspector-top'], '89px',
+  'a top-row panel begins close to its head while respecting the workspace gutter');
+secondItem.head.rect = { left: 20, right: 350, top: 380, bottom: 412 };
 secondItem.head.listeners.click();
 assert.equal(firstItem.body.hidden, true);
 assert.equal(secondItem.body.hidden, false);
+assert.equal(secondItem.body.style.properties['--cy-inspector-top'], '89px',
+  'a middle-row panel uses the viewport top instead of the row top');
 assert.equal(inspector.items.filter((item) => !item.body.hidden).length, 1);
 secondItem.head.listeners.click();
 assert.equal(inspector.items.filter((item) => !item.body.hidden).length, 0);
@@ -146,6 +154,14 @@ assert.equal(firstItem.body.hidden, true);
 first.reading.textContent = 'THREAT ONGOING';
 firstItem.observer.callback();
 assert.equal(firstItem.value.textContent, 'THREAT ONGOING', 'live source updates reach the compact head');
+firstItem.head.listeners.click();
+firstItem.head.rect = { left: 20, right: 370, top: 670, bottom: 702 };
+browserWindow.listeners.scroll();
+assert.equal(firstItem.body.style.properties['--cy-inspector-left'], '369px',
+  'window scrolling keeps the panel attached to the head edge');
+assert.equal(firstItem.body.style.properties['--cy-inspector-top'], '89px',
+  'window scrolling does not drag a long panel down with a low head');
+firstItem.head.listeners.click();
 
 browserWindow.innerWidth = 390;
 firstItem.head.listeners.click();
@@ -217,8 +233,27 @@ const supportingIndex = section.querySelector('.cy-other-readings');
 assert.deepEqual(supportingIndex.children.map((child) => child.children[0].children[0].textContent),
   [...supporting.map(([, label]) => label), 'PREVIOUS MODELS / DIAGNOSTICS']);
 assert.equal(supportingIndex.children.length, 6, 'no detail panel or diagnostic group was discarded');
-const social = hierarchy.items.find((item) => item.head.title === 'SOCIAL CONTACT / ISOLATION');
+const previousModels = hierarchy.items.find((item) => item.head.title === 'PREVIOUS MODELS / DIAGNOSTICS');
+previousModels.head.rect = { left: 20, right: 350, top: 710, bottom: 742 };
 section.open = true;
+previousModels.head.listeners.click();
+assert.equal(previousModels.body.style.properties['--cy-inspector-top'], '89px',
+  'the large low-row diagnostic panel extends above its selected head');
+assert.equal(column.scrollTop, 0, 'opening a low row does not move the selected head');
+assert.equal(previousModels.body.getAttribute('aria-labelledby'), previousModels.head.id,
+  'the floating detail body retains its semantic link to the selected row');
+previousModels.head.listeners.click();
+const world = new FakeElement();
+world.className = 'world-inspection-panel';
+brain.append(world);
+hierarchy.wrap(world, 'CONTEXT / WORLD INSPECTION', null, 'ADMIN');
+const worldItem = hierarchy.items.find((item) => item.head.title === 'CONTEXT / WORLD INSPECTION');
+worldItem.head.rect = { left: 20, right: 350, top: 760, bottom: 792 };
+worldItem.head.listeners.click();
+assert.equal(worldItem.body.style.properties['--cy-inspector-top'], '89px',
+  'the admin world inspector receives the same low-row viewport geometry');
+worldItem.head.listeners.click();
+const social = hierarchy.items.find((item) => item.head.title === 'SOCIAL CONTACT / ISOLATION');
 social.head.listeners.click();
 assert.equal(social.body.hidden, false);
 assert.equal(social.body.contains(supportingNodes.get('loneliness').chart), true,
@@ -249,7 +284,13 @@ const brainSource = readFileSync(new URL('../public/assets/brain.js', import.met
 assert.match(css, /@media \(min-width: 1181px\)[\s\S]*?position: fixed/);
 assert.match(css, /width: calc\(100vw - var\(--cy-inspector-left\) - 14px\)/);
 assert.match(css, /max-height: calc\(100vh - var\(--cy-inspector-top\) - 14px\)/);
+assert.match(css, /\.cy-inspector-body \{[\s\S]*?overflow: auto;/,
+  'large detail content scrolls inside the viewport-bounded body');
+assert.match(css, /\.cy-inspector-item\.is-active > \.cy-inspector-head::after \{[\s\S]*?pointer-events: none;/,
+  'the selected row has a visual bridge to its floating detail body');
 assert.match(css, /@media \(max-width: 1180px\)[\s\S]*?position: static/);
+assert.match(css, /@media \(max-width: 1180px\)[\s\S]*?width: 100%;[\s\S]*?max-height: min\(72vh, 740px\)/,
+  'mobile keeps its bounded inline panel instead of desktop floating geometry');
 assert.match(css, /\.cy-inspector-body\[hidden\] \{ display: none !important; \}/);
 assert.match(css, /\.cy-inspector-head:focus-visible/);
 assert.match(css, /\.cy-supporting-readings > summary:focus-visible/);
