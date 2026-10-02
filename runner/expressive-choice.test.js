@@ -24,6 +24,7 @@ import {
   recordExpressiveDrawing,
   recordExpressiveDrawingFailure,
   recordExpressiveJournal,
+  recordExpressiveOpportunity,
 } from './expressive-choice.js';
 import { availableExpressiveActions, LOCATIONS } from './location-regime.js';
 import { INSTRUMENTAL_ACTION_SELECTION } from './instrumental-agency.js';
@@ -210,6 +211,8 @@ assert.deepEqual(cadence, {
   nextDrawOpportunityAtMs: 0,
   drawRetryNotBeforeMs: 0,
   consecutiveDrawFailures: 0,
+  lastOpportunityAtMs: 0,
+  lastPublishedAtMs: 0,
 });
 for (let count = 0; count < EXPRESSIVE_DRAW_MIN_JOURNALS; count++) {
   assert.deepEqual(expressiveCadenceAvailability(cadence, { nowMs: 1000 }), {
@@ -217,7 +220,7 @@ for (let count = 0; count < EXPRESSIVE_DRAW_MIN_JOURNALS; count++) {
     draw: false,
     phase: 'JOURNAL_INTERVAL',
   });
-  cadence = recordExpressiveJournal(cadence);
+  cadence = recordExpressiveJournal(cadence, { nowMs: 1000 + count });
 }
 for (let count = EXPRESSIVE_DRAW_MIN_JOURNALS; count < EXPRESSIVE_DRAW_MAX_JOURNALS; count++) {
   assert.deepEqual(expressiveCadenceAvailability(cadence, { nowMs: 1000 }), {
@@ -225,7 +228,7 @@ for (let count = EXPRESSIVE_DRAW_MIN_JOURNALS; count < EXPRESSIVE_DRAW_MAX_JOURN
     draw: true,
     phase: 'DRAW_ELIGIBLE',
   });
-  cadence = recordExpressiveJournal(cadence);
+  cadence = recordExpressiveJournal(cadence, { nowMs: 1000 + count });
 }
 assert.deepEqual(expressiveCadenceAvailability(cadence, { nowMs: 1000 }), {
   journal: true,
@@ -242,6 +245,9 @@ assert.deepEqual(expressiveCadenceAvailability(cadence, { nowMs: 1001 }), {
 });
 assert.deepEqual(availableExpressiveActions({ current: { id: LOCATIONS.CELL } },
   expressiveCadenceAvailability(cadence, { nowMs: 1001 })), ['journal', 'silence']);
+assert.deepEqual(availableExpressiveActions({ current: { id: LOCATIONS.CELL } },
+  expressiveCadenceAvailability(cadence, { nowMs: 1001 }), { silenceAvailable: false }), ['journal'],
+  'after a failed drawing and a prolonged gap, the next available form is journal prose');
 for (let failure = 2; failure <= 12; failure++) {
   cadence = recordExpressiveDrawingFailure(cadence, { nowMs: 1000 * failure });
   assert.equal(expressiveCadenceAvailability(cadence, { nowMs: 1000 * failure }).journal, true);
@@ -256,6 +262,8 @@ assert.equal(cadence.consecutiveDrawFailures, 0);
 assert.equal(cadence.drawRetryNotBeforeMs, 0);
 assert.equal(cadence.nextDrawOpportunityAtMs,
   100000 + EXPRESSIVE_DRAW_OPPORTUNITY_MIN_MS + EXPRESSIVE_DRAW_OPPORTUNITY_SPREAD_MS / 2);
+assert.equal(cadence.lastPublishedAtMs, 100000,
+  'a successful sketch preserves the waking publication clock');
 assert.equal(expressiveCadenceAvailability(cadence,
   { nowMs: cadence.nextDrawOpportunityAtMs - 1 }).draw, false);
 assert.deepEqual(expressiveCadenceAvailability(cadence,
@@ -271,21 +279,26 @@ assert.equal(reconcileExpressiveCadence({ journalsSinceDraw: 999 }).journalsSinc
   EXPRESSIVE_DRAW_MAX_JOURNALS);
 assert.equal(reconcileExpressiveCadence({ journalsSinceDraw: -4 }).journalsSinceDraw, 0);
 
-// N. A long eligible gap is only context for the next normal model-mediated
-// choice. It never changes tempo, fabricates a world incident or forces text.
+// N. An overdue eligible gap removes chosen silence, but never fabricates a
+// world incident, changes a model setting or forces an invalid text candidate.
 const eligibleSinceMs = 1000;
-const afterNinetyMinutes = eligibleSinceMs + 90 * 60 * 1000 + 1;
-assert.equal(eligibleExpressionGap({ nowMs: afterNinetyMinutes,
+const afterTenMinutes = eligibleSinceMs + 10 * 60 * 1000 + 1;
+assert.equal(eligibleExpressionGap({ nowMs: afterTenMinutes,
   eligibleSinceMs, tempoSpeed: 30 }).prolonged, true);
-assert.equal(eligibleExpressionGap({ nowMs: afterNinetyMinutes,
-  eligibleSinceMs, tempoSpeed: 5 }).prolonged, false);
-assert.equal(eligibleExpressionGap({ nowMs: eligibleSinceMs + 31 * 60 * 1000,
+assert.equal(eligibleExpressionGap({ nowMs: afterTenMinutes,
+  eligibleSinceMs, tempoSpeed: 10 }).prolonged, false);
+assert.equal(eligibleExpressionGap({ nowMs: eligibleSinceMs + 3 * 60 * 1000,
   eligibleSinceMs, tempoSpeed: 100 }).prolonged, true);
-assert.equal(eligibleExpressionGap({ nowMs: afterNinetyMinutes,
+assert.equal(eligibleExpressionGap({ nowMs: afterTenMinutes,
   eligibleSinceMs: 0, tempoSpeed: 30 }).prolonged, false);
-assert.equal(eligibleExpressionGap({ nowMs: afterNinetyMinutes,
-  eligibleSinceMs, lastPublishedMs: afterNinetyMinutes - 1000,
+assert.equal(eligibleExpressionGap({ nowMs: afterTenMinutes,
+  eligibleSinceMs, lastPublishedMs: afterTenMinutes - 1000,
   tempoSpeed: 30 }).prolonged, false);
+cadence = recordExpressiveOpportunity(cadence, { nowMs: afterTenMinutes });
+assert.equal(JSON.parse(JSON.stringify(cadence)).lastOpportunityAtMs, afterTenMinutes,
+  'the next-opportunity clock survives a checkpoint/reload round trip');
+assert.equal(reconcileExpressiveCadence(JSON.parse(JSON.stringify(cadence))).lastPublishedAtMs,
+  cadence.lastPublishedAtMs, 'the publication clock survives a checkpoint/reload round trip');
 const gapRequest = buildExpressiveChoiceRequest({
   ...base,
   drawingPhase: 'DRAW_PREFERRED',
@@ -294,7 +307,7 @@ const gapRequest = buildExpressiveChoiceRequest({
 });
 const gapPrompt = expressiveChoiceModelCall(gapRequest).prompt;
 assert.match(gapPrompt, /prolonged_eligible_waking_gap":true/);
-assert.match(gapPrompt, /silence remains valid/i);
+assert.doesNotMatch(gapPrompt, /silence remains valid/i);
 assert.match(gapPrompt, /Do not invent an external event/i);
 assert.deepEqual(gapRequest.availableActions.map((action) => action.id), ['journal', 'draw', 'silence']);
 assert.equal(gapRequest.currentIncidentContext, null);
@@ -311,7 +324,9 @@ assert.match(runSource, /logDrawFail\('empty', baseRaw\);[\s\S]*?recordExpressiv
 assert.match(runSource, /logDrawFail\('unusable', baseRaw\);[\s\S]*?recordExpressiveDrawingFailure/);
 assert.match(runSource, /eligibleExpressionGap\(\{/);
 assert.match(runSource, /const MAX_DISCARDS = 2;/);
-assert.match(runSource, /recordExpressiveJournal\(vitals\.expressiveCadence\)/);
+assert.match(runSource, /recordExpressiveJournal\(vitals\.expressiveCadence, \{/);
 assert.match(runSource, /recordExpressiveDrawing\(vitals\.expressiveCadence\)/);
+assert.match(runSource, /silenceAvailable: silenceAvailable && !expressionGap\.prolonged/,
+  'an overdue waking gap cannot be prolonged by repeated model-chosen silences');
 
 console.log('expressive-choice.test.js: all checks passed');

@@ -7,8 +7,12 @@ import {
   clampSpeed,
   remainingTempoIdleMs,
   tempoIdleMs,
+  wakingTempoIdleMs,
+  wakingOpportunityIntervalMs,
+  wakingOpportunityWaitMs,
 } from './tempo.js';
 import { cadencePhrase, tempoIdleMs as publicTempoIdleMs } from '../public/assets/tempo.js';
+import { AWG_MIN_IDLE_BUDGET_MS } from './ambient-world-generator.js';
 
 function realisedDuty(burstMs, idleMs) {
   return (100 * burstMs) / (burstMs + idleMs);
@@ -46,6 +50,34 @@ assert.equal(requestPacer.remaining(106000, 30), 95000,
   'elapsed quiet is deducted rather than charged twice');
 assert.equal(requestPacer.remaining(61000, 100), 0,
   'full tempo leaves no deliberate inter-request quiet');
+assert.equal(wakingOpportunityIntervalMs(10), 900000);
+assert.equal(wakingOpportunityIntervalMs(30), 300000);
+assert.equal(wakingOpportunityIntervalMs(50), 180000);
+assert.equal(wakingOpportunityIntervalMs(100), 90000);
+assert.equal(wakingOpportunityWaitMs(1000, 1000 + 120000, 30), 180000);
+assert.equal(wakingOpportunityWaitMs(1000, 1000 + 300000, 30), 0);
+assert.equal(wakingOpportunityWaitMs(1000, 1000 + 3600000, 30), 0,
+  'a delayed or restarted runner gets one due opportunity, not a backlog burst');
+assert.equal(wakingOpportunityWaitMs(1000, 999, 30), 0,
+  'clock rollback cannot strand the next opportunity');
+const restoredOpportunity = JSON.parse(JSON.stringify({ lastOpportunityAtMs: 1000 }));
+assert.equal(wakingOpportunityWaitMs(restoredOpportunity.lastOpportunityAtMs, 1000 + 120000, 30), 180000,
+  'a restarted runner retains the remaining wait from persisted cadence state');
+restoredOpportunity.lastOpportunityAtMs = 1000 + 3600000;
+assert.equal(wakingOpportunityWaitMs(restoredOpportunity.lastOpportunityAtMs,
+  restoredOpportunity.lastOpportunityAtMs + 1000, 30), 299000,
+  'one overdue opportunity is re-armed instead of replaying missed cycles');
+assert.equal(wakingTempoIdleMs(140000, 30), 75000);
+assert.equal(wakingTempoIdleMs(140000, 10), 225000);
+assert.equal(wakingTempoIdleMs(140000, 50), 45000);
+assert.equal(wakingTempoIdleMs(140000, 100), 0);
+assert.ok(wakingTempoIdleMs(140000, 30) > AWG_MIN_IDLE_BUDGET_MS,
+  'the usual 30% quiet slot still offers the existing AWG its minimum admission budget');
+requestPacer.record(1000, 141000);
+assert.equal(requestPacer.remaining(141000, 30, wakingTempoIdleMs), 75000,
+  'completed rejected or ordinary waking inference has a short bounded rest');
+assert.equal(requestPacer.remaining(216000, 30, wakingTempoIdleMs), 0,
+  'a rejected candidate can be retried without a multi-minute duty wait');
 
 const gate = new BackgroundTempoGate();
 const gateNow = 1_000_000;
@@ -124,8 +156,12 @@ assert.match(runSource, /let attempted = false;[\s\S]*?attempted = true;[\s\S]*?
   'the runner records whether the prose provider was actually invoked');
 assert.match(runSource, /const completedAttempt = attempted && !interruptAbort;/,
   'only a real inbound interrupt bypasses post-attempt pacing');
-assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) : 0;/,
-  'rejected, repeated, empty, and failed completed attempts retain the final request tempo quiet');
+assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed, wakingTempoIdleMs\) : 0;/,
+  'rejected, repeated, empty, and failed completed waking attempts retain only the bounded rest');
+assert.match(runSource, /wakingOpportunityWaitMs\([\s\S]*?lastOpportunityAtMs[\s\S]*?recordExpressiveOpportunity/,
+  'the persisted opportunity clock gates autonomous waking cycles');
+assert.match(runSource, /if \(asleep\) \{[\s\S]*?await dreamStep\(mins\);[\s\S]*?continue;[\s\S]*?wakingOpportunityWaitMs/,
+  'sleep diverts to dream mode before any waking journal opportunity');
 assert.match(runSource, /const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0[\s\S]*?BACKOFF_BASE_MS/s,
   'all providers receive bounded backoff after a genuine non-emitting failure');
 assert.match(runSource, /if \(completedAttempt && idleMs > 0\) \{[\s\S]*?reserveVisibleIdleForAwg\(idleMs, Date\.now\(\)\)[\s\S]*?await idleSilently\(idleMs, \{ breakOnTempo: true, awgReservation \}\);/,

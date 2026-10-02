@@ -82,6 +82,7 @@ import {
   recordExpressiveDrawing,
   recordExpressiveDrawingFailure,
   recordExpressiveJournal,
+  recordExpressiveOpportunity,
   EXPRESSIVE_SILENCE_COOLDOWN_MS,
 } from './expressive-choice.js';
 import {
@@ -165,6 +166,9 @@ import {
   BackgroundTempoGate,
   InferenceTempoPacer,
   tempoIdleMs,
+  wakingTempoIdleMs,
+  wakingOpportunityIntervalMs,
+  wakingOpportunityWaitMs,
   readingIdleMs,
   clampSpeed,
   READ_CHARS_PER_SEC,
@@ -260,11 +264,9 @@ function logLifecycle(event, extra = '') {
   }
 }
 
-// HARD CAP on consecutive near-repeat discards in one burst. Past this many the
-// journal loop STOPS discarding and forces the text out anyway (see genLoop): a
-// context full of near-identical phrasing makes every retry overlap and be
-// discarded, so without a cap he writes constantly and publishes nothing while
-// pinning the CPU. 2 is enough - slightly repetitive prose beats total silence.
+// HARD CAP on consecutive near-repeat discards in one burst. A repeated burst
+// ends quietly at this cap, then the waking opportunity clock permits another
+// bounded attempt later. It never publishes a candidate by bypassing the guard.
 const MAX_DISCARDS = 2;
 
 // ENGINEERING AUTONOMOUS-ACTIVITY TIMING. A model-selected silence has this
@@ -779,14 +781,16 @@ async function main() {
     // Incoming human/operator work stays responsive. Its completed request still
     // establishes pacing for whatever model work follows it.
     if (purpose === 'postcard' || purpose === 'warden') return 0;
-    let remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed);
+    const idleFor = ['expressive_choice', 'journal', 'drawing'].includes(purpose)
+      ? wakingTempoIdleMs : tempoIdleMs;
+    let remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed, idleFor);
     if (remaining <= 0) return 0;
     const startedAtMs = Date.now();
     recordTempoDiagnostic(startedAtMs, remaining, 'inter-request-tempo', true);
     while (remaining > 0) {
       if (signal && signal.aborted) throw new DOMException('inference pacing interrupted', 'AbortError');
       await sleep(Math.min(1000, remaining));
-      remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed);
+      remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed, idleFor);
     }
     return Date.now() - startedAtMs;
   }
@@ -862,11 +866,9 @@ async function main() {
   // typical burst) and smoothed toward each real burst as they complete.
   let recentBurstMs = 75000;
   // When the polled tempo changes, mirror it into the public stream as a `tempo`
-  // event so the viewer can display speed, viewer count and the cost of watching
-  // live. The pence/hour anchors are derived from the power model here (the web
-  // side does not know the watts model): with the duty cycle, average draw is
-  // idle + (speed/100)*(load-idle), so pence/hour is linear in speed between
-  // pph_idle (speed->0) and pph_load (speed=100). The viewer interpolates.
+  // event so the viewer can display speed, viewer count and pace. The pence/hour
+  // anchors remain diagnostic power-model values, not an exact cost prediction:
+  // waking expression is no longer governed by a literal duty percentage.
   let tempoEpoch = 0;
   const backgroundTempoGate = new BackgroundTempoGate();
   // The client callback also fires when only the live viewer count changes. That
@@ -886,11 +888,10 @@ async function main() {
       if (autobiographicalMemory) autobiographicalMemory.schedule(0);
     }
     const pph = (w) => (w / 1000) * powerMeter.tariff * 100;
-    // Turn the speed into a legible CADENCE for the viewer: the deliberate idle
-    // after a representative burst, and the effective gap between bursts. The
-    // panel renders 'about every Ns' from these rather than a bare percentage.
+    // Report both per-request rest and the waking opportunity target. Actual
+    // publication still depends on inference time, eligibility and validation.
     const burst = recentBurstMs;
-    const idle = tempoIdleMs(burst, t.speed);
+    const idle = wakingTempoIdleMs(burst, t.speed);
     emit({
       kind: 'tempo',
       payload: {
@@ -901,7 +902,8 @@ async function main() {
         pph_load: Number(pph(powerMeter.loadWatts).toFixed(3)),
         burst_ms: Math.round(burst), // representative recent burst duration
         idle_ms: Math.round(idle), // deliberate idle the runner would insert now
-        cadence_ms: Math.round(burst + idle), // effective gap a viewer perceives between bursts
+        journal_target_ms: wakingOpportunityIntervalMs(t.speed),
+        cadence_ms: Math.round(burst + idle), // per-request pacing diagnostic, not journal target
       },
     });
   };
@@ -1506,12 +1508,11 @@ async function main() {
       /* never crash on debug logging */
     }
   }
-  // The near-repeat guard hit its HARD CAP: log LOUDLY (console.error) so the
-  // forced escape is visible in the log rather than a silent CPU spin. The loop
-  // then emits the burst anyway (repetitive prose beats silence).
+  // The near-repeat guard hit its HARD CAP: report the quiet failed burst
+  // explicitly, without letting a repetitive candidate bypass publication checks.
   async function logCapHit(mode, n) {
-    const line = `[cy] WARNING near-repeat cap hit (${mode}) after ${n} discards - forcing the text out anyway`;
-    console.error(line);
+    const line = `[cy] near-repeat cap hit (${mode}) after ${n} discards - ending this burst quietly`;
+    console.warn(line);
     try {
       const { appendFile } = await import('node:fs/promises');
       await appendFile(join(STATE_DIR, 'run.out.log'), `${tsNow()} ${line}\n`);
@@ -1859,8 +1860,8 @@ async function main() {
   let nonEmittingStreak = 0;
 
   // ---- CYCLE OUTCOME ACCOUNTING ----------------------------------------------
-  // Every generation cycle must end in exactly ONE recorded outcome so a stall is
-  // never invisible: emitted / discarded-repeat / discarded-assistant-frame /
+  // Every generation cycle must end in exactly ONE terminal outcome so a stall is
+  // never invisible: emitted / discarded-repeat-cap / discarded-assistant-frame /
   // empty / blocked-by-warden /
   // aborted / deliberate-silence / throttled. A rolling ring of the last N holds
   // the recent picture (published in the vitals payload - which ticks even during
@@ -1870,7 +1871,7 @@ async function main() {
   // removed all of it). The bare 'empty' key is retained because the drawing path
   // still uses it for a DSL pass that produced nothing (see doDraw fallback).
   const OUTCOME_KINDS = [
-    'emitted', 'discarded-repeat', 'discarded-assistant-frame', 'empty-provider', 'empty-stripped', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
+    'emitted', 'discarded-repeat', 'discarded-repeat-cap', 'discarded-assistant-frame', 'empty-provider', 'empty-stripped', 'empty', 'blocked-by-warden', 'refused', 'aborted', 'deliberate-silence', 'throttled',
   ];
   const OUTCOME_WINDOW = 20;
   const recentOutcomes = []; // ring of the last OUTCOME_WINDOW outcome strings
@@ -1887,7 +1888,7 @@ async function main() {
     // tempo throttle are legitimate quiet - they neither add to nor clear it. The
     // clear happens where real text actually flows (onChunk/emitDreamText), which
     // also covers the letter/dream paths that emit without a terminal 'emitted'.
-    if (kind === 'empty' || kind === 'empty-provider' || kind === 'empty-stripped' || kind === 'blocked-by-warden' || kind === 'refused' || kind === 'aborted') {
+    if (kind === 'empty' || kind === 'empty-provider' || kind === 'empty-stripped' || kind === 'discarded-repeat-cap' || kind === 'blocked-by-warden' || kind === 'refused' || kind === 'aborted') {
       failedCyclesSinceEmit++;
     } else if (kind === 'emitted') {
       failedCyclesSinceEmit = 0; // a produced burst (incl. a drawing, which emits no text chunk)
@@ -1911,7 +1912,7 @@ async function main() {
   const pendingWarden = [];
   const pendingDrawRequests = []; // postcards that asked him to draw something
   let expressionEligibleSinceMs = 0;
-  let lastPublishedWakingExpressionMs = 0;
+  let lastPublishedWakingExpressionMs = vitals.expressiveCadence.lastPublishedAtMs;
   // ambient cues armed by the scheduler, consumed once by the next generation
   let officerCue = null; // { key, ev, until }
   let overheardCue = null; // { item, misheard, until }
@@ -4707,7 +4708,7 @@ async function main() {
     reason = 'tempo',
   } = {}) {
     const busyMs = Math.max(0, busyEndedAtMs - startedAtMs);
-    const idleMs = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed);
+    const idleMs = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed, wakingTempoIdleMs);
     recentBurstMs = Math.round(recentBurstMs * 0.6 + busyMs * 0.4);
     recordTempoDiagnostic(startedAtMs, idleMs, reason, idleMs > 0);
     if (idleMs <= 0) {
@@ -5069,13 +5070,23 @@ async function main() {
       // A queued drawing request is external rather than autonomous and still wins.
       const nowMs = Date.now();
       if (!expressionEligibleSinceMs) expressionEligibleSinceMs = nowMs;
+      const hasDrawRequest = pendingDrawRequests.length > 0;
+      if (!hasDrawRequest) {
+        const opportunityWait = wakingOpportunityWaitMs(
+          vitals.expressiveCadence.lastOpportunityAtMs, nowMs, client.tempo.speed,
+        );
+        if (opportunityWait > 0) {
+          await idleSilently(opportunityWait, { breakOnTempo: true });
+          continue;
+        }
+        vitals.expressiveCadence = recordExpressiveOpportunity(vitals.expressiveCadence, { nowMs });
+      }
       const expressionGap = eligibleExpressionGap({
         nowMs,
         eligibleSinceMs: expressionEligibleSinceMs,
         lastPublishedMs: lastPublishedWakingExpressionMs,
         tempoSpeed: client.tempo.speed,
       });
-      const hasDrawRequest = pendingDrawRequests.length > 0;
       const cognition = prepareSomaGeneration(soma, {
         now: nowMs,
         inputs: {
@@ -5114,7 +5125,7 @@ async function main() {
       const availableActions = availableExpressiveActions(
         vitals.locationRegime,
         cadence,
-        { silenceAvailable },
+        { silenceAvailable: silenceAvailable && !expressionGap.prolonged },
       );
       const choiceContext = buildBrokerContext(CONTEXT_CONSUMERS.EXPRESSIVE_CHOICE, {
         generationRef: `expressive-choice:${nowMs}`,
@@ -5241,12 +5252,10 @@ async function main() {
       let lastTail = ''; // Zone B and the sampling actually used on the winning try,
       let lastOpts = null; // captured for the RAW view's per-burst detail
       for (;;) {
-        // Past the hard cap we STOP discarding and force the burst OUT: stream with
-        // NO near-repeat guard (contextTail undefined, so nothing is held back or
-        // discarded) so whatever is generated is emitted. Repetitive prose beats
-        // total silence, and a man going over the same ground is truthful.
-        const forceEmit = discards >= MAX_DISCARDS;
-        if (forceEmit) await logCapHit(mode, discards);
+        if (discards >= MAX_DISCARDS) {
+          await logCapHit(mode, discards);
+          break;
+        }
         const tail = contextText();
         const prompt = buildPrompt(tail, mode, null, directives);
         const opts = {
@@ -5261,9 +5270,9 @@ async function main() {
           prompt,
           opts,
           mode,
-          contextTail: forceEmit ? undefined : tail,
-          allowRepeat: allowRepeat || forceEmit,
-          attempt: forceEmit ? 'forced-after-repeats' : (discards ? `near-repeat-retry-${discards}` : 'journal-initial'),
+          contextTail: tail,
+          allowRepeat,
+          attempt: discards ? `near-repeat-retry-${discards}` : 'journal-initial',
           timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
         });
         if (r.error) { errored = true; break; } // provider already backed off; move on
@@ -5322,9 +5331,12 @@ async function main() {
       // every chunk, which must read as blocked, not emitted.
       if (errored) await recordOutcome('aborted'); // provider unreachable / bad HTTP
       else if (refusedGen) await recordOutcome('refused'); // provider refused (visible outcome)
+      else if (discards >= MAX_DISCARDS) await recordOutcome('discarded-repeat-cap');
       else if (burstEmitted.trim()) {
-        vitals.expressiveCadence = recordExpressiveJournal(vitals.expressiveCadence);
         lastPublishedWakingExpressionMs = Date.now();
+        vitals.expressiveCadence = recordExpressiveJournal(vitals.expressiveCadence, {
+          nowMs: lastPublishedWakingExpressionMs,
+        });
         await recordOutcome('emitted');
       }
       else if (lastResult && lastResult.aborted) await recordOutcome('aborted');
@@ -5371,7 +5383,7 @@ async function main() {
       // selected tempo's rest.
       const completedAttempt = attempted && !interruptAbort;
       const tempoIdle = completedAttempt
-        ? inferenceTempoPacer.remaining(Date.now(), client.tempo.speed) : 0;
+        ? inferenceTempoPacer.remaining(Date.now(), client.tempo.speed, wakingTempoIdleMs) : 0;
       const failureBackoff = nonEmittingFailure && nonEmittingStreak > 0
         ? Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (nonEmittingStreak - 1))
         : 0;
@@ -5408,9 +5420,8 @@ async function main() {
       // silently inherit the bypass. DO NOT widen this to `>= 100` alone again.
       const fullTilt = clampSpeed(client.tempo.speed) >= 100 && activeProvider().local;
       const effReadIdle = fullTilt ? 0 : readIdle;
-      // COMPOSE, do not replace: sit for the GREATER of the exact duty-cycle idle
-      // and the (at 100, bypassed) reading backpressure. A low target's required
-      // gap must not be shortened or the displayed percentage ceases to be true.
+      // COMPOSE, do not replace: sit for the GREATER of bounded waking rest,
+      // reading backpressure and real failure backoff.
       const idleMs = completedAttempt ? Math.max(tempoIdle, produced ? effReadIdle : 0, failureBackoff) : 0;
       // Why the runner is about to idle, for the RAW debug view. At 100 a successful
       // local generation may have no tempo rest, but a failed attempt still receives
@@ -5471,9 +5482,8 @@ async function main() {
       // adaptive pacing: near-continuous trickle awake, slow drift asleep. No
       // artificial gap between waking generations that produced prose.
       //
-      // TEMPO (duty cycle): after every completed inference burst, sit idle in
-      // proportion to the viewer-driven speed. This is the machine being throttled,
-      // not Cy choosing silence, so no `silence` event is emitted. idleSilently
+      // TEMPO: after every completed waking inference burst, sit for its bounded
+      // rest. This is machine pacing, not Cy choosing silence. idleSilently
       // remains interruptible for real incoming mail and tempo changes.
       if (completedAttempt && idleMs > 0) {
         if (failureBackoff > 0) await logBackoff(nonEmittingStreak, failureBackoff);

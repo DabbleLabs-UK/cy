@@ -5,6 +5,8 @@
 // the language model may choose only from the expressive capabilities offered by
 // the runner. Instrumental world actions are outside this module.
 
+import { wakingOpportunityIntervalMs } from './tempo.js';
+
 export const EXPRESSIVE_CHOICE_SCHEMA = 'cy.model-mediated-expressive-choice';
 export const EXPRESSIVE_CHOICE_VERSION = 1;
 export const EXPRESSIVE_CHOICE_CLASSIFICATION = Object.freeze([
@@ -38,7 +40,6 @@ export const EXPRESSIVE_DRAW_OPPORTUNITY_MIN_MS = 75 * 60 * 1000;
 export const EXPRESSIVE_DRAW_OPPORTUNITY_SPREAD_MS = 60 * 60 * 1000;
 export const EXPRESSIVE_DRAW_RETRY_BASE_MS = 3 * 60 * 1000;
 export const EXPRESSIVE_DRAW_RETRY_MAX_MS = 30 * 60 * 1000;
-export const EXPRESSIVE_GAP_BASE_MS = 90 * 60 * 1000;
 
 function nonnegativeTimestamp(value) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
@@ -56,7 +57,13 @@ export function reconcileExpressiveCadence(value) {
     nextDrawOpportunityAtMs: nonnegativeTimestamp(value && value.nextDrawOpportunityAtMs),
     drawRetryNotBeforeMs: nonnegativeTimestamp(value && value.drawRetryNotBeforeMs),
     consecutiveDrawFailures,
+    lastOpportunityAtMs: nonnegativeTimestamp(value && value.lastOpportunityAtMs),
+    lastPublishedAtMs: nonnegativeTimestamp(value && value.lastPublishedAtMs),
   };
+}
+
+export function recordExpressiveOpportunity(value, { nowMs = Date.now() } = {}) {
+  return { ...reconcileExpressiveCadence(value), lastOpportunityAtMs: nonnegativeTimestamp(nowMs) };
 }
 
 export function expressiveCadenceAvailability(value, { nowMs = Date.now() } = {}) {
@@ -76,9 +83,10 @@ export function expressiveCadenceAvailability(value, { nowMs = Date.now() } = {}
   };
 }
 
-export function recordExpressiveJournal(value) {
+export function recordExpressiveJournal(value, { nowMs = Date.now() } = {}) {
   const state = reconcileExpressiveCadence(value);
   state.journalsSinceDraw = Math.min(EXPRESSIVE_DRAW_MAX_JOURNALS, state.journalsSinceDraw + 1);
+  state.lastPublishedAtMs = nonnegativeTimestamp(nowMs);
   return state;
 }
 
@@ -92,6 +100,7 @@ export function recordExpressiveDrawing(value, { nowMs = Date.now(), random = Ma
       + Math.floor(draw * EXPRESSIVE_DRAW_OPPORTUNITY_SPREAD_MS),
     drawRetryNotBeforeMs: 0,
     consecutiveDrawFailures: 0,
+    lastPublishedAtMs: nonnegativeTimestamp(nowMs),
   };
 }
 
@@ -109,12 +118,11 @@ export function recordExpressiveDrawingFailure(value, { nowMs = Date.now() } = {
 }
 
 // Time since an actually published waking journal/sketch, counting only the
-// current continuous eligible period. Low tempo scales the threshold rather
-// than bypassing the inference-duty quiet owed by each model request.
+// current continuous eligible period. Two missed opportunities make silence
+// unavailable for the next autonomous choice; a bad candidate is never forced
+// through publication merely because the gap is long.
 export function eligibleExpressionGap({ nowMs = Date.now(), eligibleSinceMs, lastPublishedMs = 0, tempoSpeed = 30 } = {}) {
-  const speed = Math.min(100, Math.max(1, Math.round(Number(tempoSpeed) || 30)));
-  const thresholdMs = Math.max(30 * 60 * 1000,
-    Math.round(EXPRESSIVE_GAP_BASE_MS * 30 / speed));
+  const thresholdMs = 2 * wakingOpportunityIntervalMs(tempoSpeed);
   const since = nonnegativeTimestamp(eligibleSinceMs);
   const latest = Math.max(since, nonnegativeTimestamp(lastPublishedMs));
   const elapsedMs = since ? Math.max(0, nowMs - latest) : 0;
@@ -223,7 +231,7 @@ export function expressiveChoiceModelCall(request) {
       drawing_phase: request.drawingPhase,
       prolonged_eligible_waking_gap: request.prolongedEligibleGap,
       guidance: request.prolongedEligibleGap
-        ? 'It has been a long eligible waking interval without a published journal or sketch. Consider grounded ordinary experience for writing or drawing; silence remains valid. Do not invent an external event.'
+        ? 'It has been a long eligible waking interval without a published journal or sketch. Use grounded ordinary experience for writing or drawing; do not invent an external event.'
         : request.drawingPhase === 'DRAW_PREFERRED'
           ? 'A sketch opportunity is due. Prefer a grounded sketch when it fits; writing and silence remain valid.'
           : 'Choose among available forms from grounded current context. No publication quota.',
