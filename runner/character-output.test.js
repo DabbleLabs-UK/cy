@@ -8,8 +8,10 @@ import {
   generateWithCharacterRepair,
   validateCharacterCandidate,
 } from './character-output.js';
-import { ZONE_A } from './prompt.js';
+import { buildPrompt, ZONE_A } from './prompt.js';
 import {
+  decodeProseEntities,
+  normalizeWakingProse,
   sanitizeCharacterContext,
   stripAssistantContaminatedTail,
   stripMalformedProseControls,
@@ -103,6 +105,78 @@ for (const prose of [
   assert.equal(sanitizeCharacterContext(prose), prose);
 }
 ok('the real 12:28/12:48 control-label leaks and structural variants fail while ordinary punctuation survives');
+
+const postRestart = JSON.parse(readFileSync(
+  new URL('./fixtures/waking-journal-artifacts-2026-10-02.json', import.meta.url), 'utf8',
+)).postRestart;
+assert.equal(postRestart.length, 4);
+assert.equal(normalizeWakingProse(postRestart[0]).endsWith('|'), false);
+assert.equal(normalizeWakingProse(postRestart[1]).includes('&amp;'), false);
+assert.match(normalizeWakingProse(postRestart[1]), /47 & it goes wrong$/);
+assert.equal(validateCharacterCandidate(postRestart[3]).ok, false);
+assert.equal(sanitizeCharacterContext(postRestart[3]).includes('<...'), false);
+for (const burst of postRestart) {
+  assert.equal(sanitizeCharacterContext(burst).endsWith('|'), false);
+}
+ok('all four natural post-restart bursts exercise entity, orphan-bar and angle-frame boundaries');
+
+assert.equal(decodeProseEntities('a &amp; b &#38; c &#x26; d'), 'a & b & c & d');
+assert.equal(decodeProseEntities('&lt;... &gt; &#x3c;...'), '<... > <...');
+for (const fragment of ['went <...', 'went < . . .>', 'went &lt;...']) {
+  assert.equal(validateCharacterCandidate(fragment).ok, false, fragment);
+}
+for (const ordinary of [
+  'counted 5 < 7 and went on...',
+  'i put [door] in the margin | then counted > three scratches...',
+  "i marked '|' on the page",
+  'the pipe | stayed on the canteen sheet',
+]) {
+  assert.equal(validateCharacterCandidate(ordinary).ok, true, ordinary);
+  assert.equal(normalizeWakingProse(ordinary), ordinary);
+}
+ok('structural angle fragments fail without rejecting ordinary brackets, bars, comparisons or ellipses');
+
+{
+  const calls = [];
+  const clean = await generateWithCharacterRepair({
+    prompt: 'a real incident',
+    generate: async (_prompt, attempt) => {
+      calls.push(attempt.repair);
+      return { candidate: 'i counted one &amp; then another |' };
+    },
+  });
+  assert.deepEqual(calls, [false]);
+  assert.equal(clean.candidate, 'i counted one & then another');
+  const repaired = await generateWithCharacterRepair({
+    prompt: 'a real incident',
+    generate: async (_prompt, attempt) => ({
+      candidate: attempt.repair ? 'heard the latch &amp; looked up |' : 'heard it <...',
+    }),
+  });
+  assert.equal(repaired.candidate, 'heard the latch & looked up');
+  assert.equal(repaired.characterValidation.repairAttempted, true);
+  const discarded = await generateWithCharacterRepair({
+    prompt: 'a real incident',
+    generate: async () => ({ candidate: 'heard it &lt;...' }),
+  });
+  assert.equal(discarded.candidate, '');
+  assert.equal(discarded.characterValidation.finalAction, 'discarded-to-silence');
+}
+ok('safe entities and terminal delimiters are normalised; angle leakage gets one repair then silence');
+
+{
+  const oldTail = 'door went &amp; someone moved <... i kept counting |';
+  assert.equal(sanitizeCharacterContext(oldTail), 'door went & someone moved i kept counting');
+  const cue = buildPrompt('door went quiet', 'journal', null, 'ONE THING');
+  assert.match(cue, /understandable on a first or second read/);
+  assert.match(cue, /do not omit words needed to tell who or what you mean/);
+  assert.doesNotMatch(cue, /shorthand, fragments and unfinished grammar/);
+  assert.match(ZONE_A, /Rough lower-case prison shorthand is the default/);
+  assert.match(ZONE_A, /rough grammar and unfinished edges/);
+  assert.doesNotMatch(ZONE_A, /47 tiles|counted em twice/);
+  assert.match(ZONE_A, /thought i had it straight, but i dont/);
+}
+ok('recent context is cleaned while the final cue alone prioritises clarity and the base voice stays rough');
 
 const recentJournal = {
   rough: 'cbb wot is he doin wiv dem? cant shake dis off feelin its gonna lead to somethng rn',

@@ -141,7 +141,7 @@ const SYSTEM_BASE = [
 const EXAMPLES = [
   'HOW HE WRITES - examples of the register only, never reuse the words:',
   '- 3rd day no VO. screw clocked me at slop, said nowt, just looked. tray cold again. cba.',
-  '- 47 tiles to the door. counted em twice, lost count once. someone kicking off on the twos.',
+  '- nah. thought i had it straight, but i dont. still tryin to put it right.',
   '- b4 lockup they said gym. no gym. course not. rain on the mesh, cant see it, hear it tho.',
 ].join('\n');
 
@@ -768,7 +768,7 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
   // continues from, so the directives can sit last without being echoed.
   const cue = mode === 'sleep'
     ? '[half under. a fragment surfaces:]'
-    : '[write only the next private thought as Cy. keep his rough lower-case prison slang, shorthand, fragments and unfinished grammar even if the recent prose became formal. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
+    : '[write only the next private thought as Cy. keep his rough lower-case prison voice, but make each thought understandable on a first or second read; do not omit words needed to tell who or what you mean. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
   if (!ctxBlock) {
     // nothing written yet: directives, then the opening seed continues the stream.
     return (zoneC ? zoneC + '\n\n' : '') + 'day begins. the ceiling. same ceiling. ';

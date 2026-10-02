@@ -182,6 +182,20 @@ test('N4 real October journal control labels cannot enter memory formation or su
   assert.doesNotMatch(formatAutobiographicalMemory([stored]), /cy'?s thoughts|\|[()\[\]<>]/i);
 });
 
+test('N5 post-restart entity, angle fragment and terminal bars cannot enter memory feedback', () => {
+  const first = 'door went &amp; the landing went quiet |';
+  const second = 'still thinking <... but i heard the latch |';
+  const formed = sourceFromExpression(`${first}\n\n${second}`, 'expression-batch:october-3');
+  assert.equal(formed.text, 'door went & the landing went quiet\n\nstill thinking but i heard the latch');
+  const stored = memory({ content: second, publicSummary: first });
+  const visible = filterMemoriesBeforePrompt([stored]);
+  const surfaced = buildSurfacingRequest([stored], { groundedContext: 'the door closed' });
+  assert.doesNotMatch(visible[0].content, /<\.\.\.|\|$/);
+  assert.doesNotMatch(visible[0].publicSummary, /&amp;|\|$/);
+  assert.doesNotMatch(surfaced.call.prompt, /<\.\.\.|&amp;|\|$/);
+  assert.doesNotMatch(formatAutobiographicalMemory([stored]), /<\.\.\.|&amp;|\|$/);
+});
+
 test('O working context is bounded to surfaced memories', () => {
   const candidates = Array.from({ length: MEMORY_CANDIDATE_LIMIT + 4 }, (_, index) => memory({ id: `memory-${index}` }));
   const request = buildSurfacingRequest(candidates, {});

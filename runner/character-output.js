@@ -5,7 +5,7 @@
 // the rejected text back to the model: the retry receives the original Cy/world
 // prompt plus one short output-only instruction.
 
-import { assistantFrameHits, looksLikeAssistantFrame, malformedProseControlHits } from './warden.js';
+import { assistantFrameHits, looksLikeAssistantFrame, malformedProseControlHits, normalizeWakingProse } from './warden.js';
 
 export const CHARACTER_REPAIR_INSTRUCTION =
   "Return only the inmate's next in-character text. No commentary about writing, " +
@@ -41,10 +41,12 @@ export async function generateWithCharacterRepair({
   const initial = await generate(prompt, { repair: false });
   if (initial.error || initial.refused || initial.aborted) return initial;
 
-  const initialValidation = validate(initial.candidate);
+  const initialCandidate = normalizeWakingProse(initial.candidate);
+  const initialValidation = validate(initialCandidate);
   if (initialValidation.ok) {
     return {
       ...initial,
+      candidate: initialCandidate,
       characterValidation: {
         initial: initialValidation,
         repairAttempted: false,
@@ -55,9 +57,10 @@ export async function generateWithCharacterRepair({
 
   const repairPrompt = characterRepairPrompt(prompt);
   const repair = await generate(repairPrompt, { repair: true });
+  const repairCandidate = normalizeWakingProse(repair.candidate);
   const repairValidation = repair.error || repair.refused || repair.aborted
     ? { ok: false, reasons: [repair.error ? 'provider error' : repair.refused ? 'provider refusal' : 'generation aborted'] }
-    : validate(repair.candidate);
+    : validate(repairCandidate);
   const accepted = repairValidation.ok;
   const diagnostic = {
     initialCandidate: initial.candidate || '',
@@ -88,6 +91,7 @@ export async function generateWithCharacterRepair({
 
   return {
     ...repair,
+    candidate: repairCandidate,
     characterValidation: {
       initial: initialValidation,
       repair: repairValidation,
