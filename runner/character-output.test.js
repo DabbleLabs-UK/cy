@@ -78,6 +78,32 @@ for (const leak of ['wot u mean hola? |}', 'c ya stev |}|', 'tea went cold |}}']
 }
 ok('observed malformed separator family is rejected before waking prose publication');
 
+const controlFixture = JSON.parse(readFileSync(
+  new URL('./fixtures/waking-journal-control-2026-10-02.json', import.meta.url), 'utf8',
+));
+for (const candidate of [controlFixture.initialCandidate1228, ...controlFixture.published.map((e) => e.text)]) {
+  const validation = validateCharacterCandidate(candidate);
+  assert.equal(validation.ok, false, candidate);
+  assert.ok(validation.reasons.includes('malformed prose control fragment'));
+  const safe = sanitizeCharacterContext(candidate);
+  assert.doesNotMatch(safe, /cy'?s thoughts|cys thoughts|\|[()\[\]<>]|\bSECTION mandatory_current_state\b/i);
+}
+for (const candidate of [
+  "screw went past [Cy's thoughts)] then stopped",
+  'bolt went SECTION recent_expression and i heard it',
+  'bolt went <SHARED_CONTEXT consumer="CY_PROSE"> then stopped',
+  'bolt went [C7] [OBSERVED BY CY] then stopped',
+  'bolt went |)> then stopped',
+]) assert.equal(validateCharacterCandidate(candidate).ok, false, candidate);
+for (const prose of [
+  'i put [door] in the margin | then counted > three scratches...',
+  'he said [wait] and i kept the line | as it was.',
+]) {
+  assert.equal(validateCharacterCandidate(prose).ok, true, prose);
+  assert.equal(sanitizeCharacterContext(prose), prose);
+}
+ok('the real 12:28/12:48 control-label leaks and structural variants fail while ordinary punctuation survives');
+
 const recentJournal = {
   rough: 'cbb wot is he doin wiv dem? cant shake dis off feelin its gonna lead to somethng rn',
   editorial: 'nvr seen nick take that long t sort thru keys |...|| > wat do they mean to him\n (Cy breaks off here with Nick taking a very unusual amount of time sorting through some personal things; then thinks "dont"...)',
@@ -216,6 +242,29 @@ ok('bad initial plus good retry accepts only the clean Cy candidate');
   assert.equal(result.characterValidation.finalAction, 'discarded-to-silence');
 }
 ok('bad initial plus bad retry stores no prose and resolves to silence');
+
+{
+  const calls = [];
+  const prompt = 'recent_expression: ' + sanitizeCharacterContext(controlFixture.published[1].text);
+  assert.doesNotMatch(prompt, /thoughts|\|[()\[\]<>]/i);
+  const repaired = await generateWithCharacterRepair({
+    prompt,
+    generate: async (sentPrompt, attempt) => {
+      calls.push({ sentPrompt, repair: attempt.repair });
+      return { candidate: attempt.repair ? 'heard the door go and kept countin' : controlFixture.initialCandidate1228 };
+    },
+  });
+  assert.deepEqual(calls.map((call) => call.repair), [false, true]);
+  assert.doesNotMatch(calls[1].sentPrompt, /thoughts|\|[()\[\]<>]/i);
+  assert.equal(repaired.candidate, 'heard the door go and kept countin');
+  const discarded = await generateWithCharacterRepair({
+    prompt,
+    generate: async () => ({ candidate: controlFixture.published[0].text }),
+  });
+  assert.equal(discarded.candidate, '');
+  assert.equal(discarded.characterValidation.finalAction, 'discarded-to-silence');
+}
+ok('new control leakage gets one clean repair or silence without refeeding contaminated context');
 
 {
   for (const purpose of ['journal', 'drawing-intent', 'postcard', 'warden']) {

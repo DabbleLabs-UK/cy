@@ -1,6 +1,6 @@
 // Presentation-only grouping for the public chronology. The stored event stream
 // remains untouched; every grouped step keeps its original text and timestamp.
-import { clockOf, timestampMs } from './timeline.js';
+import { bindEndpointTime, clockOf, timestampMs } from './timeline.js';
 
 const SEARCH_STAGES = [
   'cell_search_initiated',
@@ -112,12 +112,6 @@ function groupLabel(unit) {
     : `${unit.items.length} passing moments`;
 }
 
-function groupTime(unit) {
-  const first = clockOf(unit.items[0].ts);
-  const last = clockOf(unit.items[unit.items.length - 1].ts);
-  return first === last ? first : `${first} - ${last}`;
-}
-
 function makeGroup(unit) {
   const element = document.createElement('details');
   element.className = `cy-chronology-group cy-chronology-${unit.type}`;
@@ -139,6 +133,10 @@ function makeGroup(unit) {
   element.appendChild(steps);
   unit.element = element;
   unit.time = time;
+  unit.firstTime = document.createElement('time');
+  time.appendChild(unit.firstTime);
+  bindEndpointTime(unit.firstTime, unit.items[0].ts);
+  unit.lastTime = null;
   unit.labelNode = label;
   unit.steps = steps;
   return element;
@@ -148,7 +146,7 @@ function appendStep(unit, record) {
   const row = document.createElement('div');
   row.className = 'cy-chronology-step';
   const time = document.createElement('time');
-  time.textContent = clockOf(record.ts);
+  bindEndpointTime(time, record.ts);
   const words = document.createElement('div');
   words.className = 'cy-chronology-step-words';
   const title = document.createElement('span');
@@ -169,7 +167,16 @@ function appendStep(unit, record) {
 }
 
 function refreshGroup(unit) {
-  unit.time.textContent = groupTime(unit);
+  const first = clockOf(unit.items[0].ts);
+  const lastRecord = unit.items[unit.items.length - 1];
+  if (clockOf(lastRecord.ts) !== first) {
+    if (!unit.lastTime) {
+      unit.time.appendChild(document.createTextNode(' - '));
+      unit.lastTime = document.createElement('time');
+      unit.time.appendChild(unit.lastTime);
+    }
+    bindEndpointTime(unit.lastTime, lastRecord.ts);
+  }
   unit.labelNode.textContent = groupLabel(unit);
   unit.element.setAttribute('aria-label', `${groupLabel(unit)}; ${unit.items.length} events. Expand for each event in time order.`);
 }
