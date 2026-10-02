@@ -256,6 +256,11 @@ const ASSISTANT_FRAME = [
   /\b(?:i(?:'|\u2019)?ve|i\s+have)\s+added\b[^\n]{0,100}\b(?:cy(?:'|\u2019)?s\s+thought\s+process|to\s+continue\s+cy)\b/i,
   /(?:^|\n)\s*here\s+is\s+the\s+finished\s+(?:entry|response|text|passage)\b/i,
   /\bthe\s+text\s+is\s+\d+\s+words?\s+long\b/i,
+  // A narrator describing Cy's writing is not Cy's own thought. Require a
+  // writing action at a parenthetical or sentence boundary; names alone are
+  // ordinary in-world material and must remain allowed.
+  /(?:^|[.!?][ \t]+|[\n(])\s*(?:cy|the writer)\s+(?:breaks?\s+off(?:\s+here)?|stops?\s+writing|pauses?\s+(?:writing|here)|(?:continues?|starts?|resumes?)\s+writing)\b/i,
+  /(?:^|[.!?][ \t]+|[\n(])\s*(?:the|this)\s+entry\s+(?:is|remains|was)\s+(?:unfinished|incomplete|cut\s+off)\b/i,
   // Prompt headings are instructions supplied to the model, never Cy prose.
   /(?:^|\n)\s*(?:THE WING, RIGHT NOW|ON THE WING)\s*:/i,
 ];
@@ -303,12 +308,23 @@ export function stripAssistantContaminatedTail(s) {
 // This malformed separator has appeared in generated Cy prose (not in any
 // postcard format). Keep it out of historical prose supplied to later prompts
 // without deleting the surrounding words or changing the public archive.
+// The later pseudo-control form has a pipe-enclosed run of dots followed by an
+// extra pipe or angle close (for example |...|| >). A plain ellipsis, >, or
+// single pipe-enclosed mark is not enough to identify a control fragment.
+const MALFORMED_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}\|(?:\|+[ \t]*>?|[ \t]*>)/g;
+
 export function malformedProseControlHits(s) {
-  return [...String(s || '').matchAll(/\|\}[|{}]*/g)].map((match) => match[0]);
+  return [
+    ...String(s || '').matchAll(/\|\}[|{}]*/g),
+    ...String(s || '').matchAll(MALFORMED_PROSE_CONTROL),
+  ].sort((a, b) => a.index - b.index).map((match) => match[0]);
 }
 
 export function stripMalformedProseControls(s) {
-  return String(s || '').replace(/\|\}[|{}]*/g, '').replace(/[ \t]{2,}/g, ' ');
+  return String(s || '')
+    .replace(/\|\}[|{}]*/g, '')
+    .replace(MALFORMED_PROSE_CONTROL, '')
+    .replace(/[ \t]{2,}/g, ' ');
 }
 
 // Apply the character boundary whenever recent prose is read for a new prompt,

@@ -1,6 +1,7 @@
 // character-output.test.js - waking Cy prose must never publish repair framing.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CHARACTER_REPAIR_INSTRUCTION,
   characterRepairPrompt,
@@ -77,6 +78,29 @@ for (const leak of ['wot u mean hola? |}', 'c ya stev |}|', 'tea went cold |}}']
 }
 ok('observed malformed separator family is rejected before waking prose publication');
 
+const recentJournal = {
+  rough: 'cbb wot is he doin wiv dem? cant shake dis off feelin its gonna lead to somethng rn',
+  editorial: 'nvr seen nick take that long t sort thru keys |...|| > wat do they mean to him\n (Cy breaks off here with Nick taking a very unusual amount of time sorting through some personal things; then thinks "dont"...)',
+  drawingIntent: 'canteen plan |...|| >',
+  repeated: 'dont know wat hes got planned |...|| > cba tbh wot is goin on atm |...|| > cos mark aint in assoc rn |...|| >',
+};
+assert.equal(validateCharacterCandidate(recentJournal.rough).ok, true);
+for (const leak of [recentJournal.editorial, recentJournal.drawingIntent, recentJournal.repeated,
+  'keys went quiet |..||> then the bolt went',
+  'keys went quiet | . . . | > then the bolt went',
+  'keys went quiet |...|| then the bolt went']) {
+  assert.equal(validateCharacterCandidate(leak).ok, false, leak);
+}
+ok('real October journal and drawing-intent fragments plus structural variants fail validation');
+
+for (const leak of [
+  'keys still on the table (Cy breaks off here with Nick sorting them)',
+  'keys still on the table (Cy stops writing and looks at the door)',
+  'keys still on the table. The writer continues writing about the keys.',
+  'keys still on the table (The entry remains unfinished)',
+]) assert.equal(validateCharacterCandidate(leak).ok, false, leak);
+ok('editorial descriptions of Cy or an unfinished entry fail validation');
+
 for (const legitimate of [
   'note from reg says keyes came by twice',
   'heard a change in his tone when the bolt went',
@@ -106,10 +130,26 @@ for (const legitimate of [
   "I don't know what they want me to do.",
   'Reg said my entry in the ledger was complete.',
   'I added a sentence to my letter to Mum.',
+  'the bolt went... then the keys again',
+  'i marked | on the page, then > by the door',
+  'i copied |...| from the old canteen sheet',
+  'Cy said the canteen sheet was wrong on the postcard',
+  'I stopped writing when Mr Locke came in.',
 ]) {
   assert.equal(validateCharacterCandidate(legitimate).ok, true, legitimate);
 }
 ok('ordinary prison uses of note, change, tone, response and here is remain valid');
+
+{
+  const contaminated = recentJournal.editorial;
+  const safe = sanitizeCharacterContext(contaminated);
+  assert.equal(safe, 'nvr seen nick take that long t sort thru keys wat do they mean to him');
+  assert.doesNotMatch(safe, /\|\s*\.{2,}|Cy breaks off/i);
+  assert.equal(sanitizeCharacterContext(recentJournal.drawingIntent), 'canteen plan');
+  assert.equal(sanitizeCharacterContext(recentJournal.repeated),
+    'dont know wat hes got planned cba tbh wot is goin on atm cos mark aint in assoc rn');
+}
+ok('recent-expression context preserves separable Cy prose but drops pseudo-controls and editorial tails');
 
 {
   const contaminated = [
@@ -223,6 +263,38 @@ ok('every shared waking prose purpose repairs clean output or discards persisten
 ok('malformed postcard candidate is repaired once or discarded, never published unchanged');
 
 {
+  for (const purpose of ['journal', 'drawing-intent', 'postcard', 'warden']) {
+    const calls = [];
+    const repaired = await generateWithCharacterRepair({
+      prompt: `${originalPrompt}\n[purpose: ${purpose}]`,
+      generate: async (_prompt, attempt) => {
+        calls.push(attempt.repair);
+        return { candidate: attempt.repair
+          ? 'nick left the keys by the door. i heard em go.'
+          : recentJournal.editorial };
+      },
+    });
+    assert.deepEqual(calls, [false, true]);
+    assert.equal(repaired.candidate, 'nick left the keys by the door. i heard em go.');
+    const discarded = await generateWithCharacterRepair({
+      prompt: `${originalPrompt}\n[purpose: ${purpose}]`,
+      generate: async () => ({ candidate: recentJournal.drawingIntent }),
+    });
+    assert.equal(discarded.candidate, '');
+    assert.equal(discarded.characterValidation.finalAction, 'discarded-to-silence');
+  }
+}
+ok('new marker and editorial candidates use one repair or silence for every waking prose purpose');
+
+{
+  const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
+  assert.match(runSource, /const guarded = await generateWithCharacterRepair\(/);
+  assert.match(runSource, /const r1 = await streamGenerate\(\{[\s\S]*?purpose: 'drawing', attempt: 'drawing-intent'/);
+  assert.match(runSource, /const r = await streamGenerate\(\{[\s\S]*?attempt: forceEmit \? 'forced-after-repeats'/);
+}
+ok('normal journal and drawing-intent call the shared validated waking-prose generator');
+
+{
   const historical = 'wot u mean hola? |}| still thinkin bout it |}';
   assert.equal(stripMalformedProseControls(historical), 'wot u mean hola? still thinkin bout it ');
   assert.equal(sanitizeCharacterContext(historical), 'wot u mean hola? still thinkin bout it');
@@ -233,13 +305,13 @@ ok('historical malformed fragments leave future context without deleting surroun
 
 {
   const contaminated = [
-    'bolt went twice. reg said nowt.',
-    '|re-write| Note: I have rewritten your response according to inmate Cy\'s tone.',
+    'bolt went twice |...|| > reg said nowt.',
+    '(Cy breaks off here with Nick sorting his things)',
   ].join('\n');
   const publicHistory = [{ id: 1, text: contaminated }];
   const before = structuredClone(publicHistory);
   const recent = stripAssistantContaminatedTail(contaminated);
-  assert.equal(recent, 'bolt went twice. reg said nowt.');
+  assert.equal(recent, 'bolt went twice |...|| > reg said nowt.');
   assert.deepEqual(publicHistory, before);
 }
 ok('contaminated public history is preserved while the live recent tail is removed');
