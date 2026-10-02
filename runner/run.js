@@ -865,10 +865,9 @@ async function main() {
   }
 
   // ---- viewer-driven tempo ----
-  // A representative recent burst duration, so the tempo event can carry a live
-  // cadence ('about every Ns') for the viewer. Seeded with a nominal ~75s (a
-  // typical burst) and smoothed toward each real burst as they complete.
-  let recentBurstMs = 75000;
+  // A representative chooser + journal cycle duration for the waking Tempo
+  // estimate, seeded from recent DELL measurements and smoothed toward real work.
+  let recentBurstMs = 280000;
   // When the polled tempo changes, mirror it into the public stream as a `tempo`
   // event so the viewer can display speed, viewer count and pace. The pence/hour
   // anchors remain diagnostic power-model values, not an exact cost prediction:
@@ -907,7 +906,7 @@ async function main() {
         burst_ms: Math.round(burst), // representative recent burst duration
         idle_ms: Math.round(idle), // deliberate idle the runner would insert now
         journal_target_ms: wakingOpportunityIntervalMs(t.speed),
-        cadence_ms: Math.round(burst + idle), // per-request pacing diagnostic, not journal target
+        cadence_ms: Math.round(Math.max(wakingOpportunityIntervalMs(t.speed), burst + idle)),
       },
     });
   };

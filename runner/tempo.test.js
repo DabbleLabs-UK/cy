@@ -11,7 +11,11 @@ import {
   wakingOpportunityIntervalMs,
   wakingOpportunityWaitMs,
 } from './tempo.js';
-import { cadencePhrase, tempoIdleMs as publicTempoIdleMs } from '../public/assets/tempo.js';
+import {
+  cadencePhrase,
+  wakingTempoIdleMs as publicWakingIdleMs,
+  wakingOpportunityIntervalMs as publicOpportunityIntervalMs,
+} from '../public/assets/tempo.js';
 import { AWG_MIN_IDLE_BUDGET_MS } from './ambient-world-generator.js';
 
 function realisedDuty(burstMs, idleMs) {
@@ -23,8 +27,10 @@ for (const burstMs of [1000, 75000, 178275]) {
     const idleMs = tempoIdleMs(burstMs, speed);
     assert.ok(Math.abs(realisedDuty(burstMs, idleMs) - speed) < 0.01,
       `${speed}% remains the realised duty for a ${burstMs}ms generation`);
-    assert.equal(publicTempoIdleMs(burstMs, speed), idleMs,
-      'the visitor cadence preview mirrors the runner equation');
+    assert.equal(publicWakingIdleMs(burstMs, speed), wakingTempoIdleMs(burstMs, speed),
+      'the visitor cost estimate mirrors bounded waking rest, not old duty');
+    assert.equal(publicOpportunityIntervalMs(speed), wakingOpportunityIntervalMs(speed),
+      'the visitor opportunity preview mirrors the runner target');
   }
 }
 
@@ -32,7 +38,10 @@ const recentBurstMs = 178275;
 const correctedIdleMs = tempoIdleMs(recentBurstMs, 31);
 assert.equal(correctedIdleMs, 396806, 'the live 31% example receives its full required idle');
 assert.ok(correctedIdleMs > 11829 * 30, 'the former 11.8s cap cannot silently turn 31% into near-continuous load');
-assert.equal(cadencePhrase(recentBurstMs, 31), 'about every 10 min');
+assert.equal(cadencePhrase(10), '~15 min / opportunity');
+assert.equal(cadencePhrase(30), '~5 min / opportunity');
+assert.equal(cadencePhrase(50), '~3 min / opportunity');
+assert.equal(cadencePhrase(100), '~1.5 min / opportunity');
 assert.equal(clampSpeed(0), 1);
 assert.equal(clampSpeed(101), 100);
 assert.equal(remainingTempoIdleMs(60000, 30, 45000), 95000,

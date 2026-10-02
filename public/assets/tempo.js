@@ -1,21 +1,9 @@
-// tempo.js - the viewer-driven duty-cycle control.
+// tempo.js - the viewer-driven waking expression pace control.
 //
-// A small, understated instrument-chrome panel: the current speed as a
-// percentage, a slider 1-100, and the cost of watching plainly stated
-// ("watching costs Warden Florian X p/hour"). The live viewer count is updated
-// here but displayed in the persistent top bar.
-//
-// Tempo is a DUTY CYCLE - 100% is continuous, lower means more silence between
-// bursts. The effective speed is decided server-side from presence (nobody = 5%,
-// someone = 30%, or a custom value a viewer set). This control shows it live from
-// `tempo` events on the stream and lets a watcher drag the slider to set a
-// custom value (POST). While dragging, the readout and cost track the slider so
-// the viewer sees the cost of a choice before committing it.
-//
-// The cost is linear in speed: average draw is idle + (speed/100)*(load-idle), so
-// pence/hour runs between pph_idle (speed->0) and pph_load (speed=100), both sent
-// by the runner in the tempo event. The COST OF WATCHING is the amount above the
-// nobody-watching 5% baseline, so it reads 0 at 5% and grows as he is sped up.
+// The number is an opportunity pace, not a machine duty percentage or a promise
+// that valid prose will publish. The server chooses 5% unwatched, 30% watched,
+// or a viewer-set custom value. The cost estimate uses the runner's waking
+// scheduler and whole-host idle/load power anchors; neither is measured Cy power.
 
 const IDLE_SPEED = 5; // the nobody-watching baseline the cost of watching is measured from
 
@@ -28,42 +16,52 @@ const pencePerHour = (watts, tariff) => (watts / 1000) * tariff * 100;
 const FALLBACK_PPH_IDLE = pencePerHour(FALLBACK_POWER.idleWatts, FALLBACK_POWER.tariff);
 const FALLBACK_PPH_LOAD = pencePerHour(FALLBACK_POWER.loadWatts, FALLBACK_POWER.tariff);
 
-export function watchingCostPph(speed, pphIdle, pphLoad) {
-  const s = Number(speed);
-  const idle = Number(pphIdle);
-  const load = Number(pphLoad);
-  if (![s, idle, load].every(Number.isFinite)) return null;
-  const range = load - idle;
-  const pphAt = (atSpeed) => idle + (atSpeed / 100) * range;
-  return Math.max(0, pphAt(s) - pphAt(IDLE_SPEED));
-}
+// Production chooser + prose calls currently occupy about 200-360s together.
+// Use their midpoint until the runner supplies a representative completed cycle.
+export const DEFAULT_CYCLE_MS = 280_000;
 
-// A representative burst duration to reason about cadence with, until a real one
-// arrives on a `tempo` event (bursts run ~75s). A percentage means nothing to a
-// viewer; the effective GAP between bursts does, so the panel renders that.
-const DEFAULT_BURST_MS = 75000;
-
-// ---- duty-cycle maths, MIRRORED from runner/tempo.js -----------------------
-// The runner decides the real idle; this is the same exact equation client-side
-// so the panel can preview the resulting cadence while the slider is dragged.
 function clampSpeedPct(speed) {
   const n = Math.round(Number(speed));
   if (!Number.isFinite(n)) return 100;
   return Math.max(1, Math.min(100, n));
 }
-export function tempoIdleMs(burstMs, speed) {
+
+// Mirrors runner/tempo.js. The start-to-start target does not override slower
+// inference, waiting for a shared lease, or rejection by prose validation.
+export function wakingOpportunityIntervalMs(speed) {
+  return Math.round(90_000 * 100 / clampSpeedPct(speed));
+}
+
+export function wakingTempoIdleMs(burstMs, speed) {
   const s = clampSpeedPct(speed);
   if (s >= 100) return 0;
   const b = Math.max(0, Number(burstMs) || 0);
-  return Math.max(0, Math.round(b * (100 / s - 1)));
+  return Math.min(Math.round(b * (100 / s - 1)), Math.round(75_000 * 30 / s));
 }
-// A short human phrase for the effective gap between bursts at `speed`.
-export function cadencePhrase(burstMs, speed) {
-  const b = Math.max(0, Number(burstMs) || 0) || DEFAULT_BURST_MS;
-  const s = Math.round((b + tempoIdleMs(b, speed)) / 1000);
-  if (s < 90) return 'about every ' + s + 's';
-  const m = Math.round(s / 60);
-  return 'about every ' + m + ' min';
+
+export function estimatedWakingBusyShare(speed, cycleMs = DEFAULT_CYCLE_MS) {
+  const busyMs = Number.isFinite(Number(cycleMs)) && Number(cycleMs) > 0
+    ? Number(cycleMs) : DEFAULT_CYCLE_MS;
+  const intervalMs = Math.max(wakingOpportunityIntervalMs(speed),
+    busyMs + wakingTempoIdleMs(busyMs, speed));
+  return Math.min(1, busyMs / intervalMs);
+}
+
+export function watchingCostPph(speed, pphIdle, pphLoad, cycleMs = DEFAULT_CYCLE_MS) {
+  const s = Number(speed);
+  const idle = Number(pphIdle);
+  const load = Number(pphLoad);
+  if (![s, idle, load].every(Number.isFinite)) return null;
+  const range = Math.max(0, load - idle);
+  return Math.max(0, range * (estimatedWakingBusyShare(s, cycleMs)
+    - estimatedWakingBusyShare(IDLE_SPEED, cycleMs)));
+}
+
+// This is a target opportunity, deliberately not an expected publication time.
+export function cadencePhrase(speed) {
+  const minutes = wakingOpportunityIntervalMs(speed) / 60_000;
+  const rounded = Math.round(minutes * 10) / 10;
+  return `~${rounded} min / opportunity`;
 }
 
 export class Tempo {
@@ -76,7 +74,7 @@ export class Tempo {
     this.custom = false;
     this.pphIdle = FALLBACK_PPH_IDLE; // replaced by runner-derived API anchors
     this.pphLoad = FALLBACK_PPH_LOAD;
-    this.burstMs = DEFAULT_BURST_MS; // representative recent burst, from tempo events
+    this.burstMs = DEFAULT_CYCLE_MS; // representative chooser + journal cycle
     this._dragging = false;
     this._build();
     this._applyState(this.speed, this.viewers, this.custom);
@@ -84,23 +82,24 @@ export class Tempo {
   }
 
   _build() {
+    const heading = this.root.closest('details')?.querySelector('summary');
+    if (heading) heading.textContent = 'TEMPO / WAKING PACE';
     this.root.classList.add('tempopanel');
     this.root.innerHTML = `
       <div class="tp-head">
         <div class="tp-readout"><span id="tp-pct">--</span><span class="tp-unit">%</span></div>
       </div>
       <input id="tp-slider" class="tp-slider" type="range" min="1" max="100" value="30"
-             aria-label="generation tempo, percent duty cycle">
-      <div class="tp-scale"><span>1%</span><span class="tp-mid" id="tp-cadence">duty cycle</span><span>100%</span></div>
+             aria-label="waking expression tempo, opportunity pace">
+      <div class="tp-scale"><span>1%</span><span class="tp-mid" id="tp-cadence">waking opportunities</span><span>100%</span></div>
       <div class="tp-cost">
-        <span class="tp-cost-main">watching costs Warden Florian <b id="tp-cph">--</b> p/hour</span>
-        <span class="tp-cost-sub" id="tp-cph-abs"></span>
+        <span class="tp-cost-main">watching adds ~<b id="tp-cph">--</b> p/hour host electricity</span>
+        <span class="tp-cost-sub">Whole-host estimate; entries may be delayed or rejected.</span>
       </div>`;
     this.pctEl = this.root.querySelector('#tp-pct');
     this.countEl = this.viewerEl;
     this.slider = this.root.querySelector('#tp-slider');
     this.cphEl = this.root.querySelector('#tp-cph');
-    this.cphAbsEl = this.root.querySelector('#tp-cph-abs');
     this.cadenceEl = this.root.querySelector('#tp-cadence');
 
     // dragging: track the slider live, only commit on release
@@ -185,16 +184,13 @@ export class Tempo {
       this.countEl.setAttribute('aria-label', `${this.viewers} ${this.viewers === 1 ? 'person' : 'people'} watching`);
     }
 
-    // the cadence a viewer actually feels at this speed - the effective gap
-    // between bursts - which reads as alive where a bare percentage does not.
+    // Show the opportunity target, not an assurance that a model candidate will
+    // survive inference latency, repetition checks or prose validation.
     if (this.cadenceEl) {
-      this.cadenceEl.textContent = speed != null ? cadencePhrase(this.burstMs, speed) : 'duty cycle';
+      this.cadenceEl.textContent = speed != null ? cadencePhrase(speed) : 'waking opportunities';
     }
 
-    const range = this.pphLoad - this.pphIdle;
-    const pphAt = (s) => this.pphIdle + (s / 100) * range;
-    const watching = watchingCostPph(speed, this.pphIdle, this.pphLoad);
-    this.cphEl.textContent = watching.toFixed(1);
-    this.cphAbsEl.textContent = 'he draws ' + pphAt(speed).toFixed(1) + ' p/hour at this tempo';
+    const watching = watchingCostPph(speed, this.pphIdle, this.pphLoad, this.burstMs);
+    this.cphEl.textContent = watching == null ? 'n/a' : watching.toFixed(1);
   }
 }
