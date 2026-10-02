@@ -88,6 +88,18 @@
     border-right: 0;
     border-radius: 3px 0 0 3px;
   }
+  .cy-inspector-item.is-active > .cy-inspector-head::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    right: -10px;
+    bottom: -1px;
+    width: 10px;
+    border-top: 1px solid #718c9d;
+    border-bottom: 1px solid #718c9d;
+    background: #1b2933;
+    pointer-events: none;
+  }
   .cy-inspector-body {
     position: fixed;
     z-index: 26;
@@ -95,6 +107,7 @@
     top: var(--cy-inspector-top);
     width: calc(100vw - var(--cy-inspector-left) - 14px);
     max-height: calc(100vh - var(--cy-inspector-top) - 14px);
+    border-radius: 5px;
   }
 }
 

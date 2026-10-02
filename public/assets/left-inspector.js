@@ -27,6 +27,7 @@ export class LeftInspector {
     document.addEventListener('keydown', this.onKeyDown);
     document.addEventListener('pointerdown', this.onPointerDown);
     browserWindow.addEventListener('resize', this.onViewportChange);
+    browserWindow.addEventListener('scroll', this.onViewportChange, { passive: true });
     root.querySelector('.col-brain')?.addEventListener('scroll', this.onViewportChange, { passive: true });
     this.refresh();
   }
@@ -144,13 +145,6 @@ export class LeftInspector {
     // inside the inspector, so no second chart-loading implementation is needed.
     if (item.content.tagName === 'DETAILS') item.content.open = true;
     else item.content.querySelector(':scope > .soma-anxiety-readout > details, :scope > .soma-satiety-readout > details, :scope > .soma-harm-readout > details')?.setAttribute('open', '');
-    if (this.browserWindow.innerWidth > 1180) {
-      const rect = item.head.getBoundingClientRect();
-      const headerBottom = this.root.querySelector('#topbar')?.getBoundingClientRect().bottom || 0;
-      if (this.browserWindow.innerHeight - rect.top < 260) {
-        this.root.querySelector('.col-brain').scrollTop += rect.top - headerBottom - 24;
-      }
-    }
     this.positionActive();
     this.browserWindow.requestAnimationFrame(() => this.positionActive());
   }
@@ -171,8 +165,13 @@ export class LeftInspector {
       this.close();
       return;
     }
+    const layoutTop = this.root.querySelector('.layout')?.getBoundingClientRect().top ?? headerBottom;
+    const usableTop = Math.max(14, headerBottom + 14, layoutTop + 14);
+    // A nearby top row keeps its tab-like alignment. Lower rows no longer
+    // sacrifice the panel's usable height just because their heads sit low.
+    const panelTop = Math.max(usableTop, Math.min(rect.top, usableTop + 16));
     this.active.body.style.setProperty('--cy-inspector-left', `${Math.round(rect.right - 1)}px`);
-    this.active.body.style.setProperty('--cy-inspector-top', `${Math.round(Math.max(headerBottom + 2, rect.top))}px`);
+    this.active.body.style.setProperty('--cy-inspector-top', `${Math.round(panelTop)}px`);
   }
 
   destroy() {
@@ -181,6 +180,7 @@ export class LeftInspector {
     document.removeEventListener('keydown', this.onKeyDown);
     document.removeEventListener('pointerdown', this.onPointerDown);
     this.browserWindow.removeEventListener('resize', this.onViewportChange);
+    this.browserWindow.removeEventListener('scroll', this.onViewportChange);
     this.root.querySelector('.col-brain')?.removeEventListener('scroll', this.onViewportChange);
   }
 }
