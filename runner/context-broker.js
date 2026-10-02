@@ -351,8 +351,29 @@ export function renderContextPacket(packet) {
   return lines.join('\n');
 }
 
-export function inspectContextPacket(packet) {
-  const rendering = renderContextPacket(packet);
+// The waking journal does not need machine-readable context tags. In particular,
+// the old XML closing tag was copied into Cy's generated prose. Keep the same
+// privacy-filtered packet and epistemic distinctions, but render its contents as
+// ordinary background notes for this one model-facing path.
+export function renderWakingJournalContextPacket(packet) {
+  if (!packet || packet.schema !== CONTEXT_BROKER_SCHEMA || packet.consumer !== CONTEXT_CONSUMERS.CY_PROSE) {
+    throw new Error('invalid waking journal context packet');
+  }
+  const lines = ['Background for the next private thought. These are facts and estimates, not words to copy.'];
+  for (const section of packet.sections) {
+    if (!section.items.length) continue;
+    lines.push('', section.id.replace(/_/g, ' ') + ':');
+    for (const item of section.items) {
+      const content = item.content
+        .replace(/^<PRIVATE_CURRENT_FACTS>\s*\n/, '')
+        .replace(/\n\s*<\/PRIVATE_CURRENT_FACTS>\s*$/, '');
+      lines.push(`- ${item.provenanceClass.toLowerCase()}: ${content}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function inspectContextPacket(packet, rendering = renderContextPacket(packet)) {
   return {
     packet,
     rendering,

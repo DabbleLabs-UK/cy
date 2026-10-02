@@ -9,6 +9,7 @@ import {
   validateCharacterCandidate,
 } from './character-output.js';
 import { buildPrompt, ZONE_A } from './prompt.js';
+import { CONTEXT_CONSUMERS, buildContextPacket, createContextItem, renderWakingJournalContextPacket } from './context-broker.js';
 import {
   decodeProseEntities,
   normalizeWakingProse,
@@ -79,6 +80,46 @@ for (const leak of ['wot u mean hola? |}', 'c ya stev |}|', 'tea went cold |}}']
   assert.ok(validation.reasons.includes('malformed prose control fragment'));
 }
 ok('observed malformed separator family is rejected before waking prose publication');
+
+const naturalRejectedJournalCandidates = [
+  `donno if it was reg who moved something or mr proctor but someone did and its killing me |im_end|>
+
+Cy is writing - not to anyone, just the running commentary of his own mind.`,
+  `rarely they let us have candles nowdays and it wasnt like anyone else had 1 out anyway <shakes its off can't even remember wots going wrong rn ppl are freakin out b4 lockup |</SHARED_CONTEXT>
+
+Please enter Cy's thoughts.</|im_end|>|/shared_context>
+\x60\x60\x60
+
+I've got an answer! So I did my best at mimicking your tone.`,
+];
+for (const candidate of naturalRejectedJournalCandidates) {
+  assert.equal(validateCharacterCandidate(candidate).ok, false);
+}
+assert.equal(validateCharacterCandidate('mr proctor searched the cell. i kept watching the door.').ok, true);
+ok('the two natural 21:25 and 21:44 control-template candidates remain invalid');
+
+{
+  const packet = buildContextPacket({
+    consumer: CONTEXT_CONSUMERS.CY_PROSE,
+    items: [
+      createContextItem({ id: 'cell', section: 'mandatory_current_state', provenanceClass: 'WORLD FACT',
+        knowledgeScope: 'CY_OBSERVED', content: 'Cy remained in CELL after Mr Proctor searched it.' }),
+      createContextItem({ id: 'memory', section: 'autobiographical_memory', provenanceClass: 'SUBJECTIVE MEMORY',
+        knowledgeScope: 'CY_BELIEVES', content: 'Cy remembers waiting for word from Reg.' }),
+    ],
+  });
+  const prompt = buildPrompt('the door went quiet', 'journal', null,
+    renderWakingJournalContextPacket(packet));
+  const repaired = characterRepairPrompt(prompt);
+  for (const text of [prompt, repaired]) {
+    assert.match(text, /Cy remained in CELL after Mr Proctor searched it/);
+    assert.match(text, /Cy remembers waiting for word from Reg/);
+    assert.doesNotMatch(text, /<\/?SHARED_CONTEXT|<\/?PRIVATE_CURRENT_FACTS|\[C\d+\]|<\|im_|\[write only/);
+  }
+  assert.ok(repaired.startsWith(prompt));
+  assert.ok(repaired.endsWith(CHARACTER_REPAIR_INSTRUCTION));
+}
+ok('journal and repair retain world/memory grounding without output-like control framing');
 
 const controlFixture = JSON.parse(readFileSync(
   new URL('./fixtures/waking-journal-control-2026-10-02.json', import.meta.url), 'utf8',
