@@ -25,12 +25,15 @@ import {
   recordExpressiveDrawingFailure,
   recordExpressiveJournal,
   recordExpressiveOpportunity,
+  selectAvailableExpressiveAction,
+  EXPRESSIVE_SINGLE_OPTION_MECHANISM,
 } from './expressive-choice.js';
 import { availableExpressiveActions, LOCATIONS } from './location-regime.js';
 import { INSTRUMENTAL_ACTION_SELECTION } from './instrumental-agency.js';
 import { implementationEntry } from './implementation-registry.js';
 import { reconcileSoma, recordExpressiveChoice } from './soma.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
+import { InferenceTempoPacer, wakingTempoIdleMs } from './tempo.js';
 
 const groundedContext = {
   schema: 'cy.grounded-prose-context',
@@ -111,6 +114,38 @@ assert.equal(valid.reasonType, 'subjective_character_choice');
 assert.equal(valid.selectionMechanism, EXPRESSIVE_CHOICE_MECHANISM);
 assert.equal(valid.fallbackUsed, false);
 
+// A sole available action is an engineering fact, not a model decision. The
+// common overdue journal path must not acquire a second inference lease.
+let chooserCalls = 0;
+const soleJournal = buildExpressiveChoiceRequest({ ...base, availableActions: ['journal'] });
+const soleChoice = await selectAvailableExpressiveAction(soleJournal, {
+  generate: async () => { chooserCalls++; throw new Error('chooser must not run'); },
+});
+assert.equal(chooserCalls, 0);
+assert.equal(soleChoice.selectedAction, 'journal');
+assert.equal(soleChoice.selectionMechanism, EXPRESSIVE_SINGLE_OPTION_MECHANISM);
+assert.equal(soleChoice.reasonType, 'engineering_single_option');
+assert.deepEqual(soleChoice.classification, ['ENGINEERING_SINGLE_AVAILABLE_ACTION']);
+assert.equal(soleChoice.fallbackUsed, false);
+const pacerAfterEarlierJournal = new InferenceTempoPacer();
+pacerAfterEarlierJournal.record(1000, 61000, { purpose: 'journal', result: 'candidate' });
+assert.equal(pacerAfterEarlierJournal.remaining(61000, 30, wakingTempoIdleMs), 75000,
+  'deterministic selection does not erase the next journal request pacing');
+assert.equal(await selectAvailableExpressiveAction(
+  buildExpressiveChoiceRequest({ ...base, availableActions: [] }),
+  { generate: async () => { chooserCalls++; } },
+), null, 'no options remain a quiet no-op');
+assert.equal(chooserCalls, 0);
+const twoOptions = await selectAvailableExpressiveAction(buildExpressiveChoiceRequest({
+  ...base, availableActions: ['journal', 'silence'],
+}), { generate: async () => {
+  chooserCalls++;
+  return '{"action":"silence","focusRefs":[]}';
+} });
+assert.equal(chooserCalls, 1);
+assert.equal(twoOptions.selectedAction, 'silence');
+assert.equal(twoOptions.selectionMechanism, EXPRESSIVE_CHOICE_MECHANISM);
+
 // D/K. Invalid output or a provider failure uses the fixed engineering journal
 // fallback, not an emotion, drive, salience or utility calculation.
 for (const generate of [
@@ -179,6 +214,19 @@ assert.equal(JSON.stringify({
   social: soma.socialContact,
 }), groundedBefore);
 assert.equal(soma.action.score, null);
+recordExpressiveChoice(soma, soleChoice, { now: 2001 });
+assert.match(soma.action.reason, /engineering selection, not a subjective choice/);
+assert.equal(soma.action.selectionMechanism, EXPRESSIVE_SINGLE_OPTION_MECHANISM);
+assert.equal(JSON.stringify({
+  sleep: soma.sleepHomeostasis,
+  circadian: soma.circadianProcessC,
+  threat: soma.threatLearning,
+  defensive: soma.currentDefensiveContext,
+  feeding: soma.feeding,
+  controllability: soma.learnedControllability,
+  somatic: soma.somaticNociceptive,
+  social: soma.socialContact,
+}), groundedBefore, 'single-option engineering selection leaves grounded Soma unchanged');
 
 // L and live wiring. The scientific/grounded action selector remains explicitly
 // absent; the subjective layer is implemented; legacy drive choice is not called.
@@ -196,6 +244,10 @@ const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
 assert.doesNotMatch(runSource, /soma\.chooseAction\(/);
 assert.doesNotMatch(runSource, /soma\.completeAction\(/);
 assert.match(runSource, /kind: 'expressive_choice'/);
+assert.match(runSource, /await selectAvailableExpressiveAction\(choiceRequest/);
+assert.match(runSource, /if \(!expressiveChoice\) \{[\s\S]*?continue;/);
+assert.match(runSource, /const selectedAction = expressiveChoice\.selectedAction;[\s\S]*?if \(selectedAction === 'draw'\)/,
+  'single-option journal uses the same downstream journal validation path');
 assert.match(runSource, /recordCompletedSilence/);
 assert.match(runSource, /doDraw\(\{ cognition, incidentContext \}\)/);
 

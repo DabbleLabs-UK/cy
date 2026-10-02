@@ -42,6 +42,46 @@ await assert.rejects(
   (error) => error && error.name === 'AbortError',
 );
 
+// Owner provenance is one optional health snapshot. It neither changes the
+// lease request body nor makes an unavailable health endpoint fail acquisition.
+{
+  const observed = [];
+  const observedClient = createSharedOllamaClient('http://127.0.0.1:11435', {
+    fetchImpl: async (url, options = {}) => {
+      observed.push({ url, options });
+      if (url.endsWith('/health')) return {
+        ok: true, async json() { return { active: { client: 'feddit', purpose: 'user_turn' } }; },
+      };
+      if (url.endsWith('/v1/acquire')) return {
+        ok: true, async json() { return { id: 'lease-observed', waitMs: 4200,
+          heartbeatMs: 60000, profile: { num_ctx: 3072, num_thread: 4 } }; },
+      };
+      return { ok: true, async json() { return {}; } };
+    },
+  });
+  const observedLease = await observedClient.acquire({ purpose: 'journal', observeOwner: true });
+  assert.deepEqual(observedLease.ownerAtRequest, { client: 'feddit', purpose: 'user_turn' });
+  assert.equal(observedLease.waitMs, 4200);
+  assert.equal(observed[0].url.endsWith('/health'), true);
+  assert.deepEqual(JSON.parse(observed[1].options.body),
+    { client: 'cy', priorityClass: 'cy', purpose: 'journal' });
+  await observedLease.release();
+
+  const unavailableClient = createSharedOllamaClient('http://127.0.0.1:11435', {
+    fetchImpl: async (url) => {
+      if (url.endsWith('/health')) throw new Error('diagnostic endpoint unavailable');
+      if (url.endsWith('/v1/acquire')) return {
+        ok: true, async json() { return { id: 'lease-no-health', waitMs: 0,
+          heartbeatMs: 60000, profile: { num_ctx: 3072, num_thread: 4 } }; },
+      };
+      return { ok: true, async json() { return {}; } };
+    },
+  });
+  const unavailableLease = await unavailableClient.acquire({ purpose: 'journal', observeOwner: true });
+  assert.equal(unavailableLease.ownerAtRequest, null);
+  await unavailableLease.release();
+}
+
 // A preemptible lease (CY's AWG reserved-idle slot) aborts once the arbiter's
 // heartbeat response reports an interactive request queued behind it. Note:
 // the client clamps heartbeatMs to a 1000ms floor regardless of what the

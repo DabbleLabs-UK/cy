@@ -75,7 +75,7 @@ import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import {
   buildExpressiveChoiceRequest,
-  chooseExpressiveAction,
+  selectAvailableExpressiveAction,
   expressiveCadenceAvailability,
   eligibleExpressionGap,
   reconcileExpressiveCadence,
@@ -83,8 +83,10 @@ import {
   recordExpressiveDrawingFailure,
   recordExpressiveJournal,
   recordExpressiveOpportunity,
+  EXPRESSIVE_CHOICE_MECHANISM,
   EXPRESSIVE_SILENCE_COOLDOWN_MS,
 } from './expressive-choice.js';
+import { InferenceWaitTrace } from './inference-wait.js';
 import {
   parseStrokes,
   moodSnapshot,
@@ -753,6 +755,8 @@ async function main() {
       prompt_tokens: Number(stats.prompt_eval_count ?? stats.usage?.prompt_tokens) || null,
       output_tokens: Number(stats.eval_count ?? stats.usage?.completion_tokens) || null,
       load_duration_ns: Number(stats.load_duration) || null,
+      model_load_ms: Number.isFinite(Number(stats.load_duration))
+        ? Math.round(Number(stats.load_duration) / 1e6) : null,
       prompt_eval_duration_ns: Number(stats.prompt_eval_duration) || null,
       eval_duration_ns: Number(stats.eval_duration) || null,
     };
@@ -777,14 +781,15 @@ async function main() {
       tempo_speed: clampSpeed(client.tempo.speed),
     });
   }
-  async function waitForInferenceTempo(signal, purpose) {
+  async function waitForInferenceTempo(signal, purpose, { pairedWithChoice = false } = {}) {
     // Incoming human/operator work stays responsive. Its completed request still
     // establishes pacing for whatever model work follows it.
     if (purpose === 'postcard' || purpose === 'warden') return 0;
     // The action chooser and its directly following journal are one visible
     // expression cycle. Only a successful immediately preceding chooser earns
     // this exemption; failed or intervening requests retain normal pacing.
-    if (purpose === 'journal' && inferenceTempoPacer.followingSuccessfulChoice()) return 0;
+    if (purpose === 'journal' && pairedWithChoice
+      && inferenceTempoPacer.followingSuccessfulChoice()) return 0;
     const idleFor = ['expressive_choice', 'journal', 'drawing'].includes(purpose)
       ? wakingTempoIdleMs : tempoIdleMs;
     let remaining = inferenceTempoPacer.remaining(Date.now(), client.tempo.speed, idleFor);
@@ -2467,7 +2472,7 @@ async function main() {
   // original Cy/world prompt, and two failures become silence.
   async function streamGenerate({
     system, prompt, opts, mode, purpose, contextTail, allowRepeat = false, attempt = 'initial',
-    timeoutMs = null,
+    timeoutMs = null, pairedWithChoice = false,
   }) {
     // Visible prose is foreground work. Stop any lower-priority memory job before
     // waiting for the provider slot so a postcard, warden reply or journal turn
@@ -2496,6 +2501,9 @@ async function main() {
 
     const collectCandidateBody = async (candidatePrompt, { repair = false } = {}, ac) => {
       let t0 = null;
+      const requestPurpose = purpose || mode;
+      const waitTrace = new InferenceWaitTrace(requestPurpose);
+      let waitReported = false;
       let ttftMs = null;
       let stats = null;
       let candidate = '';
@@ -2505,6 +2513,15 @@ async function main() {
       let cancelTimeout = () => {};
       let requestFinished = false;
       let transportResult = 'error';
+      const reportWait = (status) => {
+        if (waitReported) return;
+        waitReported = true;
+        recordInferenceDiagnostic({
+          event: 'wait', id: lease && lease.id, at: new Date().toISOString(),
+          ...waitTrace.snapshot({ modelStartedAtMs: t0, arbiterGrant: hostLease, status }),
+          ...(ac.signal.aborted ? { abort_reason: cancellationReason(ac.signal) } : {}),
+        });
+      };
       const finishRequest = async () => {
         if (requestFinished) return;
         requestFinished = true;
@@ -2524,28 +2541,30 @@ async function main() {
         });
       };
       try {
-        await waitForInferenceTempo(ac.signal, purpose || mode);
-        lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
+        await waitTrace.measure('tempoIdleMs', () => waitForInferenceTempo(ac.signal, requestPurpose,
+          { pairedWithChoice }));
+        lease = await waitTrace.measure('coordinatorWaitMs', () => inferenceCoordinator.acquire({ ...inferenceMeta({
           provider,
           system,
           prompt: candidatePrompt,
           opts,
-          purpose: purpose || mode,
+          purpose: requestPurpose,
           attempt: repair ? `${attempt}:character-repair` : attempt,
           background: false,
           transport: 'stream',
-        }), deferStart: true }, ac.signal);
+        }), deferStart: true }, ac.signal));
         // Pacing and provider ownership form one atomic boundary. A background
         // request may have completed after the first check but before this lease
         // was granted; recheck while holding the slot so another request cannot
         // slip into the gap. The coordinator remains IDLE until begin().
-        await waitForInferenceTempo(ac.signal, purpose || mode);
+        await waitTrace.measure('tempoIdleMs', () => waitForInferenceTempo(ac.signal, requestPurpose,
+          { pairedWithChoice }));
         if (typeof provider.acquireSharedLease === 'function') {
-          hostLease = await provider.acquireSharedLease({
-            purpose: purpose || mode,
+          hostLease = await waitTrace.measure('arbiterWaitMs', () => provider.acquireSharedLease({
+            purpose: requestPurpose,
             signal: ac.signal,
             onLost: () => abortWithReason(ac, 'LEASE_LOSS'),
-          });
+          }));
         }
         const requestOpts = typeof provider.applySharedProfile === 'function'
           ? provider.applySharedProfile(opts, hostLease) : opts;
@@ -2553,6 +2572,7 @@ async function main() {
         // provider timeout only after this request owns Ollama.
         cancelTimeout = startAbortTimeout(ac, timeoutMs);
         t0 = lease.begin();
+        reportWait('started');
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
@@ -2562,6 +2582,7 @@ async function main() {
         });
       } catch (err) {
         transportResult = ac.signal.aborted ? 'aborted' : 'error';
+        reportWait(ac.signal.aborted ? 'cancelled_before_start' : 'failed_before_start');
         await finishRequest();
         if (ac.signal.aborted) {
           return {
@@ -2731,6 +2752,8 @@ async function main() {
     attempt = 'initial', admittedAwgSlot = false, format = null,
   }) {
     let startedAtMs = null;
+    const waitTrace = new InferenceWaitTrace(purpose);
+    let waitReported = false;
     const awgInReservedIdle = admittedAwgSlot && purpose === 'ambient_world_generation';
     const coordinatorBackground = background || awgInReservedIdle;
     const cancellationScope = awgInReservedIdle ? 'awg' : (background ? null : 'visible');
@@ -2758,26 +2781,40 @@ async function main() {
     let requestResult = 'error';
     let requestStats = null;
     let outputChars = 0;
+    const reportWait = (status) => {
+      if (waitReported) return;
+      waitReported = true;
+      recordInferenceDiagnostic({
+        event: 'wait', id: lease && lease.id, at: new Date().toISOString(),
+        ...waitTrace.snapshot({ modelStartedAtMs: startedAtMs, arbiterGrant: hostLease, status }),
+        ...(ac.signal.aborted ? { abort_reason: cancellationReason(ac.signal) } : {}),
+      });
+    };
     try {
-      if (!background && !awgInReservedIdle) await waitForInferenceTempo(ac.signal, purpose);
-      lease = await inferenceCoordinator.acquire({ ...inferenceMeta({
+      if (!background && !awgInReservedIdle) {
+        await waitTrace.measure('tempoIdleMs', () => waitForInferenceTempo(ac.signal, purpose));
+      }
+      lease = await waitTrace.measure('coordinatorWaitMs', () => inferenceCoordinator.acquire({ ...inferenceMeta({
         provider, system, prompt, opts, purpose, attempt,
         background: coordinatorBackground, transport: 'raw',
-      }), deferStart: true }, ac.signal);
-      if (!background && !awgInReservedIdle) await waitForInferenceTempo(ac.signal, purpose);
+      }), deferStart: true }, ac.signal));
+      if (!background && !awgInReservedIdle) {
+        await waitTrace.measure('tempoIdleMs', () => waitForInferenceTempo(ac.signal, purpose));
+      }
       if (typeof provider.acquireSharedLease === 'function') {
-        hostLease = await provider.acquireSharedLease({
+        hostLease = await waitTrace.measure('arbiterWaitMs', () => provider.acquireSharedLease({
           purpose,
           signal: ac.signal,
           onLost: (reason) => abortWithReason(ac, reason || 'LEASE_LOSS'),
           // Only AWG's reserved-idle slot yields to interactive Feddit traffic
           // mid-request. CY's own foreground/background work is unaffected.
           preemptible: awgInReservedIdle,
-        });
+        }));
       }
       const requestOpts = typeof provider.applySharedProfile === 'function'
         ? provider.applySharedProfile(opts, hostLease) : opts;
       startedAtMs = lease.begin();
+      reportWait('started');
       return await withAbortTimeout(ac, timeoutMs, async () => {
         const out = await provider.rawGenerate({
           system, prompt, opts: requestOpts, signal: ac.signal, purpose, format,
@@ -2801,6 +2838,7 @@ async function main() {
       });
     } catch (error) {
       requestResult = ac.signal.aborted ? 'aborted' : 'error';
+      reportWait(ac.signal.aborted ? 'cancelled_before_start' : 'failed_before_start');
       if (awgInReservedIdle && ac.signal.aborted) throw cancellationError(ac.signal);
       if (background) throw error;
       return returnMeta
@@ -5149,7 +5187,7 @@ async function main() {
       // Include the action-selection call in the visible cycle's measured work.
       // It uses the same provider as prose, so omitting it made a nominal 30%
       // tempo substantially busier than its displayed target.
-      const expressiveChoice = await chooseExpressiveAction(choiceRequest, {
+      const expressiveChoice = await selectAvailableExpressiveAction(choiceRequest, {
         generate: (call) => rawGenerate({
           system: call.system,
           prompt: call.prompt,
@@ -5160,6 +5198,11 @@ async function main() {
           timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
         }),
       });
+      if (!expressiveChoice) {
+        // No available form is a quiet no-op, not an invented journal choice.
+        await sleep(700);
+        continue;
+      }
       soma.recordExpressiveChoice(expressiveChoice, { now: nowMs });
       emit({
         kind: 'expressive_choice',
@@ -5277,6 +5320,7 @@ async function main() {
           allowRepeat,
           attempt: discards ? `near-repeat-retry-${discards}` : 'journal-initial',
           timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
+          pairedWithChoice: expressiveChoice.selectionMechanism === EXPRESSIVE_CHOICE_MECHANISM,
         });
         if (r.error) { errored = true; break; } // provider already backed off; move on
         if (r.refused) { refusedGen = true; break; } // DeepSeek refusal: discard, no retry

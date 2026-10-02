@@ -99,10 +99,10 @@ assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeout
 ok('every known foreground call site is wired to FOREGROUND_INFERENCE_TIMEOUT_MS');
 
 assert.match(source,
-  /hostLease = await provider\.acquireSharedLease\([\s\S]{0,500}?cancelTimeout = startAbortTimeout\(ac, timeoutMs\)[\s\S]{0,300}?provider\.openStream/,
+  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\([\s\S]{0,550}?cancelTimeout = startAbortTimeout\(ac, timeoutMs\)[\s\S]{0,350}?provider\.openStream/,
   'stream timeout starts only after shared-host ownership is granted');
 assert.match(source,
-  /hostLease = await provider\.acquireSharedLease\([\s\S]{0,500}?startedAtMs = lease\.begin\(\)[\s\S]{0,200}?withAbortTimeout\(ac, timeoutMs/,
+  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\([\s\S]{0,550}?startedAtMs = lease\.begin\(\)[\s\S]{0,300}?withAbortTimeout\(ac, timeoutMs/,
   'raw timeout starts only after shared-host ownership is granted');
 ok('shared-host queueing is excluded from provider timeout accounting');
 
@@ -130,10 +130,10 @@ assert.match(source,
   /onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\)/,
   'shared lease loss cancels the owning request with a reason');
 assert.match(source,
-  /hostLease = await provider\.acquireSharedLease\(\{\s*\n\s*purpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(reason\) => abortWithReason\(ac, reason \|\| 'LEASE_LOSS'\),[\s\S]{0,200}?preemptible: awgInReservedIdle,/,
+  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(reason\) => abortWithReason\(ac, reason \|\| 'LEASE_LOSS'\),[\s\S]{0,200}?preemptible: awgInReservedIdle,/,
   'the raw generate call site (the only one AWG uses) is preemptible only for its own reserved-idle AWG slot');
 assert.match(source,
-  /hostLease = await provider\.acquireSharedLease\(\{\s*\n\s*purpose: purpose \|\| mode,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\),\s*\n\s*\}\);/,
+  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose: requestPurpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\),\s*\n\s*\}\)\);/,
   'the foreground streaming call site is unchanged: never preemptible, no LEASE_PREEMPTED reason threading');
 assert.match(source,
   /const cancellationScope = awgInReservedIdle \? 'awg'[\s\S]{0,1000}?generationCancellation\.register\(cancellationScope, ac, \{ purpose \}\)/,

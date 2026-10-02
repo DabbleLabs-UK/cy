@@ -331,7 +331,8 @@ function makeOllama(config) {
       return true;
     },
     async acquireSharedLease({ purpose, signal, onLost, preemptible }) {
-      return sharedClient ? sharedClient.acquire({ purpose, signal, onLost, preemptible }) : null;
+      return sharedClient ? sharedClient.acquire({ purpose, signal, onLost, preemptible,
+        observeOwner: true }) : null;
     },
     applySharedProfile(opts, lease) {
       return applySharedOllamaProfile(opts, lease);

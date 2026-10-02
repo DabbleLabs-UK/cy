@@ -147,7 +147,7 @@ assert.match(runSource, /canRunBackground: \(kind\) => inferPhase === 'idle'[\s\
   'memory background work respects per-request pacing and the tempo reservation');
 assert.match(runSource, /backgroundTempoGate\.claimAwgReservation\(awgReservation, nowMs\)/,
   'only an explicitly offered one-shot reservation admits AWG into visible tempo quiet');
-assert.match(runSource, /if \(!background && !awgInReservedIdle\) await waitForInferenceTempo/,
+assert.match(runSource, /if \(!background && !awgInReservedIdle\) \{\s*await waitTrace\.measure\('tempoIdleMs', \(\) => waitForInferenceTempo/,
   'an admitted AWG slot does not wait out the same tempo reservation a second time');
 assert.match(runSource, /background: coordinatorBackground, transport: 'raw'/,
   'admitted AWG work remains lower priority in the serialized inference coordinator');
@@ -155,17 +155,19 @@ assert.match(runSource, /activeInferencePurpose !== 'ambient_world_generation'/,
   'the foreground no-token watchdog cannot silently shorten the finite AWG provider budget');
 assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, endedAtMs, client\.tempo\.speed\)/,
   'each background model call earns its own tempo quiet');
-assert.match(runSource, /const cycleInferenceStart = Date\.now\(\);[\s\S]*?chooseExpressiveAction\(/,
+assert.match(runSource, /const cycleInferenceStart = Date\.now\(\);[\s\S]*?selectAvailableExpressiveAction\(/,
   'the visible burst timer starts before model-mediated action selection');
 assert.match(runSource, /const burstStart = cycleInferenceStart;/,
   'action-selection inference is included in the measured visible burst');
-assert.match(runSource, /waitForInferenceTempo\(ac\.signal, purpose \|\| mode\)[\s\S]*?inferenceCoordinator\.acquire/,
+assert.match(runSource, /waitForInferenceTempo\(ac\.signal, requestPurpose,[\s\S]*?\{ pairedWithChoice \}\)\)[\s\S]*?inferenceCoordinator\.acquire/,
   'streaming requests pay inter-request tempo before taking the provider slot');
-assert.match(runSource, /purpose === 'journal' && inferenceTempoPacer\.followingSuccessfulChoice\(\)/,
+assert.match(runSource, /purpose === 'journal' && pairedWithChoice\s*&& inferenceTempoPacer\.followingSuccessfulChoice\(\)/,
   'only the journal following a successful chooser skips the duplicate within-cycle rest');
+assert.match(runSource, /pairedWithChoice: expressiveChoice\.selectionMechanism === EXPRESSIVE_CHOICE_MECHANISM/,
+  'single-option selection cannot inherit a previous chooser tempo exemption');
 assert.match(runSource, /inferenceTempoPacer\.record\(startedAtMs, Date\.now\(\), \{ purpose, result: requestResult \}\)/,
   'the raw chooser records its purpose and outcome for the pairing rule');
-assert.match(runSource, /if \(!background && !awgInReservedIdle\) await waitForInferenceTempo\(ac\.signal, purpose\)[\s\S]*?inferenceCoordinator\.acquire/,
+assert.match(runSource, /if \(!background && !awgInReservedIdle\) \{\s*await waitTrace\.measure\('tempoIdleMs', \(\) => waitForInferenceTempo\(ac\.signal, purpose\)\);\s*\}[\s\S]*?inferenceCoordinator\.acquire/,
   'foreground non-streaming requests pay inter-request tempo before taking the provider slot');
 assert.match(runSource, /const tempoIdle = completedAttempt\s*\? inferenceTempoPacer\.remaining/,
   'the cycle tail charges only the final request remainder, not the whole multi-call wall time');

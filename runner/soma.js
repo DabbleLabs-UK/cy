@@ -907,7 +907,9 @@ export function recordExpressiveChoice(state, inspection, { now = Date.now() } =
   const previousSilence = finite(state.action && state.action.lastSilenceAtMs, 0);
   state.action = {
     name: inspection.selectedAction,
-    reason: 'subjective character choice; not psychological evidence',
+    reason: inspection.reasonType === 'engineering_single_option'
+      ? 'only one available outward form; engineering selection, not a subjective choice'
+      : 'subjective character choice; not psychological evidence',
     score: null,
     chosenAtMs: now,
     lastSilenceAtMs: inspection.selectedAction === 'silence' ? now : previousSilence,
