@@ -106,9 +106,10 @@ for (const prose of [
 }
 ok('the real 12:28/12:48 control-label leaks and structural variants fail while ordinary punctuation survives');
 
-const postRestart = JSON.parse(readFileSync(
+const journalArtifacts = JSON.parse(readFileSync(
   new URL('./fixtures/waking-journal-artifacts-2026-10-02.json', import.meta.url), 'utf8',
-)).postRestart;
+));
+const postRestart = journalArtifacts.postRestart;
 assert.equal(postRestart.length, 4);
 assert.equal(normalizeWakingProse(postRestart[0]).endsWith('|'), false);
 assert.equal(normalizeWakingProse(postRestart[1]).includes('&amp;'), false);
@@ -120,6 +121,29 @@ for (const burst of postRestart) {
 }
 ok('all four natural post-restart bursts exercise entity, orphan-bar and angle-frame boundaries');
 
+{
+  const observed = journalArtifacts.postTuningTerminalControl;
+  assert.match(observed, /numbers\? \|\.\.\.$/);
+  assert.equal(validateCharacterCandidate(observed).ok, false);
+  assert.equal(sanitizeCharacterContext(observed).endsWith('|...'), false);
+  const attempts = [];
+  const repaired = await generateWithCharacterRepair({
+    prompt: 'current cell and recent world context',
+    generate: async (_prompt, attempt) => {
+      attempts.push(attempt.repair);
+      return { candidate: attempt.repair ? 'Bill said the numbers on the floor looked wrong. he checked again.' : observed };
+    },
+  });
+  assert.deepEqual(attempts, [false, true]);
+  assert.equal(repaired.candidate, 'Bill said the numbers on the floor looked wrong. he checked again.');
+  const discarded = await generateWithCharacterRepair({
+    prompt: 'current cell and recent world context',
+    generate: async () => ({ candidate: observed }),
+  });
+  assert.equal(discarded.characterValidation.finalAction, 'discarded-to-silence');
+}
+ok('actual post-tuning terminal pseudo-control gets one repair then silence');
+
 assert.equal(decodeProseEntities('a &amp; b &#38; c &#x26; d'), 'a & b & c & d');
 assert.equal(decodeProseEntities('&lt;... &gt; &#x3c;...'), '<... > <...');
 for (const fragment of ['went <...', 'went < . . .>', 'went &lt;...']) {
@@ -130,6 +154,9 @@ for (const ordinary of [
   'i put [door] in the margin | then counted > three scratches...',
   "i marked '|' on the page",
   'the pipe | stayed on the canteen sheet',
+  'Bill marked | on the paper, then left it by the door.',
+  'Bill marked `|...` on the canteen sheet and Cy copied it.',
+  'Bill came to the cell. he left the cup there.',
 ]) {
   assert.equal(validateCharacterCandidate(ordinary).ok, true, ordinary);
   assert.equal(normalizeWakingProse(ordinary), ordinary);
@@ -172,6 +199,9 @@ ok('safe entities and terminal delimiters are normalised; angle leakage gets one
   assert.match(cue, /do not omit words needed to tell who or what you mean/);
   assert.doesNotMatch(cue, /shorthand, fragments and unfinished grammar/);
   assert.match(ZONE_A, /Rough lower-case prison shorthand is the default/);
+  assert.match(ZONE_A, /Fragments, slang and shorthand \([^)]*\)\s+are fine, but name a person, object, place or number clearly before later using\s+a pronoun, abbreviation or bare number/);
+  assert.match(ZONE_A, /never drop words needed to tell who or\s+what you mean/);
+  assert.doesNotMatch(ZONE_A, /Use fragments, abbreviations and numerals/);
   assert.match(ZONE_A, /rough grammar and unfinished edges/);
   assert.doesNotMatch(ZONE_A, /47 tiles|counted em twice/);
   assert.match(ZONE_A, /thought i had it straight, but i dont/);

@@ -331,6 +331,9 @@ export function stripAssistantContaminatedTail(s) {
 // extra pipe or angle close (for example |...|| >). A plain ellipsis, >, or
 // single pipe-enclosed mark is not enough to identify a control fragment.
 const MALFORMED_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}\|(?:\|+[ \t]*>?|[ \t]*>)/g;
+// A trailing pipe-plus-ellipsis is the same unfinished control-shaped suffix
+// without its closing pipe. Ordinary internal bars and ellipses stay valid.
+const TERMINAL_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}[ \t]*$/g;
 
 // These are prompt/citation wrappers, not prison punctuation. The model has
 // echoed them with different bracket and pipe closers, including after a
@@ -353,6 +356,7 @@ export function malformedProseControlHits(s) {
   return [
     ...text.matchAll(/\|\}[|{}]*/g),
     ...text.matchAll(MALFORMED_PROSE_CONTROL),
+    ...text.matchAll(TERMINAL_PROSE_CONTROL),
     ...PROMPT_CONTROL_LEAKS.flatMap((pattern) => [...text.matchAll(pattern)]),
   ].sort((a, b) => a.index - b.index).map((match) => match[0]);
 }
@@ -361,6 +365,7 @@ export function stripMalformedProseControls(s) {
   let text = normalizeWakingProse(s)
     .replace(/\|\}[|{}]*/g, '')
     .replace(MALFORMED_PROSE_CONTROL, '');
+  text = text.replace(TERMINAL_PROSE_CONTROL, '');
   for (const pattern of PROMPT_CONTROL_LEAKS) text = text.replace(pattern, '');
   return normalizeWakingProse(text.replace(/[ \t]{2,}/g, ' '));
 }
