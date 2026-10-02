@@ -119,6 +119,26 @@ export function sanitize(s) {
     .replace(/[ \t]{2,}/g, ' ');
 }
 
+// Model prose sometimes contains HTML character references even though neither
+// the event API nor the pen renderer HTML-encodes it. Decode only the ordinary
+// punctuation references we can safely represent as text. A decoded control
+// fragment still has to pass the character validator below.
+const PROSE_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+export function decodeProseEntities(s) {
+  return String(s || '').replace(/&(?:amp|lt|gt|quot|apos|#(?:x[0-9a-f]{1,6}|[0-9]{1,7}));/gi, (entity) => {
+    const name = entity.slice(1, -1).toLowerCase();
+    if (Object.hasOwn(PROSE_ENTITIES, name)) return PROSE_ENTITIES[name];
+    const code = name.startsWith('#x') ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
+    return [34, 38, 39, 60, 62].includes(code) ? String.fromCodePoint(code) : entity;
+  });
+}
+
+// A lone unquoted bar at the end of a model response is an orphaned delimiter,
+// not part of a sentence. Bars inside prose and balanced/quoted marks remain.
+export function normalizeWakingProse(s) {
+  return decodeProseEntities(s).replace(/[ \t]+\|[ \t]*$/g, '');
+}
+
 // Instruction / interactive-fiction scaffolding that an Instruct model
 // hallucinates around a raw-continuation prompt: a "You continue writing:"
 // narrator frame, a "7734:" speaker label, a stray opening quote, or a
@@ -324,23 +344,25 @@ const PROMPT_CONTROL_LEAKS = [
   /\bSECTION[ \t]+(?:mandatory_current_state|grounded_soma|recent_events|recent_expression)\b/gi,
   /\[[ \t]*(?:OBSERVED BY CY|WORLD FACT|MODEL ESTIMATE|SCHEDULE ESTIMATE|OBSERVED FACT|SUBJECTIVE MEMORY|NOT MODELLED|C\d+)[ \t]*\]/gi,
   /\[[ \t]*(?:write only|return only)\b[^\]\n]*\]/gi,
+  /<[ \t]*(?:\.[ \t]*){2,}(?:[|>\]]+)?/g,
   /\|[()\[\]<>|]+|[()\[\]<>]\|[()\[\]<>|]*/g,
 ];
 
 export function malformedProseControlHits(s) {
+  const text = normalizeWakingProse(s);
   return [
-    ...String(s || '').matchAll(/\|\}[|{}]*/g),
-    ...String(s || '').matchAll(MALFORMED_PROSE_CONTROL),
-    ...PROMPT_CONTROL_LEAKS.flatMap((pattern) => [...String(s || '').matchAll(pattern)]),
+    ...text.matchAll(/\|\}[|{}]*/g),
+    ...text.matchAll(MALFORMED_PROSE_CONTROL),
+    ...PROMPT_CONTROL_LEAKS.flatMap((pattern) => [...text.matchAll(pattern)]),
   ].sort((a, b) => a.index - b.index).map((match) => match[0]);
 }
 
 export function stripMalformedProseControls(s) {
-  let text = String(s || '')
+  let text = normalizeWakingProse(s)
     .replace(/\|\}[|{}]*/g, '')
     .replace(MALFORMED_PROSE_CONTROL, '');
   for (const pattern of PROMPT_CONTROL_LEAKS) text = text.replace(pattern, '');
-  return text.replace(/[ \t]{2,}/g, ' ');
+  return normalizeWakingProse(text.replace(/[ \t]{2,}/g, ' '));
 }
 
 // Apply the character boundary whenever recent prose is read for a new prompt,
@@ -348,8 +370,8 @@ export function stripMalformedProseControls(s) {
 // untouched while preventing any missed meta tail from becoming self-reinforcing
 // Zone B / recent_expression context.
 export function sanitizeCharacterContext(s) {
-  const safePrefix = stripAssistantContaminatedTail(sanitize(String(s || '')));
-  return stripMalformedProseControls(stripScaffold(safePrefix)).trimEnd();
+  const safePrefix = stripAssistantContaminatedTail(sanitize(normalizeWakingProse(s)));
+  return normalizeWakingProse(stripMalformedProseControls(stripScaffold(safePrefix)).trimEnd()).trimEnd();
 }
 
 // STATE-NOTATION LEAK. The compressed vitals notation from the volatile prompt

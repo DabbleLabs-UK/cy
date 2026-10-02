@@ -83,7 +83,7 @@ const directives = buildDirectives(v, 'journal', { bans: 'BANS. x', form: 'FORM:
 assert.ok(!directives.includes(note), 'legacy notation is excluded from the live volatile block');
 const ctx = 'same ceiling again. tray came cold, bill on the twos kicking off';
 const prompt = buildPrompt(ctx, 'journal', null, directives);
-const cue = '[write only the next private thought as Cy. keep his rough lower-case prison slang, shorthand, fragments and unfinished grammar even if the recent prose became formal. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
+const cue = '[write only the next private thought as Cy. keep his rough lower-case prison voice, but make each thought understandable on a first or second read; do not omit words needed to tell who or what you mean. no polished standard English, semicolons, analysis, explanation, or commentary about the material. begin immediately:]';
 assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
 const iCue = prompt.lastIndexOf(cue);
 assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');
@@ -104,10 +104,10 @@ assert.match(ZONE_A, /Do not use semicolons or/);
 const polishedTail = 'I have to be ready for anything; prepared for a fight. Whatever it is must be moving closer.';
 const driftPrompt = buildPrompt(polishedTail, 'journal', null, directives);
 assert.ok(driftPrompt.endsWith(cue), 'the journal voice lock follows a polished fed-back tail');
-assert.ok(driftPrompt.lastIndexOf('rough lower-case prison slang') > driftPrompt.lastIndexOf(polishedTail),
+assert.ok(driftPrompt.lastIndexOf('rough lower-case prison voice') > driftPrompt.lastIndexOf(polishedTail),
   'the rough-register instruction is later than the formal context it must override');
 const postcardPrompt = buildPrompt(polishedTail, 'postcard', { from_name: 'j', body: 'you alright?' }, directives);
-assert.ok(!postcardPrompt.includes('even if the recent prose became formal'),
+assert.ok(!postcardPrompt.includes('understandable on a first or second read'),
   'the journal-only voice lock does not replace the postcard reply contract');
 ok('journal prompts re-anchor the rough slang register after formal context without changing postcard instructions');
 
