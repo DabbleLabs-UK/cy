@@ -334,6 +334,17 @@ const MALFORMED_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}\|(?:\|+[ \t]*>?|[ \t]*
 // A trailing pipe-plus-ellipsis is the same unfinished control-shaped suffix
 // without its closing pipe. Ordinary internal bars and ellipses stay valid.
 const TERMINAL_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}[ \t]*$/g;
+// An unfinished pipe-ellipsis separator may also occur inside a sentence.
+// A closing pipe or immediate quote makes the mark complete/literal instead.
+const PIPE_ELLIPSIS_MARK = /\|[ \t]*(?:\.[ \t]*){2,}/g;
+function isUnfinishedPipeEllipsis(source, offset, length) {
+  const after = source.slice(offset + length);
+  return !/^[ \t]*\|/.test(after) && !/^[`'"]/.test(after);
+}
+function unfinishedPipeEllipsisHits(text) {
+  return [...text.matchAll(PIPE_ELLIPSIS_MARK)]
+    .filter((match) => isUnfinishedPipeEllipsis(text, match.index, match[0].length));
+}
 
 // These are prompt/citation wrappers, not prison punctuation. The model has
 // echoed them with different bracket and pipe closers, including after a
@@ -357,6 +368,7 @@ export function malformedProseControlHits(s) {
     ...text.matchAll(/\|\}[|{}]*/g),
     ...text.matchAll(MALFORMED_PROSE_CONTROL),
     ...text.matchAll(TERMINAL_PROSE_CONTROL),
+    ...unfinishedPipeEllipsisHits(text),
     ...PROMPT_CONTROL_LEAKS.flatMap((pattern) => [...text.matchAll(pattern)]),
   ].sort((a, b) => a.index - b.index).map((match) => match[0]);
 }
@@ -366,6 +378,8 @@ export function stripMalformedProseControls(s) {
     .replace(/\|\}[|{}]*/g, '')
     .replace(MALFORMED_PROSE_CONTROL, '');
   text = text.replace(TERMINAL_PROSE_CONTROL, '');
+  text = text.replace(PIPE_ELLIPSIS_MARK, (match, offset, source) =>
+    isUnfinishedPipeEllipsis(source, offset, match.length) ? '' : match);
   for (const pattern of PROMPT_CONTROL_LEAKS) text = text.replace(pattern, '');
   return normalizeWakingProse(text.replace(/[ \t]{2,}/g, ' '));
 }

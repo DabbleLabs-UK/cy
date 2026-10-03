@@ -196,6 +196,21 @@ test('N5 post-restart entity, angle fragment and terminal bars cannot enter memo
   assert.doesNotMatch(formatAutobiographicalMemory([stored]), /<\.\.\.|&amp;|\|$/);
 });
 
+test('N6 real 16:58 unfinished separators cannot enter memory formation or surfacing', async () => {
+  const fixture = JSON.parse(await readFile(
+    new URL('./fixtures/waking-journal-2026-10-03-1658.json', import.meta.url), 'utf8',
+  )).published;
+  const formed = sourceFromExpression(fixture, 'expression-batch:october-3-1658');
+  assert.doesNotMatch(formed.text, /\|[ \t]*(?:\.[ \t]*){2,}/);
+  assert.match(formed.text, /watchn me too close/);
+  const stored = memory({ content: fixture, publicSummary: fixture });
+  const visible = filterMemoriesBeforePrompt([stored]);
+  const surfaced = buildSurfacingRequest([stored], { groundedContext: 'the cell is quiet' });
+  assert.doesNotMatch(visible[0].content, /\|[ \t]*(?:\.[ \t]*){2,}/);
+  assert.doesNotMatch(visible[0].publicSummary, /\|[ \t]*(?:\.[ \t]*){2,}/);
+  assert.doesNotMatch(surfaced.call.prompt, /\|[ \t]*(?:\.[ \t]*){2,}/);
+});
+
 test('O working context is bounded to surfaced memories', () => {
   const candidates = Array.from({ length: MEMORY_CANDIDATE_LIMIT + 4 }, (_, index) => memory({ id: `memory-${index}` }));
   const request = buildSurfacingRequest(candidates, {});
