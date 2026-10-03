@@ -97,6 +97,27 @@ export function localModelFor(config, purpose) {
   return routed || journal || config.model;
 }
 
+// This deployed Q5 GGUF has a ChatML-style Ollama template. Its visible prose
+// sometimes emits |im_end|> without the leading <, which the normal full-token
+// stop cannot match. Stop at the provider boundary, while keeping the waking
+// validator as the final safety check. Other models, providers, and non-prose
+// requests retain their original options.
+const MALFORMED_CHATML_MODEL = 'hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M';
+const WAKING_PROSE_PURPOSES = new Set(['journal', 'drawing', 'postcard', 'warden']);
+
+function ollamaWakingProseOptions(model, purpose, opts) {
+  if (model !== MALFORMED_CHATML_MODEL || !WAKING_PROSE_PURPOSES.has(purpose)) return opts;
+  const stops = Array.isArray(opts?.stop) ? opts.stop : [];
+  if (stops.includes('|im_end|>')) return opts;
+  const fullIndex = stops.indexOf('<|im_end|>');
+  const withFull = fullIndex < 0 ? ['<|im_end|>', ...stops] : stops;
+  const insertAfterFull = withFull.indexOf('<|im_end|>') + 1;
+  return {
+    ...(opts || {}),
+    stop: [...withFull.slice(0, insertAfterFull), '|im_end|>', ...withFull.slice(insertAfterFull)],
+  };
+}
+
 // ---- key loading -----------------------------------------------------------
 //
 // The DeepSeek key lives at runner/deepseek.key (gitignored). Missing file means
@@ -342,7 +363,8 @@ function makeOllama(config) {
       const res = await fetch(`${url()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, system, prompt, options: opts, keep_alive: -1, stream: true }),
+        body: JSON.stringify({ model, system, prompt,
+          options: ollamaWakingProseOptions(model, purpose, opts), keep_alive: -1, stream: true }),
         signal,
       });
       if (!res.ok || !res.body) return { ok: false, status: res.status };
