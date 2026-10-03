@@ -185,6 +185,41 @@ ok('all four natural post-restart bursts exercise entity, orphan-bar and angle-f
 }
 ok('actual post-tuning terminal pseudo-control gets one repair then silence');
 
+const unfinishedPipeFixture = JSON.parse(readFileSync(
+  new URL('./fixtures/waking-journal-2026-10-03-1658.json', import.meta.url), 'utf8',
+)).published;
+assert.equal(validateCharacterCandidate(unfinishedPipeFixture).ok, false);
+assert.equal(sanitizeCharacterContext(unfinishedPipeFixture).includes('|...'), false);
+for (const fragment of [
+  'the bolt went |.. and i waited',
+  'the bolt went | . . . and i waited',
+  'the bolt went |.... and i waited',
+]) assert.equal(validateCharacterCandidate(fragment).ok, false, fragment);
+for (const ordinary of [
+  'the bolt went... and i waited',
+  'i marked | and waited',
+  'i copied |...| from the canteen sheet',
+  'i copied `|...` from the canteen sheet',
+]) {
+  assert.equal(validateCharacterCandidate(ordinary).ok, true, ordinary);
+  assert.equal(sanitizeCharacterContext(ordinary), ordinary);
+}
+const repairedPipe = await generateWithCharacterRepair({
+  prompt: 'current cell and recent world context',
+  generate: async (_prompt, attempt) => ({
+    candidate: attempt.repair ? 'the bolt went and i waited for him to leave.' : unfinishedPipeFixture,
+  }),
+});
+assert.equal(repairedPipe.candidate, 'the bolt went and i waited for him to leave.');
+assert.equal(repairedPipe.characterValidation.repairAttempted, true);
+const discardedPipe = await generateWithCharacterRepair({
+  prompt: 'current cell and recent world context',
+  generate: async () => ({ candidate: unfinishedPipeFixture }),
+});
+assert.equal(discardedPipe.candidate, '');
+assert.equal(discardedPipe.characterValidation.finalAction, 'discarded-to-silence');
+ok('real 16:58 unfinished pipe-ellipsis separators fail with one repair then silence');
+
 assert.equal(decodeProseEntities('a &amp; b &#38; c &#x26; d'), 'a & b & c & d');
 assert.equal(decodeProseEntities('&lt;... &gt; &#x3c;...'), '<... > <...');
 for (const fragment of ['went <...', 'went < . . .>', 'went &lt;...']) {
