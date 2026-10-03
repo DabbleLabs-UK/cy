@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { ZONE_A, buildDirectives, buildPrompt, completionBudget, completionDirective } from './prompt.js';
+import { selectProseRecentExpression } from './context-broker.js';
 import { sanitizeCharacterContext, stripMalformedProseControls } from './warden.js';
 
 assert.match(
@@ -65,7 +66,8 @@ assert.match(correspondencePrompt, /i remember the book/);
 assert.match(correspondencePrompt, /GROUNDED SOMA: sleep pressure live/);
 assert.match(correspondencePrompt, /hello again - how is the book\?/);
 const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
-assert.match(runSource, /recentExpression: contextText\(\)\.slice\(-640\)/);
+assert.match(runSource, /brokerOptions\.recentExpression \?\? contextText\(\)\.slice\(-640\)/);
+assert.equal(selectProseRecentExpression('tray cold again.'), 'tray cold again.');
 assert.match(runSource, /content: sanitizeCharacterContext\(memory\.content \|\| memory\.publicSummary\)/);
 assert.match(runSource, /autobiographicalMemory: stripMalformedProseControls\(memory\.directive\)/);
 assert.match(runSource, /emit\(\{ kind: 'postcard_out', payload:/);

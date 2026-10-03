@@ -87,12 +87,13 @@ const cue = 'Continue the next private thought in the same rough lower-case pris
 assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
 const iCue = prompt.lastIndexOf(cue);
 assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');
-// the reprise (his prose) is the last thing before the cue - so what the model
-// continues from is his voice, never the notation or a directive block.
+// The subjective continuation occurs once, before grounded directives. The cue
+// follows those directives without repeating his prose as a second source.
 const beforeCue = prompt.slice(0, iCue).trimEnd();
-assert.ok(/twos kicking off|ceiling/.test(beforeCue.slice(-80)), 'his own prose immediately precedes the cue');
+assert.equal(prompt.split(ctx).length - 1, 1, 'prior journal prose appears once');
+assert.match(prompt, /Earlier private writing by Cy \(subjective/);
 assert.ok(!/agit \.70|STATE:/.test(beforeCue.slice(-60)), 'the notation is NOT adjacent to the cue');
-ok('state notation is absent; his prose + cue are the final thing before generation');
+ok('state notation is absent; subjective prose occurs once before grounded directives and cue');
 
 // ---- 5b. JOURNAL VOICE LOCK: the cached persona restores Cy's rough register,
 // and a final journal-only reminder follows even a polished recent tail. This is

@@ -15,6 +15,12 @@ export const CONTEXT_CONSUMERS = Object.freeze({
   EXPRESSIVE_CHOICE: 'EXPRESSIVE_CHOICE',
 });
 
+// A waking journal already receives this writing as its sole Zone B continuation.
+// Other prose consumers may still need the bounded recent-expression item.
+export function selectProseRecentExpression(recentExpression, { wakingJournalContext = false } = {}) {
+  return wakingJournalContext ? '' : String(recentExpression || '');
+}
+
 export const EPISTEMIC_LABELS = Object.freeze([
   'WORLD FACT',
   'OBSERVED BY CY',
@@ -359,7 +365,7 @@ export function renderWakingJournalContextPacket(packet) {
   if (!packet || packet.schema !== CONTEXT_BROKER_SCHEMA || packet.consumer !== CONTEXT_CONSUMERS.CY_PROSE) {
     throw new Error('invalid waking journal context packet');
   }
-  const lines = ['Background for the next private thought. These are facts and estimates, not words to copy.'];
+  const lines = ['Background for the next private thought. Source labels distinguish observations, memories and estimates; do not treat one as another or copy these notes.'];
   for (const section of packet.sections) {
     if (!section.items.length) continue;
     lines.push('', section.id.replace(/_/g, ' ') + ':');

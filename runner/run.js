@@ -223,6 +223,7 @@ import {
   createContextItem,
   inspectContextPacket,
   renderWakingJournalContextPacket,
+  selectProseRecentExpression,
   safeBuildContext,
 } from './context-broker.js';
 import {
@@ -1480,7 +1481,7 @@ async function main() {
   async function appendContext(chunk) {
     // Re-apply the same boundary at the persistence edge. Full candidates have
     // already passed validation, but this prevents a legacy or future missed
-    // meta tail from being fed back into both Zone B and recent_expression.
+    // meta tail from being fed back into Zone B or another prose consumer.
     contextBuf = sanitizeCharacterContext(contextBuf);
     contextBuf += sanitizeCharacterContext(chunk);
     if (contextBuf.length > CONTEXT_HARD) {
@@ -2977,7 +2978,7 @@ async function main() {
     if (!forAwg && recentExpression) {
       add({
         id: 'recent-expression:tail', sourceId: 'recent-expression:tail', section: 'recent_expression',
-        provenanceClass: 'OBSERVED BY CY', knowledgeScope: 'CY_OBSERVED', privacyScope: 'INTERNAL_ONLY',
+        provenanceClass: 'SUBJECTIVE BELIEF', knowledgeScope: 'CY_BELIEVES', privacyScope: 'INTERNAL_ONLY',
         priority: 50, content: recentExpression,
       });
     }
@@ -3127,8 +3128,11 @@ async function main() {
     };
     const brokered = buildBrokerContext(CONTEXT_CONSUMERS.CY_PROSE, {
       cognition: { groundedDirective: grounded.directive, groundedContext: grounded.context },
-      recentExpression: contextText().slice(-640),
       ...brokerOptions,
+      recentExpression: selectProseRecentExpression(
+        brokerOptions.recentExpression ?? contextText().slice(-640),
+        { wakingJournalContext: brokerOptions.wakingJournalContext },
+      ),
       fallback: '',
     });
     if (brokered.ok) ctx.sharedContext = brokered.rendering;

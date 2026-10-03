@@ -154,7 +154,7 @@ const EXAMPLES = [
 const ROSTER = (() => {
   const line = (c) => `- ${c.name}: ${c.blurb}`;
   return [
-    'THE WING - who is in here with you. Keep them consistent; never invent new traits.',
+    'THE WING - standing descriptions of who is in here, not new events. Keep them consistent; never invent new traits.',
     'Inmates (bare first names):',
     ...CAST.map(line),
     'Officers (surname + title - they run the place):',
@@ -766,8 +766,8 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
     return lines.join('\n');
   }
   // journal / sleep: prose (Zone B), then the volatile directives (Zone C), then
-  // a short cue to pick the stream back up in voice - the cue is what the model
-  // continues from, so the directives can sit last without being echoed.
+  // a short cue. Journal prose is a single subjective source, not event evidence;
+  // do not reprise it after Zone C or it appears twice in the same prompt.
   const cue = mode === 'sleep'
     ? '[half under. a fragment surfaces:]'
     : 'Continue the next private thought in the same rough lower-case prison voice. Make it understandable on a first or second read; do not omit words needed to tell who or what you mean. No polished standard English, semicolons, analysis, explanation, or commentary about the material. Begin with the thought itself.';
@@ -775,12 +775,16 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
     // nothing written yet: directives, then the opening seed continues the stream.
     return (zoneC ? zoneC + '\n\n' : '') + 'day begins. the ceiling. same ceiling. ';
   }
-  const parts = [ctxBlock];
+  const parts = mode === 'journal'
+    ? ['Earlier private writing by Cy (subjective, may be mistaken or outdated; not evidence that its claims are true):', ctxBlock]
+    : [ctxBlock];
   if (zoneC) parts.push('', zoneC);
-  // hand him back his own voice as the last thing before the cue, so the model
-  // continues his stream rather than starting a fresh (letter-shaped) document.
-  const reprise = tailReprise(ctxBlock);
-  if (reprise) parts.push('', reprise);
+  // Sleep keeps its short reprise. Repeating journal prose here would turn one
+  // subjective continuation source into two apparently separate prompt cues.
+  if (mode !== 'journal') {
+    const reprise = tailReprise(ctxBlock);
+    if (reprise) parts.push('', reprise);
+  }
   parts.push(cue);
   return parts.join('\n');
 }
