@@ -211,6 +211,27 @@ test('N6 real 16:58 unfinished separators cannot enter memory formation or surfa
   assert.doesNotMatch(surfaced.call.prompt, /\|[ \t]*(?:\.[ \t]*){2,}/);
 });
 
+test('N7 real spaced im_end publications are removed at memory formation and read-time surfacing', async () => {
+  const fixtures = JSON.parse(await readFile(
+    new URL('./fixtures/waking-im-end-2026-10-04.json', import.meta.url), 'utf8',
+  ));
+  const historical = fixtures.map((fixture) => fixture.published).join('\n\n');
+  const formed = sourceFromExpression(historical, 'expression-batch:october-4');
+  assert.equal(formed.sourceType, 'CY_EXPRESSION');
+  assert.equal(formed.sourceId, 'expression-batch:october-4');
+  assert.doesNotMatch(formed.text, /\|[ \t]*im[ \t_]+end/i);
+  assert.match(formed.text, /keys close by jangling then gone/);
+  const stored = memory({ content: historical, publicSummary: historical });
+  const before = structuredClone(stored);
+  const visible = filterMemoriesBeforePrompt([stored]);
+  const surfaced = buildSurfacingRequest([stored], { groundedContext: 'the cell is quiet' });
+  assert.doesNotMatch(visible[0].content, /\|[ \t]*im[ \t_]+end/i);
+  assert.doesNotMatch(visible[0].publicSummary, /\|[ \t]*im[ \t_]+end/i);
+  assert.doesNotMatch(surfaced.call.prompt, /\|[ \t]*im[ \t_]+end/i);
+  assert.doesNotMatch(formatAutobiographicalMemory([stored]), /\|[ \t]*im[ \t_]+end/i);
+  assert.deepEqual(stored, before);
+});
+
 test('O working context is bounded to surfaced memories', () => {
   const candidates = Array.from({ length: MEMORY_CANDIDATE_LIMIT + 4 }, (_, index) => memory({ id: `memory-${index}` }));
   const request = buildSurfacingRequest(candidates, {});
