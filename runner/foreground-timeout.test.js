@@ -101,8 +101,11 @@ ok('every known foreground call site is wired to FOREGROUND_INFERENCE_TIMEOUT_MS
 assert.match(source,
   /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\([\s\S]{0,550}?cancelTimeout = startAbortTimeout\(ac, timeoutMs\)[\s\S]{0,350}?provider\.openStream/,
   'stream timeout starts only after shared-host ownership is granted');
-assert.match(source,
-  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\([\s\S]{0,550}?startedAtMs = lease\.begin\(\)[\s\S]{0,300}?withAbortTimeout\(ac, timeoutMs/,
+const rawGenerateSource = source.slice(source.indexOf('async function rawGenerate('), source.indexOf('function brokerItems('));
+const rawGrantAt = rawGenerateSource.indexOf("hostLease = await waitTrace.measure('arbiterWaitMs'");
+const rawStartAt = rawGenerateSource.indexOf('startedAtMs = lease.begin()');
+const rawTimeoutAt = rawGenerateSource.indexOf('withAbortTimeout(ac, timeoutMs');
+assert.ok(rawGrantAt >= 0 && rawGrantAt < rawStartAt && rawStartAt < rawTimeoutAt,
   'raw timeout starts only after shared-host ownership is granted');
 ok('shared-host queueing is excluded from provider timeout accounting');
 

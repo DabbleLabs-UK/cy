@@ -80,6 +80,7 @@ export class Client {
     // blindly. onRegimeChange fires the moment it transitions so the runner can cut
     // the in-flight burst and re-evaluate the sleep state at once, no restart.
     this.regime = 'auto';
+    this.regimeLoaded = false;
     this.onRegimeChange = null;
     // last known tempo. Defaults to 100 (continuous, the old behaviour) so an
     // endpoint that is unreachable at startup never stalls or throttles blindly;
@@ -700,7 +701,7 @@ export class Client {
   // non-200, bad body) it returns without touching this.tempo, so the last known
   // value keeps driving the duty cycle rather than stalling or running flat out.
   // dryRun reads an optional state/tempo.json (NOT consumed - it is live state).
-  async pollTempo() {
+  async pollTempo({ regimeOnly = false } = {}) {
     let data;
     if (this.config.dryRun) {
       try {
@@ -728,6 +729,15 @@ export class Client {
         this.lastError = String(err && err.message ? err.message : err);
         return; // transient; keep last known
       }
+    }
+    // Startup reads only this field before any sleep/location decision. The
+    // provider and pause handlers are not yet installed at that point.
+    if (regimeOnly) {
+      if (data && ['auto', 'day', 'night'].includes(data.regime)) {
+        this.regime = data.regime;
+        this.regimeLoaded = true;
+      }
+      return;
     }
     // Pause rides on the same poll (it lives on the tempo row). Detect the
     // TRANSITION here and fire onPause/onResume at once, so the runner can cut the
@@ -763,7 +773,8 @@ export class Client {
     // sleep state immediately - forcing 'day' wakes him, 'night' puts him under.
     // Handled before the speed early-return so it is honoured even if speed is
     // somehow absent from a malformed tempo body.
-    if (data && typeof data.regime === 'string' && data.regime) {
+    if (data && ['auto', 'day', 'night'].includes(data.regime)) {
+      this.regimeLoaded = true;
       if (data.regime !== this.regime) {
         this.regime = data.regime;
         if (this.onRegimeChange) this.onRegimeChange(data.regime);
