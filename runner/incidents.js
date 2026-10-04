@@ -8,15 +8,15 @@
 // SUBSTANCE - nothing concrete to write about. This turns every ambient / social
 // / officer happening into a specific, mundane INCIDENT: a time, a person, a
 // thing. A rolling ledger of the last ~12 rides on the vitals object (so it
-// persists with state), and the 3-5 most recent - plus any still-open threads -
-// are injected verbatim into every waking prompt as raw material to write FROM.
+// persists with state). Its notes are labelled by evidence class in prompts;
+// ambient texture is never an authoritative object-state transition.
 //
-// An incident record is { ts, actor, verb, object, detail, resolved:false } as
-// specified; some also carry { open, threadKind, subject } so a dangling thing
-// (an undelivered message, something taken, something promised, a wait for a
-// reply or a transfer) can be surfaced as an unresolved thread until it clears.
+// An incident record is { ts, actor, verb, object, detail, resolved:false };
+// some carry { open, threadKind, subject }. Factual object custody also carries
+// sourceEventId and revisioned objectEvidence.
 
 import { BY_KEY, CAST, OFFICERS, topGrudge } from './cast.js';
+import { worldEntityRevision } from './world-mirror.js';
 
 const LEDGER_MAX = 12;
 
@@ -75,7 +75,6 @@ const BUILDERS = {
     const detail = pick(['no reason given', 'clipboard out', 'did not look at you', 'dead on time', 'and logged it'], ctx.rnd);
     const inc = { actor: name, verb: ctx.slight || 'had a word', object: '', detail };
     if (ctx.evType === 'refusal') Object.assign(inc, { open: true, threadKind: 'owed', subject: name });
-    if (ctx.evType === 'search') Object.assign(inc, { open: true, threadKind: 'taken', subject: name });
     return inc;
   },
 
@@ -140,7 +139,7 @@ const TEXTURE_ANY = [
     return { actor: '', verb: '', object: '', detail: `still nothing back from ${n}`, open: true, threadKind: 'reply', subject: n };
   },
   (c) => ({ actor: officerName('bailey', c.rnd), verb: 'said your name properly', object: '', detail: 'for once' }),
-  (c) => ({ actor: officerName('sweep', c.rnd), verb: 'been through the cell', object: '', detail: 'the photo is not where you left it', open: true, threadKind: 'taken', subject: 'Sweep' }),
+  () => ({ actor: '', verb: '', object: '', detail: 'you wonder whether your things are where you left them' }),
   (c) => {
     const n = fullName(pick(INMATE_KEYS, c.rnd));
     return { actor: n, verb: 'promised to pass it on', object: '', detail: 'that was two days ago', open: true, threadKind: 'promise', subject: n };
@@ -176,7 +175,7 @@ export function reconcileLedger(saved) {
   return saved
     .filter((x) => x && typeof x === 'object')
     .slice(-LEDGER_MAX)
-    .map((x) => ({ resolved: false, ...x }));
+    .map((x) => ({ resolved: false, evidenceClass: 'LEGACY_UNVERIFIED', ...x }));
 }
 
 // Build an incident of `kind` from templates. Returns the record WITHOUT a ts
@@ -191,8 +190,69 @@ export function makeIncident(kind, ctx = {}) {
     object: rec.object || '',
     detail: rec.detail || '',
     resolved: false,
-    ...(rec.open ? { open: true, threadKind: rec.threadKind || 'thread', subject: rec.subject || '' } : {}),
+    evidenceClass: ctx.environmentEventId ? 'OBSERVED_EVENT'
+      : kind === 'texture' ? 'AMBIENT_TEXTURE' : 'OBSERVED_AMBIGUOUS',
+    ...(ctx.environmentEventId ? { sourceEventId: ctx.environmentEventId } : {}),
+    ...(rec.open && !['taken', 'object_custody'].includes(rec.threadKind)
+      ? { open: true, threadKind: rec.threadKind || 'thread', subject: rec.subject || '' } : {}),
   };
+}
+
+// Object facts come from a revisioned world transition, never from a line of
+// ambient prose or an officer search that merely inspected an item.
+export function makeObjectTransitionIncident({ before, after, sourceEventId, actor, observedByCy } = {}) {
+  if (!observedByCy || !before || !after || before.id !== after.id || !sourceEventId) return null;
+  let previous;
+  let current;
+  try {
+    previous = worldEntityRevision(before);
+    current = worldEntityRevision(after);
+  } catch {
+    return null;
+  }
+  if (current.revision !== previous.revision + 1
+    || current.transitionId === previous.transitionId) return null;
+  const changed = ['status', 'holderId', 'location'].some((field) => before[field] !== after[field]);
+  if (!changed) return null;
+  const confiscated = before.status !== 'CONFISCATED' && after.status === 'CONFISCATED';
+  const label = after.type || before.type || 'item';
+  return {
+    actor: actor || 'an officer', verb: confiscated ? 'confiscated' : 'changed custody of',
+    object: label, detail: confiscated ? 'the item went into officer custody' : 'the item changed holder or location',
+    resolved: false, evidenceClass: 'WORLD_TRANSITION', sourceEventId,
+    objectEvidence: {
+      id: after.id, revision: current.revision, transitionId: current.transitionId,
+      status: after.status, holderId: after.holderId ?? null, location: after.location ?? null,
+    },
+    ...(confiscated ? { open: true, threadKind: 'object_custody', subject: after.id } : {}),
+  };
+}
+
+function currentObjectCustody(inc, objects) {
+  const evidence = inc.objectEvidence;
+  const object = Array.isArray(objects) && evidence
+    ? objects.find((item) => item.id === evidence.id) : null;
+  return !!object && object.status === 'CONFISCATED'
+    && object.holderId === evidence.holderId
+    && object.location === evidence.location
+    && Number.isSafeInteger(object.revision)
+    && (object.revision > evidence.revision
+      || (object.revision === evidence.revision
+        && object.transitionId === evidence.transitionId));
+}
+
+// Resolution is derived from the current world object, not from ledger prose.
+export function reconcileObjectIncidentThreads(ledger, objects) {
+  if (!Array.isArray(ledger) || !Array.isArray(objects)) return 0;
+  let resolved = 0;
+  for (const inc of ledger) {
+    if (inc.open && !inc.resolved && inc.threadKind === 'object_custody'
+      && !currentObjectCustody(inc, objects)) {
+      inc.resolved = true;
+      resolved++;
+    }
+  }
+  return resolved;
 }
 
 // Push an incident onto the ledger, capped at LEDGER_MAX (oldest dropped). Skips
@@ -200,9 +260,14 @@ export function makeIncident(kind, ctx = {}) {
 // fill does not land twice running.
 export function pushIncident(ledger, inc) {
   if (!Array.isArray(ledger) || !inc) return ledger;
+  if (inc.objectEvidence && ledger.some((item) =>
+    item.objectEvidence?.transitionId === inc.objectEvidence.transitionId)) return ledger;
   const line = incidentLine(inc);
   const last = ledger[ledger.length - 1];
-  if (last && incidentLine(last) === line) return ledger;
+  if (last && incidentLine(last) === line
+    && (!inc.objectEvidence || last.objectEvidence?.transitionId === inc.objectEvidence.transitionId)) {
+    return ledger;
+  }
   ledger.push(inc);
   while (ledger.length > LEDGER_MAX) ledger.shift();
   return ledger;
@@ -232,15 +297,20 @@ export function resolveThreads(ledger, kinds) {
   return n;
 }
 
-// The dangling real ledger threads and a factual long mail silence. A legacy
+// The dangling ledger threads and a factual long mail silence. A legacy
 // optional relations argument remains for non-live compatibility tools; the
 // live caller omits it. Deduped by kind+subject, newest first.
-export function unresolvedThreads(ledger, { relations = {}, mailWaitMs = 0, rnd = Math.random } = {}) {
+export function unresolvedThreads(ledger, { relations = {}, mailWaitMs = 0, objects = [] } = {}) {
   const out = [];
   const seen = new Set();
   const open = (Array.isArray(ledger) ? ledger : []).filter((i) => i.open && !i.resolved);
   for (let i = open.length - 1; i >= 0 && out.length < 3; i--) {
     const inc = open[i];
+    // Legacy `taken` entries had no object ID or transition. They are not
+    // evidence that an object left Cy's possession.
+    if (inc.threadKind === 'taken' || (inc.threadKind === 'object_custody'
+      && (inc.evidenceClass !== 'WORLD_TRANSITION' || !inc.objectEvidence))) continue;
+    if (inc.threadKind === 'object_custody' && !currentObjectCustody(inc, objects)) continue;
     // normalise the subject (drop any title) so 'Sweep' and 'Mr Sweep' collapse
     const subj = (inc.subject || '').replace(/^(Mr|Miss|Mrs|Ms|Dr)\s+/, '').toLowerCase();
     const key = inc.threadKind + '|' + subj;
@@ -261,7 +331,7 @@ function threadLine(inc) {
   const who = inc.subject || 'someone';
   switch (inc.threadKind) {
     case 'reply': return `still nothing back from ${who}`;
-    case 'taken': return `whatever ${who} moved is still not right`;
+    case 'object_custody': return `the confiscated ${inc.object || 'item'} remains in officer custody`;
     case 'promise': return `${who} promised and has not`;
     case 'owed': return `${who} still owes you the thing`;
     case 'transfer': return `word of a move, and nothing since`;
@@ -270,22 +340,32 @@ function threadLine(inc) {
   }
 }
 
-// The prompt block: 3-5 most recent incidents verbatim as raw material, plus any
-// unresolved threads, and the instruction to write FROM it - react, misremember,
-// obsess, or ignore it for one small detail - not to summarise it.
+// The prompt block: 3-5 recent incidents with explicit evidence labels, plus
+// unresolved threads. Unverified legacy object claims remain in the historical
+// ledger but are not rendered as facts or durable open object-state threads.
 export function incidentsDirective(ledger, opts = {}) {
   const rnd = opts.rnd || Math.random;
   const list = Array.isArray(ledger) ? ledger : [];
   if (!list.length) return '';
   const n = Math.min(list.length, 3 + Math.floor(rnd() * 3)); // 3-5
-  const recent = list.slice(-n).map((inc) => '- ' + incidentLine(inc)).filter((l) => l.trim().length > 2);
+  const recent = list.slice(-n).map((inc) => {
+    // Preserve the historical record but never restate an unverified object
+    // loss as a fresh factual assertion in Cy's prompt.
+    if (inc.threadKind === 'taken' && !inc.objectEvidence) {
+      return '- unverified concern about belongings; no object movement is recorded';
+    }
+    const evidence = inc.evidenceClass === 'WORLD_TRANSITION' ? 'verified world transition'
+      : inc.evidenceClass === 'OBSERVED_EVENT' ? 'recorded event'
+        : 'unverified impression';
+    return `- ${evidence}: ${incidentLine(inc)}`;
+  }).filter((l) => l.trim().length > 2);
   if (!recent.length) return '';
   const threads = unresolvedThreads(list, opts);
   // The incidents themselves are the whole value here. The header stays a bare label
   // and the how-to-use-it instruction is gone - it is a constant, so it lives in the
   // cached Zone A ('MATERIAL. ... write FROM them, not about them ...') and is paid
   // once instead of re-evaluated in this volatile block every time the ledger moves.
-  const lines = ['RAW MATERIAL (real, yours, you were there):', ...recent];
+  const lines = ['INCIDENT NOTES (impressions are not proof that an object moved):', ...recent];
   if (threads.length) {
     lines.push('STILL OPEN:');
     for (const t of threads) lines.push('- ' + t);
