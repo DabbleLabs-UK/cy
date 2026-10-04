@@ -1468,11 +1468,10 @@ async function main() {
 
   // ZONE B: the model's own CLEANED output, fed back in. Only scaffold-free prose
   // ever lands here (see onChunk), so the model never re-reads its own instruction
-  // frames and echoes them. APPEND-ONLY: it grows at the END every burst and is
-  // NEVER re-sliced from the front per burst, so the KV-cache prefix (Zone A +
-  // this) stays stable and keeps GROWING. Only when it crosses CONTEXT_HARD is it
-  // trimmed - in one large chunk back to CONTEXT_SOFT - so the cache is broken
-  // rarely (every ~6 bursts) instead of every single burst.
+  // frames and echoes them. The stored buffer grows at the end of each burst
+  // and trims to CONTEXT_SOFT only when it crosses CONTEXT_HARD. Journal prompt
+  // construction now selects only its newest 520 characters; this buffer and
+  // other consumers are not shortened by that prompt policy.
   const CONTEXT_SOFT = 3000;
   const CONTEXT_HARD = 4600;
   let contextBuf = await loadContext(contextPath);
@@ -5344,6 +5343,8 @@ async function main() {
           await logCapHit(mode, discards);
           break;
         }
+        // Keep the full stored tail for the existing verbatim near-repeat guard.
+        // buildPrompt applies the journal-only subjective recency selection.
         const tail = contextText();
         const prompt = buildPrompt(tail, mode, null, directives);
         const opts = {
