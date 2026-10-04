@@ -112,9 +112,11 @@ import { updateAffect } from './shout.js';
 import {
   reconcileLedger,
   makeIncident,
+  makeObjectTransitionIncident,
   pushIncident,
   incidentsDirective,
   incidentLine,
+  reconcileObjectIncidentThreads,
   resolveThreads,
 } from './incidents.js';
 import {
@@ -594,9 +596,11 @@ async function main() {
     worldMirrorSyncPending = (async () => {
       const world = await synchronizeWorldMirror(vitals.worldSimulation, client, async (next) => {
         vitals.worldSimulation = reconcileWorldSimulationState(next);
+        reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
         await saveVitals(vitalsPath, vitals);
       });
       vitals.worldSimulation = reconcileWorldSimulationState(world);
+      reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
       worldMirrorReady = true;
       console.log('[cy] world mirror synchronized');
     })().catch((error) => {
@@ -1370,11 +1374,22 @@ async function main() {
         if (opportunity.chosenAction === 'action:hand_over_item' && objectId) {
           const object = vitals.worldSimulation.objects.find((item) => item.id === objectId);
           if (object) {
+            const before = { ...object };
             object.holderId = opportunity.actorKey;
             object.location = 'officer_desk';
             object.status = 'CONFISCATED';
             object.updatedAt = resolutionTimestamp;
             Object.assign(object, advanceWorldEntity(object));
+            const incident = makeObjectTransitionIncident({
+              before, after: object, sourceEventId: structured.world_event.id,
+              actor: opportunity.actorName, observedByCy: true,
+            });
+            if (incident) {
+              incident.ts = resolutionTimestamp;
+              pushIncident(vitals.ledger, incident);
+              vitals.lastIncidentMs = Date.now();
+            }
+            reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
             emit({ kind: 'world_object_record', payload: object });
           }
         }
@@ -2996,7 +3011,10 @@ async function main() {
     if (!forAwg && incidentContext) {
       add({
         id: 'incident:current', sourceId: 'incident:current', section: 'recent_events',
-        provenanceClass: 'OBSERVED BY CY', knowledgeScope: 'CY_OBSERVED', privacyScope: 'INTERNAL_ONLY',
+        // The legacy ledger mixes observed events and unverified impressions.
+        // Its lines carry their own evidence labels; the mixed block cannot
+        // inherit the authority of an observed world event.
+        provenanceClass: 'SUBJECTIVE BELIEF', knowledgeScope: 'CY_BELIEVES', privacyScope: 'INTERNAL_ONLY',
         priority: 90, content: incidentContext,
       });
     }
@@ -4680,6 +4698,9 @@ async function main() {
       return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED' };
     }
     vitals.worldSimulation = result.state;
+    if (result.status === 'ACCEPTED') {
+      reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
+    }
     if (result.run) {
       emit({
         kind: 'awg_run_record',
@@ -5183,6 +5204,7 @@ async function main() {
       // resulting journal/drawing prompt. No full ledger or day history is sent.
       const incidentContext = incidentsDirective(vitals.ledger, {
         mailWaitMs: nowMs - (vitals.lastMailMs || nowMs),
+        objects: vitals.worldSimulation.objects,
         rnd: () => 0,
       });
       if (pendingMemoryQuery) {
@@ -5667,7 +5689,9 @@ async function main() {
     regime: regimeDirective(londonParts().mins),
     groundedSoma: sampleGrounded.directive,
     autobiographicalMemory: autobiographicalMemory.working.directive,
-    incidents: incidentsDirective(vitals.ledger, { mailWaitMs: 0, rnd: () => 0 }),
+    incidents: incidentsDirective(vitals.ledger, {
+      mailWaitMs: 0, objects: vitals.worldSimulation.objects, rnd: () => 0,
+    }),
   };
   const sampleC = buildDirectives(vitals, 'journal', sampleCtx);
   console.log(
