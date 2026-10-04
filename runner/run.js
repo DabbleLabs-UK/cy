@@ -219,6 +219,12 @@ import {
   cancellationReason,
 } from './inference-cancellation.js';
 import {
+  effectiveAsleepForRegime,
+  loadInitialRegime,
+  requireInferenceEligibility,
+  runDreamIfEligible,
+} from './dream-regime.js';
+import {
   CONTEXT_CONSUMERS,
   createContextItem,
   inspectContextPacket,
@@ -576,6 +582,7 @@ async function main() {
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
+  await loadInitialRegime(client);
   let worldMirrorReady = !!config.dryRun;
   client.onWorldMirrorConflict = (conflicts) => {
     worldMirrorReady = false;
@@ -2752,6 +2759,7 @@ async function main() {
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
     attempt = 'initial', admittedAwgSlot = false, format = null,
+    isEligible = null,
   }) {
     let startedAtMs = null;
     const waitTrace = new InferenceWaitTrace(purpose);
@@ -2815,12 +2823,16 @@ async function main() {
       }
       const requestOpts = typeof provider.applySharedProfile === 'function'
         ? provider.applySharedProfile(opts, hostLease) : opts;
+      // A dream can become ineligible while waiting for the shared model. Do
+      // not start inference merely because the earlier loop decision was asleep.
+      requireInferenceEligibility(isEligible, ac);
       startedAtMs = lease.begin();
       reportWait('started');
       return await withAbortTimeout(ac, timeoutMs, async () => {
         const out = await provider.rawGenerate({
           system, prompt, opts: requestOpts, signal: ac.signal, purpose, format,
         });
+        requireInferenceEligibility(isEligible, ac);
         requestStats = out.stats || null;
         outputChars = String(out.text || '').length;
         if (!out.ok) {
@@ -3743,9 +3755,7 @@ async function main() {
   // the incident cadence and the vitals (heart rate, brain regions) - reads this, so
   // a forced wake/sleep is total and consistent, not just cosmetic.
   function effectiveAsleep(mins) {
-    if (client.regime === 'day') return false;
-    if (client.regime === 'night') return true;
-    return isAsleep(mins);
+    return effectiveAsleepForRegime(client.regime, mins);
   }
 
   // Process S follows observed sleep, not the unsupported legacy fatigue clock.
@@ -3796,9 +3806,11 @@ async function main() {
   // used to only ride along as a field on the periodic vitals tick, which is too
   // infrequent for the UI's confirm-timeout window.
   let activeRegimeId = client.regime;
+  let regimeEpoch = 0;
   client.onRegimeChange = (to) => {
     const from = activeRegimeId;
     activeRegimeId = to;
+    regimeEpoch++;
     const now = Date.now();
     const observedAsleep = to === 'night' || (to === 'auto' && isAsleep(londonParts(new Date(now)).mins));
     const archetypeId = to === 'day' ? 'forced_wakefulness' : 'sleep_normal';
@@ -4734,9 +4746,10 @@ async function main() {
   // AWG is permitted only when the caller explicitly marks a normal waking
   // throttle interval as spare capacity. Dream, failure-backoff and chosen
   // silence intervals never start background world inference.
-  async function idleSilently(ms, { breakOnTempo = false, awgReservation = null } = {}) {
+  async function idleSilently(ms, { breakOnTempo = false, breakOnRegime = false, awgReservation = null } = {}) {
     const end = Date.now() + ms;
     const startingTempoEpoch = tempoEpoch;
+    const startingRegimeEpoch = regimeEpoch;
     if (awgReservation) {
       try {
         await runAwgDuringIdle(Math.max(0, end - Date.now()), awgReservation);
@@ -4746,7 +4759,8 @@ async function main() {
     }
     while (running && Date.now() < end) {
       const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;
-      if (pendingPostcards.length || pendingWarden.length || tempoChanged) break;
+      const regimeChanged = breakOnRegime && regimeEpoch !== startingRegimeEpoch;
+      if (pendingPostcards.length || pendingWarden.length || tempoChanged || regimeChanged) break;
       await sleep(Math.min(500, Math.max(0, end - Date.now())));
     }
   }
@@ -4828,6 +4842,7 @@ async function main() {
       screened.push(chunk.trim());
     }
     if (!screened.length) return false;
+    if (detail.isEligible && !detail.isEligible()) return false;
     const id = detail.id || randomUUID();
     emit({
       kind: 'dream',
@@ -4913,10 +4928,13 @@ async function main() {
     dreamState.sleepPeriodId = null;
   }
 
+  const dreamStillAllowed = () => running && !client.paused && effectiveAsleep(londonParts().mins);
+
   // One night iteration: a night-waking lucid line if a wing noise surfaced him,
   // else advance the slow drawing, else a murmur if one is due, else sit still a
   // short slice so the next stroke lands within its 1-2 min window.
   async function dreamStep(mins) {
+    if (!dreamStillAllowed()) return;
     const now = Date.now();
     const clock = londonParts(new Date(now));
     const date = clock.date;
@@ -4939,33 +4957,41 @@ async function main() {
       const opts = options(vitals, config.threads, 'dream', { num_predict: DREAM_TOKEN_LIMIT });
       await logPrompt('dream-wake', ZONE_A + '\n\n---PROMPT---\n' + prompt);
       const started = Date.now();
-      const result = await rawGenerate({
-        system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-waking',
-        timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
+      await runDreamIfEligible({
+        isEligible: dreamStillAllowed,
+        generate: (isEligible) => rawGenerate({
+          system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-waking',
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS, isEligible,
+        }),
+        publish: async (result, isEligible) => {
+          const raw = result.text || '';
+          const validation = validateDreamOutput(raw);
+          if (validation.valid) {
+            return emitDreamFragments(validation.fragments.slice(0, 1), {
+              id: eventId, lucid: true, contextPacket: packet, isEligible,
+              provider: activeProviderId, model: result.model, latencyMs: Date.now() - started,
+            });
+          }
+          if (raw.trim()) {
+            emit({ kind: 'dream_inspection', payload: {
+              id: eventId, sleep_period_id: dreamState.sleepPeriodId,
+              output_validation: validation.result, provider: activeProviderId,
+              model: result.model || activeProvider().model, latency_ms: Date.now() - started,
+            } });
+          }
+          return false;
+        },
       });
-      const raw = result.text || '';
-      const validation = validateDreamOutput(raw);
-      if (validation.valid) {
-        await emitDreamFragments(validation.fragments.slice(0, 1), {
-          id: eventId, lucid: true, contextPacket: packet,
-          provider: activeProviderId, model: result.model, latencyMs: Date.now() - started,
-        });
-      } else if (raw.trim()) {
-        emit({ kind: 'dream_inspection', payload: {
-          id: eventId, sleep_period_id: dreamState.sleepPeriodId,
-          output_validation: validation.result, provider: activeProviderId,
-          model: result.model || activeProvider().model, latency_ms: Date.now() - started,
-        } });
-      }
+      if (!dreamStillAllowed()) return;
       dreamState.nextMurmurAt = now + dreamMurmurGapMs(); // settle back under
-      await idleSilently(4000);
+      await idleSilently(4000, { breakOnRegime: true });
       return;
     }
 
     // the night's one slow abstract drawing: arm it, then release a due stroke
     maybeArmDream(now, mins, date);
     if (advanceDreamDraw(now)) {
-      await idleSilently(3000);
+      await idleSilently(3000, { breakOnRegime: true });
       return;
     }
 
@@ -4996,35 +5022,43 @@ async function main() {
       const opts = options(vitals, config.threads, 'dream', { num_predict: DREAM_TOKEN_LIMIT });
       await logPrompt('dream', ZONE_A + '\n\n---PROMPT---\n' + prompt);
       const started = Date.now();
-      const result = await rawGenerate({
-        system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-murmur',
-        timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
+      await runDreamIfEligible({
+        isEligible: dreamStillAllowed,
+        generate: (isEligible) => rawGenerate({
+          system: ZONE_A, prompt, opts, purpose: 'dream', returnMeta: true, attempt: 'dream-murmur',
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS, isEligible,
+        }),
+        publish: async (result, isEligible) => {
+          const raw = result.text || '';
+          const validation = validateDreamOutput(raw);
+          if (validation.valid) {
+            return emitDreamFragments(validation.fragments, {
+              id: eventId, contextPacket: packet,
+              memoryIds: memory.selected.map((item) => item.id), isEligible,
+              provider: activeProviderId, model: result.model, latencyMs: Date.now() - started,
+            });
+          }
+          if (raw.trim()) {
+            emit({ kind: 'dream_inspection', payload: {
+              id: eventId, sleep_period_id: dreamState.sleepPeriodId,
+              context_packet: packet,
+              autobiographical_memory_ids: memory.selected.map((item) => item.id),
+              privacy_filter: 'PUBLIC_RECALLABLE ONLY; sender-private excluded',
+              output_validation: validation.result, provider: activeProviderId,
+              model: result.model || activeProvider().model, latency_ms: Date.now() - started,
+            } });
+          }
+          return false;
+        },
       });
-      const raw = result.text || '';
-      const validation = validateDreamOutput(raw);
-      if (validation.valid) {
-        await emitDreamFragments(validation.fragments, {
-          id: eventId, contextPacket: packet,
-          memoryIds: memory.selected.map((item) => item.id),
-          provider: activeProviderId, model: result.model, latencyMs: Date.now() - started,
-        });
-      } else if (raw.trim()) {
-        emit({ kind: 'dream_inspection', payload: {
-          id: eventId, sleep_period_id: dreamState.sleepPeriodId,
-          context_packet: packet,
-          autobiographical_memory_ids: memory.selected.map((item) => item.id),
-          privacy_filter: 'PUBLIC_RECALLABLE ONLY; sender-private excluded',
-          output_validation: validation.result, provider: activeProviderId,
-          model: result.model || activeProvider().model, latency_ms: Date.now() - started,
-        } });
-      }
+      if (!dreamStillAllowed()) return;
       dreamState.nextMurmurAt = now + dreamMurmurGapMs();
-      await idleSilently(2000);
+      await idleSilently(2000, { breakOnRegime: true });
       return;
     }
 
     // nothing due: hold still a short slice (strokes are serviced ~every 1-2 min)
-    await idleSilently(20000);
+    await idleSilently(20000, { breakOnRegime: true });
   }
 
   // ---- main generation loop ----

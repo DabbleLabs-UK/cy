@@ -34,6 +34,7 @@ import { implementationEntry } from './implementation-registry.js';
 import { reconcileSoma, recordExpressiveChoice } from './soma.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import { InferenceTempoPacer, wakingTempoIdleMs } from './tempo.js';
+import { effectiveAsleepForRegime } from './dream-regime.js';
 
 const groundedContext = {
   schema: 'cy.grounded-prose-context',
@@ -368,7 +369,8 @@ assert.deepEqual(availableExpressiveActions({ current: { id: LOCATIONS.EXERCISE_
 assert.match(runSource, /if \(asleep\) \{[\s\S]*?await dreamStep\(mins\);[\s\S]*?continue;/);
 assert.ok(runSource.indexOf('if (pendingWarden.length) {') < runSource.indexOf('const cadence = expressiveCadenceAvailability'));
 assert.ok(runSource.indexOf('if (pendingPostcards.length) {') < runSource.indexOf('const cadence = expressiveCadenceAvailability'));
-assert.match(runSource, /if \(client\.regime === 'day'\) return false;/);
+assert.equal(effectiveAsleepForRegime('day', 23 * 60), false);
+assert.match(runSource, /return effectiveAsleepForRegime\(client\.regime, mins\);/);
 assert.match(runSource, /lastPublishedWakingExpressionMs = Date\.now\(\)/);
 assert.match(runSource, /recordExpressiveDrawingFailure\(vitals\.expressiveCadence\)/);
 assert.match(runSource, /logDrawFail\('unusable', line\);[\s\S]*?recordExpressiveDrawingFailure/);
