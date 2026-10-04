@@ -334,6 +334,11 @@ const MALFORMED_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}\|(?:\|+[ \t]*>?|[ \t]*
 // A trailing pipe-plus-ellipsis is the same unfinished control-shaped suffix
 // without its closing pipe. Ordinary internal bars and ellipses stay valid.
 const TERMINAL_PROSE_CONTROL = /\|[ \t]*(?:\.[ \t]*){2,}[ \t]*$/g;
+// Chat-template terminators can be emitted as ordinary characters with spaces
+// or underscores replacing the separator. Require a pipe/angle opener AND a
+// pipe/angle closer: "im end" in ordinary prose is not a control marker.
+// This one pattern is shared by publication validation and context sanitisation.
+const MUTATED_IM_END_CONTROL = /(?:<[ \t]*\|*[ \t]*|\|+[ \t]*)im[ \t_]+end[ \t]*(?:\|+[ \t]*>+|>+|\|+)\|*/gi;
 // An unfinished pipe-ellipsis separator may also occur inside a sentence.
 // A closing pipe or immediate quote makes the mark complete/literal instead.
 const PIPE_ELLIPSIS_MARK = /\|[ \t]*(?:\.[ \t]*){2,}/g;
@@ -368,15 +373,19 @@ export function malformedProseControlHits(s) {
     ...text.matchAll(/\|\}[|{}]*/g),
     ...text.matchAll(MALFORMED_PROSE_CONTROL),
     ...text.matchAll(TERMINAL_PROSE_CONTROL),
+    // Inspect raw candidate as well: cosmetic trailing-bar normalisation can
+    // otherwise remove the closer from "| im end |" before validation.
+    ...String(s || '').matchAll(MUTATED_IM_END_CONTROL),
     ...unfinishedPipeEllipsisHits(text),
     ...PROMPT_CONTROL_LEAKS.flatMap((pattern) => [...text.matchAll(pattern)]),
   ].sort((a, b) => a.index - b.index).map((match) => match[0]);
 }
 
 export function stripMalformedProseControls(s) {
-  let text = normalizeWakingProse(s)
+  let text = normalizeWakingProse(String(s || '').replace(MUTATED_IM_END_CONTROL, ''))
     .replace(/\|\}[|{}]*/g, '')
-    .replace(MALFORMED_PROSE_CONTROL, '');
+    .replace(MALFORMED_PROSE_CONTROL, '')
+    .replace(MUTATED_IM_END_CONTROL, '');
   text = text.replace(TERMINAL_PROSE_CONTROL, '');
   text = text.replace(PIPE_ELLIPSIS_MARK, (match, offset, source) =>
     isUnfinishedPipeEllipsis(source, offset, match.length) ? '' : match);
@@ -389,7 +398,10 @@ export function stripMalformedProseControls(s) {
 // untouched while preventing any missed meta tail from becoming self-reinforcing
 // Zone B / recent_expression context.
 export function sanitizeCharacterContext(s) {
-  const safePrefix = stripAssistantContaminatedTail(sanitize(normalizeWakingProse(s)));
+  // Remove the whole mutated marker before sanitize() strips an exact im_end
+  // name and leaves an orphaned pipe/angle shell behind in derived context.
+  const withoutMutatedControl = normalizeWakingProse(String(s || '').replace(MUTATED_IM_END_CONTROL, ''));
+  const safePrefix = stripAssistantContaminatedTail(sanitize(withoutMutatedControl));
   return normalizeWakingProse(stripMalformedProseControls(stripScaffold(safePrefix)).trimEnd()).trimEnd();
 }
 

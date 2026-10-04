@@ -220,6 +220,54 @@ assert.equal(discardedPipe.candidate, '');
 assert.equal(discardedPipe.characterValidation.finalAction, 'discarded-to-silence');
 ok('real 16:58 unfinished pipe-ellipsis separators fail with one repair then silence');
 
+const mutatedImEndFixtures = JSON.parse(readFileSync(
+  new URL('./fixtures/waking-im-end-2026-10-04.json', import.meta.url), 'utf8',
+));
+assert.deepEqual(mutatedImEndFixtures.map((fixture) => fixture.eventId),
+  [2170229, 2173183, 2173334, 2173585, 2173691]);
+for (const fixture of mutatedImEndFixtures) {
+  assert.equal(validateCharacterCandidate(fixture.published).ok, false, String(fixture.eventId));
+  assert.doesNotMatch(sanitizeCharacterContext(fixture.published), /\|[ \t]*im[ \t_]+end/i,
+    String(fixture.eventId));
+}
+for (const fragment of [
+  '| im end >', '|im end>', '| im_end >', '<| im end |>',
+  '< | im_end | >', '|| im__end || >>', '< im _ end >', '| im end |',
+]) {
+  assert.equal(validateCharacterCandidate('heard the latch ' + fragment).ok, false, fragment);
+  assert.equal(sanitizeCharacterContext('heard the latch ' + fragment).trim(), 'heard the latch', fragment);
+}
+for (const ordinary of [
+  "I'm near the end", 'this is the end', 'im at the end of this bird',
+  'i marked | and waited', 'the door went... then stopped',
+  'i copied |...| from the sheet', 'i wrote | im end of shift > as ordinary words',
+]) {
+  assert.equal(validateCharacterCandidate(ordinary).ok, true, ordinary);
+  assert.equal(sanitizeCharacterContext(ordinary), ordinary);
+}
+ok('real spaced im_end publications and bounded marker variants fail without rejecting ordinary prose');
+
+for (const purpose of ['journal', 'drawing-intent', 'postcard', 'warden']) {
+  const calls = [];
+  const clean = 'the keys went quiet when mr keyes left the cell.';
+  const repaired = await generateWithCharacterRepair({
+    prompt: 'current cell and recent world context',
+    generate: async (_prompt, attempt) => {
+      calls.push(attempt.repair);
+      return { candidate: attempt.repair ? clean : mutatedImEndFixtures[2].published };
+    },
+  });
+  assert.deepEqual(calls, [false, true], purpose);
+  assert.equal(repaired.candidate, clean, purpose);
+  const discarded = await generateWithCharacterRepair({
+    prompt: 'current cell and recent world context',
+    generate: async () => ({ candidate: mutatedImEndFixtures[2].published }),
+  });
+  assert.equal(discarded.candidate, '', purpose);
+  assert.equal(discarded.characterValidation.finalAction, 'discarded-to-silence', purpose);
+}
+ok('spaced im_end uses one repair then silence across shared waking prose paths');
+
 assert.equal(decodeProseEntities('a &amp; b &#38; c &#x26; d'), 'a & b & c & d');
 assert.equal(decodeProseEntities('&lt;... &gt; &#x3c;...'), '<... > <...');
 for (const fragment of ['went <...', 'went < . . .>', 'went &lt;...']) {
