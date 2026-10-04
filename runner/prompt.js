@@ -675,22 +675,13 @@ export function options(v, threads, mode, overrides = {}) {
   };
 }
 
-// The continuation prompt, in strict zone order: ZONE B (Cy's append-only prose
-// context, fed back for continuity) then ZONE C (the volatile `directives` block
-// from buildDirectives) then a short generation cue. Keeping the volatile block
-// LAST is the whole point - it means the shared prefix with the previous request
-// runs all the way through the identical Zone A and the append-only Zone B, so
-// only the small tail is re-evaluated. In postcard mode the sender's postcard is
-// presented and answered; in warden mode a signed notice is read and reacted to.
-// The last fragment of his own prose, cleaned to start on a word boundary. The
-// volatile directives (Zone C) must sit AFTER the append-only context (Zone B) to
-// keep the KV-cache prefix intact, but that leaves an instruction block as the
-// model's immediate lead-in - and an instruct 8B told to continue right after a
-// wall of directives starts a fresh document (the generic default being a letter:
-// "Dear friend"). So we reprise his own recent prose just before the continuation
-// cue: the final thing the model reads is his voice mid-thought, and it continues
-// HIM instead of opening a letter. The reprise is tiny (lives in the volatile tail
-// that is re-evaluated anyway) so it costs nothing against the cache.
+// The continuation prompt puts subjective prose before volatile directives.
+// Journal generation sees only a short, sliding selection of that prose. The
+// stored context remains intact for other consumers and for repeat detection.
+// In postcard mode the sender's postcard is presented and answered; in warden
+// mode a signed notice is read and reacted to.
+// Sleep still uses a tiny final prose reprise after Zone C. Journal deliberately
+// does not: that would duplicate its subjective source in the same prompt.
 function tailReprise(prose, max = 220) {
   if (!prose) return '';
   let t = prose.slice(-max);
@@ -701,8 +692,23 @@ function tailReprise(prose, max = 220) {
   return t.trim();
 }
 
+// About one or two 93-token journal bursts, not the full 4600-character rolling
+// context. This is a prompt view only: older writing/history is not deleted.
+export const JOURNAL_CONTINUATION_CHARS = 520;
+export function selectJournalContinuation(prose) {
+  const text = String(prose || '').trim();
+  if (text.length <= JOURNAL_CONTINUATION_CHARS) return text;
+  const start = text.length - JOURNAL_CONTINUATION_CHARS;
+  const tail = text.slice(start);
+  if (/\s/.test(text[start - 1])) return tail.trimStart();
+  const boundary = tail.search(/\s/);
+  return boundary < 0 ? tail : tail.slice(boundary + 1).trimStart();
+}
+
 export function buildPrompt(contextText, mode, payload, directives = '') {
-  const ctxBlock = contextText && contextText.trim() ? contextText.trim() : '';
+  const fullContext = contextText && contextText.trim() ? contextText.trim() : '';
+  const ctxBlock = mode === 'journal'
+    ? selectJournalContinuation(fullContext) : fullContext;
   const zoneC = directives && directives.trim() ? directives.trim() : '';
 
   if (mode === 'postcard' && payload) {
