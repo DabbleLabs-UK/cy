@@ -106,6 +106,7 @@ export class AutobiographicalMemoryRuntime {
     this.timer = null;
     this.stopped = true;
     this.lastReservedSenderAt = 0;
+    this.activeSenderFormation = null;
   }
 
   start() {
@@ -292,7 +293,13 @@ export class AutobiographicalMemoryRuntime {
         checkedFormation = true;
         if (sender && sender.job) {
           didWork = true;
-          await this.processFormation(sender.job, sender.depth || 0);
+          const formation = this.processFormation(sender.job, sender.depth || 0);
+          this.activeSenderFormation = formation;
+          try {
+            await formation;
+          } finally {
+            if (this.activeSenderFormation === formation) this.activeSenderFormation = null;
+          }
         }
       }
       if (!didWork && this.canRunBackground('surfacing')) {
@@ -330,10 +337,18 @@ export class AutobiographicalMemoryRuntime {
   // This supplies a bounded turn even when visible expression would otherwise
   // take every model slot. Incoming interactive work may still abort it.
   async serviceAgedSenderBeforeExpression() {
-    if (this.stopped || this.busy || !this.canRunBackground('sender_formation')) return { status: 'DEFERRED' };
+    if (this.stopped) return { status: 'DEFERRED' };
     if (this.lastReservedSenderAt && this.now() - this.lastReservedSenderAt < SENDER_RESERVED_INTERVAL_MS) {
       return { status: 'NOT_DUE' };
     }
+    // The normal background tick may have already claimed a sender job. In
+    // that case the waking opportunity is its reserved turn: wait for the
+    // bounded in-flight work instead of preempting it and claiming nothing.
+    if (this.activeSenderFormation) {
+      this.lastReservedSenderAt = this.now();
+      return this.activeSenderFormation;
+    }
+    if (this.busy || !this.canRunBackground('sender_formation')) return { status: 'DEFERRED' };
     this.busy = true;
     try {
       if (typeof this.client.drainMemorySourceQueue === 'function') await this.client.drainMemorySourceQueue();

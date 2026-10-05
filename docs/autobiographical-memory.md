@@ -60,7 +60,8 @@ before claim, retaining their provenance. A
 current-sender reply is linked to that same sender and cannot be considered for
 another sender's private memory. One source is considered at a time by a
 background worker. Aged sender correspondence gets a turn before optional
-surfacing, plus one reserved waking turn at most every ten minutes; immediate
+surfacing, plus one reserved waking turn at most every ten minutes, including
+an already-running sender formation; immediate
 visitor replies still preempt it. The server returns at most five privacy-eligible
 existing memories. The active model must return one structured decision:
 
