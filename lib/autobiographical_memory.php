@@ -10,6 +10,79 @@ const CY_MEMORY_REASONS = [
 ];
 const CY_MEMORY_CANDIDATE_LIMIT = 10;
 const CY_MEMORY_PUBLIC_LIMIT = 20;
+const CY_MEMORY_FORMATION_FAILURE_LIMIT = 6;
+
+function captive_memory_formation_retry(int $failureStreak, string $category): array
+{
+    if ($category === 'PREEMPTED') {
+        return ['status' => 'RETRYABLE', 'failure_streak' => $failureStreak, 'delay_seconds' => 30];
+    }
+    $failures = min(CY_MEMORY_FORMATION_FAILURE_LIMIT, max(0, $failureStreak) + 1);
+    return ['status' => $failures >= CY_MEMORY_FORMATION_FAILURE_LIMIT ? 'FAILED' : 'RETRYABLE',
+        'failure_streak' => $failures, 'delay_seconds' => min(900, 30 * (2 ** ($failures - 1)))];
+}
+
+function captive_memory_formation_filter(array $input): array
+{
+    $senderOnly = $input['sender_only'] ?? false;
+    $age = $input['min_age_seconds'] ?? 0;
+    $visitor = $input['visitor_id'] ?? null;
+    if (!is_bool($senderOnly) || !is_int($age) || $age < 0 || $age > 86400
+        || ($visitor !== null && (!is_string($visitor) || !preg_match('/^[a-f0-9]{32}$/', $visitor)))) {
+        throw new InvalidArgumentException('invalid formation claim filter');
+    }
+    return ['sender_only' => $senderOnly, 'min_age_seconds' => $age, 'visitor_id' => $visitor];
+}
+
+function captive_memory_formation_health(PDO $db): array
+{
+    $row = $db->query("SELECT
+        COALESCE(SUM(status = 'PENDING'),0) AS pending,
+        COALESCE(SUM(status = 'PROCESSING'),0) AS processing,
+        COALESCE(SUM(status = 'RETRYABLE'),0) AS retryable,
+        COALESCE(SUM(status = 'FAILED'),0) AS failed,
+        COALESCE(SUM(status = 'QUARANTINED'),0) AS quarantined,
+        COALESCE(SUM(status IN ('PENDING','RETRYABLE') AND available_at <= NOW(3)
+            AND source_type IN ('POSTCARD','CY_REPLY') AND subject_visitor_id IS NOT NULL),0) AS sender_ready,
+        MAX(IF(status IN ('PENDING','PROCESSING','RETRYABLE'), TIMESTAMPDIFF(SECOND,queued_at,NOW(3)),NULL)) AS oldest_pending_age_seconds,
+        MIN(IF(status IN ('PENDING','RETRYABLE'),available_at,NULL)) AS next_available_at,
+        MAX(IF(status IN ('FAILED','QUARANTINED'),updated_at,NULL)) AS last_terminal_at
+        FROM autobiographical_memory_formation_queue")->fetch(PDO::FETCH_ASSOC);
+    foreach (['pending','processing','retryable','failed','quarantined','sender_ready'] as $key) $row[$key] = (int)$row[$key];
+    $row['oldest_pending_age_seconds'] = $row['oldest_pending_age_seconds'] === null ? null : max(0, (int)$row['oldest_pending_age_seconds']);
+    $row['sender_sources'] = [];
+    foreach (['POSTCARD','CY_REPLY'] as $type) {
+        $row['sender_sources'][$type] = array_fill_keys(['pending','processing','retryable','failed','processed','quarantined','linked','unlinked'], 0);
+    }
+    $sources = $db->query("SELECT source_type, status, subject_visitor_id IS NOT NULL AS linked, COUNT(*) AS count
+        FROM autobiographical_memory_formation_queue WHERE source_type IN ('POSTCARD','CY_REPLY')
+        GROUP BY source_type, status, subject_visitor_id IS NOT NULL")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($sources as $source) {
+        $counts =& $row['sender_sources'][$source['source_type']];
+        $status = strtolower($source['status']);
+        if (array_key_exists($status, $counts)) $counts[$status] += (int)$source['count'];
+        $counts[(int)$source['linked'] === 1 ? 'linked' : 'unlinked'] += (int)$source['count'];
+        unset($counts);
+    }
+    $sender = $db->query("SELECT
+        MAX(IF(status = 'PROCESSED',completed_at,NULL)) AS last_sender_success_at,
+        MIN(IF(status = 'RETRYABLE',available_at,NULL)) AS next_sender_retry_at,
+        MAX(IF(status IN ('PENDING','PROCESSING','RETRYABLE'),TIMESTAMPDIFF(SECOND,queued_at,NOW(3)),NULL)) AS oldest_sender_pending_age_seconds
+        FROM autobiographical_memory_formation_queue WHERE source_type IN ('POSTCARD','CY_REPLY')")->fetch(PDO::FETCH_ASSOC);
+    $sender['oldest_sender_pending_age_seconds'] = $sender['oldest_sender_pending_age_seconds'] === null
+        ? null : max(0, (int)$sender['oldest_sender_pending_age_seconds']);
+    $row += $sender;
+    $failure = $db->query("SELECT result_category AS category, completed_at AS at
+        FROM autobiographical_memory_formation_attempts WHERE source_type IN ('POSTCARD','CY_REPLY')
+          AND result_category IN ('INVALID','ERROR','TIMEOUT','CONFLICT')
+        UNION ALL SELECT last_result_category AS category, updated_at AS at
+        FROM autobiographical_memory_formation_queue WHERE source_type IN ('POSTCARD','CY_REPLY')
+          AND last_result_category IN ('INVALID','ERROR','TIMEOUT','CONFLICT')
+        ORDER BY at DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    $row['last_sender_failure'] = $failure ?: null;
+    $row['failure_limit'] = CY_MEMORY_FORMATION_FAILURE_LIMIT;
+    return $row;
+}
 
 function captive_memory_tokens(string $text): array
 {
@@ -98,21 +171,44 @@ function captive_memory_enqueue_source(PDO $db, array $source): array
     ];
 }
 
-function captive_memory_claim_source(PDO $db): ?array
+function captive_memory_claim_source(PDO $db, array $filter = []): ?array
 {
+    $filter = captive_memory_formation_filter($filter);
     $db->beginTransaction();
     try {
+        // Old generic environment copies of correspondence lack a sender scope.
+        // Retain their bytes/provenance, but never let them form public memories.
+        $db->exec("UPDATE autobiographical_memory_formation_queue q
+            JOIN environment_events e ON e.event_id = q.source_id
+            SET q.status = 'QUARANTINED', q.claim_token = NULL,
+                q.last_result_category = 'UNLINKED_CORRESPONDENCE',
+                q.last_error = 'correspondence source has no canonical sender binding', q.updated_at = NOW(3)
+            WHERE q.source_type = 'ENVIRONMENT_EVENT' AND q.subject_visitor_id IS NULL
+              AND q.status IN ('PENDING','RETRYABLE')
+              AND e.event_type IN ('postcard','postcard_reply','postcard_with_image')");
         $db->exec(
             "UPDATE autobiographical_memory_formation_queue
-             SET status = 'RETRYABLE', available_at = NOW(3),
+             SET status = IF(failure_streak + 1 >= 6, 'FAILED', 'RETRYABLE'),
+                 available_at = DATE_ADD(NOW(3), INTERVAL LEAST(900, 30 * POW(2, LEAST(failure_streak, 5))) SECOND),
+                 failure_streak = LEAST(6, failure_streak + 1), claim_token = NULL,
+                 last_result_category = 'TIMEOUT',
                  last_error = 'recovered after interrupted processing', updated_at = NOW(3)
              WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)"
         );
-        $row = $db->query(
+        $where = $filter['sender_only'] ? " AND source_type IN ('POSTCARD','CY_REPLY') AND subject_visitor_id IS NOT NULL" : '';
+        $params = [$filter['min_age_seconds']];
+        if ($filter['visitor_id'] !== null) {
+            $where .= ' AND subject_visitor_id = ?';
+            $params[] = $filter['visitor_id'];
+        }
+        $select = $db->prepare(
             "SELECT * FROM autobiographical_memory_formation_queue
              WHERE status IN ('PENDING', 'RETRYABLE') AND available_at <= NOW(3)
+               AND queued_at <= DATE_SUB(NOW(3), INTERVAL ? SECOND)" . $where . "
              ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE"
-        )->fetch();
+        );
+        $select->execute($params);
+        $row = $select->fetch();
         if (!$row) {
             $db->commit();
             return null;
@@ -120,12 +216,14 @@ function captive_memory_claim_source(PDO $db): ?array
         $stmt = $db->prepare(
             "UPDATE autobiographical_memory_formation_queue
              SET status = 'PROCESSING', attempts = attempts + 1,
-                 started_at = NOW(3), updated_at = NOW(3) WHERE id = ?"
+                 claim_token = ?, started_at = NOW(3), updated_at = NOW(3) WHERE id = ?"
         );
-        $stmt->execute([(int)$row['id']]);
+        $token = bin2hex(random_bytes(16));
+        $stmt->execute([$token, (int)$row['id']]);
         $db->commit();
         $row['source'] = json_decode((string)$row['source_payload'], true) ?: [];
         $row['attempts'] = (int)$row['attempts'] + 1;
+        $row['claim_token'] = $token;
         return $row;
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
@@ -138,6 +236,132 @@ function captive_memory_claim_source(PDO $db): ?array
 function captive_memory_sender_scope_key(?string $visitorId): string
 {
     return $visitorId ?? '';
+}
+
+function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true): array
+{
+    $id = (int)($input['job_id'] ?? 0);
+    $token = $input['claim_token'] ?? null;
+    $category = strtoupper((string)($input['result_category'] ?? 'ERROR'));
+    $categories = ['CREATE','UPDATE','RESOLVE','NOTHING','INVALID','ERROR','TIMEOUT','PREEMPTED','CONFLICT'];
+    if ($id < 1 || !in_array($category, $categories, true)
+        || ($atomic && (!is_string($token) || !preg_match('/^[a-f0-9]{32}$/', $token)))) {
+        throw new InvalidArgumentException('invalid formation completion');
+    }
+    $operations = $input['operations'] ?? [];
+    if (!is_array($operations) || count($operations) > 8) throw new InvalidArgumentException('invalid formation operations');
+    $finished = in_array($category, ['CREATE','UPDATE','RESOLVE','NOTHING'], true);
+    if ((!$finished || $category === 'NOTHING') && $operations) throw new InvalidArgumentException('unexpected formation operations');
+    if ($atomic && $finished && $category !== 'NOTHING' && !$operations) throw new InvalidArgumentException('formation operations required');
+    $db->beginTransaction();
+    try {
+        $read = $db->prepare('SELECT * FROM autobiographical_memory_formation_queue WHERE id = ? FOR UPDATE');
+        $read->execute([$id]);
+        $job = $read->fetch(PDO::FETCH_ASSOC);
+        if (!$job) throw new InvalidArgumentException('formation job not found');
+        $token = $token ?? $job['claim_token']; // Compatibility for the old completion-only client during deployment.
+        if (!$atomic && !$token && $job['status'] === 'PROCESSING') {
+            // A claim already running when 027 was applied has no token yet.
+            $token = bin2hex(random_bytes(16));
+            $job['claim_token'] = $token;
+            $db->prepare('UPDATE autobiographical_memory_formation_queue SET claim_token = ? WHERE id = ?')->execute([$token, $id]);
+        }
+        if ($token) {
+            $receipt = $db->prepare('SELECT result_payload FROM autobiographical_memory_formation_attempts WHERE queue_id = ? AND claim_token = ?');
+            $receipt->execute([$id, $token]);
+            $saved = $receipt->fetchColumn();
+            if ($saved !== false && $saved !== null) {
+                $result = json_decode($saved, true, 32, JSON_THROW_ON_ERROR);
+                $db->commit();
+                return array_replace($result, ['duplicate' => true]);
+            }
+        }
+        if ($job['status'] !== 'PROCESSING' || !$token || !hash_equals((string)$job['claim_token'], (string)$token)) {
+            throw new RuntimeException('formation claim conflict');
+        }
+        $source = captive_memory_validate_source(json_decode($job['source_payload'], true, 32, JSON_THROW_ON_ERROR));
+        $senderSource = in_array($job['source_type'], ['POSTCARD','CY_REPLY'], true);
+        $results = [];
+        foreach ($operations as $operation) {
+            if (!is_array($operation)) throw new InvalidArgumentException('invalid formation operation');
+            $op = captive_memory_validate_operation($operation);
+            $expectedDecision = $category === 'RESOLVE' ? 'ARCHIVE' : $category;
+            if ($op['decision'] !== $expectedDecision) throw new InvalidArgumentException('formation decision does not match result');
+            $supplied = $op['source'] ?? [];
+            if (($supplied['sourceType'] ?? null) !== $source['sourceType']
+                || ($supplied['sourceId'] ?? null) !== $source['sourceId']
+                || ($supplied['subjectVisitorId'] ?? null) !== $source['subjectVisitorId']
+                || ($supplied['sourceVisibility'] ?? null) !== $source['sourceVisibility']) {
+                throw new InvalidArgumentException('formation source mismatch');
+            }
+            if ($senderSource && (!$source['subjectVisitorId'] || $source['sourceVisibility'] !== 'SENDER_RECALLABLE')) {
+                throw new InvalidArgumentException('correspondence requires canonical sender privacy');
+            }
+            if ($op['decision'] === 'CREATE') {
+                if ($senderSource && ($op['privacyScope'] !== 'SENDER_RECALLABLE' || !empty($op['publicSummary']))) {
+                    throw new InvalidArgumentException('correspondence memory must remain sender recallable');
+                }
+            } else {
+                $existing = $db->prepare('SELECT * FROM autobiographical_memories WHERE id = ? FOR UPDATE');
+                $existing->execute([$op['memoryId']]);
+                $memory = $existing->fetch(PDO::FETCH_ASSOC);
+                if (!$memory || $memory['status'] !== 'ACTIVE'
+                    || ($memory['subject_visitor_id'] ?? null) !== $source['subjectVisitorId']
+                    || ($senderSource && $memory['privacy_scope'] !== 'SENDER_RECALLABLE')) {
+                    throw new InvalidArgumentException('formation target is not eligible for source sender');
+                }
+                if ($senderSource && !empty($op['publicSummary'])) throw new InvalidArgumentException('private correspondence has no public summary');
+                if ((int)($op['expectedVersion'] ?? 0) !== (int)$memory['version']) throw new RuntimeException('memory version conflict');
+                if ($op['decision'] === 'ARCHIVE' && $memory['memory_type'] !== 'UNRESOLVED_THREAD') {
+                    throw new InvalidArgumentException('resolution requires unresolved thread');
+                }
+            }
+            $op['source'] = $source;
+            $results[] = captive_memory_apply($db, $op);
+            // Same transaction and claim receipt as the mutation, including the
+            // private activity row; a lost acknowledgement cannot duplicate it.
+            $current = $db->prepare('SELECT privacy_scope, public_summary FROM autobiographical_memories WHERE id = ?');
+            $current->execute([$op['memoryId']]);
+            $memory = $current->fetch(PDO::FETCH_ASSOC);
+            $db->prepare('INSERT INTO autobiographical_memory_activity
+                (memory_id, activity_type, public_text, reason_codes, privacy_scope, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW(3))')->execute([
+                    $op['memoryId'], $op['decision'] === 'CREATE' ? 'MEMORY_FORMED' : 'MEMORY_CHANGED',
+                    $memory['privacy_scope'] === 'PUBLIC_RECALLABLE' ? $memory['public_summary'] : null,
+                    '[]', $memory['privacy_scope'],
+                ]);
+        }
+        $retry = $finished ? ['status' => 'PROCESSED', 'failure_streak' => 0, 'delay_seconds' => 0]
+            : captive_memory_formation_retry((int)$job['failure_streak'], $category);
+        $error = isset($input['error']) ? mb_substr((string)$input['error'], 0, 1000) : null;
+        $db->prepare("UPDATE autobiographical_memory_formation_queue
+            SET status = ?, failure_streak = ?, last_result_category = ?,
+                completed_at = IF(?,NOW(3),completed_at),
+                available_at = IF(?,available_at,DATE_ADD(NOW(3),INTERVAL ? SECOND)),
+                last_error = ?, updated_at = NOW(3) WHERE id = ?")
+            ->execute([$retry['status'], $retry['failure_streak'], $category, $finished ? 1 : 0,
+                $finished ? 1 : 0, $retry['delay_seconds'], $error, $id]);
+        $depth = captive_memory_queue_depth($db);
+        $result = ['ok' => true, 'status' => $retry['status'], 'result_category' => $category, 'depth' => $depth,
+            'failure_streak' => $retry['failure_streak'], 'retry_delay_seconds' => $retry['delay_seconds'],
+            'results' => $results, 'duplicate' => false];
+        $db->prepare('INSERT INTO autobiographical_memory_formation_attempts
+            (queue_id, claim_token, result_payload, source_type, source_id, started_at, completed_at,
+             provider, model, prompt_chars, latency_ms, result_category, resulting_memory_id,
+             queue_depth_before, queue_depth_after, error_text, created_at)
+            VALUES (?, ?, ?, ?, ?, COALESCE(?,NOW(3)), NOW(3), ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))')
+            ->execute([$id, $token, json_encode($result, JSON_THROW_ON_ERROR), $job['source_type'], $job['source_id'],
+                $job['started_at'], mb_substr((string)($input['provider'] ?? ''),0,32) ?: null,
+                mb_substr((string)($input['model'] ?? ''),0,160) ?: null,
+                max(0,(int)($input['prompt_chars'] ?? 0)), max(0,(int)($input['latency_ms'] ?? 0)),
+                $category, $results[0]['memory_id'] ?? $input['memory_id'] ?? null,
+                max(0,(int)($input['queue_depth_before'] ?? 0)), $depth, $error]);
+        $db->commit();
+        return $result;
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
 }
 
 function captive_memory_tags(mixed $value): array
@@ -583,7 +807,8 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
     $op = captive_memory_validate_operation($rawOperation);
     $decision = strtoupper((string)$op['decision']);
     $id = (string)$op['memoryId'];
-    $db->beginTransaction();
+    $ownsTransaction = !$db->inTransaction();
+    if ($ownsTransaction) $db->beginTransaction();
     try {
         if ($decision === 'CREATE') {
             $memory = [
@@ -678,6 +903,8 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
         if (in_array($decision, ['CREATE', 'UPDATE'], true)) {
             captive_memory_add_source($db, $id, $op['source'] ?? []);
             captive_memory_replace_tags($db, $id, $op['tags'] ?? []);
+        } elseif ($decision === 'ARCHIVE' && isset($op['source'])) {
+            captive_memory_add_source($db, $id, $op['source']);
         }
         $snapshot = $decision === 'DELETE'
             ? ['status' => 'DELETED']
@@ -691,10 +918,10 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
             $id, $version, $decision, json_encode($snapshot, JSON_UNESCAPED_SLASHES),
             $op['source']['sourceType'] ?? null, $op['source']['sourceId'] ?? null,
         ]);
-        $db->commit();
+        if ($ownsTransaction) $db->commit();
         return ['memory_id' => $id, 'version' => $version, 'operation' => $decision];
     } catch (Throwable $e) {
-        if ($db->inTransaction()) {
+        if ($ownsTransaction && $db->inTransaction()) {
             $db->rollBack();
         }
         throw $e;
