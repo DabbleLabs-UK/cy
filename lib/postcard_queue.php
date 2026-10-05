@@ -144,19 +144,19 @@ function captive_postcard_promote_oldest(PDO $db): bool
 
 // Called only for the first authoritative reply event for a postcard. Every fifth
 // completed reply reserves the newly-freed place for the oldest archived fan item.
-function captive_postcard_mark_replied(PDO $db, int $postcardId, string $at): void
+function captive_postcard_mark_replied(PDO $db, int $postcardId, string $at): bool
 {
     if ($postcardId <= 0) {
-        return;
+        return false;
     }
     $queue = captive_postcard_queue_lock($db);
     $update = $db->prepare(
-        'UPDATE postcards SET replied_at = :at
-         WHERE id = :id AND replied_at IS NULL'
+        "UPDATE postcards SET replied_at = :at
+         WHERE id = :id AND replied_at IS NULL AND blocked = 0 AND mail_class = 'reply'"
     );
     $update->execute([':at' => $at, ':id' => $postcardId]);
     if ($update->rowCount() !== 1) {
-        return;
+        return false;
     }
 
     $completed = $queue['completed_since_promotion'] + 1;
@@ -169,4 +169,5 @@ function captive_postcard_mark_replied(PDO $db, int $postcardId, string $at): vo
          WHERE id = 1'
     );
     $state->execute([':completed' => $completed]);
+    return true;
 }

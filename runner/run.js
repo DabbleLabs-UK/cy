@@ -73,6 +73,8 @@ import { createSomaRuntime } from './soma-runtime.js';
 import { restoreStartupSleepHistory } from './sleep-startup.js';
 import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
+import { PostcardInference, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
+import { canonicalPostcardContext } from './postcard-context.js';
 import {
   buildExpressiveChoiceRequest,
   selectAvailableExpressiveAction,
@@ -712,6 +714,7 @@ async function main() {
   // persists its cumulative total across restarts.
   const deepseekKey = await loadDeepSeekKey(HERE);
   const providers = makeProviders(config, { deepseekKey });
+  const postcardInference = new PostcardInference(config);
   console.log(`[cy] providers: ollama ready; deepseek ${providers[DEEPSEEK].available() ? 'ready' : 'unavailable (no key file)'}`);
   let activeProviderId = OLLAMA;
   const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
@@ -1786,7 +1789,7 @@ async function main() {
         threads: config.threads,
         // the model that produced THIS burst (the active provider's model), and
         // the provider id, so the diagnostics show which model is running.
-        provider: activeProviderId,
+        provider: (r && r.provider) || activeProviderId,
         model: (r && r.stats && r.stats.model) || (r && r.model) || activeProvider().model,
         num_ctx: NUM_CTX,
         inbox_ok: client.lastInboxOk,
@@ -2495,7 +2498,7 @@ async function main() {
   // original Cy/world prompt, and two failures become silence.
   async function streamGenerate({
     system, prompt, opts, mode, purpose, contextTail, allowRepeat = false, attempt = 'initial',
-    timeoutMs = null, pairedWithChoice = false,
+    timeoutMs = null, pairedWithChoice = false, providerOverride = null, postcardTurn = null,
   }) {
     // Visible prose is foreground work. Stop any lower-priority memory job before
     // waiting for the provider slot so a postcard, warden reply or journal turn
@@ -2513,13 +2516,15 @@ async function main() {
     burstAnnihilated = { scaffold: 0, narration: 0, stateNotation: 0 };
     burstTrimmed = 0;
     wardenBlocksInGen = 0;
-    const provider = activeProvider();
+    const provider = providerOverride || activeProvider();
     const attempts = [];
 
     const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
       generationCancellation.register('visible', ac, { purpose: purpose || mode });
-      return collectCandidateBody(candidatePrompt, { repair }, ac);
+      const result = await collectCandidateBody(candidatePrompt, { repair }, ac);
+      if (postcardTurn) await postcardTurn.afterCandidate(result);
+      return result;
     };
 
     const collectCandidateBody = async (candidatePrompt, { repair = false } = {}, ac) => {
@@ -2596,6 +2601,15 @@ async function main() {
         cancelTimeout = startAbortTimeout(ac, timeoutMs);
         t0 = lease.begin();
         reportWait('started');
+        if (postcardTurn) {
+          try {
+            await postcardTurn.beforeRequest({ system, prompt: candidatePrompt,
+              opts: requestOpts, repair, provider });
+          } catch (error) {
+            error.postcardAccounting = true;
+            throw error;
+          }
+        }
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
@@ -2618,7 +2632,8 @@ async function main() {
         }
         console.warn(`[cy] provider ${provider.id} unreachable:`, err.message);
         await sleep(2000);
-        return { candidate, full: '', error: true, requestId: lease && lease.id };
+        return { candidate, full: '', error: true, requestId: lease && lease.id,
+          ...(err.postcardAccounting ? { accountingError: true, holdReason: err.postcardHold || 'accounting_unavailable' } : {}) };
       }
       if (!gen.ok) {
         transportResult = 'http-error';
@@ -2695,6 +2710,7 @@ async function main() {
 
     const guarded = await generateWithCharacterRepair({
       prompt,
+      ...(postcardTurn ? { validate: () => validatePostcardCandidate(attempts.at(-1)?.candidate || '') } : {}),
       generate: async (candidatePrompt, attemptDetail) => {
         const result = await collectCandidate(candidatePrompt, attemptDetail);
         attempts.push(result);
@@ -2744,6 +2760,9 @@ async function main() {
     }
 
     const buffer = warden.newBuffer();
+    // Persist a validated outcome before any visible reply bytes are emitted.
+    // The ingest transaction separately records actual postcard publication.
+    if (postcardTurn) await postcardTurn.outcome('generated');
     for (const chunk of buffer.push(accounted.out)) await onChunk(chunk, mode);
     for (const chunk of buffer.flush({ tokenLimited: guarded.tokenLimited })) await onChunk(chunk, mode);
     await logBurstStrip(rawFull, mode);
@@ -2754,6 +2773,7 @@ async function main() {
     recordInferenceOutcome(guarded.requestId, burstEmitted.trim() ? 'emitted' : 'rejected-after-filtering');
     return {
       ...guarded,
+      provider: provider.id,
       full: burstEmitted,
       strip: {
         rawChars: rawFull.length,
@@ -3188,6 +3208,20 @@ async function main() {
 
   // ---- postcard mode: interrupt, transition, recognise, reply, remember ----
   async function doPostcard(pc) {
+    let route;
+    try {
+      route = await postcardInference.route(pc, providers);
+    } catch {
+      console.warn('[cy] postcard held: routing/accounting unavailable');
+      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      return;
+    }
+    if (!route.execute || !route.provider) {
+      console.log(`[cy] postcard held: ${route.reason || 'existing_turn'}`);
+      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      return;
+    }
+    const postcardTurn = postcardInference.turn(pc, route);
     emit({ kind: 'abort', payload: { cause: 'postcard' } });
     const from = currentMode;
     currentMode = 'letter'; // 'letter' remains the viewer mode label for a reply
@@ -3317,6 +3351,8 @@ async function main() {
       generationRef: `postcard-reply:${pc.id}`,
       currentSenderId: pc.visitor_id || null,
       visitorContext: visitorForPrompt(visitor, { now: Date.now() }),
+      recentExpression: '',
+      incidentContext: incidentsDirective(vitals.ledger, { objects: vitals.worldSimulation.objects }),
     });
     const recog = visitorForPrompt(visitor, { now: Date.now() });
     if (recog && !ctx.sharedContext) ctx.visitor = recog;
@@ -3324,16 +3360,35 @@ async function main() {
     const targetPredict = letterPredict(pc.body);
     ctx.length = completionDirective(targetPredict);
     const directives = buildDirectives(vitals, 'letter', ctx);
-    const letterTail = contextText();
-    const prompt = buildPrompt(letterTail, 'postcard', pc, directives);
+    const postcardContext = canonicalPostcardContext({ postcard: pc, directives,
+      priorWriting: contextText(), now: tsNow(), location: vitals.locationRegime.current.id });
+    const letterTail = postcardContext.subjective;
+    const { system, prompt } = postcardContext;
     const opts = options(vitals, config.threads, 'letter', { num_predict: completionBudget(targetPredict) });
-    await logPrompt('postcard', ZONE_A + '\n\n---PROMPT---\n' + prompt);
-    const r = await streamGenerate({
-      system: ZONE_A, prompt, opts, mode: 'letter', purpose: 'postcard', attempt: 'postcard-initial',
-      timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
-    });
+    await logPrompt('postcard', system + '\n\n---PROMPT---\n' + prompt);
+    let r;
+    try {
+      const generate = () => streamGenerate({
+        system, prompt, opts, mode: 'letter', purpose: 'postcard', attempt: 'postcard-initial',
+        timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
+        providerOverride: providers[postcardTurn.route.provider], postcardTurn,
+      });
+      r = await generate();
+      // Quality rejection still gets only the normal one repair. A transport
+      // failure may use the local fallback when AUTO explicitly permits it.
+      if (postcardMayFallback(r) && await postcardTurn.fallback(r.holdReason || 'provider_unavailable')) {
+        r = await generate();
+      }
+      if (!r.full) await postcardTurn.outcome(r.characterDiscarded ? 'validation_rejected' : 'held',
+        r.aborted ? 'interrupted' : r.error ? 'provider_unavailable' : 'no_valid_reply');
+    } catch {
+      // A lost accounting acknowledgement is ambiguous: hold rather than replay
+      // a paid request or emit prose whose durable outcome was not recorded.
+      console.warn('[cy] postcard held: durable accounting could not be confirmed');
+      r = { full: '', error: true };
+    }
     emitGen(r, 'letter', {
-      zoneA: ZONE_A,
+      zoneA: system,
       zoneB: letterTail,
       zoneC: directives,
       groundedSomaContext: ctx.groundedSomaContext,

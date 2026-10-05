@@ -223,7 +223,7 @@ test('committed mixed ingest and a lost response replay every category independe
         return response;
       };
       await chunkClient.flush();
-      assert.equal(firstChunkLost, true);
+      assert.equal(firstChunkLost, true, chunkClient.lastError || 'first queued chunk must reach the server');
       const firstChunkCount = Number(scalar("SELECT COUNT(*) FROM events WHERE kind = 'event'"));
       globalThis.fetch = priorFetch;
       await chunkClient.flush();

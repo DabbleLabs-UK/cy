@@ -98,9 +98,12 @@ assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeout
   'the shared AutobiographicalMemoryRuntime generate callback applies the foreground timeout only when NOT background');
 ok('every known foreground call site is wired to FOREGROUND_INFERENCE_TIMEOUT_MS');
 
-assert.match(source,
-  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\([\s\S]{0,550}?cancelTimeout = startAbortTimeout\(ac, timeoutMs\)[\s\S]{0,350}?provider\.openStream/,
-  'stream timeout starts only after shared-host ownership is granted');
+const streamSource = source.slice(source.indexOf('async function streamGenerate('), source.indexOf('async function rawGenerate('));
+const streamGrantAt = streamSource.indexOf("hostLease = await waitTrace.measure('arbiterWaitMs'");
+const streamTimeoutAt = streamSource.indexOf('cancelTimeout = startAbortTimeout(ac, timeoutMs)');
+const streamOpenAt = streamSource.indexOf('gen = await provider.openStream');
+assert.ok(streamGrantAt >= 0 && streamGrantAt < streamTimeoutAt && streamTimeoutAt < streamOpenAt,
+  'stream timeout starts after shared-host ownership and before the bounded postcard reservation/provider call');
 const rawGenerateSource = source.slice(source.indexOf('async function rawGenerate('), source.indexOf('function brokerItems('));
 const rawGrantAt = rawGenerateSource.indexOf("hostLease = await waitTrace.measure('arbiterWaitMs'");
 const rawStartAt = rawGenerateSource.indexOf('startedAtMs = lease.begin()');

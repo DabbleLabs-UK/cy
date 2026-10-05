@@ -6,6 +6,7 @@ require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/admin.php';
 require __DIR__ . '/../../lib/tempo.php';
 require __DIR__ . '/../../lib/postcard_queue.php';
+require __DIR__ . '/../../lib/postcard_inference.php';
 require __DIR__ . '/../../lib/environment_event.php';
 require __DIR__ . '/../../lib/world_simulation.php';
 require __DIR__ . '/../../lib/live_vitals.php';
@@ -392,7 +393,9 @@ try {
         if ($kind === 'postcard_out') {
             $p = $event['payload'];
             $postcardId = is_array($p) ? (int)($p['reply_to'] ?? $p['id'] ?? 0) : 0;
-            captive_postcard_mark_replied($db, $postcardId, (string)$event['ts']);
+            if (!captive_postcard_mark_replied($db, $postcardId, (string)$event['ts'])) {
+                continue; // A different delivery ID cannot publish a second reply.
+            }
         }
 
         // Runner-side inbound moderation is authoritative. Record the result but
@@ -427,6 +430,7 @@ try {
                         ':deliver_at' => gmdate('Y-m-d H:i:s', time() + $outcome['retry_after_seconds']),
                         ':id' => $postcardId,
                     ]);
+                    captive_postcard_inference_publication($db, $postcardId, 'deferred');
                 }
             }
             continue;
@@ -550,6 +554,9 @@ try {
         $insert->bindValue(':kind', $kind, PDO::PARAM_STR);
         $insert->bindValue(':payload', $payloadJson, PDO::PARAM_STR);
         $insert->execute();
+        if ($kind === 'postcard_out') {
+            captive_postcard_inference_publication($db, $postcardId, 'published', (int)$db->lastInsertId());
+        }
         $inserted++;
     }
 
