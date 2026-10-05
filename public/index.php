@@ -123,6 +123,7 @@ function cy_import_map(): string
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/style.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/timetravel.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('postcard-layout.css'), ENT_QUOTES) ?>">
+<link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('postcard-inference.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('shell-layout.css'), ENT_QUOTES) ?>">
 <link rel="stylesheet" href="<?= htmlspecialchars(cy_asset('assets/left-inspector.css'), ENT_QUOTES) ?>">
 <?php if ($isAdmin): ?>
@@ -261,6 +262,11 @@ window.CY = {
     </details>
 
     <details class="panel panel-collapsible">
+      <summary class="panel-title panel-toggle">POSTCARD INFERENCE</summary>
+      <div id="postcard-inference"></div>
+    </details>
+
+    <details class="panel panel-collapsible">
       <summary class="panel-title panel-toggle">TEMPO &middot; DUTY CYCLE</summary>
       <div id="tempo"></div>
     </details>
@@ -355,6 +361,7 @@ window.CY = {
 </dialog>
 
 <script type="module" src="<?= htmlspecialchars(cy_asset('shell-layout.js'), ENT_QUOTES) ?>"></script>
+<script type="module" src="<?= htmlspecialchars(cy_asset('postcard-inference.js'), ENT_QUOTES) ?>"></script>
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/app.js'), ENT_QUOTES) ?>"></script>
 <?php if ($rawEnabled): ?>
 <script type="module" src="<?= htmlspecialchars(cy_asset('assets/raw.js'), ENT_QUOTES) ?>"></script>

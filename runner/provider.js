@@ -233,6 +233,7 @@ export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx }) {
       eval_count: c.tokensOut,
       provider: DEEPSEEK,
       model,
+      usage_reported: usage !== null,
       usage: {
         prompt_tokens: c.tokensIn,
         completion_tokens: c.tokensOut,
@@ -413,7 +414,7 @@ function makeDeepSeek(config, key) {
     available() {
       return !!key;
     },
-    async openStream({ system, prompt, opts, signal }) {
+    async openStream({ system, prompt, opts, signal, purpose }) {
       const res = await fetch(`${apiBase}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -422,6 +423,7 @@ function makeDeepSeek(config, key) {
           messages: messages(system, prompt),
           stream: true,
           stream_options: { include_usage: true }, // so the final chunk carries token usage
+          ...(purpose === 'postcard' ? { thinking: { type: 'disabled' } } : {}),
           ...mapOptsToDeepSeek(opts, ds.maxTokens),
         }),
         signal,
@@ -434,7 +436,7 @@ function makeDeepSeek(config, key) {
         model: ds.model,
       };
     },
-    async rawGenerate({ system, prompt, opts, signal, format = null }) {
+    async rawGenerate({ system, prompt, opts, signal, purpose, format = null }) {
       const res = await fetch(`${apiBase}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
@@ -443,6 +445,7 @@ function makeDeepSeek(config, key) {
           messages: messages(system, prompt),
           stream: false,
           ...(format ? { response_format: { type: 'json_object' } } : {}),
+          ...(purpose === 'postcard' ? { thinking: { type: 'disabled' } } : {}),
           ...mapOptsToDeepSeek(opts, ds.maxTokens),
         }),
         signal,
@@ -456,6 +459,7 @@ function makeDeepSeek(config, key) {
         provider: DEEPSEEK,
         model: ds.model,
         prompt_eval_count: c.tokensIn,
+        usage_reported: !!j.usage,
         eval_count: c.tokensOut,
         usage: {
           prompt_tokens: c.tokensIn,
