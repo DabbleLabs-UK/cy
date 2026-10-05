@@ -43,6 +43,20 @@ test('classification instructions distinguish facts, open topics, greetings and 
   }
 });
 
+test('sender semantics prioritize closing settled topics and prohibit invented interpretations', () => {
+  const { system } = buildFormationRequest(source, [topic]);
+  for (const required of [
+    'decide first whether the new same-sender source closes it',
+    'answered, settled, completed, withdrawn or no longer open',
+    'UPDATE only when it remains genuinely open and has materially changed',
+    'Never use UPDATE merely to record the answer to a settled question',
+    '-> RESOLVE FM1, not UPDATE', '-> UPDATE FM1 because it remains open',
+    'No resolution from silence', 'conservatively abstract only supported facts',
+    'withholding, reluctance, deception, uncertainty or emotions unless directly supported',
+    'An unknown result does not mean the sender is unwilling to share it',
+  ]) assert.ok(system.includes(required), required);
+});
+
 test('all valid sender actions attach scope, IDs, revisions and provenance deterministically', () => {
   assert.deepEqual(parse({ decision: 'NOTHING' }), { decision: 'NOTHING', valid: true });
   for (const type of ['PERSON', 'UNRESOLVED_THREAD', 'EPISODIC', 'SEMANTIC', 'MOTIF']) {
