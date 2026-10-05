@@ -462,6 +462,7 @@ CREATE TABLE IF NOT EXISTS autobiographical_memory_formation_queue (
     updated_at DATETIME(3) NOT NULL,
     claim_token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
     failure_streak SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    model_invalid_streak SMALLINT UNSIGNED NOT NULL DEFAULT 0,
     last_result_category VARCHAR(32) NULL,
     UNIQUE KEY uniq_memory_formation_source (source_type, source_id),
     INDEX idx_memory_formation_work (status, available_at, priority, queued_at),

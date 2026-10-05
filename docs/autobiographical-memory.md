@@ -28,6 +28,9 @@ queues, expiring prepared working sets, and owner-only attempt records containin
 provider/model, prompt size, latency, result category, queue depth and errors.
 Migration `sql/027_memory_formation_delivery.sql` adds claim receipts, consecutive
 failure counts and terminal/quarantine status without discarding old sources.
+Migration `028_memory_formation_contract.sql` adds an independent invalid-model
+decision counter. It starts at zero because the old failure count also included
+infrastructure errors; existing statuses and completion receipts are not reset.
 
 Memory types are EPISODIC, PERSON, MOTIF, UNRESOLVED_THREAD and SEMANTIC.
 Lifecycle states are ACTIVE, ARCHIVED and DELETED. Consistency is CONSISTENT,
@@ -71,16 +74,33 @@ existing memories. The active model must return one structured decision:
   clearly settles it, archiving it with a revision and resolving provenance; or
 - NOTHING.
 
+Sender POSTCARD/CY_REPLY formation uses an Ollama JSON Schema with separate
+action shapes and no additional properties. CREATE needs only type/content;
+NOTHING has no other fields. UPDATE/RESOLVE use exact offered `FM1`-style refs,
+distinct from shared-context labels. Without an eligible target those actions
+are absent from the schema. CY attaches sender-only scope, IDs and provenance;
+the parser independently enforces fields, reference membership and privacy.
+PERSON represents durable sender facts, UNRESOLVED_THREAD a persistent open
+issue, EPISODIC a meaningful episode rather than a personal-fact fallback, and
+trivial greetings normally yield NOTHING. Other source contracts are unchanged.
+
 The server validates the decision, provenance, version and privacy scope. UPDATE
 and RESOLVE use optimistic version checking. The operation and queue completion
 commit in one transaction, so replay of a claim token returns its original
 receipt without applying a second memory. Errors, invalid responses and timeouts
-use bounded exponential backoff. Six consecutive invalid model decisions enter
+use bounded exponential backoff. Six rejected model decisions for a source enter
 a retained FAILED state. Operational errors, timeouts and foreground preemption
-remain retryable at a capped rate so shared-model contention cannot discard a
+do not consume that separate invalid-decision allowance; they remain retryable
+at a capped rate so shared-model contention cannot discard a
 valid source. Formation cannot edit or backfill the structured
 world archive. A generated expression can become subjective autobiography but
 cannot become evidence for a grounded Soma subsystem.
+
+Owner-only attempt inspection exposes bounded structural rejection codes and
+both retry counters from the transactional receipt. It does not retain raw model
+responses or source text in the new diagnostics. The production timeout and
+preemption policy are unchanged. The opt-in synthetic probe is
+`scripts/probe-sender-formation-contract.mjs`; it never uses production memory.
 
 There is no automatic merge score. There is no model-generated chain-of-thought.
 A separate periodic consolidation process is not implemented. UPDATE can revise

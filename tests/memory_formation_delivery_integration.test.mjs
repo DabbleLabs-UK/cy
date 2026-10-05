@@ -26,9 +26,20 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
   let server;
   try {
     sql(`CREATE DATABASE ${database}`, null);
-    sql(await readFile(join(root, 'sql/schema.sql'), 'utf8'));
+    // Exercise the additive migration from the deployed pre-counter schema.
+    sql((await readFile(join(root, 'sql/schema.sql'), 'utf8')).replace(/^.*model_invalid_streak.*\r?\n/m, ''));
+    // Owner inspection also reads the existing optional-surfacing tables.
+    sql((await readFile(join(root, 'sql/017_memory_runtime_queue.sql'), 'utf8')).replaceAll('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '));
     const migration = await readFile(join(root, 'sql/027_memory_formation_delivery.sql'), 'utf8');
     sql(migration); sql(migration);
+    const contractMigration = await readFile(join(root, 'sql/028_memory_formation_contract.sql'), 'utf8');
+    sql(`INSERT INTO autobiographical_memory_formation_queue
+      (source_type,source_id,source_payload,status,attempts,failure_streak,available_at,queued_at,updated_at)
+      VALUES ('MIGRATION_TEST','legacy-mixed','{}','FAILED',300,6,NOW(),NOW(),NOW())`);
+    sql(contractMigration); sql(contractMigration);
+    assert.equal(sql("SELECT CONCAT(status,':',attempts,':',failure_streak,':',model_invalid_streak) FROM autobiographical_memory_formation_queue WHERE source_id='legacy-mixed'"),
+      'FAILED:300:6:0', 'migration starts only the invalid-decision budget; old mixed counts and status remain intact');
+    sql("DELETE FROM autobiographical_memory_formation_queue WHERE source_type='MIGRATION_TEST'");
     await cp(join(root, 'lib'), join(web, 'lib'), { recursive: true });
     await cp(join(root, 'public/api'), join(web, 'public/api'), { recursive: true });
     await cp(join(root, 'config'), join(web, 'config'), { recursive: true });
@@ -80,10 +91,14 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     assert.equal(Number(first.id), firstId);
     assert.equal(Number(first.attempts), 293);
     assert.equal(Number(first.failure_streak), 0, 'historical attempts do not consume the new retry allowance');
+    assert.equal(Number(first.model_invalid_streak), 0);
     assert.match(first.claim_token, /^[a-f0-9]{32}$/);
     const operation = create(firstSource);
+    sql(`UPDATE autobiographical_memory_formation_queue SET failure_streak=5,model_invalid_streak=4 WHERE id=${firstId}`);
     const completed = await finish(first, 'CREATE', [operation]);
     assert.equal(completed.status, 'PROCESSED');
+    assert.equal(completed.failure_streak, 0);
+    assert.equal(completed.model_invalid_streak, 0, 'valid application resets both independent counters');
     const replayed = await finish(first, 'CREATE', [create(firstSource)]);
     assert.equal(replayed.duplicate, true, 'lost acknowledgement returns original result despite a newly generated candidate ID');
     assert.equal(replayed.result_category, 'CREATE');
@@ -141,11 +156,19 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
 
     const retryId = await enqueue(source('retry'));
     let job = await claim(sender);
+    await finish(job, 'INVALID', [], { rejection_code: 'SCHEMA: private text' }, 422);
+    assert.equal(sql(`SELECT status FROM autobiographical_memory_formation_queue WHERE id=${retryId}`), 'PROCESSING');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_formation_attempts WHERE queue_id=${retryId}`), '0');
     for (let failure = 1; failure <= 6; failure++) {
-      const result = await finish(job, 'INVALID', [], { error: 'malformed model decision' });
+      const result = await finish(job, 'INVALID', [], { error: 'malformed model decision', rejection_code: 'UNKNOWN_REF' });
       assert.equal(result.failure_streak, failure);
+      assert.equal(result.model_invalid_streak, failure);
+      assert.equal(result.rejection_code, 'UNKNOWN_REF');
       assert.equal(result.status, failure === 6 ? 'FAILED' : 'RETRYABLE');
-      assert.equal((await finish(job, 'INVALID')).duplicate, true, 'lost failure acknowledgement cannot count twice');
+      const replay = await finish(job, 'INVALID', [], { rejection_code: 'SCHEMA' });
+      assert.deepEqual(replay, { ...result, duplicate: true }, 'lost failure acknowledgement preserves counters and original diagnostic');
+      assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_formation_attempts WHERE claim_token='${job.claim_token}'`), '1');
+      assert.equal(sql(`SELECT JSON_UNQUOTE(JSON_EXTRACT(result_payload,'$.rejection_code')) FROM autobiographical_memory_formation_attempts WHERE claim_token='${job.claim_token}'`), 'UNKNOWN_REF');
       if (failure === 6) break;
       assert.equal(await claim(sender), null, 'backoff prevents immediate hot retry');
       sql(`UPDATE autobiographical_memory_formation_queue SET available_at=NOW()-INTERVAL 1 SECOND WHERE id=${retryId}`);
@@ -157,6 +180,7 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
       if (failure === 2) {
         const preempted = await finish(job, 'PREEMPTED');
         assert.equal(preempted.failure_streak, 2);
+        assert.equal(preempted.model_invalid_streak, 2);
         assert.equal(preempted.status, 'RETRYABLE');
         sql(`UPDATE autobiographical_memory_formation_queue SET available_at=NOW()-INTERVAL 1 SECOND WHERE id=${retryId}`);
         job = await claim(sender);
@@ -167,15 +191,23 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     const operationalId = await enqueue(source('operational-timeout'));
     let operational = await claim(sender);
     for (let failure = 1; failure <= 7; failure++) {
-      const result = await finish(operational, 'TIMEOUT', [], { error: 'shared model unavailable' });
+      const result = await finish(operational, ['TIMEOUT', 'ERROR', 'CONFLICT'][failure % 3], [], { error: 'shared model unavailable' });
       assert.equal(result.status, 'RETRYABLE', 'model access cannot make a valid source terminal');
       assert.equal(result.failure_streak, Math.min(failure, 6));
+      assert.equal(result.model_invalid_streak, 0);
       assert.ok(result.retry_delay_seconds <= 900, 'operational retry rate stays capped');
       if (failure === 7) break;
       sql(`UPDATE autobiographical_memory_formation_queue SET available_at=NOW()-INTERVAL 1 SECOND WHERE id=${operationalId}`);
       operational = await claim(sender);
     }
     assert.equal(await claim(sender), null, 'operational failure still observes backoff');
+    sql(`UPDATE autobiographical_memory_formation_queue SET available_at=NOW()-INTERVAL 1 SECOND WHERE id=${operationalId}`);
+    operational = await claim(sender);
+    const mixed = await finish(operational, 'INVALID', [], { rejection_code: 'MISSING_FIELD' });
+    assert.equal(mixed.status, 'RETRYABLE', 'operational failures cannot spend the invalid decision allowance');
+    assert.equal(mixed.failure_streak, 6);
+    assert.equal(mixed.model_invalid_streak, 1);
+    assert.equal(mixed.retry_delay_seconds, 900);
 
     const crashedId = await enqueue(source('crash'));
     const crashed = await claim(sender);
@@ -183,6 +215,7 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     assert.equal(await claim(sender), null, 'expired lease enters backoff');
     await finish(crashed, 'CREATE', [create(source('crash'))], {}, 409);
     assert.equal(sql(`SELECT failure_streak FROM autobiographical_memory_formation_queue WHERE id=${crashedId}`), '6');
+    assert.equal(sql(`SELECT model_invalid_streak FROM autobiographical_memory_formation_queue WHERE id=${crashedId}`), '0');
     assert.equal(sql(`SELECT status FROM autobiographical_memory_formation_queue WHERE id=${crashedId}`), 'RETRYABLE');
 
     sql("INSERT INTO environment_events (event_id,occurred_at,event_type,event_family,record) VALUES ('legacy-card',NOW(),'postcard','ordinary_postcard','{}'),('ordinary-noise',NOW(),'wing_noise','environment','{}')");
@@ -193,6 +226,10 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     assert.equal(sql(`SELECT status FROM autobiographical_memory_formation_queue WHERE id=${legacyId}`), 'QUARANTINED');
     assert.match(sql(`SELECT source_payload FROM autobiographical_memory_formation_queue WHERE id=${legacyId}`), /private sender garden question/);
     await finish(ordinary, 'NOTHING');
+    const preservedRows = sql('SELECT id,status,failure_streak,model_invalid_streak FROM autobiographical_memory_formation_queue ORDER BY id');
+    sql(contractMigration);
+    assert.equal(sql('SELECT id,status,failure_streak,model_invalid_streak FROM autobiographical_memory_formation_queue ORDER BY id'), preservedRows,
+      'reapplying migration cannot reset invalid budgets or processed/quarantined/failed state');
     const health = (await api('formation_health')).health;
     assert.equal(health.failed, 1);
     assert.equal(health.quarantined, 1);
@@ -207,6 +244,17 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     assert.ok(health.next_sender_retry_at);
     assert.equal(typeof health.oldest_sender_pending_age_seconds, 'number');
     assert.doesNotMatch(JSON.stringify(health), /garden|aaaa|source_payload/);
+    const inspectionUrl = endpoint.replace('memory.php', 'memory-inspection.php');
+    assert.equal((await fetch(inspectionUrl)).status, 404, 'attempt diagnostics remain owner-only');
+    const inspectionResponse = await fetch(`${inspectionUrl}?111`);
+    assert.equal(inspectionResponse.status, 200);
+    const inspection = await inspectionResponse.json();
+    const inspectedInvalid = inspection.runtime.formation.recent.find(row => row.source_id === 'operational-timeout');
+    assert.equal(inspectedInvalid.rejection_code, 'MISSING_FIELD');
+    assert.equal(Number(inspectedInvalid.failure_streak), 6);
+    assert.equal(Number(inspectedInvalid.model_invalid_streak), 1);
+    assert.doesNotMatch(JSON.stringify(inspection.runtime.formation.recent), /private sender garden question|tends a garden|grows vegetables|aaaa|source_payload|result_payload/,
+      'inspection projects only structural receipt diagnostics, not operation/source payloads');
   } finally {
     if (server && server.exitCode === null) {
       const exit = new Promise(resolve => server.once('exit', resolve)); server.kill(); await exit;

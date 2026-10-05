@@ -514,6 +514,7 @@ export class AutobiographicalMemoryRuntime {
     let memoryId = null;
     let error = null;
     let operations = [];
+    let rejectionCode = null;
     try {
       const response = await this.client.queryMemories({
         query: { text: source.text || '', tags: source.tags || [], location: source.location || null },
@@ -535,7 +536,10 @@ export class AutobiographicalMemoryRuntime {
         existing: request.candidates.map((candidate) => candidates.find((memory) => memory.id === candidate.id)).filter(Boolean),
         makeId: this.makeId,
       });
-      if (!operation.valid) category = 'INVALID';
+      if (!operation.valid) {
+        category = 'INVALID';
+        rejectionCode = operation.rejectionCode || 'SCHEMA';
+      }
       else if (operation.decision === 'NOTHING') category = 'NOTHING';
       else {
         category = operation.decision === 'ARCHIVE' ? 'RESOLVE' : operation.decision;
@@ -554,6 +558,7 @@ export class AutobiographicalMemoryRuntime {
       prompt_chars: promptChars(call), latency_ms: this.now() - started,
       queue_depth_before: Number(queueDepthBefore) || 0,
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
+      rejection_code: rejectionCode,
     };
     let completed;
     try {
@@ -567,6 +572,8 @@ export class AutobiographicalMemoryRuntime {
         : /422/i.test(failure) ? 'INVALID' : 'ERROR';
       completed = await this.client.finishMemorySource({
         ...completion, result_category: category, operations: [], memory_id: null, error: failure,
+        rejection_code: category === 'CONFLICT' ? 'APPLICATION_CONFLICT'
+          : category === 'INVALID' ? 'PRIVACY_PROVENANCE' : null,
       });
     }
     category = completed?.result_category || category;

@@ -2873,6 +2873,11 @@ async function main() {
         outputChars = String(out.text || '').length;
         if (!out.ok) {
           requestResult = ac.signal.aborted ? 'aborted' : 'http-error';
+          // A failed transport is not an empty/invalid model decision. Keep it
+          // outside the sender formation model-invalid retry budget.
+          if (background && purpose === 'memory_formation' && !ac.signal.aborted) {
+            throw new Error(`memory formation provider HTTP ${Number(out.status) || 0}`);
+          }
           if (awgInReservedIdle && ac.signal.aborted) throw cancellationError(ac.signal);
           if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
           return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
@@ -3134,6 +3139,7 @@ async function main() {
       // is untouched.
       timeoutMs: call.background ? null : FOREGROUND_INFERENCE_TIMEOUT_MS,
       attempt: call.purpose || 'memory-background',
+      format: call.purpose === 'memory_formation' ? call.format || null : null,
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
     canRunBackground: (kind) => inferPhase === 'idle'
