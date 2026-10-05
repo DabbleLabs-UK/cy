@@ -137,6 +137,9 @@ try {
       const result = await runtime.processFormation({ id, claim_token: `synthetic-${id}`, source }, 1);
       const completion = JSON.parse(db.prepare('SELECT body FROM completions WHERE id=?').get(id).body);
       const operation = completion.operations[0];
+      // This automated check covers action/type/target, not semantic fidelity.
+      // Review the synthetic output too: correct action with an invented claim
+      // must not be reported as a successful memory decision.
       const valid = result.status === fixture.expected && (!fixture.type || operation?.type === fixture.type)
         && (fixture.expected !== 'RESOLVE' || operation?.memoryId === 'synthetic-open-topic');
       if (valid) passed++;
