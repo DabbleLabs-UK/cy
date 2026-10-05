@@ -125,34 +125,7 @@ function captive_postcard_inference_route(PDO $db, array $input): array
     $insert = $db->prepare('INSERT INTO postcard_inference_turns (postcard_id, route, provider, model, status, reason, fallback_reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))');
     $fallback = $settings['enabled'] && $settings['route'] === 'AUTO' && $choice['provider'] === 'ollama' ? $choice['reason'] : null;
     $insert->execute([$id, $settings['route'], $choice['provider'], $model, $choice['provider'] ? 'claimed' : 'held', $choice['reason'], $fallback]);
-    return ['ok' => true, 'execute' => $choice['provider'] !== null, 'route' => $settings['route'], 'settings' => $settings, 'pricing' => $pricing,
-        'correspondence' => captive_postcard_inference_correspondence($db, $postcard)] + $choice;
-}
-
-function captive_postcard_inference_correspondence(PDO $db, array $postcard): array
-{
-    if (empty($postcard['visitor_id'])) return [];
-    // Replied items prove prior receipt. Delivery alone is only an inbox claim,
-    // and unscreened/fan-mail arrivals do not establish that Cy knew the text.
-    // Legacy outgoing prose has no indexed postcard linkage and is omitted.
-    $read = $db->prepare("SELECT p.from_name, p.body, p.posted_at, e.payload AS reply_payload
-        FROM postcards p
-        LEFT JOIN postcard_inference_turns t ON t.postcard_id = p.id
-        LEFT JOIN events e ON e.seq = t.publication_event_id AND e.kind = 'postcard_out'
-        WHERE p.visitor_id = ? AND p.id < ? AND p.blocked = 0 AND p.replied_at IS NOT NULL
-        ORDER BY p.id DESC LIMIT 2");
-    $read->execute([$postcard['visitor_id'], $postcard['id']]);
-    $result = [];
-    foreach (array_reverse($read->fetchAll(PDO::FETCH_ASSOC)) as $row) {
-        $reply = json_decode((string)($row['reply_payload'] ?? ''), true);
-        $result[] = [
-            'from_name' => mb_substr((string)($row['from_name'] ?? ''), 0, 40),
-            'body' => mb_substr((string)($row['body'] ?? ''), 0, 500),
-            'posted_at' => $row['posted_at'],
-            'reply' => is_array($reply) && is_string($reply['body'] ?? null) ? mb_substr($reply['body'], 0, 500) : null,
-        ];
-    }
-    return $result;
+    return ['ok' => true, 'execute' => $choice['provider'] !== null, 'route' => $settings['route'], 'settings' => $settings, 'pricing' => $pricing] + $choice;
 }
 
 function captive_postcard_inference_int(array $input, string $key, int $min, int $max): int

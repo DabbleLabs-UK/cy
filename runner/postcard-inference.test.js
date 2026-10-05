@@ -5,6 +5,10 @@ import { PostcardInference, postcardInputTokenBound, postcardMayFallback, valida
 import { canonicalPostcardContext, POSTCARD_CHARACTER } from './postcard-context.js';
 import { makeProviders } from './provider.js';
 import { generateWithCharacterRepair } from './character-output.js';
+import { AutobiographicalMemoryRuntime, memoryContextFingerprint } from './memory-runtime.js';
+import { visitorForPrompt } from './cast.js';
+import { buildDirectives } from './prompt.js';
+import { safeBuildContext } from './context-broker.js';
 
 const config = { apiBase: 'https://cy.invalid', ingestKey: 'test-only', model: 'local',
   deepseek: { apiBase: 'https://provider.invalid', model: 'deepseek-v4-flash' } };
@@ -57,6 +61,58 @@ test('UTF-8 bound includes conservative envelope and rejects unbounded paid outp
   const turn = client.turn({ id: 1 }, { provider: 'deepseek', route: 'AUTO' });
   await assert.rejects(() => turn.beforeRequest({ system: '', prompt: '', opts: {}, provider: registry.deepseek }), /bound required/);
   assert.equal(calls.length, 0);
+});
+
+test('canonical sender memories, unresolved topics and public recall survive both provider serializations', async () => {
+  const sender = 'a'.repeat(32), other = 'b'.repeat(32);
+  const current = { text: 'how is the garden?', currentVisitorId: sender, generationRef: 'postcard:80' };
+  const base = { type: 'PERSON', status: 'ACTIVE', privacyScope: 'SENDER_RECALLABLE',
+    subjectVisitorId: sender, consistencyStatus: 'CONSISTENT', tags: ['garden'], version: 40 };
+  const stored = [
+    { ...base, id: 'person', content: 'Ana told Cy many cards ago that she tends a garden.' },
+    { ...base, id: 'topic', type: 'UNRESOLVED_THREAD', content: 'Ana has not yet said whether the seedlings survived.' },
+    { ...base, id: 'public', privacyScope: 'PUBLIC_RECALLABLE', subjectVisitorId: other,
+      content: 'PRIVATE original name and address', publicSummary: 'Another visitor also described a garden.' },
+    { ...base, id: 'private', subjectVisitorId: other, content: 'PRIVATE other sender conversation' },
+  ];
+  const snapshot = structuredClone(stored);
+  const runtime = new AutobiographicalMemoryRuntime({ client: {
+    getPreparedMemorySet: async () => ({ prepared_set: { id: 'existing-prepared',
+      context_fingerprint: memoryContextFingerprint(current), subject_visitor_id: sender, selected_memories: stored } }),
+    consumePreparedMemorySet: async () => {},
+  }, generate: () => { throw Error('no second retrieval/model/store'); }, makeId: () => 'unused' });
+  await runtime.requestWorkingContext(current, { deadlineMs: 750 });
+  const memory = runtime.consumeWorking(current.generationRef, sender);
+  assert.equal(memory.selected.length, 3);
+  const visitor = visitorForPrompt({ handle: 'Ana', postcard_count: 80 });
+  const brokered = safeBuildContext({ consumer: 'CY_PROSE', currentSenderId: sender, items: [
+    { id: 'visitor', section: 'visitor_context', provenanceClass: 'PUBLIC VISITOR MATERIAL',
+      knowledgeScope: 'CY_OBSERVED', privacyScope: 'SENDER_RECALLABLE', senderId: sender, content: visitor },
+    ...memory.selected.map(m => ({ id: m.id, section: 'autobiographical_memory',
+      provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
+      privacyScope: m.privacyScope, senderId: m.subjectVisitorId, content: m.content })),
+  ] });
+  assert.equal(brokered.ok, true);
+  const context = canonicalPostcardContext({ postcard: { from_name: 'Ana', body: current.text },
+    directives: buildDirectives({}, 'letter', { sharedContext: brokered.rendering }),
+    priorWriting: '', now: '2026-10-05', location: 'CELL' });
+  assert.match(context.prompt, /80 postcards now/);
+  for (const text of ['many cards ago', 'seedlings survived', 'Another visitor also described a garden']) assert.ok(context.prompt.includes(text));
+  assert.match(context.prompt, /subjective memory/i);
+  assert.doesNotMatch(context.prompt, /PRIVATE|existing-prepared|aaaaaaaaaaaaaaaa/);
+  const requests = [], originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => { requests.push(JSON.parse(options.body)); return new Response(''); };
+  try {
+    await registry.ollama.openStream({ ...context, opts: { num_predict: 120 }, purpose: 'postcard' });
+    await registry.deepseek.openStream({ ...context, opts: { num_predict: 120 }, purpose: 'postcard' });
+    assert.equal(requests[0].prompt, requests[1].messages[1].content);
+    assert.equal(requests[0].system, requests[1].messages[0].content);
+  } finally { globalThis.fetch = originalFetch; runtime.stop(); }
+  assert.deepEqual(stored, snapshot, 'no mutation of canonical memory');
+  const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
+  const body = run.slice(run.indexOf('async function doPostcard('), run.indexOf('// ---- inbox:'));
+  assert.ok(body.indexOf('autobiographicalMemory.requestWorkingContext') < body.indexOf('canonicalPostcardContext'));
+  assert.doesNotMatch(body, /route\.correspondence/);
 });
 
 test('lost reservation acknowledgement never reaches provider and retry retains identity', async () => {

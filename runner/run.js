@@ -3361,8 +3361,7 @@ async function main() {
     ctx.length = completionDirective(targetPredict);
     const directives = buildDirectives(vitals, 'letter', ctx);
     const postcardContext = canonicalPostcardContext({ postcard: pc, directives,
-      priorWriting: contextText(), now: tsNow(), location: vitals.locationRegime.current.id,
-      correspondence: route.correspondence || [] });
+      priorWriting: contextText(), now: tsNow(), location: vitals.locationRegime.current.id });
     const letterTail = postcardContext.subjective;
     const { system, prompt } = postcardContext;
     const opts = options(vitals, config.threads, 'letter', { num_predict: completionBudget(targetPredict) });

@@ -5,9 +5,17 @@ Cy's active journal, dream, drawing, AWG or memory provider. Both reply provider
 receive one canonical persona/context: the verbatim submitted card, sender
 recognition, current clock/location/regime, bounded observed events, grounded
 Soma, provenanced incident notes, eligible autobiographical memories, static cast
-descriptions and one bounded subjective prior-writing source. Up to two earlier
-replied-to cards from this exact sender are included. Legacy outgoing replies
-without an indexed event association are omitted, not guessed.
+descriptions and one bounded subjective prior-writing source. Sender identity,
+PERSON memories, relevant prior exchanges and UNRESOLVED_THREAD records use the
+existing autobiographical retrieval/formation system, not a second transcript
+lookup or cloud memory store. Public cross-visitor recall uses only the existing
+privacy-eligible public summary. Local and cloud consume the same selected set.
+
+The existing asynchronous memory deadline is preserved: a reply may proceed
+without recalled details if no compatible prepared set is ready within 750 ms.
+Recognition/counts still arrive with the inbox visitor record. This feature does
+not promise exhaustive recall, add a consolidation mechanism, or change which
+memories the existing background selector chooses.
 
 The postcard-specific instruction allows interest, gratitude, warmth, curiosity
 and humour while preserving Cy's present mood, rough voice and unresolved history.

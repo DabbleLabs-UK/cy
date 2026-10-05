@@ -15,15 +15,13 @@ export const POSTCARD_CHARACTER = [
 
 // Both providers consume these exact strings. Provider selection cannot change
 // Cy's persona, memory selection, knowledge boundary, or the sender's message.
-export function canonicalPostcardContext({ postcard, directives, priorWriting, now, location, correspondence = [] }) {
+export function canonicalPostcardContext({ postcard, directives, priorWriting, now, location }) {
   const subjective = selectJournalContinuation(sanitizeCharacterContext(priorWriting));
   const clock = `Current date/time: ${now}. Current location: ${location}.`;
-  const previous = correspondence.slice(-2).map(item => [
-    `Earlier correspondence with this sender (${String(item.posted_at || 'date unknown')}):`,
-    `They wrote: ${sanitizeCharacterContext(String(item.body || '').slice(0, 500))}`,
-    item.reply ? `Cy replied: ${sanitizeCharacterContext(String(item.reply).slice(0, 500))}` : '',
-  ].filter(Boolean).join('\n')).join('\n\n');
-  const context = [clock, directives, previous,
+  // Returning-person and conversation recall already comes through directives
+  // from the canonical memory runtime and provenance/privacy-aware broker.
+  // Routing/accounting must not grow its own recent-correspondence lookup.
+  const context = [clock, directives,
     subjective ? `Prior subjective writing, possibly mistaken or outdated:\n${subjective}` : '',
   ].filter(Boolean).join('\n\n');
   return Object.freeze({

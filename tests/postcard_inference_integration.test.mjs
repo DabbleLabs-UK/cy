@@ -57,6 +57,34 @@ test('postcard cloud budget, lost acknowledgements, one reply and public/admin b
       return result;
     };
     const publicGet = async range => (await fetch(`${base}/api/postcard-inference.php?range=${range}`)).json();
+    // Exercise the pre-existing indexed memory API, not a provider-specific
+    // transcript lookup. Old sender/topic records survive many newer exchanges.
+    const sender = 'a'.repeat(32), other = 'b'.repeat(32);
+    const personId = randomUUID(), topicId = randomUUID(), publicId = randomUUID(), privateId = randomUUID();
+    const memoryRow = (id, type, scope, who, content, summary, date) =>
+      `('${id}','${type}','${scope}','${who}','${content}',${summary ? `'${summary}'` : 'NULL'},'${date}','${date}')`;
+    const rows = [
+      memoryRow(personId, 'PERSON', 'SENDER_RECALLABLE', sender, 'Ana tends a garden', null, '2025-01-01'),
+      memoryRow(topicId, 'UNRESOLVED_THREAD', 'SENDER_RECALLABLE', sender, 'The garden seedlings question remains unanswered', null, '2025-01-02'),
+      memoryRow(publicId, 'EPISODIC', 'PUBLIC_RECALLABLE', other, 'PRIVATE identifying garden wording', 'Another visitor described a garden', '2025-01-03'),
+      memoryRow(privateId, 'PERSON', 'SENDER_RECALLABLE', other, 'PRIVATE other garden history', null, '2025-01-04'),
+      ...Array.from({ length: 300 }, () => memoryRow(randomUUID(), 'EPISODIC', 'SENDER_RECALLABLE', other, 'unrelated correspondence', null, '2026-10-01')),
+    ];
+    sql(`INSERT INTO autobiographical_memories (id,memory_type,privacy_scope,subject_visitor_id,content,public_summary,created_at,updated_at) VALUES ${rows.join(',')}`);
+    sql(`INSERT INTO autobiographical_memory_sources (memory_id,source_type,source_id,source_visibility,created_at)
+      SELECT id,'POSTCARD',CONCAT('test-card:',id),privacy_scope,created_at FROM autobiographical_memories`);
+    const recalledResponse = await fetch(`${base}/api/memory.php`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cy-Key': 'test-key' },
+      body: JSON.stringify({ action: 'query', visitor_id: sender, query: { text: 'garden seedlings' }, limit: 10 }),
+    });
+    assert.equal(recalledResponse.status, 200);
+    const recalled = await recalledResponse.json();
+    assert.deepEqual(new Set(recalled.candidates.map(m => m.id)), new Set([personId, topicId, publicId]));
+    assert.ok(recalled.candidates.length <= 10, 'many exchanges never become a whole transcript');
+    assert.match(recalled.candidates.find(m => m.id === topicId).content, /unanswered/);
+    assert.equal(recalled.candidates.find(m => m.id === publicId).content, 'Another visitor described a garden');
+    assert.doesNotMatch(JSON.stringify(recalled.candidates), /PRIVATE/);
+    assert.ok(recalled.retrieval.mechanisms.includes('EXACT_PERSON'));
     const initial = await publicGet('1H');
     assert.equal(initial.ok, true);
     assert.equal(initial.can_admin, false);
@@ -78,15 +106,9 @@ test('postcard cloud budget, lost acknowledgements, one reply and public/admin b
       attempt, input_tokens: 20000, max_output_tokens: 512,
     });
     const id = postcard();
-    sql(`UPDATE postcards SET visitor_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' WHERE id=${id};
-      INSERT INTO postcards (id,body,posted_at,deliver_at,replied_at,visitor_id,mail_class,blocked) VALUES
-      (90,'previous greeting',NOW(),NOW(),NOW(),'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','reply',0),
-      (91,'other sender secret',NOW(),NOW(),NOW(),'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','reply',0),
-      (92,'unscreened mail',NOW(),NOW(),NULL,'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','fan',0),
-      (93,'blocked material',NOW(),NOW(),NOW(),'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','reply',1)`);
     const firstRoute = await route(id);
     assert.equal(firstRoute.provider, 'deepseek');
-    assert.deepEqual(firstRoute.correspondence.map(c => c.body), ['previous greeting']);
+    assert.equal(firstRoute.correspondence, undefined, 'accounting is not a second memory/history source');
     assert.equal((await route(id)).execute, false, 'lost route acknowledgement never repeats a turn');
     const reserved = await reserve(id);
     assert.equal(reserved.execute, true);
