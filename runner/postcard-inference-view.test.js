@@ -60,6 +60,20 @@ test('public view shows aggregated accounting and cannot submit settings', async
   assert.match(root.innerHTML, /aria-live="polite"/);
 });
 
+test('default browser fetch retains the Window receiver rather than the panel instance', async () => {
+  const { root, nodes, data } = fixture();
+  const original = globalThis.fetch;
+  globalThis.fetch = async function () {
+    assert.equal(this, globalThis, 'native browser fetch rejects an unrelated receiver');
+    return { ok: true, json: async () => data };
+  };
+  try {
+    await new PostcardInference(root).refresh();
+    assert.equal(nodes.get('.pci-state').textContent, 'Cloud disabled - local replies');
+    assert.match(nodes.get('.pci-current').innerHTML, /30% of GBP 0.1000 cap/);
+  } finally { globalThis.fetch = original; }
+});
+
 test('admin controls require explicit server authorization and preserve unsaved edits on refresh', () => {
   const { root, nodes, data } = fixture();
   const panel = new PostcardInference(root);
