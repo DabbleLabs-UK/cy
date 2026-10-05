@@ -18,7 +18,10 @@ function captive_memory_formation_retry(int $failureStreak, string $category): a
         return ['status' => 'RETRYABLE', 'failure_streak' => $failureStreak, 'delay_seconds' => 30];
     }
     $failures = min(CY_MEMORY_FORMATION_FAILURE_LIMIT, max(0, $failureStreak) + 1);
-    return ['status' => $failures >= CY_MEMORY_FORMATION_FAILURE_LIMIT ? 'FAILED' : 'RETRYABLE',
+    // Operational outages and model-access timeouts must not permanently
+    // condemn a valid durable source. Only repeated invalid model decisions
+    // can reach terminal failure; all retries remain rate-limited.
+    return ['status' => $category === 'INVALID' && $failures >= CY_MEMORY_FORMATION_FAILURE_LIMIT ? 'FAILED' : 'RETRYABLE',
         'failure_streak' => $failures, 'delay_seconds' => min(900, 30 * (2 ** ($failures - 1)))];
 }
 
@@ -188,7 +191,7 @@ function captive_memory_claim_source(PDO $db, array $filter = []): ?array
               AND e.event_type IN ('postcard','postcard_reply','postcard_with_image')");
         $db->exec(
             "UPDATE autobiographical_memory_formation_queue
-             SET status = IF(failure_streak + 1 >= 6, 'FAILED', 'RETRYABLE'),
+             SET status = 'RETRYABLE',
                  available_at = DATE_ADD(NOW(3), INTERVAL LEAST(900, 30 * POW(2, LEAST(failure_streak, 5))) SECOND),
                  failure_streak = LEAST(6, failure_streak + 1), claim_token = NULL,
                  last_result_category = 'TIMEOUT',

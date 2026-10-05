@@ -164,12 +164,26 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     }
     assert.equal(await claim(sender), null, 'terminal failed source stays retained outside active queue');
 
+    const operationalId = await enqueue(source('operational-timeout'));
+    let operational = await claim(sender);
+    for (let failure = 1; failure <= 7; failure++) {
+      const result = await finish(operational, 'TIMEOUT', [], { error: 'shared model unavailable' });
+      assert.equal(result.status, 'RETRYABLE', 'model access cannot make a valid source terminal');
+      assert.equal(result.failure_streak, Math.min(failure, 6));
+      assert.ok(result.retry_delay_seconds <= 900, 'operational retry rate stays capped');
+      if (failure === 7) break;
+      sql(`UPDATE autobiographical_memory_formation_queue SET available_at=NOW()-INTERVAL 1 SECOND WHERE id=${operationalId}`);
+      operational = await claim(sender);
+    }
+    assert.equal(await claim(sender), null, 'operational failure still observes backoff');
+
     const crashedId = await enqueue(source('crash'));
     const crashed = await claim(sender);
-    sql(`UPDATE autobiographical_memory_formation_queue SET started_at=NOW()-INTERVAL 11 MINUTE WHERE id=${crashedId}`);
+    sql(`UPDATE autobiographical_memory_formation_queue SET started_at=NOW()-INTERVAL 11 MINUTE,failure_streak=5 WHERE id=${crashedId}`);
     assert.equal(await claim(sender), null, 'expired lease enters backoff');
     await finish(crashed, 'CREATE', [create(source('crash'))], {}, 409);
-    assert.equal(sql(`SELECT failure_streak FROM autobiographical_memory_formation_queue WHERE id=${crashedId}`), '1');
+    assert.equal(sql(`SELECT failure_streak FROM autobiographical_memory_formation_queue WHERE id=${crashedId}`), '6');
+    assert.equal(sql(`SELECT status FROM autobiographical_memory_formation_queue WHERE id=${crashedId}`), 'RETRYABLE');
 
     sql("INSERT INTO environment_events (event_id,occurred_at,event_type,event_family,record) VALUES ('legacy-card',NOW(),'postcard','ordinary_postcard','{}'),('ordinary-noise',NOW(),'wing_noise','environment','{}')");
     const legacyId = await enqueue(source('legacy-card', 'ENVIRONMENT_EVENT', null));
@@ -183,7 +197,7 @@ test('formation claims, atomic completion replay, sender privacy and bounded rec
     assert.equal(health.failed, 1);
     assert.equal(health.quarantined, 1);
     assert.equal(health.sender_sources.POSTCARD.failed, 1);
-    assert.equal(health.sender_sources.POSTCARD.retryable, 1);
+    assert.equal(health.sender_sources.POSTCARD.retryable, 2);
     assert.equal(health.sender_sources.POSTCARD.unlinked, 0);
     assert.ok(health.sender_sources.POSTCARD.linked > 0);
     assert.ok(health.sender_sources.CY_REPLY.processed > 0);

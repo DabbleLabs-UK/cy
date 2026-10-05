@@ -75,8 +75,10 @@ The server validates the decision, provenance, version and privacy scope. UPDATE
 and RESOLVE use optimistic version checking. The operation and queue completion
 commit in one transaction, so replay of a claim token returns its original
 receipt without applying a second memory. Errors, invalid responses and timeouts
-use bounded exponential backoff; six consecutive failures enter a retained FAILED
-state, while foreground preemption remains retryable. Formation cannot edit or backfill the structured
+use bounded exponential backoff. Six consecutive invalid model decisions enter
+a retained FAILED state. Operational errors, timeouts and foreground preemption
+remain retryable at a capped rate so shared-model contention cannot discard a
+valid source. Formation cannot edit or backfill the structured
 world archive. A generated expression can become subjective autobiography but
 cannot become evidence for a grounded Soma subsystem.
 
