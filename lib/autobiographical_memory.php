@@ -420,6 +420,11 @@ function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): a
     }
 
     $ids = array_slice(array_keys($candidateIds), 0, 500);
+    return captive_memory_rows_by_ids($db, $ids);
+}
+
+function captive_memory_rows_by_ids(PDO $db, array $ids): array
+{
     if (!$ids) {
         return [];
     }
@@ -447,6 +452,71 @@ function captive_memory_query(
 {
     $rows = captive_memory_fetch_rows($db, $query, $visitorId);
     $ranked = captive_memory_rank_candidates($rows, $query, $visitorId, $limit, $recentExpressionTerms);
+    return captive_memory_candidate_items($ranked, $visitorId);
+}
+
+function captive_memory_sender_continuity(PDO $db, array $query, string $visitorId): array
+{
+    if (!preg_match('/^[a-f0-9]{32}$/', $visitorId)) {
+        throw new InvalidArgumentException('valid sender visitor id required');
+    }
+    $candidates = [];
+    $terms = captive_memory_tokens((string)($query['text'] ?? ''));
+    $tags = captive_memory_tags($query['tags'] ?? []);
+    $location = mb_substr(trim((string)($query['location'] ?? '')), 0, 64);
+    if ($location !== '' && !in_array($location, $tags, true)) {
+        $tags[] = $location;
+    }
+    foreach (['PERSON', 'UNRESOLVED_THREAD'] as $type) {
+        // Indexed same-sender/type discovery happens before the bounded pool.
+        // New episodic exchanges cannot displace an old retained person/topic.
+        $stmt = $db->prepare(
+            "SELECT id FROM autobiographical_memories
+             WHERE subject_visitor_id = ? AND status = 'ACTIVE' AND memory_type = ?
+               AND privacy_scope IN ('INTERNAL_ONLY', 'SENDER_RECALLABLE', 'PUBLIC_RECALLABLE')
+             ORDER BY updated_at DESC, id ASC LIMIT 100"
+        );
+        $stmt->execute([$visitorId, $type]);
+        $ids = array_column($stmt->fetchAll(), 'id');
+        // Independent indexed relevance paths keep older facts reachable even
+        // after more than 100 newer memories of the same type have accumulated.
+        if ($terms) {
+            $booleanQuery = implode(' ', array_map(static fn(string $term): string => $term . '*', $terms));
+            $stmt = $db->prepare(
+                "SELECT id, MATCH(content, public_summary) AGAINST (? IN BOOLEAN MODE) AS fts_rank
+                 FROM autobiographical_memories
+                 WHERE subject_visitor_id = ? AND status = 'ACTIVE' AND memory_type = ?
+                   AND privacy_scope IN ('INTERNAL_ONLY', 'SENDER_RECALLABLE', 'PUBLIC_RECALLABLE')
+                 HAVING fts_rank > 0
+                 ORDER BY fts_rank DESC, updated_at DESC, id ASC LIMIT 100"
+            );
+            $stmt->execute([$booleanQuery, $visitorId, $type]);
+            $ids = array_merge($ids, array_column($stmt->fetchAll(), 'id'));
+        }
+        if ($tags) {
+            $placeholders = implode(',', array_fill(0, count($tags), '?'));
+            $stmt = $db->prepare(
+                "SELECT m.id FROM autobiographical_memories m
+                 JOIN autobiographical_memory_tags t ON t.memory_id = m.id
+                 WHERE m.subject_visitor_id = ? AND m.status = 'ACTIVE' AND m.memory_type = ?
+                   AND m.privacy_scope IN ('INTERNAL_ONLY', 'SENDER_RECALLABLE', 'PUBLIC_RECALLABLE')
+                   AND t.tag IN ($placeholders)
+                 GROUP BY m.id
+                 ORDER BY COUNT(DISTINCT t.tag) DESC, m.updated_at DESC, m.id ASC LIMIT 100"
+            );
+            $stmt->execute(array_merge([$visitorId, $type], $tags));
+            $ids = array_merge($ids, array_column($stmt->fetchAll(), 'id'));
+        }
+        $ids = array_values(array_unique($ids));
+        $rows = captive_memory_rows_by_ids($db, $ids);
+        $ranked = captive_memory_rank_candidates($rows, $query, $visitorId, 2);
+        array_push($candidates, ...captive_memory_candidate_items($ranked, $visitorId));
+    }
+    return $candidates;
+}
+
+function captive_memory_candidate_items(array $ranked, ?string $visitorId): array
+{
     return array_map(static function (array $row) use ($visitorId): array {
         $crossVisitor = $visitorId !== null
             && (string)$row['privacy_scope'] === 'PUBLIC_RECALLABLE'

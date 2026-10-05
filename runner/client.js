@@ -552,10 +552,10 @@ export class Client {
     };
   }
 
-  async _memoryRequest(action, payload = {}) {
+  async _memoryRequest(action, payload = {}, signal = null) {
     if (this.config.dryRun) {
-      if (action === 'query') {
-        return { candidates: [], mechanisms: [], privacy_filter: { applied: true, dry_run: true } };
+      if (action === 'query' || action === 'sender_continuity') {
+        return { ok: true, candidates: [], mechanisms: [], privacy_filter: { applied: true, dry_run: true } };
       }
       return { ok: true, dry_run: true, applied: 0 };
     }
@@ -566,7 +566,7 @@ export class Client {
         'X-Cy-Key': this.config.ingestKey,
       },
       body: JSON.stringify({ action, ...payload }),
-      signal: AbortSignal.timeout(15000),
+      signal: signal || AbortSignal.timeout(15000),
     });
     if (!res.ok) throw new Error(`memory ${action} HTTP ${res.status}`);
     return res.json();
@@ -582,6 +582,10 @@ export class Client {
       recent_expression_text: recentExpressionText || '',
       query_source_type: querySourceType || null,
     });
+  }
+
+  async getSenderContinuity({ visitorId, query = {}, signal = null }) {
+    return this._memoryRequest('sender_continuity', { visitor_id: visitorId, query }, signal);
   }
 
   async applyMemoryOperations(operations) {

@@ -85,6 +85,64 @@ test('postcard cloud budget, lost acknowledgements, one reply and public/admin b
     assert.equal(recalled.candidates.find(m => m.id === publicId).content, 'Another visitor described a garden');
     assert.doesNotMatch(JSON.stringify(recalled.candidates), /PRIVATE/);
     assert.ok(recalled.retrieval.mechanisms.includes('EXACT_PERSON'));
+    // Sender continuity is its own bounded canonical read, not the newest
+    // general-purpose candidate pool or an unbounded correspondence transcript.
+    const archivedPerson = randomUUID(), archivedTopic = randomUUID();
+    const extraPeople = Array.from({ length: 120 }, () => randomUUID());
+    const extraTopics = Array.from({ length: 120 }, () => randomUUID());
+    const continuityRows = [
+      ...Array.from({ length: 320 }, () => memoryRow(randomUUID(), 'EPISODIC', 'SENDER_RECALLABLE', sender, 'new ordinary correspondence', null, '2026-10-04')),
+      ...extraPeople.map(id => memoryRow(id, 'PERSON', 'SENDER_RECALLABLE', sender, 'Another retained personal fact', null, '2026-10-03')),
+      ...extraTopics.map(id => memoryRow(id, 'UNRESOLVED_THREAD', 'SENDER_RECALLABLE', sender, 'Another unresolved topic', null, '2026-10-03')),
+      memoryRow(archivedPerson, 'PERSON', 'SENDER_RECALLABLE', sender, 'PRIVATE archived garden detail', null, '2026-10-04'),
+      memoryRow(archivedTopic, 'UNRESOLVED_THREAD', 'SENDER_RECALLABLE', sender, 'PRIVATE resolved garden question', null, '2026-10-04'),
+    ];
+    sql(`INSERT INTO autobiographical_memories (id,memory_type,privacy_scope,subject_visitor_id,content,public_summary,created_at,updated_at) VALUES ${continuityRows.join(',')}`);
+    sql(`UPDATE autobiographical_memories SET status='ARCHIVED' WHERE id IN ('${archivedPerson}','${archivedTopic}')`);
+    sql(`UPDATE autobiographical_memories SET version=3 WHERE id='${personId}'`);
+    const memoryApi = async (payload, key = 'test-key') => fetch(`${base}/api/memory.php`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cy-Key': key },
+      body: JSON.stringify({ action: 'sender_continuity', ...payload }),
+    });
+    assert.equal((await memoryApi({ visitor_id: sender }, 'wrong-key')).status, 401);
+    assert.equal((await memoryApi({})).status, 422);
+    assert.equal((await memoryApi({ visitor_id: 'not-a-sender' })).status, 422);
+    const continuityResponse = await memoryApi({ visitor_id: sender, query: { text: 'garden seedlings' } });
+    assert.equal(continuityResponse.status, 200);
+    const continuity = await continuityResponse.json();
+    assert.equal(continuity.ok, true);
+    assert.equal(continuity.candidates.length, 4);
+    assert.equal(continuity.candidates.filter(m => m.type === 'PERSON').length, 2);
+    assert.equal(continuity.candidates.filter(m => m.type === 'UNRESOLVED_THREAD').length, 2);
+    const oldPerson = continuity.candidates.find(m => m.id === personId);
+    const oldTopic = continuity.candidates.find(m => m.id === topicId);
+    assert.equal(oldPerson.content, 'Ana tends a garden', '320 newer sender exchanges cannot displace retained PERSON facts');
+    assert.equal(oldTopic.content, 'The garden seedlings question remains unanswered');
+    assert.equal(oldPerson.version, 3);
+    assert.equal(oldPerson.sourceCount, 1, 'canonical source provenance survives selection');
+    assert.equal(oldPerson.matchProvenance.structured_sender_identity, true);
+    assert.ok(oldPerson.reasons.includes('DIRECT_SENDER_HISTORY'));
+    assert.ok(continuity.candidates.every(m => m.subjectVisitorId === sender && m.status === 'ACTIVE'));
+    assert.ok(continuity.candidates.every(m => ![publicId, privateId, archivedPerson, archivedTopic].includes(m.id)));
+    assert.doesNotMatch(JSON.stringify(continuity.candidates), /PRIVATE|new ordinary correspondence/);
+    assert.equal(continuity.retrieval.per_type_limit, 2);
+    assert.equal(continuity.retrieval.candidate_pool_per_type, 300);
+    assert.equal(continuity.retrieval.candidate_pool_per_mechanism, 100);
+    assert.ok(Number.isFinite(continuity.retrieval.duration_ms));
+    const repeated = await (await memoryApi({ visitor_id: sender, query: { text: 'garden seedlings' } })).json();
+    assert.deepEqual(repeated.candidates, continuity.candidates, 'equal-rank selection is stable');
+    const empty = await (await memoryApi({ visitor_id: 'c'.repeat(32) })).json();
+    assert.deepEqual(empty.candidates, [], 'no other visitor records are substituted for an empty sender');
+    sql(`INSERT INTO autobiographical_memory_tags (memory_id,tag) VALUES ('${personId}','sender-hobby'),('${topicId}','pending-seedlings')`);
+    const tagged = await (await memoryApi({ visitor_id: sender, query: { tags: ['sender-hobby', 'pending-seedlings'] } })).json();
+    assert.ok(tagged.candidates.some(m => m.id === personId), 'indexed tags can independently recover old PERSON facts');
+    assert.ok(tagged.candidates.some(m => m.id === topicId), 'indexed tags can independently recover old unresolved topics');
+    assert.ok(tagged.candidates.every(m => m.subjectVisitorId === sender));
+    const indexedPlan = sql(`EXPLAIN SELECT id FROM autobiographical_memories
+      WHERE subject_visitor_id='${sender}' AND status='ACTIVE' AND memory_type='PERSON'
+      AND privacy_scope IN ('INTERNAL_ONLY','SENDER_RECALLABLE','PUBLIC_RECALLABLE')
+      ORDER BY updated_at DESC,id ASC LIMIT 100`);
+    assert.match(indexedPlan, /idx_memory_(subject|type)/, 'continuity lookup uses existing source indexes');
     const initial = await publicGet('1H');
     assert.equal(initial.ok, true);
     assert.equal(initial.can_admin, false);

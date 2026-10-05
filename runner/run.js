@@ -75,6 +75,8 @@ import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import { PostcardInference, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
 import { canonicalPostcardContext } from './postcard-context.js';
+import { loadPostcardSenderContinuity, loadPostcardEnrichment, postcardSenderMemoryItems,
+  postcardMemoryDirective, postcardMemoryReadiness } from './postcard-memory.js';
 import {
   buildExpressiveChoiceRequest,
   selectAvailableExpressiveAction,
@@ -2933,6 +2935,7 @@ async function main() {
     recentExpression = '',
     provenanceSource = null,
     memoryCandidates = [],
+    postcardMemory = null,
     actionOptions = [],
     mins = londonParts().mins,
   } = {}) {
@@ -3043,7 +3046,7 @@ async function main() {
         id: 'visitor:current', sourceId: 'visitor:current', section: 'visitor_context',
         provenanceClass: 'PUBLIC VISITOR MATERIAL', knowledgeScope: 'CY_OBSERVED',
         privacyScope: currentSenderId ? 'SENDER_RECALLABLE' : 'INTERNAL_ONLY', senderId: currentSenderId,
-        priority: 100, content: visitorContext,
+        priority: 100, mandatory: !!postcardMemory, content: visitorContext,
       });
     }
     if (!forAwg && currentPostcard) {
@@ -3064,7 +3067,10 @@ async function main() {
         content: provenanceSource.text,
       });
     }
-    const memories = memoryCandidates.length ? memoryCandidates
+    if (postcardMemory) {
+      for (const item of postcardSenderMemoryItems(postcardMemory.sender)) add(item);
+    }
+    const memories = postcardMemory ? postcardMemory.enrichment.selected : memoryCandidates.length ? memoryCandidates
       : (autobiographicalMemory && autobiographicalMemory.working.selected || []);
     for (const memory of memories) {
       add({
@@ -3159,13 +3165,17 @@ async function main() {
   // Assemble factual/grounded prompt injections plus explicit engineering cues.
   // Legacy relationship, monotony-amplification, attention and heuristic memory
   // state do not enter. The autobiography block has already passed the server
-  // privacy filter and a separate model-mediated surfacing decision.
+  // privacy filter. Postcards reserve deterministic sender continuity separately
+  // from optional model-mediated surfacing.
   function buildCtx(cognition = null, brokerOptions = {}) {
     genCount++;
     const grounded = cognition && cognition.groundedDirective != null
       ? { context: cognition.groundedContext, directive: cognition.groundedDirective }
       : soma.groundedDirective({ now: Date.now() });
-    const memory = autobiographicalMemory.consumeWorking(
+    const memory = brokerOptions.postcardMemory ? {
+      directive: postcardMemoryDirective(brokerOptions.postcardMemory),
+      inspection: postcardMemoryReadiness(brokerOptions.postcardMemory.sender, brokerOptions.postcardMemory.enrichment),
+    } : autobiographicalMemory.consumeWorking(
       brokerOptions.generationRef || `generation:${Date.now()}`,
       brokerOptions.currentSenderId || null,
     );
@@ -3208,6 +3218,25 @@ async function main() {
 
   // ---- postcard mode: interrupt, transition, recognise, reply, remember ----
   async function doPostcard(pc) {
+    // Required continuity is read before routing or any arrival/world side effect.
+    // A failed read holds the claim under the existing retry/expiry policy rather
+    // than generating an amnesic reply or creating a second memory store.
+    const senderContinuity = await loadPostcardSenderContinuity({
+      client, visitorId: pc.visitor_id || null,
+      query: { text: [pc.body, pc.caption].filter(Boolean).join(' '), tags: ['postcard'] },
+    });
+    const recordReadiness = (enrichment = null) => recordInferenceDiagnostic({
+      event: 'postcard_memory_readiness', timestamp: tsNow(),
+      sender_known: !!pc.visitor_id,
+      returning_sender: Number(pc.visitor?.postcard_count || 0) > 1 || !!pc.visitor?.notes,
+      ...postcardMemoryReadiness(senderContinuity, enrichment),
+    });
+    if (!senderContinuity.ready) {
+      recordReadiness();
+      console.warn(`[cy] postcard held: sender memory ${senderContinuity.status.toLowerCase()}`);
+      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      return;
+    }
     let route;
     try {
       route = await postcardInference.route(pc, providers);
@@ -3329,7 +3358,7 @@ async function main() {
         console.warn(`[cy] postcard memory enqueue deferred: ${error.message}`);
       });
     }
-    await autobiographicalMemory.requestWorkingContext({
+    const enrichment = await loadPostcardEnrichment(autobiographicalMemory, {
       text: postcardText,
       tags: postcardMemorySource ? postcardMemorySource.tags : ['postcard'],
       location: 'cell',
@@ -3342,7 +3371,9 @@ async function main() {
       // ENVIRONMENT_EVENT pendingMemoryQuery assembly above.
       querySourceType: 'POSTCARD',
       recentExpressionText: contextText().slice(-640),
-    }, { deadlineMs: 750, priority: 100, scheduleDelayMs: 1000 });
+    }, senderContinuity);
+    recordReadiness(enrichment);
+    const postcardMemory = { sender: senderContinuity, enrichment };
 
     // Recognition supplies factual visitor identity/count/timing only. Legacy
     // relation values are retained for private visitor diagnostics, not prose.
@@ -3350,6 +3381,7 @@ async function main() {
     const ctx = buildCtx(cognition, {
       generationRef: `postcard-reply:${pc.id}`,
       currentSenderId: pc.visitor_id || null,
+      postcardMemory,
       visitorContext: visitorForPrompt(visitor, { now: Date.now() }),
       recentExpression: '',
       incidentContext: incidentsDirective(vitals.ledger, { objects: vitals.worldSimulation.objects }),
