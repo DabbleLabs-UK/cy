@@ -23,6 +23,8 @@ import { sanitizeCharacterContext } from './warden.js';
 const PREPARED_TTL_MS = 15 * 60 * 1000;
 const BACKGROUND_TIMEOUT_MS = 120000;
 const RETRY_DELAY_SECONDS = 30;
+const SENDER_FORMATION_MIN_AGE_SECONDS = 120;
+const SENDER_RESERVED_INTERVAL_MS = 10 * 60 * 1000;
 
 function stableContext(value = {}) {
   return {
@@ -103,6 +105,7 @@ export class AutobiographicalMemoryRuntime {
     this.interruptReason = null;
     this.timer = null;
     this.stopped = true;
+    this.lastReservedSenderAt = 0;
   }
 
   start() {
@@ -264,7 +267,7 @@ export class AutobiographicalMemoryRuntime {
 
   async tick() {
     if (this.stopped || this.busy) return;
-    if (!this.canRunBackground('surfacing')) {
+    if (!this.canRunBackground('surfacing') && !this.canRunBackground('sender_formation')) {
       // A tempo reservation can be minutes long. Polling it four times a second
       // adds no value and makes a supposedly quiet interval needlessly busy.
       const requested = Number(this.backgroundWaitMs('surfacing'));
@@ -279,12 +282,27 @@ export class AutobiographicalMemoryRuntime {
       if (typeof this.client.drainMemorySourceQueue === 'function') {
         await this.client.drainMemorySourceQueue();
       }
-      const surfacing = await this.client.claimMemorySurfacing();
-      if (surfacing && surfacing.job) {
-        didWork = true;
-        await this.processSurfacing(surfacing.job);
+      // An aged sender source gets first refusal on each available background
+      // slot. The optional surfacing queue can be perpetually replenished and
+      // must not prevent durable correspondence from forming memory.
+      if (this.canRunBackground('sender_formation')) {
+        const sender = await this.client.claimMemorySource({
+          senderOnly: true, minAgeSeconds: SENDER_FORMATION_MIN_AGE_SECONDS,
+        });
+        checkedFormation = true;
+        if (sender && sender.job) {
+          didWork = true;
+          await this.processFormation(sender.job, sender.depth || 0);
+        }
       }
-      else if (this.canRunBackground('formation')) {
+      if (!didWork && this.canRunBackground('surfacing')) {
+        const surfacing = await this.client.claimMemorySurfacing();
+        if (surfacing && surfacing.job) {
+          didWork = true;
+          await this.processSurfacing(surfacing.job);
+        }
+      }
+      if (!didWork && this.canRunBackground('formation')) {
         const formation = await this.client.claimMemorySource();
         checkedFormation = true;
         if (formation && formation.job) {
@@ -305,6 +323,33 @@ export class AutobiographicalMemoryRuntime {
       this.activeAbort = null;
       this.interruptReason = null;
       this.schedule(didWork ? 25 : 2000);
+    }
+  }
+
+  // A waking opportunity reserves at most one aged sender job per interval.
+  // This supplies a bounded turn even when visible expression would otherwise
+  // take every model slot. Incoming interactive work may still abort it.
+  async serviceAgedSenderBeforeExpression() {
+    if (this.stopped || this.busy || !this.canRunBackground('sender_formation')) return { status: 'DEFERRED' };
+    if (this.lastReservedSenderAt && this.now() - this.lastReservedSenderAt < SENDER_RESERVED_INTERVAL_MS) {
+      return { status: 'NOT_DUE' };
+    }
+    this.busy = true;
+    try {
+      if (typeof this.client.drainMemorySourceQueue === 'function') await this.client.drainMemorySourceQueue();
+      const response = await this.client.claimMemorySource({
+        senderOnly: true, minAgeSeconds: SENDER_FORMATION_MIN_AGE_SECONDS,
+      });
+      if (!response?.job) return { status: 'EMPTY' };
+      this.lastReservedSenderAt = this.now();
+      const result = await this.processFormation(response.job, response.depth || 0);
+      this.priorityPending = true;
+      return result;
+    } finally {
+      this.busy = false;
+      this.activeAbort = null;
+      this.interruptReason = null;
+      this.schedule(25);
     }
   }
 
@@ -439,8 +484,9 @@ export class AutobiographicalMemoryRuntime {
     const started = this.now();
     const provider = this.providerInfo() || {};
     if (!source) {
-      await this.client.completeMemorySource({
-        job_id: Number(job.id), result_category: 'NOTHING', memory_id: null,
+      await this.client.finishMemorySource({
+        job_id: Number(job.id), claim_token: job.claim_token,
+        result_category: 'NOTHING', operations: [],
         provider: provider.id || provider.provider, model: provider.model,
         prompt_chars: 0, latency_ms: this.now() - started,
         queue_depth_before: Number(queueDepthBefore) || 0,
@@ -452,6 +498,7 @@ export class AutobiographicalMemoryRuntime {
     let category = 'ERROR';
     let memoryId = null;
     let error = null;
+    let operations = [];
     try {
       const response = await this.client.queryMemories({
         query: { text: source.text || '', tags: source.tags || [], location: source.location || null },
@@ -476,32 +523,41 @@ export class AutobiographicalMemoryRuntime {
       if (!operation.valid) category = 'INVALID';
       else if (operation.decision === 'NOTHING') category = 'NOTHING';
       else {
-        await this.client.applyMemoryOperations([operation]);
-        category = operation.decision;
+        category = operation.decision === 'ARCHIVE' ? 'RESOLVE' : operation.decision;
         memoryId = operation.memoryId;
-        const scope = operation.privacyScope
-          || candidates.find((memory) => memory.id === operation.memoryId)?.privacyScope
-          || 'INTERNAL_ONLY';
-        await this.client.recordMemoryActivity({
-          memoryId: operation.memoryId,
-          activityType: operation.decision === 'CREATE' ? 'MEMORY_FORMED' : 'MEMORY_CHANGED',
-          publicText: scope === 'PUBLIC_RECALLABLE'
-            ? String(operation.publicSummary || 'An autobiographical memory changed.').slice(0, 600) : null,
-          privacyScope: scope, reasonCodes: source.tags || [],
-        }).catch(() => {});
+        operations = [operation];
       }
     } catch (caught) {
       error = errorText(caught);
       if (/409|version conflict/i.test(error)) category = 'CONFLICT';
       else category = isAbort(caught) ? (this.interruptReason ? 'PREEMPTED' : 'TIMEOUT') : 'ERROR';
     }
-    await this.client.completeMemorySource({
-      job_id: Number(job.id), result_category: category, memory_id: memoryId,
+    const completion = {
+      job_id: Number(job.id), claim_token: job.claim_token,
+      result_category: category, operations, memory_id: memoryId,
       provider: provider.id || provider.provider, model: provider.model,
       prompt_chars: promptChars(call), latency_ms: this.now() - started,
       queue_depth_before: Number(queueDepthBefore) || 0,
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
-    });
+    };
+    let completed;
+    try {
+      completed = await this.client.finishMemorySource(completion);
+    } catch (caught) {
+      // The atomic apply may have committed while its HTTP response was lost.
+      // Reusing the claim token returns that receipt; a real conflict instead
+      // records a retryable attempt rather than waiting for stale-claim recovery.
+      const failure = errorText(caught);
+      category = /409|version conflict/i.test(failure) ? 'CONFLICT'
+        : /422/i.test(failure) ? 'INVALID' : 'ERROR';
+      completed = await this.client.finishMemorySource({
+        ...completion, result_category: category, operations: [], memory_id: null, error: failure,
+      });
+    }
+    category = completed?.result_category || category;
+    memoryId = completed?.results?.[0]?.memory_id || memoryId;
+    if (completed?.status === 'FAILED') console.warn(`[cy-memory] ${source.sourceType} formation reached terminal failure`);
+    else if (category !== 'NOTHING') console.log(`[cy-memory] ${source.sourceType} formation ${category}`);
     return { status: category, memoryId };
   }
 

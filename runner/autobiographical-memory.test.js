@@ -13,6 +13,7 @@ import {
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
   sourceFromExpression,
+  sourceFromEnvironmentRecord,
   sourceFromReply,
 } from './autobiographical-memory.js';
 
@@ -86,6 +87,35 @@ const updated = parseFormationResponse(JSON.stringify({
 }), { source, existing: [senderMemory], makeId: () => 'unused' });
 assert.equal(updated.decision, 'UPDATE');
 assert.equal(updated.expectedVersion, 1);
+
+const openTopic = { ...senderMemory, type: 'UNRESOLVED_THREAD' };
+const resolved = parseFormationResponse('{"decision":"RESOLVE","memoryRef":"C1"}', {
+  source, existing: [openTopic], makeId: () => 'unused',
+});
+assert.equal(resolved.decision, 'ARCHIVE');
+assert.equal(resolved.memoryId, openTopic.id);
+assert.equal(resolved.expectedVersion, 1);
+assert.equal(parseFormationResponse('{"decision":"RESOLVE","memoryRef":"C1"}', {
+  source, existing: [{ ...openTopic, subjectVisitorId: other }], makeId: () => 'unused',
+}).valid, false);
+assert.equal(parseFormationResponse('{"decision":"RESOLVE","memoryRef":"C1"}', {
+  source, existing: [senderMemory], makeId: () => 'unused',
+}).valid, false);
+assert.match(formation.system, /not trivial wording or a transcript/);
+assert.equal(parseFormationResponse('{"decision":"NOTHING"}', {
+  source, existing: [], makeId: () => 'unused',
+}).decision, 'NOTHING');
+
+for (const eventType of ['postcard', 'postcard_with_image', 'postcard_reply']) {
+  assert.equal(sourceFromEnvironmentRecord({
+    world_event: { id: `event-${eventType}`, event_type: eventType },
+    observation: { summary: 'private postcard text' },
+  }), null, `${eventType} cannot form an unlinked generic memory source`);
+}
+assert.equal(sourceFromEnvironmentRecord({
+  world_event: { id: 'event-meal', event_type: 'meal' },
+  observation: { summary: 'a real meal' },
+}).sourceType, 'ENVIRONMENT_EVENT');
 
 // Generated expression is autobiographical material, never a world record.
 const expression = sourceFromExpression('same cell really. 8 by 4.', 'generation:7');

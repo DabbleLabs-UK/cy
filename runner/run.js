@@ -3058,10 +3058,13 @@ async function main() {
       });
     }
     if (!forAwg && provenanceSource && provenanceSource.text) {
+      const sourceKind = String(provenanceSource.sourceType || '').toUpperCase();
       add({
         id: 'memory-source:current', sourceId: provenanceSource.sourceId || 'memory-source:current',
-        section: 'provenance_source', provenanceClass: provenanceSource.sourceType === 'environment_event'
-          ? 'OBSERVED BY CY' : 'PUBLIC VISITOR MATERIAL', knowledgeScope: 'CY_OBSERVED',
+        section: 'provenance_source',
+        provenanceClass: sourceKind === 'CY_REPLY' ? 'SUBJECTIVE BELIEF'
+          : ['ENVIRONMENT_EVENT', 'POSTCARD'].includes(sourceKind) ? 'OBSERVED BY CY' : 'PUBLIC VISITOR MATERIAL',
+        knowledgeScope: sourceKind === 'CY_REPLY' ? 'CY_BELIEVES' : 'CY_OBSERVED',
         privacyScope: provenanceSource.sourceVisibility || 'INTERNAL_ONLY',
         senderId: provenanceSource.subjectVisitorId || currentSenderId, mandatory: true, priority: 100,
         content: provenanceSource.text,
@@ -3783,7 +3786,10 @@ async function main() {
       interrupt = true;
       interruptReason = 'WARDEN';
     }
-    if (interrupt) generationCancellation.abortAll(interruptReason);
+    if (interrupt) {
+      if (autobiographicalMemory) autobiographicalMemory.interruptBackground('interactive');
+      generationCancellation.abortAll(interruptReason);
+    }
   };
 
   // ---- operator pause: interrupt the in-flight burst and acknowledge at once ----
@@ -3797,6 +3803,7 @@ async function main() {
   // untouched (onChunk appended it as it streamed) - then emits the transition and
   // priority-flushes so the control confirms within a poll. Resume is the mirror.
   client.onPause = () => {
+    if (autobiographicalMemory) autobiographicalMemory.interruptBackground('pause');
     if (currentMode !== 'paused') {
       emit({ kind: 'mode', payload: { from: currentMode, to: 'paused' } });
       currentMode = 'paused';
@@ -5257,7 +5264,7 @@ async function main() {
       // opportunity. Grounded Soma now supplies facts; a separate model-mediated
       // subjective layer chooses only among real outward expressive capabilities.
       // A queued drawing request is external rather than autonomous and still wins.
-      const nowMs = Date.now();
+      let nowMs = Date.now();
       if (!expressionEligibleSinceMs) expressionEligibleSinceMs = nowMs;
       const hasDrawRequest = pendingDrawRequests.length > 0;
       if (!hasDrawRequest) {
@@ -5268,6 +5275,18 @@ async function main() {
           await idleSilently(opportunityWait, { breakOnTempo: true });
           continue;
         }
+        // Reserve one aged sender-memory turn before a waking opportunity can
+        // immediately occupy the next model slot. It is bounded, asynchronous
+        // relative to the original postcard reply, and interactive mail aborts it.
+        try {
+          await autobiographicalMemory.serviceAgedSenderBeforeExpression();
+        } catch (error) {
+          console.warn(`[cy-memory] reserved sender formation deferred: ${error && error.message || error}`);
+        }
+        if (pendingPostcards.length || pendingWarden.length || client.paused
+            || vitals.locationRegime.current.id !== LOCATIONS.CELL
+            || effectiveAsleep(londonParts().mins)) continue;
+        nowMs = Date.now();
         vitals.expressiveCadence = recordExpressiveOpportunity(vitals.expressiveCadence, { nowMs });
       }
       const expressionGap = eligibleExpressionGap({

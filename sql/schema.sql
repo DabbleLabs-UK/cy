@@ -443,6 +443,56 @@ CREATE TABLE world_objects (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Additive postcard-only routing, reservations and immutable attempt accounting.
+-- Canonical formation queue (017) plus idempotent source completion (027).
+CREATE TABLE IF NOT EXISTS autobiographical_memory_formation_queue (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    source_type VARCHAR(32) NOT NULL,
+    source_id VARCHAR(128) NOT NULL,
+    source_payload JSON NOT NULL,
+    subject_visitor_id CHAR(32) NULL,
+    privacy_scope VARCHAR(24) NOT NULL DEFAULT 'INTERNAL_ONLY',
+    priority SMALLINT UNSIGNED NOT NULL DEFAULT 50,
+    status VARCHAR(24) NOT NULL DEFAULT 'PENDING',
+    attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    available_at DATETIME(3) NOT NULL,
+    queued_at DATETIME(3) NOT NULL,
+    started_at DATETIME(3) NULL,
+    completed_at DATETIME(3) NULL,
+    last_error VARCHAR(1000) NULL,
+    updated_at DATETIME(3) NOT NULL,
+    claim_token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    failure_streak SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    last_result_category VARCHAR(32) NULL,
+    UNIQUE KEY uniq_memory_formation_source (source_type, source_id),
+    INDEX idx_memory_formation_work (status, available_at, priority, queued_at),
+    INDEX idx_memory_formation_subject (subject_visitor_id, queued_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS autobiographical_memory_formation_attempts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    queue_id BIGINT UNSIGNED NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    source_id VARCHAR(128) NOT NULL,
+    started_at DATETIME(3) NOT NULL,
+    completed_at DATETIME(3) NOT NULL,
+    provider VARCHAR(32) NULL,
+    model VARCHAR(160) NULL,
+    prompt_chars INT UNSIGNED NOT NULL DEFAULT 0,
+    latency_ms INT UNSIGNED NOT NULL DEFAULT 0,
+    result_category VARCHAR(32) NOT NULL,
+    resulting_memory_id CHAR(36) NULL,
+    queue_depth_before INT UNSIGNED NOT NULL DEFAULT 0,
+    queue_depth_after INT UNSIGNED NOT NULL DEFAULT 0,
+    error_text VARCHAR(1000) NULL,
+    created_at DATETIME(3) NOT NULL,
+    claim_token CHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    result_payload JSON NULL,
+    CONSTRAINT fk_memory_formation_attempt_queue FOREIGN KEY (queue_id)
+        REFERENCES autobiographical_memory_formation_queue(id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_memory_formation_claim (claim_token),
+    INDEX idx_memory_formation_attempt_created (created_at),
+    INDEX idx_memory_formation_attempt_result (result_category, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS postcard_inference_settings (
   id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
   settings JSON NOT NULL,

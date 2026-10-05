@@ -34,7 +34,7 @@ function client(overrides = {}) {
     async claimMemorySource() { return { job: null, depth: 0 }; },
     async queryMemories() { return { candidates: [] }; },
     async completeMemorySurfacing() {},
-    async completeMemorySource() {},
+    async finishMemorySource() {},
     async recordMemoryQuery() {},
     async consumePreparedMemorySet() {},
     async applyMemoryOperations() {},
@@ -57,16 +57,34 @@ function runtime(overrides = {}) {
 }
 
 test('journal context request does not await a slow surfacing model call', async () => {
-  let generated = false;
-  const r = runtime({ generate: async () => {
-    generated = true;
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    return '{"memoryRefs":[]}';
-  } });
-  const started = Date.now();
-  await r.requestWorkingContext({ text: 'a current event' });
-  assert.ok(Date.now() - started < 100);
-  assert.equal(generated, false);
+  let releaseGeneration;
+  let modelStarted;
+  const started = new Promise((resolve) => { modelStarted = resolve; });
+  const blocked = new Promise((resolve) => { releaseGeneration = resolve; });
+  let backgroundSettled = false;
+  const r = runtime({
+    client: { async queryMemories() { return { candidates: [candidate] }; } },
+    generate: async () => {
+      modelStarted();
+      await blocked;
+      return '{"memoryRefs":[]}';
+    },
+  });
+  const background = r.processSurfacing({ id: 1, subject_visitor_id: sender, context: { text: 'earlier event' } })
+    .finally(() => { backgroundSettled = true; });
+  await started;
+  try {
+    const foreground = r.requestWorkingContext({ text: 'a current event' });
+    const completed = await Promise.race([
+      foreground.then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 2000)),
+    ]);
+    assert.equal(completed, true, 'foreground context waited for blocked surfacing');
+    assert.equal(backgroundSettled, false);
+  } finally {
+    releaseGeneration();
+    await background;
+  }
 });
 
 test('foreground context can defer the background claim until its model call has started', async () => {
@@ -139,7 +157,7 @@ test('restart can claim and process a previously persisted source', async () => 
       async claimMemorySurfacing() { return { job: null }; },
       async claimMemorySource() { return { job, depth: 1 }; },
       async queryMemories() { return { candidates: [] }; },
-      async completeMemorySource(value) { completed.push(value); },
+      async finishMemorySource(value) { completed.push(value); },
     },
     generate: async () => '{"decision":"NOTHING"}',
   });
@@ -156,7 +174,7 @@ test('NOTHING and invalid formation output are recorded distinctly', async () =>
   const r = runtime({
     client: {
       async queryMemories() { return { candidates: [] }; },
-      async completeMemorySource(value) { categories.push(value.result_category); },
+      async finishMemorySource(value) { categories.push(value.result_category); },
     },
     generate: async () => raw,
   });
@@ -172,7 +190,7 @@ test('provider timeout is persisted and not treated as NOTHING', async () => {
   const r = runtime({
     client: {
       async queryMemories() { return { candidates: [] }; },
-      async completeMemorySource(value) { completed.push(value); },
+      async finishMemorySource(value) { completed.push(value); },
     },
     backgroundTimeoutMs: 10,
     generate: async ({ signal }) => new Promise((resolve, reject) => {
@@ -281,7 +299,7 @@ test('durable priority starts conservative and clears only after both queues are
   r.stopped = false;
   await r.tick();
   r.stop();
-  assert.deepEqual(claims, ['surfacing', 'formation']);
+  assert.deepEqual(claims, ['formation', 'surfacing', 'formation']);
   assert.equal(r.hasPriorityWork(), false);
 });
 
@@ -296,7 +314,7 @@ test('an available durable memory job retains priority for the immediate follow-
         };
       },
       async queryMemories() { return { candidates: [] }; },
-      async completeMemorySource() {},
+      async finishMemorySource() {},
     },
     generate: async () => '{"decision":"NOTHING"}',
   });
@@ -304,6 +322,128 @@ test('an available durable memory job retains priority for the immediate follow-
   await r.tick();
   r.stop();
   assert.equal(r.hasPriorityWork(), true);
+});
+
+test('an aged sender source runs before a continuously replenished surfacing queue', async () => {
+  const claimed = [];
+  const completed = [];
+  const r = runtime({ client: {
+    async claimMemorySource({ senderOnly } = {}) {
+      claimed.push(senderOnly ? 'sender' : 'general');
+      return senderOnly ? {
+        job: { id: 81, claim_token: 'claim-81', source: {
+          sourceType: 'POSTCARD', sourceId: 'postcard:81', text: 'My dog is called Alfie.',
+          sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,
+        } }, depth: 1,
+      } : { job: null };
+    },
+    async claimMemorySurfacing() {
+      claimed.push('surfacing');
+      return { job: { id: 82, context: { text: 'another request' } } };
+    },
+    async finishMemorySource(value) { completed.push(value); return { status: 'PROCESSED' }; },
+  }, generate: async () => '{"decision":"CREATE","type":"PERSON","privacyScope":"SENDER_RECALLABLE","content":"The sender has a dog called Alfie."}' });
+  r.stopped = false;
+  await r.tick();
+  r.stop();
+  assert.deepEqual(claimed, ['sender']);
+  assert.equal(completed[0].result_category, 'CREATE');
+  assert.equal(completed[0].operations[0].type, 'PERSON');
+  assert.equal(completed[0].claim_token, 'claim-81');
+});
+
+test('AWG gate or model contention delays sender formation without losing it', async () => {
+  let available = false;
+  let claims = 0;
+  const r = runtime({
+    canRunBackground: (kind) => available && kind !== 'formation',
+    client: {
+      async claimMemorySource({ senderOnly } = {}) {
+        if (!senderOnly) return { job: null };
+        claims += 1;
+        return { job: { id: 83, claim_token: 'claim-83', source: {
+          sourceType: 'CY_REPLY', sourceId: 'postcard-reply:83', text: 'I remember Alfie.',
+          sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,
+        } } };
+      },
+    },
+    generate: async () => '{"decision":"NOTHING"}',
+  });
+  r.stopped = false;
+  await r.tick();
+  assert.equal(claims, 0);
+  available = true;
+  await r.tick();
+  r.stop();
+  assert.equal(claims, 1);
+});
+
+test('reserved sender turn is paced and does not create a restart burst', async () => {
+  let now = 1_000_000;
+  let claims = 0;
+  const r = runtime({
+    now: () => now,
+    client: {
+      async claimMemorySource({ senderOnly } = {}) {
+        assert.equal(senderOnly, true);
+        claims += 1;
+        return { job: { id: 84 + claims, claim_token: `claim-${claims}`, source: {
+          sourceType: 'POSTCARD', sourceId: `postcard:${claims}`, text: 'My dog is called Alfie.',
+          sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,
+        } } };
+      },
+    },
+    generate: async () => '{"decision":"NOTHING"}',
+  });
+  r.stopped = false;
+  assert.equal((await r.serviceAgedSenderBeforeExpression()).status, 'NOTHING');
+  assert.equal((await r.serviceAgedSenderBeforeExpression()).status, 'NOT_DUE');
+  assert.equal(claims, 1);
+  now += 10 * 60 * 1000;
+  assert.equal((await r.serviceAgedSenderBeforeExpression()).status, 'NOTHING');
+  r.stop();
+  assert.equal(claims, 2);
+});
+
+test('lost completion response retries the same claim token without regenerating memory', async () => {
+  const requests = [];
+  let generated = 0;
+  const r = runtime({ client: {
+    async finishMemorySource(value) {
+      requests.push(value);
+      if (requests.length === 1) throw new Error('memory finish_source HTTP response lost');
+      return { status: 'PROCESSED', result_category: 'CREATE', duplicate: true, results: [{ operation: 'CREATE' }] };
+    },
+  }, generate: async () => {
+    generated += 1;
+    return '{"decision":"CREATE","type":"PERSON","privacyScope":"SENDER_RECALLABLE","content":"The sender has a dog called Alfie."}';
+  } });
+  const result = await r.processFormation({ id: 86, claim_token: 'claim-86', source: {
+    sourceType: 'POSTCARD', sourceId: 'postcard:86', text: 'My dog is called Alfie.',
+    sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,
+  } });
+  assert.equal(result.status, 'CREATE');
+  assert.equal(generated, 1);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].claim_token, requests[1].claim_token);
+  assert.equal(requests[1].operations.length, 0);
+});
+
+test('a clear same-sender unresolved topic produces a revisioned resolution', async () => {
+  const completed = [];
+  const r = runtime({ client: {
+    async queryMemories() { return { candidates: [{
+      ...candidate, type: 'UNRESOLVED_THREAD', content: 'The sender asked if Cy kept their question open.',
+    }] }; },
+    async finishMemorySource(value) { completed.push(value); return { status: 'PROCESSED' }; },
+  }, generate: async () => '{"decision":"RESOLVE","memoryRef":"C1"}' });
+  await r.processFormation({ id: 87, claim_token: 'claim-87', source: {
+    sourceType: 'CY_REPLY', sourceId: 'postcard-reply:87', text: 'Yes, I answered that question.',
+    sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,
+  } });
+  assert.equal(completed[0].result_category, 'RESOLVE');
+  assert.equal(completed[0].operations[0].decision, 'ARCHIVE');
+  assert.equal(completed[0].operations[0].expectedVersion, 1);
 });
 
 test('a source enqueue in flight prevents lower-priority world generation', async () => {
@@ -486,7 +626,7 @@ test('a pre-fix pending Cy expression is cleaned before retrieval, formation and
   const r = runtime({
     client: {
       async queryMemories(value) { queries.push(value); return { candidates: [] }; },
-      async completeMemorySource(value) { completed.push(value); },
+      async finishMemorySource(value) { completed.push(value); },
     },
     generate: async (call) => { prompts.push(call.prompt); return '{"decision":"NOTHING"}'; },
   });
@@ -521,7 +661,7 @@ test('new Cy reply sources are cleaned before durable enqueue without changing t
 test('an entirely editorial pending Cy expression completes without model work', async () => {
   const completed = [];
   const r = runtime({
-    client: { async completeMemorySource(value) { completed.push(value); } },
+    client: { async finishMemorySource(value) { completed.push(value); } },
     generate: async () => { throw new Error('model must not receive editorial text'); },
   });
   const result = await r.processFormation({

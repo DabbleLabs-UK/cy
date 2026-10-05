@@ -123,8 +123,8 @@ assert.match(source,
   /mid = Math\.random\(\) < 0\.5 && generationCancellation\.has\('visible'\)[\s\S]{0,180}?generationCancellation\.abort\('visible', 'WING_NOISE_MID'\)/,
   'wing noise targets visible prose only');
 assert.match(source,
-  /if \(interrupt\) generationCancellation\.abortAll\(interruptReason\)/,
-  'postcard and warden work can still preempt AWG');
+  /if \(interrupt\) \{[\s\S]{0,160}?autobiographicalMemory\.interruptBackground\('interactive'\);[\s\S]{0,80}?generationCancellation\.abortAll\(interruptReason\);/,
+  'postcard and warden work preempt both memory formation and AWG');
 assert.match(source,
   /async function streamGenerate[\s\S]{0,700}?generationCancellation\.abort\('awg', 'FOREGROUND_INFERENCE'\)/,
   'foreground prose can preempt active AWG work');

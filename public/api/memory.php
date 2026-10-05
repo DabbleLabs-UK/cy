@@ -100,57 +100,17 @@ try {
     if ($action === 'claim_source') {
         captive_json_response([
             'ok' => true,
-            'job' => captive_memory_claim_source($db),
+            'job' => captive_memory_claim_source($db, $input),
             'depth' => captive_memory_queue_depth($db),
         ]);
     }
 
-    if ($action === 'complete_source') {
-        $jobId = max(0, (int)($input['job_id'] ?? 0));
-        $category = strtoupper((string)($input['result_category'] ?? 'ERROR'));
-        $allowed = ['CREATE', 'UPDATE', 'NOTHING', 'INVALID', 'ERROR', 'TIMEOUT', 'PREEMPTED', 'CONFLICT'];
-        if ($jobId < 1 || !in_array($category, $allowed, true)) {
-            captive_error_response('invalid formation completion', 422);
-        }
-        $db->beginTransaction();
-        $select = $db->prepare('SELECT * FROM autobiographical_memory_formation_queue WHERE id = ? FOR UPDATE');
-        $select->execute([$jobId]);
-        $job = $select->fetch();
-        if (!$job) {
-            $db->rollBack();
-            captive_error_response('formation job not found', 404);
-        }
-        $finished = in_array($category, ['CREATE', 'UPDATE', 'NOTHING'], true);
-        $delay = max(5, min(900, (int)($input['retry_delay_seconds'] ?? 30)));
-        $update = $db->prepare(
-            "UPDATE autobiographical_memory_formation_queue
-             SET status = ?, completed_at = IF(?, NOW(3), completed_at),
-                 available_at = IF(?, available_at, DATE_ADD(NOW(3), INTERVAL ? SECOND)),
-                 last_error = ?, updated_at = NOW(3) WHERE id = ?"
-        );
-        $errorText = isset($input['error']) ? mb_substr((string)$input['error'], 0, 1000) : null;
-        $update->execute([$finished ? 'PROCESSED' : 'RETRYABLE', $finished ? 1 : 0, $finished ? 1 : 0, $delay, $errorText, $jobId]);
-        $depth = (int)$db->query(
-            "SELECT COUNT(*) FROM autobiographical_memory_formation_queue
-             WHERE status IN ('PENDING', 'PROCESSING', 'RETRYABLE')"
-        )->fetchColumn();
-        $attempt = $db->prepare(
-            'INSERT INTO autobiographical_memory_formation_attempts
-                (queue_id, source_type, source_id, started_at, completed_at, provider, model,
-                 prompt_chars, latency_ms, result_category, resulting_memory_id,
-                 queue_depth_before, queue_depth_after, error_text, created_at)
-             VALUES (?, ?, ?, COALESCE(?, NOW(3)), NOW(3), ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(3))'
-        );
-        $attempt->execute([
-            $jobId, $job['source_type'], $job['source_id'], $job['started_at'],
-            mb_substr((string)($input['provider'] ?? ''), 0, 32) ?: null,
-            mb_substr((string)($input['model'] ?? ''), 0, 160) ?: null,
-            max(0, (int)($input['prompt_chars'] ?? 0)), max(0, (int)($input['latency_ms'] ?? 0)),
-            $category, $input['memory_id'] ?? null,
-            max(0, (int)($input['queue_depth_before'] ?? 0)), $depth, $errorText,
-        ]);
-        $db->commit();
-        captive_json_response(['ok' => true, 'status' => $finished ? 'PROCESSED' : 'RETRYABLE', 'depth' => $depth]);
+    if ($action === 'complete_source' || $action === 'finish_source') {
+        captive_json_response(captive_memory_finish_source($db, $input, $action === 'finish_source'));
+    }
+
+    if ($action === 'formation_health') {
+        captive_json_response(['ok' => true, 'health' => captive_memory_formation_health($db)]);
     }
 
     if ($action === 'enqueue_surfacing') {
@@ -467,7 +427,7 @@ try {
 } catch (InvalidArgumentException $e) {
     captive_error_response($e->getMessage(), 422);
 } catch (RuntimeException $e) {
-    captive_error_response($e->getMessage(), $e->getMessage() === 'memory version conflict' ? 409 : 500);
+    captive_error_response($e->getMessage(), in_array($e->getMessage(), ['memory version conflict','formation claim conflict'], true) ? 409 : 500);
 } catch (Throwable $e) {
     captive_error_response('internal error', 500);
 }

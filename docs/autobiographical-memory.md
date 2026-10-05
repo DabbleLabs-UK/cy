@@ -26,6 +26,8 @@ MariaDB is authoritative. Migration `sql/015_autobiographical_memory.sql` adds:
 Migration `sql/017_memory_runtime_queue.sql` adds durable formation and surfacing
 queues, expiring prepared working sets, and owner-only attempt records containing
 provider/model, prompt size, latency, result category, queue depth and errors.
+Migration `sql/027_memory_formation_delivery.sql` adds claim receipts, consecutive
+failure counts and terminal/quarantine status without discarding old sources.
 
 Memory types are EPISODIC, PERSON, MOTIF, UNRESOLVED_THREAD and SEMANTIC.
 Lifecycle states are ACTIVE, ARCHIVED and DELETED. Consistency is CONSISTENT,
@@ -51,18 +53,29 @@ inspection endpoint is `public/api/memory-inspection.php`.
 
 The runner writes provenance-bearing sources to a restart-safe Dell disk spool,
 then transfers them idempotently to the durable server queue. Sources include structured environment events,
-current-sender postcards and groups of four screened outward expressions. A
+current-sender postcards and groups of four screened outward expressions. The
+postcard's observed world record remains, but does not create a second unlinked
+generic formation source. Old unlinked correspondence sources are quarantined
+before claim, retaining their provenance. A
 current-sender reply is linked to that same sender and cannot be considered for
-another sender's private memory. One source is considered at a time by a low-priority
-background worker. The server returns at most five privacy-eligible
+another sender's private memory. One source is considered at a time by a
+background worker. Aged sender correspondence gets a turn before optional
+surfacing, plus one reserved waking turn at most every ten minutes; immediate
+visitor replies still preempt it. The server returns at most five privacy-eligible
 existing memories. The active model must return one structured decision:
 
 - CREATE a new memory;
 - UPDATE exactly one supplied existing memory; or
+- RESOLVE one offered same-sender UNRESOLVED_THREAD only when the new source
+  clearly settles it, archiving it with a revision and resolving provenance; or
 - NOTHING.
 
 The server validates the decision, provenance, version and privacy scope. UPDATE
-uses optimistic version checking. Formation cannot edit or backfill the structured
+and RESOLVE use optimistic version checking. The operation and queue completion
+commit in one transaction, so replay of a claim token returns its original
+receipt without applying a second memory. Errors, invalid responses and timeouts
+use bounded exponential backoff; six consecutive failures enter a retained FAILED
+state, while foreground preemption remains retryable. Formation cannot edit or backfill the structured
 world archive. A generated expression can become subjective autobiography but
 cannot become evidence for a grounded Soma subsystem.
 
@@ -110,7 +123,7 @@ inbox visitor record. Optional broader enrichment waits at most 750 ms for a
 compatible prepared set and cannot displace required continuity. Both providers
 use one privacy-filtered turn snapshot. See `postcard-inference.md` for timing
 evidence and limits; this does not promise exhaustive recall or completed memory
-formation for every exchange. Any foreground model call preempts background
+formation for every exchange. Interactive foreground work preempts background
 memory work; interrupted jobs remain retryable.
 
 The bounded recent-expression Zone B remains separate. It supplies immediate

@@ -666,8 +666,19 @@ export class Client {
     return { ...last, pending: 0 };
   }
 
-  async claimMemorySource() {
-    return this._memoryRequest('claim_source');
+  async claimMemorySource({ senderOnly = false, minAgeSeconds = 0 } = {}) {
+    return this._memoryRequest('claim_source', {
+      sender_only: !!senderOnly,
+      min_age_seconds: Math.max(0, Math.floor(Number(minAgeSeconds) || 0)),
+    });
+  }
+
+  async finishMemorySource(value) {
+    return this._memoryRequest('finish_source', value || {});
+  }
+
+  async memoryFormationHealth() {
+    return this._memoryRequest('formation_health');
   }
 
   async completeMemorySource(value) {

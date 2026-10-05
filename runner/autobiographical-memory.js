@@ -95,6 +95,7 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
 export function buildFormationRequest(source, existing = [], groundedContext = null) {
   const expression = sanitizeCyExpressionSource(source);
   if (!expression) throw new Error('empty Cy expression after character-boundary sanitisation');
+  const senderCorrespondence = ['POSTCARD', 'CY_REPLY'].includes(expression.sourceType);
   const safeSource = {
     sourceType: expression.sourceType,
     occurredAt: expression.occurredAt,
@@ -122,19 +123,23 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
       'You perform MODEL-MEDIATED AUTOBIOGRAPHICAL MEMORY FORMATION for a fictional character.',
       'Return one JSON object only. Do not explain your reasoning.',
       'World history is immutable. Every proposed memory is subjective autobiography, never world fact.',
-      'Allowed decision values: CREATE, UPDATE, NOTHING.',
+      'Allowed decision values: CREATE, UPDATE, RESOLVE, NOTHING.',
       'Allowed memory types: ' + MEMORY_TYPES.join(', ') + '.',
       'Allowed privacy scopes: ' + MEMORY_SCOPES.join(', ') + '.',
       'For UPDATE, memoryRef must name one supplied candidate. Preserve uncertainty and contradictions.',
+      senderCorrespondence
+        ? 'RESOLVE only when this source clearly settles an offered unresolved topic from this sender. Do not infer resolution from silence or similar wording.' : null,
+      senderCorrespondence
+        ? 'For sender postcards, keep durable personal facts and genuinely open questions, not trivial wording or a transcript.' : null,
       'Do not include technical identifiers, scores, hidden metadata, or claims not present in the source.',
-    ].join('\n'),
+    ].filter(Boolean).join('\n'),
     prompt: JSON.stringify({
       source: safeSource,
       groundedContext: groundedContext || null,
       existingMemoryCandidates: candidates.map(({ id, ...candidate }) => candidate),
       outputSchema: {
-        decision: 'CREATE | UPDATE | NOTHING',
-        memoryRef: 'required for UPDATE',
+        decision: 'CREATE | UPDATE | RESOLVE | NOTHING',
+        memoryRef: 'required for UPDATE or RESOLVE',
         type: 'required for CREATE',
         privacyScope: 'required for CREATE',
         content: 'subjective autobiographical wording',
@@ -160,10 +165,22 @@ function extractJson(raw) {
 
 export function parseFormationResponse(raw, { source, existing = [], makeId } = {}) {
   const parsed = extractJson(raw);
-  if (!parsed || !['CREATE', 'UPDATE', 'NOTHING'].includes(parsed.decision)) {
+  if (!parsed || !['CREATE', 'UPDATE', 'RESOLVE', 'NOTHING'].includes(parsed.decision)) {
     return { decision: 'NOTHING', valid: false };
   }
   if (parsed.decision === 'NOTHING') return { decision: 'NOTHING', valid: true };
+  if (parsed.decision === 'RESOLVE') {
+    const refMatch = /^C([1-5])$/.exec(String(parsed.memoryRef || ''));
+    const target = refMatch ? existing[Number(refMatch[1]) - 1] : null;
+    if (!target || target.type !== 'UNRESOLVED_THREAD' || target.status !== 'ACTIVE'
+        || target.subjectVisitorId !== source?.subjectVisitorId || !source?.subjectVisitorId) {
+      return { decision: 'NOTHING', valid: false };
+    }
+    return {
+      decision: 'ARCHIVE', valid: true, memoryId: target.id,
+      expectedVersion: target.version, source,
+    };
+  }
   const content = String(parsed.content || '').trim().slice(0, 2000);
   if (!content) return { decision: 'NOTHING', valid: false };
   try { assertPromptSafe(content); } catch { return { decision: 'NOTHING', valid: false }; }
@@ -299,6 +316,10 @@ export function publicMemoryQueryTelemetry(inspection) {
 export function sourceFromEnvironmentRecord(record) {
   const world = record && record.world_event;
   if (!world || !world.id) return null;
+  // Postcard contact has its own sender-scoped POSTCARD/CY_REPLY source. The
+  // observed world record remains intact, but must not form an unlinked copy
+  // of private correspondence under a different source identity.
+  if (['postcard', 'postcard_with_image', 'postcard_reply'].includes(world.event_type)) return null;
   const summary = world.context && world.context.description
     || record.observation && record.observation.summary
     || world.event_type;
