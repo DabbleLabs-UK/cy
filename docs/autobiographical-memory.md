@@ -102,9 +102,16 @@ and preserves its consistency status.
 Prepared sets are keyed by a SHA-256 context fingerprint and exact sender scope,
 expire after 15 minutes, and are marked with the generation that consumed them.
 A stale or differently scoped set is never reused. Journalling does not wait for
-surfacing. A postcard waits at most 750 ms for a compatible prepared set and then
-continues without memory. Any foreground model call preempts background memory
-work; interrupted jobs remain retryable.
+surfacing. Postcards independently require a canonical same-sender continuity
+read (up to 5 seconds, no model selection), reserving two PERSON and two unresolved
+topic slots at most, bounded to 600 characters each. A failed required read holds
+the reply under existing claim retry/expiry rules. Identity still comes from the
+inbox visitor record. Optional broader enrichment waits at most 750 ms for a
+compatible prepared set and cannot displace required continuity. Both providers
+use one privacy-filtered turn snapshot. See `postcard-inference.md` for timing
+evidence and limits; this does not promise exhaustive recall or completed memory
+formation for every exchange. Any foreground model call preempts background
+memory work; interrupted jobs remain retryable.
 
 The bounded recent-expression Zone B remains separate. It supplies immediate
 continuity; autobiography supplies selective longer-term continuity. If retrieval

@@ -11,11 +11,31 @@ existing autobiographical retrieval/formation system, not a second transcript
 lookup or cloud memory store. Public cross-visitor recall uses only the existing
 privacy-eligible public summary. Local and cloud consume the same selected set.
 
-The existing asynchronous memory deadline is preserved: a reply may proceed
-without recalled details if no compatible prepared set is ready within 750 ms.
-Recognition/counts still arrive with the inbox visitor record. This feature does
-not promise exhaustive recall, add a consolidation mechanism, or change which
-memories the existing background selector chooses.
+Sender continuity is required before reply routing/inference. Identity/counts
+come from the existing inbox visitor record. An authenticated canonical memory
+read has a 5-second total deadline, independent of background model selection.
+It reserves up to two ACTIVE same-sender PERSON memories and two ACTIVE
+same-sender unresolved topics, with 600 characters per record. Existing privacy,
+subjective-memory labels and provenance remain intact. These bounded records
+and recognition cannot be evicted by optional context budgeting. This is not
+exhaustive recall or a transcript: no new memory store or consolidation exists.
+
+The 5-second deadline allows headroom over measured DELL-to-API read timings
+(424 ms cold; 27-39 ms warm; canonical DB query 1.1-1.9 ms on 5 October 2026).
+Timeout/error/malformed response holds the claim before routing, inference or
+arrival side effects under the existing postcard retry/expiry policy. It does
+not generate a reply pretending the sender is new, nor promise an extra reply.
+A successful empty read is explicitly distinguished from unavailable recall.
+
+Broader autobiographical/public cross-visitor enrichment keeps its own 750-ms
+best-effort deadline and background model selector. A cache miss cannot normally
+finish within that deadline because background work is scheduled after 1 second;
+this no longer affects required sender continuity. Both layers are snapshotted
+once for local/cloud/fallback, with duplicate memory IDs removed. Content-free
+`postcard_memory_readiness` diagnostics record status, latency, counts and held
+replies in the existing inference diagnostic log. No prompts or memory text are
+included. Formation remains asynchronous: this guarantees retrieval readiness
+for selected stored records, not that every exchange has already formed memory.
 
 The postcard-specific instruction allows interest, gratitude, warmth, curiosity
 and humour while preserving Cy's present mood, rough voice and unresolved history.

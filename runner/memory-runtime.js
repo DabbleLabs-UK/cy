@@ -2,8 +2,9 @@
 //
 // The server owns the formation and surfacing queues. The runner performs at
 // most one background model call at a time and foreground work may abort it.
-// Journalling never awaits memory. A postcard may wait only for a short fixed
-// deadline, then continues without memory if no compatible set is ready.
+// Journalling never awaits memory. Postcard optional enrichment waits briefly
+// for a compatible set; postcard-memory.js separately requires canonical sender
+// continuity without waiting for this background model selector.
 
 import { createHash } from 'node:crypto';
 
@@ -164,6 +165,10 @@ export class AutobiographicalMemoryRuntime {
           contextFingerprint: fingerprint,
           visitorId: context.currentVisitorId,
         });
+        // An optional foreground wait may expire while this read is pending.
+        // Never let that older request replace a newer sender's working set.
+        if (this.desired?.fingerprint !== fingerprint
+            || (this.desired?.visitorId || null) !== (context.currentVisitorId || null)) return;
         if (cached && cached.prepared_set) this.activatePrepared(cached.prepared_set, context);
         if (!this.compatibleWorking(fingerprint, context.currentVisitorId)) {
           this.priorityPending = true;

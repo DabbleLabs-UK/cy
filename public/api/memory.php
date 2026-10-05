@@ -314,6 +314,30 @@ try {
         captive_json_response(['ok' => true]);
     }
 
+    if ($action === 'sender_continuity') {
+        $visitorId = $parseVisitorId($input['visitor_id'] ?? null);
+        if ($visitorId === null) {
+            captive_error_response('valid sender visitor id required', 422);
+        }
+        $query = is_array($input['query'] ?? null) ? $input['query'] : [];
+        $started = microtime(true);
+        $candidates = captive_memory_sender_continuity($db, $query, $visitorId);
+        captive_json_response([
+            'ok' => true,
+            'candidates' => $candidates,
+            'retrieval' => [
+                'mechanisms' => array_merge(captive_memory_retrieval_mechanisms($query, $visitorId), ['SENDER_CONTINUITY_BY_TYPE']),
+                'types' => ['PERSON', 'UNRESOLVED_THREAD'],
+                'per_type_limit' => 2,
+                'candidate_pool_per_type' => 300,
+                'candidate_pool_per_mechanism' => 100,
+                'ranking' => 'LEXICOGRAPHIC ENGINEERING ORDER; NO PSYCHOLOGICAL SCORE',
+                'privacy_filter' => 'ACTIVE SAME-SENDER MEMORIES ONLY',
+                'duration_ms' => round((microtime(true) - $started) * 1000, 3),
+            ],
+        ]);
+    }
+
     if ($action === 'query') {
         $visitorId = $parseVisitorId($input['visitor_id'] ?? null);
         $query = is_array($input['query'] ?? null) ? $input['query'] : [];
