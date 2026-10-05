@@ -405,6 +405,52 @@ test('reserved sender turn is paced and does not create a restart burst', async 
   assert.equal(claims, 2);
 });
 
+test('a waking opportunity waits for an already claimed sender job instead of preempting it', async () => {
+  let startModel;
+  let releaseModel;
+  const modelStarted = new Promise((resolve) => { startModel = resolve; });
+  const modelHeld = new Promise((resolve) => { releaseModel = resolve; });
+  let claims = 0;
+  const r = runtime({
+    client: {
+      async claimMemorySource({ senderOnly } = {}) {
+        assert.equal(senderOnly, true);
+        claims += 1;
+        return { job: { id: 85, claim_token: 'claim-85', source: {
+          sourceType: 'POSTCARD', sourceId: 'postcard:85', text: 'My dog is called Alfie.',
+          sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,
+        } } };
+      },
+    },
+    generate: async () => {
+      startModel();
+      await modelHeld;
+      return '{"decision":"NOTHING"}';
+    },
+  });
+  r.stopped = false;
+  r.schedule = () => {};
+  const background = r.tick();
+  await modelStarted;
+  assert.equal(r.busy, true);
+  assert.ok(r.activeSenderFormation);
+  r.canRunBackground = () => false; // The new waking turn closes the background eligibility gate.
+  let wakingReleased = false;
+  const reserved = r.serviceAgedSenderBeforeExpression().then((result) => {
+    wakingReleased = true;
+    return result;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(wakingReleased, false);
+  assert.equal(claims, 1, 'waking turn must not claim a duplicate source');
+  releaseModel();
+  assert.equal((await reserved).status, 'NOTHING');
+  await background;
+  assert.equal(r.activeSenderFormation, null);
+  assert.ok(r.lastReservedSenderAt > 0);
+  r.stop();
+});
+
 test('lost completion response retries the same claim token without regenerating memory', async () => {
   const requests = [];
   let generated = 0;
