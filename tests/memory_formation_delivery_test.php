@@ -10,7 +10,9 @@ $checks['sender priority uses source semantics'] = captive_memory_source_priorit
 $checks['historical attempts do not define new failures'] = captive_memory_formation_retry(0, 'INVALID')
     === ['status' => 'RETRYABLE', 'failure_streak' => 1, 'delay_seconds' => 30];
 $checks['backoff increases'] = captive_memory_formation_retry(3, 'TIMEOUT')['delay_seconds'] === 240;
-$checks['six consecutive failures stop retries'] = captive_memory_formation_retry(5, 'ERROR')['status'] === 'FAILED';
+$checks['six invalid decisions stop retries'] = captive_memory_formation_retry(5, 'INVALID')['status'] === 'FAILED';
+$checks['six transport failures remain recoverable'] = captive_memory_formation_retry(5, 'ERROR')['status'] === 'RETRYABLE';
+$checks['six model-access timeouts remain recoverable'] = captive_memory_formation_retry(5, 'TIMEOUT')['status'] === 'RETRYABLE';
 $checks['backoff remains bounded'] = captive_memory_formation_retry(999, 'ERROR')['delay_seconds'] === 900;
 $checks['preemption cannot condemn source'] = captive_memory_formation_retry(5, 'PREEMPTED')
     === ['status' => 'RETRYABLE', 'failure_streak' => 5, 'delay_seconds' => 30];
