@@ -127,7 +127,7 @@ export class PostcardInference {
     this.canAdmin = data.can_admin === true;
     this.root.querySelector('.pci-state').textContent = inferenceStatus(data);
     this.root.querySelectorAll('[data-range]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.range === this.range)));
-    this.root.querySelector('.pci-current').innerHTML = `<p class="pci-route">${escape(settings.route || 'LOCAL')} / ${escape(status.provider || 'local')}<small>${escape(status.model || data.pricing?.model || 'Model unavailable')}</small></p><dl class="pci-stats">${[['hour', 'This hour', 'gbp_hour', 'requests_hour'], ['day', 'Today', 'gbp_day', 'requests_day'], ['month', 'This month', 'gbp_month', 'requests_month']].map(([key, label, costCap, requestCap]) => {
+    this.root.querySelector('.pci-current').innerHTML = `<p class="pci-route">${escape(settings.route || 'LOCAL')} / ${escape(status.provider || 'awaiting selection')}<small>${status.provider ? '' : 'Configured cloud: '}${escape(status.model || data.pricing?.model || 'Model unavailable')}</small></p><dl class="pci-stats">${[['hour', 'This hour', 'gbp_hour', 'requests_hour'], ['day', 'Today', 'gbp_day', 'requests_day'], ['month', 'This month', 'gbp_month', 'requests_month']].map(([key, label, costCap, requestCap]) => {
       const window = windows[key] || {};
       const committed = number(window.estimated_gbp);
       const cap = number(settings[costCap]);

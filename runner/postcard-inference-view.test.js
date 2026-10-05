@@ -53,6 +53,8 @@ test('public view shows aggregated accounting and cannot submit settings', async
   assert.equal(panel.canAdmin, false);
   assert.equal(nodes.get('.pci-admin').innerHTML, '');
   assert.match(nodes.get('.pci-current').innerHTML, /30% of GBP 0.1000 cap/);
+  assert.match(nodes.get('.pci-current').innerHTML, /awaiting selection/);
+  assert.doesNotMatch(nodes.get('.pci-current').innerHTML, /AUTO \/ local/);
   assert.match(nodes.get('.pci-totals').innerHTML, /1.3s/);
   await panel.save(null);
   assert.equal(calls, 1, 'public writes never leave the panel');
