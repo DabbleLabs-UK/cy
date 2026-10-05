@@ -87,7 +87,7 @@ export function settingsMarkup(settings) {
 }
 
 export class PostcardInference {
-  constructor(root, { endpoint = 'api/postcard-inference.php', fetcher = globalThis.fetch } = {}) {
+  constructor(root, { endpoint = 'api/postcard-inference.php', fetcher = (...args) => globalThis.fetch(...args) } = {}) {
     this.root = root;
     this.endpoint = endpoint;
     this.fetcher = fetcher;
