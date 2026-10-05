@@ -47,3 +47,28 @@ semantics are not established. Migration 028, production merge, deployment and
 restart were not performed. Existing historical statuses and the 17 quarantined
 unlinked sources were not reset. Do not claim durable visitor relationships are
 solved from these results.
+
+## One focused semantic correction: 67a491c
+
+The user authorized one prompt-only correction: explicit priority for RESOLVE
+when a topic is settled, UPDATE only for a materially changed still-open topic,
+contrasting examples, and conservative source fidelity without invented motives.
+Schema, fixtures, provider, settings and canonical memory handling were unchanged.
+The 43 targeted deterministic tests passed; review found no material issue.
+
+The same real local-model probe stopped after the first resolution failure,
+as requested. Only four calls were made, not the planned twelve:
+
+| Fixture | Faithful result |
+| --- | --- |
+| PERSON | 1/1 |
+| UNRESOLVED_THREAD | 1/1 |
+| Greeting NOTHING | 1/1 |
+| Settled topic RESOLVE | 0/1; returned UPDATE FM1 |
+
+All four responses were schema-valid and finished normally. Resolution took
+54.089s waiting for access and 32.642s inference, producing 35 tokens. It updated
+the topic with the received positive result instead of closing it. No second
+round, further tuning, full-suite rerun, production merge, migration, deployment
+or restart followed this failed acceptance gate. No production memories or paid
+calls were made. Deployment remains blocked.
