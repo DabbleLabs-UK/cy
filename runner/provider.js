@@ -384,6 +384,46 @@ function makeOllama(config) {
   };
 }
 
+// Sender formation alone uses DeepSeek's strict forced-tool contract. This is
+// the schema-equivalent encoding accepted by the bounded synthetic evaluation;
+// ordinary postcard/chat paths below keep their existing transport unchanged.
+function formationStrictSchema(value) {
+  if (Array.isArray(value)) return value.map(formationStrictSchema);
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [name, item] of Object.entries(value)) {
+    if (name === 'oneOf') out.anyOf = formationStrictSchema(item);
+    else if (name === 'const') { out.type = typeof item; out.enum = [item]; }
+    else if (name === 'enum') { out.type = 'string'; out.enum = item; }
+    else if (name !== 'minLength' && name !== 'maxLength') out[name] = formationStrictSchema(item);
+  }
+  if (value.minLength === 1 && value.maxLength === 480) out.pattern = '^[\\s\\S]{1,480}$';
+  return out;
+}
+
+export function deepseekFormationRequest({ system, prompt, format, opts, model }) {
+  if (!Array.isArray(format?.oneOf) || !format.oneOf.length || !model
+      || opts?.num_predict !== 260 || opts?.temperature !== 0.1) {
+    throw new Error('bounded sender formation request required');
+  }
+  // oneOf -> anyOf is equivalent only because these action branches are
+  // disjoint. Reject an unexpected schema rather than relaxing its meaning.
+  const actions = format.oneOf.map(branch => branch?.properties?.decision?.const);
+  if (actions.some(action => !['NOTHING', 'CREATE', 'UPDATE', 'RESOLVE'].includes(action))
+      || new Set(actions).size !== actions.length) throw new Error('disjoint formation action schema required');
+  return {
+    model, stream: false, thinking: { type: 'disabled' },
+    temperature: opts.temperature, top_p: opts.top_p, max_tokens: opts.num_predict,
+    stop: opts.stop?.slice(0, 4),
+    messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
+    tools: [{ type: 'function', function: { name: 'formation_decision', strict: true,
+      description: 'Return the constrained formation decision.',
+      parameters: { type: 'object', properties: { result: formationStrictSchema(format) },
+        required: ['result'], additionalProperties: false } } }],
+    tool_choice: { type: 'function', function: { name: 'formation_decision' } },
+  };
+}
+
 function makeDeepSeek(config, key) {
   const ds = config.deepseek || {};
   const apiBase = ds.apiBase || 'https://api.deepseek.com';
@@ -413,6 +453,39 @@ function makeDeepSeek(config, key) {
     },
     available() {
       return !!key;
+    },
+    async formationGenerate({ system, prompt, opts, signal, format, model = ds.model }) {
+      if (!key) return { ok: false, status: 0, text: '', reason: 'credentials_missing', configuredModel: model };
+      const body = deepseekFormationRequest({ system, prompt, opts, format, model });
+      const base = apiBase.replace(/\/$/, '');
+      const response = await fetch(`${base.endsWith('/beta') ? base : `${base}/beta`}/chat/completions`, {
+        method: 'POST', redirect: 'error',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body), signal,
+      });
+      if (!response.ok) return { ok: false, status: response.status, text: '', configuredModel: model,
+        reason: response.status === 429 ? 'rate_limit' : response.status >= 500 ? 'provider_unavailable' : 'provider_error' };
+      const result = await response.json();
+      let text = '', transportValid = false;
+      const tools = result.choices?.[0]?.message?.tool_calls;
+      try {
+        if (tools?.length !== 1 || tools[0].function?.name !== 'formation_decision') throw new Error('wrong tool');
+        const envelope = JSON.parse(tools[0].function.arguments);
+        if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)
+            || Object.keys(envelope).length !== 1 || !Object.hasOwn(envelope, 'result')) throw new Error('wrong envelope');
+        text = JSON.stringify(envelope.result);
+        transportValid = true;
+      } catch { /* Empty text reaches the existing canonical invalid-decision boundary. */ }
+      const usage = result.usage;
+      const usageReported = Number.isFinite(usage?.prompt_tokens) && Number.isFinite(usage?.completion_tokens);
+      const stats = { done: true, provider: DEEPSEEK, model: result.model || null,
+        configured_model: model, done_reason: result.choices?.[0]?.finish_reason || null,
+        formation_transport_valid: transportValid, usage_reported: usageReported,
+        ...(usageReported ? { prompt_eval_count: usage.prompt_tokens, eval_count: usage.completion_tokens,
+          usage: { prompt_tokens: usage.prompt_tokens, completion_tokens: usage.completion_tokens,
+            cached_tokens: usage.prompt_cache_hit_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? 0 } } : {}),
+      };
+      return { ok: true, status: response.status, text, configuredModel: model, model: result.model || null, stats };
     },
     async openStream({ system, prompt, opts, signal, purpose }) {
       const res = await fetch(`${apiBase}/chat/completions`, {

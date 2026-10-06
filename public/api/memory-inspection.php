@@ -86,9 +86,12 @@ try {
          FROM autobiographical_memory_surfacing_queue"
     )->fetch() ?: [];
     $recentFormation = $db->query(
-        'SELECT source_type, source_id, result_category, provider, model, prompt_chars,
-                latency_ms, queue_depth_before, queue_depth_after, error_text, created_at
-         FROM autobiographical_memory_formation_attempts ORDER BY created_at DESC, id DESC LIMIT 20'
+        "SELECT source_type, source_id, result_category, provider, model, prompt_chars,
+                latency_ms, queue_depth_before, queue_depth_after, error_text, created_at,
+                NULLIF(JSON_UNQUOTE(JSON_EXTRACT(result_payload,'$.rejection_code')),'null') AS rejection_code,
+                CAST(JSON_EXTRACT(result_payload,'$.failure_streak') AS UNSIGNED) AS failure_streak,
+                CAST(JSON_EXTRACT(result_payload,'$.model_invalid_streak') AS UNSIGNED) AS model_invalid_streak
+         FROM autobiographical_memory_formation_attempts ORDER BY created_at DESC, id DESC LIMIT 20"
     )->fetchAll();
     $recentSurfacing = $db->query(
         'SELECT generation_ref, result_category, provider, model, prompt_chars, latency_ms,

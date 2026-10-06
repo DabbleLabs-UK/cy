@@ -107,17 +107,48 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
   assertPromptSafe(safeSource);
   const candidates = filterMemoriesBeforePrompt(existing, {
     currentVisitorId: source.subjectVisitorId || null,
-  }).filter((memory) => source.sourceVisibility !== 'SENDER_RECALLABLE'
+  }).filter((memory) => !senderCorrespondence
+    || (memory.privacyScope === 'SENDER_RECALLABLE' && memory.subjectVisitorId === source.subjectVisitorId))
+    .filter((memory) => source.sourceVisibility !== 'SENDER_RECALLABLE'
     || (memory.privacyScope === 'SENDER_RECALLABLE'
       && memory.subjectVisitorId === source.subjectVisitorId))
     .slice(0, MEMORY_FORMATION_MATCH_LIMIT).map((memory, index) => ({
     id: memory.id,
-    memoryRef: `C${index + 1}`,
+    memoryRef: `${senderCorrespondence ? 'FM' : 'C'}${index + 1}`,
     type: memory.type,
     content: memory.content,
     consistencyStatus: memory.consistencyStatus,
   }));
   if (groundedContext) assertPromptSafe(groundedContext);
+  if (senderCorrespondence) {
+    if (!source.subjectVisitorId || source.sourceVisibility !== 'SENDER_RECALLABLE') {
+      throw new Error('sender formation requires canonical sender provenance');
+    }
+    const format = senderFormationSchema(candidates);
+    return {
+      system: [
+        'Select one durable autobiographical memory decision from this correspondence. Return only the constrained JSON object.',
+        'Use only the current source and offered memories, not facts in these instruction examples. No transcript or invented facts.',
+        'PERSON: durable facts about this sender: identity, family, pets, interests, ongoing circumstances, preferences or meaningful personal history.',
+        'UNRESOLVED_THREAD: a genuinely persistent open issue worth returning to, not every question or social greeting.',
+        'EPISODIC: a meaningful experienced event, not a fallback for personal facts. MOTIF: a supported recurring pattern. SEMANTIC: durable general knowledge.',
+        'Prefer NOTHING for greetings, politeness, repetition or no durable future value.',
+        'CREATE for new information. UPDATE only an offered FM reference, preserving its type. For an offered UNRESOLVED_THREAD, decide first whether the new same-sender source closes it.',
+        'RESOLVE when the offered topic is explicitly answered, settled, completed, withdrawn or no longer open. UPDATE only when it remains genuinely open and has materially changed. Never use UPDATE merely to record the answer to a settled question. No resolution from silence.',
+        'Content must conservatively abstract only supported facts. Do not invent motives, withholding, reluctance, deception, uncertainty or emotions unless directly supported by the source. An unknown result does not mean the sender is unwilling to share it.',
+        'A POSTCARD is the sender speaking. A CY_REPLY is Cy speaking, not new testimony about the sender. Preserve who said what and uncertainty.',
+        'Examples of decisions (not facts about this sender): "my dog is called Alfie" -> CREATE PERSON, content "The sender says their dog is called Alfie.";',
+        '"I am waiting for an important result and will tell you next time" -> CREATE UNRESOLVED_THREAD; "Hi, hope you are okay" -> NOTHING;',
+        'Contrast: offered FM1 awaits an application decision; "it was approved, that is settled" -> RESOLVE FM1, not UPDATE. "the decision is delayed until next week; I am still waiting" -> UPDATE FM1 because it remains open. With no offered candidates, never UPDATE or RESOLVE.',
+        'Content: one concise third-person recollection, at most 480 characters. Do not invent technical IDs, candidate refs or privacy fields; CY attaches provenance and sender-only scope.',
+      ].join('\n'),
+      prompt: JSON.stringify({ source: safeSource, groundedContext: groundedContext || null,
+        existingMemoryCandidates: candidates.map(({ id, ...candidate }) => candidate) }),
+      format,
+      options: { temperature: 0.1, num_predict: 260 },
+      purpose: 'memory_formation', candidates,
+    };
+  }
   return {
     system: [
       'You perform MODEL-MEDIATED AUTOBIOGRAPHICAL MEMORY FORMATION for a fictional character.',
@@ -155,6 +186,65 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
   };
 }
 
+// Small action-specific grammar. Only this sender path opts into constrained
+// output; other memory sources retain their established formation contract.
+export function senderFormationSchema(candidates = []) {
+  const content = { type: 'string', minLength: 1, maxLength: 480 };
+  const branch = (decision, fields = {}) => ({ type: 'object',
+    properties: { decision: { const: decision }, ...fields },
+    required: ['decision', ...Object.keys(fields)], additionalProperties: false });
+  const choices = [branch('NOTHING'), branch('CREATE', {
+    type: { enum: [...MEMORY_TYPES] }, content,
+  })];
+  if (candidates.length) choices.push(branch('UPDATE', {
+    memoryRef: { enum: candidates.map(memory => memory.memoryRef) }, content,
+  }));
+  const unresolved = candidates.filter(memory => memory.type === 'UNRESOLVED_THREAD');
+  if (unresolved.length) choices.push(branch('RESOLVE', {
+    memoryRef: { enum: unresolved.map(memory => memory.memoryRef) },
+  }));
+  return { oneOf: choices };
+}
+
+function parseSenderFormationResponse(raw, { source, existing, makeId }) {
+  const invalid = (rejectionCode) => ({ decision: 'NOTHING', valid: false, rejectionCode });
+  if (!source.subjectVisitorId || source.sourceVisibility !== 'SENDER_RECALLABLE') {
+    return invalid('PRIVACY_PROVENANCE');
+  }
+  let parsed;
+  try { parsed = JSON.parse(String(raw || '').trim()); } catch { return invalid('JSON_FORMAT'); }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return invalid('SCHEMA');
+  if (!Object.hasOwn(parsed, 'decision')) return invalid('MISSING_FIELD');
+  const fields = { NOTHING: [], CREATE: ['type', 'content'], UPDATE: ['memoryRef', 'content'], RESOLVE: ['memoryRef'] };
+  if (typeof parsed.decision !== 'string' || !Object.hasOwn(fields, parsed.decision)) return invalid('ILLEGAL_ACTION');
+  const allowed = ['decision', ...fields[parsed.decision]];
+  if (Object.keys(parsed).some(key => !allowed.includes(key))) return invalid('FORBIDDEN_FIELD');
+  if (allowed.some(key => !Object.hasOwn(parsed, key))) return invalid('MISSING_FIELD');
+  if (parsed.decision === 'NOTHING') return { decision: 'NOTHING', valid: true };
+  if (parsed.decision === 'CREATE' && !MEMORY_TYPES.includes(parsed.type)) return invalid('ILLEGAL_TYPE');
+  let target = null;
+  if (parsed.decision === 'UPDATE' || parsed.decision === 'RESOLVE') {
+    const match = /^FM([1-5])$/.exec(typeof parsed.memoryRef === 'string' ? parsed.memoryRef : '');
+    target = match ? existing[Number(match[1]) - 1] : null;
+    if (!target) return invalid('UNKNOWN_REF');
+    if (target.status !== 'ACTIVE' || target.privacyScope !== 'SENDER_RECALLABLE'
+        || target.subjectVisitorId !== source.subjectVisitorId) return invalid('PRIVACY_PROVENANCE');
+    if (parsed.decision === 'RESOLVE' && target.type !== 'UNRESOLVED_THREAD') return invalid('SCHEMA');
+  }
+  if (parsed.decision === 'RESOLVE') return { decision: 'ARCHIVE', valid: true,
+    memoryId: target.id, expectedVersion: target.version, source };
+  if (typeof parsed.content !== 'string' || !parsed.content.trim()) return invalid('MISSING_FIELD');
+  if (parsed.content.length > 480) return invalid('SCHEMA');
+  const content = parsed.content.trim();
+  try { assertPromptSafe(content); } catch { return invalid('PRIVACY_PROVENANCE'); }
+  const common = { valid: true, content, publicSummary: null, consistencyStatus: 'UNCERTAIN',
+    tags: retrievalTerms(content).slice(0, 12), source };
+  if (parsed.decision === 'UPDATE') return { ...common, decision: 'UPDATE',
+    memoryId: target.id, expectedVersion: target.version, classification: target.classification || '' };
+  return { ...common, decision: 'CREATE', memoryId: makeId(), type: parsed.type,
+    privacyScope: 'SENDER_RECALLABLE', classification: 'sender correspondence' };
+}
+
 function extractJson(raw) {
   const text = String(raw || '').trim();
   const first = text.indexOf('{');
@@ -164,6 +254,9 @@ function extractJson(raw) {
 }
 
 export function parseFormationResponse(raw, { source, existing = [], makeId } = {}) {
+  if (['POSTCARD', 'CY_REPLY'].includes(source?.sourceType)) {
+    return parseSenderFormationResponse(raw, { source, existing, makeId });
+  }
   const parsed = extractJson(raw);
   if (!parsed || !['CREATE', 'UPDATE', 'RESOLVE', 'NOTHING'].includes(parsed.decision)) {
     return { decision: 'NOTHING', valid: false };

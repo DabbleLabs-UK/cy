@@ -143,8 +143,8 @@ assert.doesNotMatch(runSource, /Math\.min\(MAX_TEMPO_IDLE_MS/,
   'the runtime does not reintroduce an absolute cap around the exact duty idle');
 assert.match(runSource, /backgroundTempoGate\.reserveVisibleIdle\(idleMs, Date\.now\(\)\)/,
   'visible tempo quiet is reserved before background inference can use it');
-assert.match(runSource, /canRunBackground: \(kind\) => inferPhase === 'idle'[\s\S]*?inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) <= 0[\s\S]*?backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
-  'memory background work respects per-request pacing and the tempo reservation');
+assert.match(runSource, /canRunBackground: \(kind\) => kind === 'sender_formation'\s*\? !client\.paused\s*: inferPhase === 'idle'[\s\S]*?inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) <= 0[\s\S]*?backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
+  'local memory retains pacing/reservation; only remote sender work bypasses local model quiet');
 assert.match(runSource, /backgroundTempoGate\.claimAwgReservation\(awgReservation, nowMs\)/,
   'only an explicitly offered one-shot reservation admits AWG into visible tempo quiet');
 assert.match(runSource, /if \(!background && !awgInReservedIdle\) \{\s*await waitTrace\.measure\('tempoIdleMs', \(\) => waitForInferenceTempo/,

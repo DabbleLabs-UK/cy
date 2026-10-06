@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { PostcardInference, costBuckets, costChart, inferenceStatus, INFERENCE_RANGES } from '../public/postcard-inference.js';
+import { PostcardInference, costBuckets, costChart, inferenceStatus, settingsMarkup, INFERENCE_RANGES } from '../public/postcard-inference.js';
 
 const base = Date.parse('2026-10-05T00:00:00Z');
 const bucket = (offset, cost = 0.001) => ({ at: new Date(base + offset * 60000).toISOString(), estimated_gbp: cost, requests: 1 });
@@ -128,4 +128,143 @@ test('panel is collapsed by default and its layout remains contained at mobile w
   assert.match(css, /minmax\(0, 1fr\)/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /width: 100%/);
+  assert.match(index, /id="postcard-reply-inference"/);
+  assert.match(index, /id="postcard-memory-inference"/);
+  assert.match(index, /aria-labelledby="postcard-reply-heading"/);
+  assert.match(index, /aria-labelledby="postcard-memory-heading"/);
+});
+
+const memoryData = data => ({ ...data,
+  settings: { mode: 'DEEPSEEK', concurrency: 1, requests_hour: 20, requests_day: 100,
+    requests_month: 1000, gbp_hour: 0.05, gbp_day: 0.25, gbp_month: 2 },
+  status: { mode: 'DEEPSEEK', provider: 'deepseek', configured_model: 'deepseek-v4-flash', actual_model: 'actual-model', reason: 'generated' },
+  totals: { requests: 6, cloud_requests: 5, local_requests: 1, formed: 1, updated: 2, resolved: 1, nothing: 1,
+    held: 3, invalid: 1, failures: 1, input_tokens: 800, output_tokens: 80, cached_tokens: 600, uncached_tokens: 200,
+    mean_latency_ms: 1500 }, pending_count: 3, oldest_pending_age_seconds: 121,
+});
+
+test('memory view reports independent mode, models, decisions, backlog and cached usage without private records', async () => {
+  const { root, nodes, data } = fixture();
+  const value = memoryData(data);
+  value.private_text = 'PRIVATE SOURCE TEXT';
+  value.recent = [{ text: 'PRIVATE SOURCE TEXT' }];
+  const calls = [];
+  const panel = new PostcardInference(root, { kind: 'memory', fetcher: async (...args) => {
+    calls.push(args); return { ok: true, json: async () => value };
+  } });
+  await panel.refresh();
+  assert.equal(calls[0][0], 'api/memory-formation-inference.php?range=24H');
+  assert.equal(calls[0][1].credentials, 'same-origin');
+  assert.match(nodes.get('.pci-current').innerHTML, /60% of GBP 0.0500 cap/);
+  assert.match(nodes.get('.pci-current').innerHTML, /Configured: deepseek-v4-flash/);
+  assert.match(nodes.get('.pci-current').innerHTML, /Last actual model: actual-model/);
+  assert.match(nodes.get('.pci-current').innerHTML, /independent caps/);
+  assert.match(nodes.get('.pci-current').innerHTML, /UTC/);
+  assert.match(nodes.get('.pci-totals').innerHTML, /completed decisions<\/dt><dd>5/);
+  assert.match(nodes.get('.pci-totals').innerHTML, /1 \/ 2 \/ 1 \/ 1/);
+  assert.match(nodes.get('.pci-totals').innerHTML, /3 \/ 3m/);
+  assert.match(nodes.get('.pci-totals').innerHTML, /600 \/ 200/);
+  assert.doesNotMatch([...nodes.values()].map(node => node.innerHTML).join(''), /PRIVATE SOURCE TEXT/);
+  assert.equal(nodes.get('.pci-admin').innerHTML, '');
+  await panel.save(null);
+  assert.equal(calls.length, 1, 'public memory viewer cannot initiate settings write');
+});
+
+test('memory controls use explicit mode and never inherit reply AUTO or enabled semantics', () => {
+  const markup = settingsMarkup(memoryData({}).settings, 'memory');
+  assert.match(markup, /name="mode"/);
+  assert.match(markup, />DEEPSEEK<|>LOCAL<|>OFF</);
+  assert.doesNotMatch(markup, /name="enabled"|name="route"|>AUTO</);
+  assert.match(markup, /does not fall back locally/);
+  assert.match(markup, /OFF leaves sources queued/);
+  assert.match(markup, /name="requests_hour"[^>]*value="20"/);
+  assert.match(markup, /name="gbp_hour"[^>]*value="0.05"/);
+  assert.equal(inferenceStatus({ settings: { mode: 'OFF' } }, 'memory'), 'Memory formation off - sources remain queued');
+  assert.equal(inferenceStatus({ settings: { mode: 'LOCAL' } }, 'memory'), 'Local memory formation');
+  assert.match(inferenceStatus({ settings: { mode: 'DEEPSEEK' }, status: { reason: 'hour_spend_cap' } }, 'memory'), /held - hourly spend cap/);
+  assert.doesNotMatch(inferenceStatus({ settings: { mode: 'DEEPSEEK' }, status: { reason: 'PRIVATE ERROR' } }, 'memory'), /PRIVATE ERROR/);
+});
+
+test('two sections retain independent budgets, ranges, permissions and failed refresh state', async () => {
+  const reply = fixture(), memory = fixture();
+  const replyPanel = new PostcardInference(reply.root, { fetcher: async () => ({ ok: true, json: async () => reply.data }) });
+  const memoryPanel = new PostcardInference(memory.root, { kind: 'memory', fetcher: async () => { throw new Error('offline'); } });
+  replyPanel.range = '1H';
+  memoryPanel.range = '30D';
+  memoryPanel.render(memoryData(memory.data));
+  await replyPanel.refresh();
+  await memoryPanel.refresh();
+  assert.match(reply.nodes.get('.pci-current').innerHTML, /30% of GBP 0.1000 cap/);
+  assert.match(memory.nodes.get('.pci-current').innerHTML, /60% of GBP 0.0500 cap/);
+  assert.match(reply.nodes.get('.pci-totals').innerHTML, /1H replies published/);
+  assert.match(memory.nodes.get('.pci-totals').innerHTML, /30D completed decisions/);
+  assert.doesNotMatch(reply.nodes.get('.pci-state').textContent, /unavailable/);
+  assert.match(memory.nodes.get('.pci-state').textContent, /out of date/);
+  memoryPanel.canAdmin = true;
+  assert.equal(replyPanel.canAdmin, false, 'memory permission does not authorize reply settings');
+});
+
+test('memory history race uses newest response and escapes model names instead of exposing markup', async () => {
+  const { root, nodes, data } = fixture();
+  const pending = [];
+  const panel = new PostcardInference(root, { kind: 'memory', fetcher: () => new Promise(resolve => pending.push(resolve)) });
+  const old = panel.refresh();
+  panel.range = 'ALL';
+  const newer = panel.refresh();
+  const current = memoryData(data);
+  current.status.actual_model = '<script>private()</script>';
+  pending[1]({ ok: true, json: async () => current }); await newer;
+  pending[0]({ ok: true, json: async () => ({ ...memoryData(data), pending_count: 999 }) }); await old;
+  assert.doesNotMatch(nodes.get('.pci-current').innerHTML, /<script>/);
+  assert.match(nodes.get('.pci-current').innerHTML, /&lt;script&gt;/);
+  assert.doesNotMatch(nodes.get('.pci-totals').innerHTML, /999/);
+  assert.match(nodes.get('.pci-totals').innerHTML, /ALL completed decisions/);
+});
+
+test('memory save only sends its own settings, invalidates old GET and respects revoked permission', async () => {
+  const { root, nodes, data } = fixture();
+  const value = memoryData(data), pending = [], calls = [];
+  const panel = new PostcardInference(root, { kind: 'memory', fetcher: (...args) => {
+    calls.push(args); return new Promise(resolve => pending.push(resolve));
+  } });
+  panel.canAdmin = true;
+  const old = panel.refresh();
+  const submit = { disabled: false };
+  const form = { elements: Object.fromEntries(Object.entries(value.settings).map(([key, item]) => [key, { value: String(item) }])), querySelector: () => submit };
+  const saving = panel.save(form);
+  assert.equal(submit.disabled, true);
+  await panel.refresh(); await panel.save(form);
+  assert.equal(calls.length, 2, 'polling and repeated submit cannot race a save');
+  assert.equal(calls[1][0], 'api/memory-formation-inference.php?range=24H');
+  assert.equal(calls[1][1].credentials, 'same-origin');
+  assert.deepEqual(JSON.parse(calls[1][1].body), { action: 'settings', settings: value.settings });
+  pending[1]({ ok: true, json: async () => ({ ...value, can_admin: false }) }); await saving;
+  pending[0]({ ok: true, json: async () => ({ ...value, can_admin: true }) }); await old;
+  assert.equal(panel.canAdmin, false);
+  assert.equal(nodes.get('.pci-admin').innerHTML, '');
+  assert.equal(submit.disabled, false);
+  await panel.save(form);
+  assert.equal(calls.length, 2);
+});
+
+test('memory polling preserves form edits and saving preserves expanded settings and keyboard focus', () => {
+  const { root, nodes, data } = fixture();
+  const panel = new PostcardInference(root, { kind: 'memory' });
+  panel.render(memoryData(data));
+  const admin = nodes.get('.pci-admin');
+  let focused = 0;
+  const details = { open: true };
+  const input = { name: 'gbp_day', focus() { focused++; } };
+  const form = { addEventListener() {} };
+  admin.querySelector = selector => selector === 'form' ? form : selector === 'details' ? details : input;
+  admin.contains = element => element === input;
+  root.ownerDocument = { activeElement: input };
+  admin.innerHTML = 'unsaved values';
+  panel.render({ ...memoryData(data), can_admin: true });
+  assert.equal(admin.innerHTML, 'unsaved values');
+  assert.equal(focused, 0, 'polling never moves keyboard focus');
+  panel.render({ ...memoryData(data), can_admin: true }, true);
+  assert.match(admin.innerHTML, /Memory inference settings/);
+  assert.equal(details.open, true);
+  assert.equal(focused, 1, 'focused control is restored following authorized save');
 });

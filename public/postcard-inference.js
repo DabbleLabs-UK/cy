@@ -1,4 +1,4 @@
-// Postcard-only inference accounting. Public readers never receive settings controls.
+// Independent reply and sender-memory inference accounting in one public panel.
 export const INFERENCE_RANGES = ['1H', '24H', '30D', 'ALL'];
 const MAX_BARS = 120;
 const number = value => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
@@ -51,7 +51,32 @@ export function costChart(source, bounds = {}) {
   return `<svg class="pci-chart" viewBox="0 0 300 100" role="img" aria-label="Recorded inference cost by time bucket; bars show estimated and unresolved spend. No interpolation between calls."><title>Postcard inference cost</title>${bars}</svg><div class="pci-axis"><span>${escape(new Date(start).toLocaleString('en-GB'))}</span><span>${escape(new Date(end).toLocaleString('en-GB'))}</span></div><p class="pci-note">Bars: estimated cost per bucket. Pale bars: unresolved cost reserved against caps.</p>`;
 }
 
-export function inferenceStatus(data) {
+export function inferenceStatus(data, kind = 'reply') {
+  if (kind === 'memory') {
+    if (data.settings?.mode === 'OFF') return 'Memory formation off - sources remain queued';
+    if (data.settings?.mode === 'LOCAL') return 'Local memory formation';
+    const reason = String(data.status?.reason || '').toLowerCase();
+    const labels = {
+      credentials_missing: 'Memory formation held - cloud credentials missing',
+      provider_unavailable: 'Memory formation held - provider unavailable',
+      concurrency_full: 'Memory formation waiting for capacity',
+      hour_request_cap: 'Memory formation held - hourly request cap',
+      day_request_cap: 'Memory formation held - daily request cap',
+      month_request_cap: 'Memory formation held - monthly request cap',
+      hour_spend_cap: 'Memory formation held - hourly spend cap',
+      day_spend_cap: 'Memory formation held - daily spend cap',
+      month_spend_cap: 'Memory formation held - monthly spend cap',
+      timeout: 'Memory formation provider timed out', network_error: 'Memory formation connection unavailable',
+      provider_error: 'Memory formation provider unavailable', invalid: 'Memory decision failed validation',
+      held: 'Memory formation held', active: 'DeepSeek memory formation', deepseek_active: 'DeepSeek memory formation',
+      model_mismatch: 'Memory formation held - configured model unavailable',
+      already_reserved: 'Memory formation already in progress', claim_not_active: 'Memory source no longer claimed',
+      generated: 'Memory decision generated', cancelled: 'Memory formation interrupted',
+      invalid_decision: 'Memory decision failed validation', application_conflict: 'Memory update conflict',
+      no_requests: 'Awaiting sender-memory request',
+    };
+    return labels[reason] || 'Awaiting sender-memory request';
+  }
   if (!data.settings?.enabled) return 'Cloud disabled - local replies';
   if (data.settings?.route === 'LOCAL') return 'Local replies';
   const reasons = {
@@ -82,15 +107,23 @@ const capFields = [
   ['gbp_month', 'GBP cap / month', '0', '1000', '0.0001'],
 ];
 
-export function settingsMarkup(settings) {
-  return `<details class="pci-settings"><summary>Inference settings</summary><form class="pci-form"><label class="pci-check"><input type="checkbox" name="enabled"${settings.enabled ? ' checked' : ''}> Cloud postcard inference</label><label>Route<select name="route">${['AUTO', 'LOCAL', 'DEEPSEEK'].map(route => `<option${settings.route === route ? ' selected' : ''}>${route}</option>`).join('')}</select></label>${capFields.map(([key, label, min, max, step]) => `<label>${label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${escape(settings[key])}"></label>`).join('')}<p class="pci-note">AUTO can fall back locally. DEEPSEEK holds the postcard if cloud inference is unavailable. Cloud off always uses local inference.</p><button type="submit">Save settings</button></form></details>`;
+export function settingsMarkup(settings, kind = 'reply') {
+  const memory = kind === 'memory';
+  const route = memory
+    ? `<label>Memory mode<select name="mode">${['DEEPSEEK', 'LOCAL', 'OFF'].map(mode => `<option${settings.mode === mode ? ' selected' : ''}>${mode}</option>`).join('')}</select></label>`
+    : `<label class="pci-check"><input type="checkbox" name="enabled"${settings.enabled ? ' checked' : ''}> Cloud postcard inference</label><label>Route<select name="route">${['AUTO', 'LOCAL', 'DEEPSEEK'].map(value => `<option${settings.route === value ? ' selected' : ''}>${value}</option>`).join('')}</select></label>`;
+  const note = memory
+    ? 'Memory formation has its own budget. DEEPSEEK holds queued sources when unavailable; it does not fall back locally. LOCAL explicitly uses local inference. OFF leaves sources queued.'
+    : 'AUTO can fall back locally. DEEPSEEK holds the postcard if cloud inference is unavailable. Cloud off always uses local inference.';
+  return `<details class="pci-settings"><summary>${memory ? 'Memory' : 'Reply'} inference settings</summary><form class="pci-form">${route}${capFields.map(([key, label, min, max, step]) => `<label>${memory && key === 'concurrency' ? 'Concurrent memory requests' : label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${escape(settings[key])}"></label>`).join('')}<p class="pci-note">${note}</p><button type="submit">Save ${memory ? 'memory' : 'reply'} settings</button></form></details>`;
 }
 
 export class PostcardInference {
-  constructor(root, { endpoint = 'api/postcard-inference.php', fetcher = (...args) => globalThis.fetch(...args) } = {}) {
+  constructor(root, { kind = 'reply', endpoint = kind === 'memory' ? 'api/memory-formation-inference.php' : 'api/postcard-inference.php', fetcher = (...args) => globalThis.fetch(...args) } = {}) {
     this.root = root;
     this.endpoint = endpoint;
     this.fetcher = fetcher;
+    this.kind = kind;
     this.range = '24H';
     this.serial = 0;
     this.canAdmin = false;
@@ -125,9 +158,13 @@ export class PostcardInference {
     const status = data.status || {};
     const windows = data.windows || {};
     this.canAdmin = data.can_admin === true;
-    this.root.querySelector('.pci-state').textContent = inferenceStatus(data);
+    this.root.querySelector('.pci-state').textContent = inferenceStatus(data, this.kind);
     this.root.querySelectorAll('[data-range]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.range === this.range)));
-    this.root.querySelector('.pci-current').innerHTML = `<p class="pci-route">${escape(settings.route || 'LOCAL')} / ${escape(status.provider || 'awaiting selection')}<small>${status.provider ? '' : 'Configured cloud: '}${escape(status.model || data.pricing?.model || 'Model unavailable')}</small></p><dl class="pci-stats">${[['hour', 'This hour', 'gbp_hour', 'requests_hour'], ['day', 'Today', 'gbp_day', 'requests_day'], ['month', 'This month', 'gbp_month', 'requests_month']].map(([key, label, costCap, requestCap]) => {
+    const memory = this.kind === 'memory';
+    const route = memory
+      ? `<p class="pci-route">${escape(settings.mode || 'Unavailable')} / ${escape(status.provider || 'awaiting selection')}<small>Configured: ${escape(status.configured_model || data.pricing?.model || 'Model unavailable')}</small><small>Last actual model: ${escape(status.actual_model || 'No recorded request')}</small></p>`
+      : `<p class="pci-route">${escape(settings.route || 'LOCAL')} / ${escape(status.provider || 'awaiting selection')}<small>${status.provider ? '' : 'Configured cloud: '}${escape(status.model || data.pricing?.model || 'Model unavailable')}</small></p>`;
+    this.root.querySelector('.pci-current').innerHTML = `${route}<p class="pci-note">${memory ? 'Memory formation' : 'Reply'} cloud budget only; independent caps. Hour is rolling; day and month use UTC.</p><dl class="pci-stats">${[['hour', 'Last hour', 'gbp_hour', 'requests_hour'], ['day', 'Today (UTC)', 'gbp_day', 'requests_day'], ['month', 'Month (UTC)', 'gbp_month', 'requests_month']].map(([key, label, costCap, requestCap]) => {
       const window = windows[key] || {};
       const committed = number(window.estimated_gbp);
       const cap = number(settings[costCap]);
@@ -136,19 +173,28 @@ export class PostcardInference {
     }).join('')}</dl>`;
     this.root.querySelector('.pci-graph').innerHTML = costChart(data.buckets, data);
     const latency = number(totals.mean_latency_ms);
-    this.root.querySelector('.pci-totals').innerHTML = `<dl class="pci-stats"><div><dt>${escape(this.range)} replies published</dt><dd>${count(totals.published)}</dd></div><div><dt>Requests / cloud / local</dt><dd>${count(totals.requests)} / ${count(totals.cloud_requests)} / ${count(totals.local_requests)}</dd></div><div><dt>Tokens in / out</dt><dd>${count(totals.input_tokens)} / ${count(totals.output_tokens)}</dd></div><div><dt>Mean request latency</dt><dd>${latency ? `${(latency / 1000).toFixed(1)}s` : 'No completed requests'}</dd></div><div><dt>Fallbacks / failed / rejected</dt><dd>${count(totals.fallbacks)} / ${count(totals.failures)} / ${count(totals.validation_failures)}</dd></div></dl><p class="pci-note">Costs estimated from recorded token usage. Pricing: USD ${escape(data.pricing?.input_uncached_per_million ?? '--')} input / ${escape(data.pricing?.input_cached_per_million ?? '--')} cached / ${escape(data.pricing?.output_per_million ?? '--')} output per million tokens; GBP conversion ${escape(data.pricing?.usd_to_gbp ?? '--')}.</p>`;
+    const outcomes = memory
+      ? `<div><dt>${escape(this.range)} completed decisions</dt><dd>${count(number(totals.formed) + number(totals.updated) + number(totals.resolved) + number(totals.nothing))}</dd></div><div><dt>Create / update / resolve / nothing</dt><dd>${count(totals.formed)} / ${count(totals.updated)} / ${count(totals.resolved)} / ${count(totals.nothing)}</dd></div><div><dt>Failed / invalid / held</dt><dd>${count(totals.failures)} / ${count(totals.invalid)} / ${count(totals.held)}</dd></div><div><dt>Pending sources / oldest age</dt><dd>${count(data.pending_count)} / ${data.oldest_pending_age_seconds == null ? 'None' : `${count(Math.ceil(number(data.oldest_pending_age_seconds) / 60))}m`}</dd></div>`
+      : `<div><dt>${escape(this.range)} replies published</dt><dd>${count(totals.published)}</dd></div><div><dt>Fallbacks / failed / rejected</dt><dd>${count(totals.fallbacks)} / ${count(totals.failures)} / ${count(totals.validation_failures)}</dd></div>`;
+    this.root.querySelector('.pci-totals').innerHTML = `<dl class="pci-stats">${outcomes}<div><dt>${escape(this.range)} estimated spend</dt><dd>${money(totals.estimated_gbp)}</dd>${number(totals.uncertain_gbp) ? `<dd class="pci-note">Includes ${money(totals.uncertain_gbp)} unresolved, reserved against caps.</dd>` : ''}</div><div><dt>Requests / cloud / local</dt><dd>${count(totals.requests)} / ${count(totals.cloud_requests)} / ${count(totals.local_requests)}</dd></div><div><dt>Tokens in / out</dt><dd>${count(totals.input_tokens)} / ${count(totals.output_tokens)}</dd></div><div><dt>Input cached / uncached</dt><dd>${count(totals.cached_tokens)} / ${count(totals.uncached_tokens)}</dd></div><div><dt>Mean request latency</dt><dd>${latency ? `${(latency / 1000).toFixed(1)}s` : 'No completed requests'}</dd></div></dl><p class="pci-note">Costs estimated from recorded token usage. Pricing: USD ${escape(data.pricing?.input_uncached_per_million ?? '--')} input / ${escape(data.pricing?.input_cached_per_million ?? '--')} cached / ${escape(data.pricing?.output_per_million ?? '--')} output per million tokens; GBP conversion ${escape(data.pricing?.usd_to_gbp ?? '--')}.</p>`;
     const admin = this.root.querySelector('.pci-admin');
     if (!this.canAdmin) admin.innerHTML = '';
     else if (replaceSettings || !admin.querySelector('form')) {
-      admin.innerHTML = settingsMarkup(settings);
+      const wasOpen = admin.querySelector('details')?.open;
+      const focused = this.root.ownerDocument?.activeElement;
+      const focusName = focused && admin.contains?.(focused) ? focused.name || (focused.type === 'submit' ? 'submit' : null) : null;
+      admin.innerHTML = settingsMarkup(settings, this.kind);
       admin.querySelector('form').addEventListener('submit', event => { event.preventDefault(); this.save(event.currentTarget); });
+      if (wasOpen) admin.querySelector('details').open = true;
+      if (focusName) admin.querySelector(focusName === 'submit' ? '[type="submit"]' : `[name="${focusName}"]`)?.focus();
     }
   }
 
   async save(form) {
     if (!this.canAdmin || this.saving) return;
     this.saving = true;
-    const settings = { enabled: form.elements.enabled.checked, route: form.elements.route.value };
+    const settings = this.kind === 'memory' ? { mode: form.elements.mode.value }
+      : { enabled: form.elements.enabled.checked, route: form.elements.route.value };
     for (const [key] of capFields) settings[key] = Number(form.elements[key].value);
     const message = this.root.querySelector('.pci-message');
     const submit = form.querySelector('[type="submit"]');
@@ -171,9 +217,10 @@ export class PostcardInference {
 }
 
 if (typeof document !== 'undefined') {
-  const root = document.getElementById('postcard-inference');
-  if (root) {
-    const panel = new PostcardInference(root);
+  for (const [id, kind] of [['postcard-reply-inference', 'reply'], ['postcard-memory-inference', 'memory']]) {
+    const root = document.getElementById(id);
+    if (!root) continue;
+    const panel = new PostcardInference(root, { kind });
     panel.refresh();
     // Accounting refresh is independent of model scheduling and stops while hidden.
     setInterval(() => {

@@ -263,7 +263,16 @@ window.CY = {
 
     <details class="panel panel-collapsible">
       <summary class="panel-title panel-toggle">POSTCARD INFERENCE</summary>
-      <div id="postcard-inference"></div>
+      <div id="postcard-inference">
+        <section class="pci-section" aria-labelledby="postcard-reply-heading">
+          <h3 id="postcard-reply-heading" class="pci-heading">REPLY</h3>
+          <div id="postcard-reply-inference"></div>
+        </section>
+        <section class="pci-section" aria-labelledby="postcard-memory-heading">
+          <h3 id="postcard-memory-heading" class="pci-heading">MEMORY</h3>
+          <div id="postcard-memory-inference"></div>
+        </section>
+      </div>
     </details>
 
     <details class="panel panel-collapsible">

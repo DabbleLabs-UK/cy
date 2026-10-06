@@ -50,12 +50,11 @@ const formation = buildFormationRequest(source, [senderMemory]);
 assert.doesNotMatch(formation.prompt, new RegExp(sender));
 assert.doesNotMatch(formation.prompt, /visitor_id|cookie|ip address/i);
 assert.doesNotMatch(formation.prompt, /\"private\"|\"sender\"|memory-public/);
-assert.match(formation.prompt, /\"memoryRef\":\"C1\"/);
+assert.match(formation.prompt, /\"memoryRef\":\"FM1\"/);
 
 const created = parseFormationResponse(JSON.stringify({
-  decision: 'CREATE', type: 'UNRESOLVED_THREAD', privacyScope: 'SENDER_RECALLABLE',
+  decision: 'CREATE', type: 'UNRESOLVED_THREAD',
   content: 'Jody previously asked what the cell meant and the question stayed open.',
-  classification: 'shared unresolved question', consistencyStatus: 'UNCERTAIN', tags: ['cell', 'question'],
 }), { source, existing: [], makeId: () => 'memory-new' });
 assert.equal(created.decision, 'CREATE');
 assert.equal(created.memoryId, 'memory-new');
@@ -66,8 +65,8 @@ const senderScoped = parseFormationResponse(JSON.stringify({
   content: 'Jody asked before about a television.', publicSummary: 'Someone asked a question.',
   classification: 'returning sender', consistencyStatus: 'CONSISTENT', tags: ['postcard'],
 }), { source, existing: [], makeId: () => 'memory-sender' });
-assert.equal(senderScoped.privacyScope, 'SENDER_RECALLABLE');
-assert.equal(senderScoped.publicSummary, null);
+assert.equal(senderScoped.valid, false, 'sender output cannot choose public scope');
+assert.equal(senderScoped.rejectionCode, 'FORBIDDEN_FIELD');
 
 const replySource = sourceFromReply('aye i remember that', {
   id: 7, visitor_id: sender, from_name: 'Jody',
@@ -82,26 +81,25 @@ const replyFormation = buildFormationRequest(replySource, [
 assert.deepEqual(replyFormation.candidates.map((memory) => memory.id), ['sender']);
 
 const updated = parseFormationResponse(JSON.stringify({
-  decision: 'UPDATE', memoryRef: 'C1', content: 'The shared cell question returned.',
-  consistencyStatus: 'CONSISTENT', tags: ['cell'],
+  decision: 'UPDATE', memoryRef: 'FM1', content: 'The shared cell question returned.',
 }), { source, existing: [senderMemory], makeId: () => 'unused' });
 assert.equal(updated.decision, 'UPDATE');
 assert.equal(updated.expectedVersion, 1);
 
 const openTopic = { ...senderMemory, type: 'UNRESOLVED_THREAD' };
-const resolved = parseFormationResponse('{"decision":"RESOLVE","memoryRef":"C1"}', {
+const resolved = parseFormationResponse('{"decision":"RESOLVE","memoryRef":"FM1"}', {
   source, existing: [openTopic], makeId: () => 'unused',
 });
 assert.equal(resolved.decision, 'ARCHIVE');
 assert.equal(resolved.memoryId, openTopic.id);
 assert.equal(resolved.expectedVersion, 1);
-assert.equal(parseFormationResponse('{"decision":"RESOLVE","memoryRef":"C1"}', {
+assert.equal(parseFormationResponse('{"decision":"RESOLVE","memoryRef":"FM1"}', {
   source, existing: [{ ...openTopic, subjectVisitorId: other }], makeId: () => 'unused',
 }).valid, false);
-assert.equal(parseFormationResponse('{"decision":"RESOLVE","memoryRef":"C1"}', {
+assert.equal(parseFormationResponse('{"decision":"RESOLVE","memoryRef":"FM1"}', {
   source, existing: [senderMemory], makeId: () => 'unused',
 }).valid, false);
-assert.match(formation.system, /not trivial wording or a transcript/);
+assert.match(formation.system, /Prefer NOTHING for greetings/);
 assert.equal(parseFormationResponse('{"decision":"NOTHING"}', {
   source, existing: [], makeId: () => 'unused',
 }).decision, 'NOTHING');
