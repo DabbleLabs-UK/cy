@@ -119,6 +119,12 @@ CREATE TABLE postcards (
     promoted_at   DATETIME NULL,
     replied_at    DATETIME NULL,
     reply_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    claim_generation BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    processing_attempts INT UNSIGNED NOT NULL DEFAULT 0,
+    temporary_failures INT UNSIGNED NOT NULL DEFAULT 0,
+    quality_failures INT UNSIGNED NOT NULL DEFAULT 0,
+    retry_hold VARCHAR(64) NULL,
+    arrival_event_id BIGINT UNSIGNED NULL,
     blocked       TINYINT DEFAULT 0,
     block_reason  VARCHAR(80) NULL,
     INDEX idx_delivered_deliver (delivered_at, deliver_at),
@@ -509,6 +515,7 @@ CREATE TABLE IF NOT EXISTS postcard_inference_settings_audit (
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS postcard_inference_turns (
   postcard_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  claim_generation BIGINT UNSIGNED NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   route VARCHAR(12) NOT NULL,
@@ -523,7 +530,9 @@ CREATE TABLE IF NOT EXISTS postcard_inference_turns (
 CREATE TABLE IF NOT EXISTS postcard_inference_attempts (
   request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
   postcard_id BIGINT UNSIGNED NOT NULL,
+  claim_generation BIGINT UNSIGNED NOT NULL DEFAULT 0,
   attempt VARCHAR(12) NOT NULL,
+  safe_retry TINYINT(1) NOT NULL DEFAULT 0,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   settled_at DATETIME(3) NULL,
   provider VARCHAR(16) NOT NULL,
@@ -540,7 +549,7 @@ CREATE TABLE IF NOT EXISTS postcard_inference_attempts (
   latency_ms BIGINT UNSIGNED NULL,
   validation_failure TINYINT(1) NOT NULL DEFAULT 0,
   provider_error VARCHAR(64) NULL,
-  UNIQUE KEY postcard_attempt (postcard_id, provider, attempt),
+  UNIQUE KEY postcard_claim_attempt (postcard_id, claim_generation, provider, attempt),
   KEY attempts_created (created_at),
   KEY attempts_active (provider, settled_at)
 ) ENGINE=InnoDB;

@@ -47,7 +47,8 @@ use non-thinking mode; normal sampling/length settings and other paths are uncha
 Settings persist in `postcard_inference_settings`; changes have an audit row.
 Default cloud ON, AUTO, concurrency 1. OFF and LOCAL always use local replies.
 AUTO falls back locally on known unavailability or admission denial. DEEPSEEK
-holds the card on failure; existing retry/expiry rules account for it in fan mail.
+holds the card on failure; operational holds retain retry eligibility rather
+than consuming the completed reply-quality failure allowance.
 An ambiguous accounting acknowledgement holds the card without another inference.
 
 Default cloud request limits are 20/hour, 100/day and 1000/month. Each initial
@@ -74,20 +75,41 @@ must be kept current by the operator. Unknown usage retains the full reservation
 ## Durability and publication
 
 Migration 026 adds a postcard-unique turn and request-unique attempt rows.
-Initial/repair identities are unique per postcard/provider. Losing a route,
+Migration 030 adds fenced claim generations to the existing turn/attempt ledger.
+Initial/repair identities are unique per postcard/claim generation/provider.
+The canonical turn identity remains the postcard ID. Losing a route,
 reservation or settlement response cannot authorize a repeat paid call.
 Explicitly reported usage replaces the reservation even for failed/rejected
 responses. Missing usage never becomes zero spend. An abandoned concurrency
 lease expires after 30 minutes (provider timeout is 10 minutes); its uncertain
 cost remains and its identity is never reused.
 
+Processing claims, temporary failures and completed quality failures have
+separate counters. Legacy `reply_attempts` values are not evidence of quality
+failures, and migration 030 neither reopens nor rewrites historical terminal
+cards. Only three completed substantive failures reach terminal `fan_final`.
+Temporary interruptions and holds release with exponential backoff from 30
+seconds to 15 minutes. Expiry of a 30-minute claim releases it under that same
+policy, unless an unknown provider outcome or pending publication requires a
+protected hold. Old workers cannot reserve, defer or publish against a newer
+claim generation. The existing overflow fan-mail promotion cadence is unchanged.
+
+Confirmed no-dispatch requests can settle at zero usage. Local interruptions
+and explicit provider rejection responses are retryable; dispatched cloud
+timeouts, cancellations and uncertain transport failures are not evidence that
+the paid call failed. They retain their reservation and prevent blind replay or
+AUTO fallback. A generated result awaiting publication also blocks new provider
+execution. Late delivery of the same accepted reply remains transactional and
+idempotent. No automatic retry promises another paid call when its outcome is
+unknown, and no whole postcard transcript or parallel memory store is added.
+
 The normal shared prose validator and single repair still apply, with both raw
 and normalized postcard candidates checked. Accounting must acknowledge the
 validated outcome before visible chunks. The existing ingest delivery receipts
 remain in force. An additional postcard-level guard accepts only the first reply,
 even if another delivery ID is used. Publication status is recorded in the same
-transaction as the accepted `postcard_out`. A crash can leave the card as retained
-fan mail; it cannot promise or manufacture another paid reply.
+transaction as the accepted `postcard_out`. A crash can leave a protected
+ambiguous hold; it cannot promise or manufacture another paid reply.
 
 Ledger rows contain identities, token counts, price snapshots, bounded categories,
 latency and publication outcome, never raw prompt/reply text, keys or visitor IPs.
@@ -97,7 +119,8 @@ Bars show spending when calls occur; unresolved reservations are visibly separat
 ## Rollout and recovery
 
 Back up runner runtime/checkpoint and web runtime/affected postcard rows. Apply
-026 before the PHP/API and runner changes. Deploy only changed runtime files and
+030 after the existing 026 ledger and before the PHP/API and runner changes.
+Deploy only changed runtime files and
 restart through `cy-restart`. Keys remain in `runner/deepseek.key`; absent keys
 cannot make a paid call. No model probe or synthetic postcard is needed for rollout.
 Disable cloud through the panel for an operational rollback; retain the additive

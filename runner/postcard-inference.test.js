@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
-import { PostcardInference, postcardInputTokenBound, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
+import { PostcardInference, postcardFailureClass, postcardAttemptStatus, postcardInputTokenBound, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
 import { canonicalPostcardContext, POSTCARD_CHARACTER } from './postcard-context.js';
-import { makeProviders } from './provider.js';
+import { deepseekToNdjsonReader, makeProviders } from './provider.js';
 import { generateWithCharacterRepair } from './character-output.js';
 import { AutobiographicalMemoryRuntime, memoryContextFingerprint } from './memory-runtime.js';
 import { visitorForPrompt } from './cast.js';
@@ -135,6 +135,7 @@ test('paid rejected candidates are accounted and repaired once using the same pr
   const turn = client.turn({ id: 5 }, { provider: 'deepseek', route: 'AUTO' });
   const result = await generateWithCharacterRepair({ prompt: 'hola', generate: async (prompt, { repair }) => {
     await turn.beforeRequest({ system: 'cy', prompt, opts: { num_predict: 93 }, repair, provider: registry.deepseek });
+    turn.markDispatched();
     const r = { candidate: repair ? 'hola ana. glad you wrote.' : 'hello | im end >',
       stats: { usage: { prompt_tokens: 30, completion_tokens: 10, cached_tokens: 4 } } };
     await turn.afterCandidate(r);
@@ -152,6 +153,7 @@ test('unknown usage remains explicit, settlement failure prevents acceptance, fa
   const { client, calls } = fixture([{ execute: true, request_id: 'x' }, new Error('settlement lost')]);
   const turn = client.turn({ id: 5 }, { provider: 'deepseek', route: 'DEEPSEEK' });
   await turn.beforeRequest({ system: '', prompt: '', opts: { num_predict: 93 }, provider: registry.deepseek });
+  turn.markDispatched();
   await assert.rejects(() => turn.afterCandidate({ error: true, stats: { usage_reported: false, usage: { prompt_tokens: 0 } } }));
   assert.equal(calls[1].usage, null);
   assert.equal(await turn.fallback('provider_unavailable'), false);
@@ -194,4 +196,84 @@ test('runtime override is postcard-scoped and accounting precedes public chunks'
   assert.ok(body.indexOf('postcardTurn.beforeRequest') < body.indexOf('gen = await provider.openStream'));
   assert.ok(body.indexOf("postcardTurn.outcome('generated')") < body.indexOf('await onChunk(chunk, mode)'));
   assert.match(body, /generateWithCharacterRepair/);
+});
+
+test('world interruptions and infrastructure holds never become quality failures', () => {
+  for (const abortReason of ['REGIME_CHANGE', 'REGIME_CHANGE', 'WING_NOISE_MID', 'WARDEN', 'LEASE_LOSS']) {
+    assert.equal(postcardFailureClass({ full: '', aborted: true, abortReason }), 'temporary');
+    assert.equal(postcardFailureClass({ full: '', aborted: true, characterDiscarded: true }), 'temporary',
+      'an interrupted repair is not a completed invalid repair');
+  }
+  assert.equal(postcardFailureClass({ error: true }), 'temporary');
+  assert.equal(postcardFailureClass({ error: true, accountingError: true, holdReason: 'hour_spend_cap' }), 'temporary');
+  assert.equal(postcardFailureClass({ characterDiscarded: true }), 'quality');
+  assert.equal(postcardFailureClass({ refused: true }), 'quality');
+  assert.equal(postcardFailureClass({ error: true, accountingError: true }), 'ambiguous');
+});
+
+test('definitive empty postcard replies get one repair then a quality failure, not an ambiguity hold', async () => {
+  assert.equal(validatePostcardCandidate('').ok, false);
+  assert.equal(validatePostcardCandidate('   ').ok, false);
+  let calls = 0;
+  const failed = await generateWithCharacterRepair({ prompt: 'fixture', validate: validatePostcardCandidate,
+    generate: async () => { calls++; return { candidate: '', stats: { done: true } }; } });
+  assert.equal(calls, 2);
+  assert.equal(postcardFailureClass(failed), 'quality');
+  assert.equal(postcardAttemptStatus({ candidate: '' }, { provider: 'deepseek', dispatched: true }), 'validation_rejected');
+  calls = 0;
+  const repaired = await generateWithCharacterRepair({ prompt: 'fixture', validate: validatePostcardCandidate,
+    generate: async () => ({ candidate: ++calls === 1 ? '' : 'glad you wrote again.' }) });
+  assert.equal(repaired.characterValidation.finalAction, 'accepted');
+});
+
+test('paid transport ambiguity differs from no dispatch and definitive rejection', () => {
+  const cloud = { provider: 'deepseek', dispatched: true };
+  assert.equal(postcardAttemptStatus({ aborted: true }, cloud), 'unknown');
+  assert.equal(postcardAttemptStatus({ error: true }, cloud), 'unknown');
+  assert.equal(postcardAttemptStatus({ error: true, definitiveProviderRejection: true }, cloud), 'provider_error');
+  assert.equal(postcardAttemptStatus({ aborted: true }, { ...cloud, dispatched: false }), 'not_sent');
+  assert.equal(postcardAttemptStatus({ aborted: true }, { provider: 'ollama', dispatched: true }), 'aborted');
+  assert.equal(postcardMayFallback({ error: true, postcardAmbiguous: true }), false);
+});
+
+test('postcard SSE requires a provider completion signal, not just transport EOF', async () => {
+  const consume = async (text, strict = true) => {
+    const source = new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode(text)); controller.close();
+    } }).getReader();
+    const reader = deepseekToNdjsonReader(source, { model: 'fixture', priceRow: {}, fx: 1,
+      requireCompletion: strict });
+    let output = '';
+    for (;;) { const { done, value } = await reader.read(); if (done) return output;
+      output += new TextDecoder().decode(value); }
+  };
+  const partial = 'data: {"choices":[{"delta":{"content":"glad you wrote"}}]}\n';
+  await assert.rejects(() => consume(partial), /without completion/);
+  assert.match(await consume(partial, false), /"done":true/, 'unrelated paths unchanged');
+  assert.match(await consume(partial + 'data: [DONE]\n'), /"done":true/);
+  assert.match(await consume(partial + 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n'), /"done":true/);
+});
+
+test('claim generation follows routing, reservation, fallback, outcome and publication fencing', async () => {
+  const { client, calls } = fixture([
+    { execute: true, provider: 'deepseek', route: 'AUTO' },
+    { execute: true, request_id: 'request' }, { cost_gbp: 0, cost_usd: 0 },
+    { execute: true }, { execute: true },
+  ]);
+  const pc = { id: 27, claim_generation: 4 };
+  const route = await client.route(pc, registry);
+  const turn = client.turn(pc, route);
+  await turn.beforeRequest({ system: '', prompt: '', opts: { num_predict: 93 }, provider: registry.deepseek });
+  await turn.afterCandidate({ aborted: true }); // cancellation before dispatch
+  assert.equal(calls[2].status, 'not_sent');
+  assert.deepEqual(calls[2].usage, { prompt_tokens: 0, completion_tokens: 0 });
+  await turn.fallback('provider_unavailable');
+  await turn.outcome('held', 'cancelled');
+  for (const call of calls.filter(c => c.action !== 'settle')) assert.equal(call.claim_generation, 4);
+  const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
+  const postcard = run.slice(run.indexOf('async function doPostcard('), run.indexOf('// ---- warden notice:'));
+  assert.match(postcard, /failure_class: failureClass/);
+  assert.match(postcard, /reply_to: pc\.id, claim_generation: pc\.claim_generation/);
+  assert.match(postcard, /defer\(postcardFailureClass\(r\)\)/);
+  assert.match(run, /ac\.signal\.throwIfAborted\(\);\s*if \(postcardTurn\) postcardTurn\.markDispatched\(\);/);
 });

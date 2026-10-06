@@ -6,12 +6,12 @@ declare(strict_types=1);
 // promise of an immediate personal reply.
 const CY_REPLY_TRAY_CAPACITY = 8;
 const CY_FAN_PROMOTE_EVERY_REPLIES = 5;
-// A single empty or failed model call is transient, not evidence that the reply
-// tray is full. Give a claimed postcard three total attempts before retaining it
-// as final fan mail, with a short pause between attempts to avoid a hot loop when
-// the model service is temporarily unavailable.
+// Only definitive completed quality failures consume the terminal allowance.
+// Interruptions and infrastructure holds use a separate bounded retry backoff.
 const CY_REPLY_MAX_ATTEMPTS = 3;
 const CY_REPLY_RETRY_DELAY_SECONDS = 10;
+const CY_REPLY_TEMPORARY_RETRY_SECONDS = 30;
+const CY_REPLY_MAX_RETRY_SECONDS = 900;
 // A claimed reply normally completes in a few minutes. If a runner disappears
 // after claiming one, do not let that abandoned claim occupy the bounded tray
 // forever. The postcard itself remains retained in the database and timeline.
@@ -53,6 +53,56 @@ function captive_postcard_should_publish_arrival(int $completedAttempts): bool
     return $completedAttempts <= 0;
 }
 
+function captive_postcard_retry_delay(int $temporaryFailures): int
+{
+    return min(CY_REPLY_MAX_RETRY_SECONDS, CY_REPLY_TEMPORARY_RETRY_SECONDS * (2 ** min(5, max(0, $temporaryFailures - 1))));
+}
+
+function captive_postcard_claim_matches(array $postcard, mixed $generation): bool
+{
+    // Missing generations are tolerated only for the pre-migration generation.
+    return ($generation === null && (int)$postcard['claim_generation'] === 0)
+        || (is_int($generation) && $generation >= 0 && $generation === (int)$postcard['claim_generation']);
+}
+
+// This inspection runs with the queue and postcard locked. Unknown paid work,
+// unsettled work, and generated output awaiting durable publication cannot be
+// converted into another provider call merely by expiring/releasing a claim.
+function captive_postcard_retry_blocker(PDO $db, int $id): ?string
+{
+    $read = $db->prepare('SELECT status, publication_result FROM postcard_inference_turns WHERE postcard_id = ?');
+    $read->execute([$id]);
+    $turn = $read->fetch(PDO::FETCH_ASSOC);
+    if ($turn && ($turn['publication_result'] === 'published' || $turn['status'] === 'generated')) return 'publication_pending';
+    $read = $db->prepare("SELECT provider, status, settled_at, validation_failure, safe_retry FROM postcard_inference_attempts WHERE postcard_id = ?");
+    $read->execute([$id]);
+    foreach ($read->fetchAll(PDO::FETCH_ASSOC) as $attempt) {
+        if (!$attempt['settled_at']) return 'outcome_unknown';
+        if (in_array($attempt['status'], ['success', 'generated'], true) && !$attempt['validation_failure']) return 'publication_pending';
+        if ($attempt['provider'] === 'deepseek' && !$attempt['safe_retry'] && !in_array($attempt['status'], ['not_sent', 'refused', 'validation_rejected', 'success', 'generated'], true)) return 'outcome_unknown';
+    }
+    return null;
+}
+
+function captive_postcard_defer(PDO $db, int $id, mixed $generation, string $failureClass): bool
+{
+    captive_postcard_queue_lock($db);
+    $read = $db->prepare("SELECT * FROM postcards WHERE id = ? AND mail_class = 'reply' AND replied_at IS NULL AND blocked = 0 AND delivered_at IS NOT NULL FOR UPDATE");
+    $read->execute([$id]);
+    $row = $read->fetch(PDO::FETCH_ASSOC);
+    if (!$row || !captive_postcard_claim_matches($row, $generation)) return false;
+    if (!in_array($failureClass, ['temporary', 'quality', 'ambiguous'], true)) $failureClass = 'temporary';
+    $hold = captive_postcard_retry_blocker($db, $id);
+    if ($failureClass === 'ambiguous') $hold ??= 'outcome_unknown';
+    $quality = (int)$row['quality_failures'] + (int)($failureClass === 'quality' && $hold === null);
+    $temporary = (int)$row['temporary_failures'] + (int)($failureClass !== 'quality' || $hold !== null);
+    $terminal = $hold === null && $quality >= CY_REPLY_MAX_ATTEMPTS;
+    $delay = $terminal ? 0 : ($failureClass === 'quality' && $hold === null ? CY_REPLY_RETRY_DELAY_SECONDS : captive_postcard_retry_delay($temporary));
+    $db->prepare('UPDATE postcards SET delivered_at = NULL, deliver_at = DATE_ADD(NOW(), INTERVAL ? SECOND), temporary_failures = ?, quality_failures = ?, retry_hold = ?, mail_class = ? WHERE id = ?')
+        ->execute([$delay, $temporary, $quality, $hold, $terminal ? 'fan_final' : 'reply', $id]);
+    return true;
+}
+
 /**
  * A runner has one reply generation lane. Do not hand it another postcard while
  * a previously claimed reply remains in progress.
@@ -62,26 +112,30 @@ function captive_postcard_inflight_replies(PDO $db): int
     return (int)$db->query(
         "SELECT COUNT(*) FROM postcards
          WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
+           AND retry_hold IS NULL
            AND delivered_at IS NOT NULL
            AND delivered_at >= DATE_SUB(NOW(), INTERVAL " . CY_REPLY_CLAIM_TTL_SECONDS . " SECOND)"
     )->fetchColumn();
 }
 
 /**
- * A reply claim which never completed is retained, but it is not attempted or
- * presented as a fresh reply again. Clear its abandoned claim so the existing
- * fan-mail lane can screen it and publish one terminal archive receipt.
+ * Claim expiry is a lease failure, never a quality decision. Release safely
+ * retryable work; hold uncertain/provider-completed work for late settlement.
  */
 function captive_postcard_expire_stale_claims(PDO $db): int
 {
     $claimTtl = max(60, CY_REPLY_CLAIM_TTL_SECONDS);
-    return (int)$db->exec(
-        "UPDATE postcards
-         SET mail_class = 'fan_final', delivered_at = NULL
+    $rows = $db->query(
+        "SELECT id, claim_generation FROM postcards
          WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
            AND delivered_at IS NOT NULL
-           AND delivered_at < DATE_SUB(NOW(), INTERVAL {$claimTtl} SECOND)"
-    );
+           AND delivered_at < DATE_SUB(NOW(), INTERVAL {$claimTtl} SECOND) FOR UPDATE"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    $count = 0;
+    foreach ($rows as $row) {
+        $count += (int)captive_postcard_defer($db, (int)$row['id'], (int)$row['claim_generation'], 'temporary');
+    }
+    return $count;
 }
 
 /** @param array{posted_at?:mixed,promoted?:mixed}|null $source */
@@ -121,6 +175,7 @@ function captive_postcard_active_replies(PDO $db): int
     return (int)$db->query(
         "SELECT COUNT(*) FROM postcards
          WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0
+           AND retry_hold IS NULL
            AND (
              delivered_at IS NULL
              OR delivered_at >= DATE_SUB(NOW(), INTERVAL {$claimTtl} SECOND)
@@ -144,14 +199,18 @@ function captive_postcard_promote_oldest(PDO $db): bool
 
 // Called only for the first authoritative reply event for a postcard. Every fifth
 // completed reply reserves the newly-freed place for the oldest archived fan item.
-function captive_postcard_mark_replied(PDO $db, int $postcardId, string $at): bool
+function captive_postcard_mark_replied(PDO $db, int $postcardId, string $at, mixed $generation = null): bool
 {
     if ($postcardId <= 0) {
         return false;
     }
     $queue = captive_postcard_queue_lock($db);
+    $read = $db->prepare('SELECT claim_generation FROM postcards WHERE id = ? FOR UPDATE');
+    $read->execute([$postcardId]);
+    $row = $read->fetch(PDO::FETCH_ASSOC);
+    if (!$row || !captive_postcard_claim_matches($row, $generation)) return false;
     $update = $db->prepare(
-        "UPDATE postcards SET replied_at = :at
+        "UPDATE postcards SET replied_at = :at, retry_hold = NULL
          WHERE id = :id AND replied_at IS NULL AND blocked = 0 AND mail_class = 'reply'"
     );
     $update->execute([':at' => $at, ':id' => $postcardId]);

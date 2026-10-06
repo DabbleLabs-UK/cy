@@ -97,7 +97,7 @@ function captive_postcard_inference_route_choice(array $settings, bool $availabl
 function captive_postcard_inference_turn_lock(PDO $db, int $id): ?array
 {
     captive_postcard_queue_lock($db);
-    $read = $db->prepare('SELECT id, visitor_id, blocked, mail_class, replied_at, delivered_at,
+    $read = $db->prepare('SELECT id, visitor_id, blocked, mail_class, replied_at, delivered_at, claim_generation, retry_hold,
         (delivered_at >= NOW() - INTERVAL ' . CY_REPLY_CLAIM_TTL_SECONDS . ' SECOND) AS claim_live
         FROM postcards WHERE id = ? FOR UPDATE');
     $read->execute([$id]);
@@ -112,19 +112,25 @@ function captive_postcard_inference_route(PDO $db, array $input): array
     $pricing = captive_postcard_inference_config()['pricing'];
     $existing = $db->prepare('SELECT * FROM postcard_inference_turns WHERE postcard_id = ?');
     $existing->execute([$id]);
-    if ($turn = $existing->fetch(PDO::FETCH_ASSOC)) {
-        return ['ok' => true, 'execute' => false, 'provider' => $turn['provider'], 'route' => $turn['route'], 'reason' => 'already_claimed', 'settings' => $settings, 'pricing' => $pricing];
-    }
-    if (!$postcard || $postcard['blocked'] || $postcard['replied_at'] || $postcard['mail_class'] !== 'reply' || !$postcard['claim_live']) {
+    $turn = $existing->fetch(PDO::FETCH_ASSOC);
+    if (!$postcard || !captive_postcard_claim_matches($postcard, $input['claim_generation'] ?? null) || $postcard['blocked'] || $postcard['replied_at'] || $postcard['mail_class'] !== 'reply' || !$postcard['claim_live'] || $postcard['retry_hold']) {
         return ['ok' => true, 'execute' => false, 'provider' => null, 'route' => $settings['route'], 'reason' => 'not_claimable', 'settings' => $settings, 'pricing' => $pricing];
+    }
+    $generation = (int)$postcard['claim_generation'];
+    if ($turn) {
+        $blocker = captive_postcard_retry_blocker($db, $id);
+        if ($blocker !== null || (int)$turn['claim_generation'] === $generation) {
+            return ['ok' => true, 'execute' => false, 'provider' => $turn['provider'], 'route' => $turn['route'], 'reason' => $blocker ?? 'already_claimed', 'settings' => $settings, 'pricing' => $pricing];
+        }
     }
     $available = ($input['cloud_available'] ?? false) === true && ($input['model'] ?? '') === $pricing['model'];
     $recentFailure = (int)$db->query("SELECT COUNT(*) FROM postcard_inference_attempts WHERE provider = 'deepseek' AND provider_error IS NOT NULL AND settled_at >= UTC_TIMESTAMP() - INTERVAL 60 SECOND")->fetchColumn();
     $choice = captive_postcard_inference_route_choice($settings, $available, ($input['cloud_healthy'] ?? false) === true && $recentFailure === 0, captive_postcard_inference_admission($db, $settings, 0));
     $model = $choice['provider'] === 'deepseek' ? $pricing['model'] : captive_postcard_inference_model($input['local_model'] ?? 'local');
-    $insert = $db->prepare('INSERT INTO postcard_inference_turns (postcard_id, route, provider, model, status, reason, fallback_reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))');
+    $insert = $db->prepare('INSERT INTO postcard_inference_turns (postcard_id, claim_generation, route, provider, model, status, reason, fallback_reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))
+        ON DUPLICATE KEY UPDATE claim_generation = VALUES(claim_generation), route = VALUES(route), provider = VALUES(provider), model = VALUES(model), status = VALUES(status), reason = VALUES(reason), fallback_reason = VALUES(fallback_reason), publication_result = NULL, updated_at = UTC_TIMESTAMP(3)');
     $fallback = $settings['enabled'] && $settings['route'] === 'AUTO' && $choice['provider'] === 'ollama' ? $choice['reason'] : null;
-    $insert->execute([$id, $settings['route'], $choice['provider'], $model, $choice['provider'] ? 'claimed' : 'held', $choice['reason'], $fallback]);
+    $insert->execute([$id, $generation, $settings['route'], $choice['provider'], $model, $choice['provider'] ? 'claimed' : 'held', $choice['reason'], $fallback]);
     return ['ok' => true, 'execute' => $choice['provider'] !== null, 'route' => $settings['route'], 'settings' => $settings, 'pricing' => $pricing] + $choice;
 }
 
@@ -147,7 +153,7 @@ function captive_postcard_inference_reason(mixed $reason): string
     $allowed = ['cloud_disabled', 'local_selected', 'deepseek_active', 'credentials_missing', 'provider_unavailable',
         'concurrency_full', 'hour_request_cap', 'day_request_cap', 'month_request_cap', 'hour_spend_cap', 'day_spend_cap',
         'month_spend_cap', 'timeout', 'network_error', 'provider_error', 'validation_rejected', 'cancelled', 'empty_response',
-        'generated', 'held', 'budget_unavailable', 'already_claimed', 'publication_pending', 'local_fallback'];
+        'generated', 'held', 'budget_unavailable', 'already_claimed', 'publication_pending', 'outcome_unknown', 'not_sent', 'local_fallback'];
     return is_string($reason) && in_array($reason, $allowed, true) ? $reason : 'provider_error';
 }
 
@@ -166,15 +172,16 @@ function captive_postcard_inference_reserve(PDO $db, array $input): array
     $read = $db->prepare('SELECT * FROM postcard_inference_turns WHERE postcard_id = ?');
     $read->execute([$id]);
     $turn = $read->fetch(PDO::FETCH_ASSOC);
-    if (!$postcard || $postcard['replied_at'] || $postcard['blocked'] || $postcard['mail_class'] !== 'reply' || !$postcard['claim_live'] || !$turn || $turn['provider'] !== $provider || !in_array($turn['status'], ['claimed', 'generating'], true)) {
+    if (!$postcard || !captive_postcard_claim_matches($postcard, $input['claim_generation'] ?? null) || $postcard['replied_at'] || $postcard['blocked'] || $postcard['mail_class'] !== 'reply' || !$postcard['claim_live'] || $postcard['retry_hold'] || !$turn || (int)$turn['claim_generation'] !== (int)$postcard['claim_generation'] || $turn['provider'] !== $provider || !in_array($turn['status'], ['claimed', 'generating'], true)) {
         return ['ok' => true, 'execute' => false, 'reason' => 'turn_not_active'];
     }
-    $read = $db->prepare('SELECT request_id FROM postcard_inference_attempts WHERE postcard_id = ? AND provider = ? AND attempt = ?');
-    $read->execute([$id, $provider, $attempt]);
+    $generation = (int)$postcard['claim_generation'];
+    $read = $db->prepare('SELECT request_id FROM postcard_inference_attempts WHERE postcard_id = ? AND claim_generation = ? AND provider = ? AND attempt = ?');
+    $read->execute([$id, $generation, $provider, $attempt]);
     if ($request = $read->fetchColumn()) return ['ok' => true, 'execute' => false, 'request_id' => $request, 'reason' => 'already_reserved'];
     if ($attempt === 'repair') {
-        $initial = $db->prepare("SELECT status, validation_failure, settled_at FROM postcard_inference_attempts WHERE postcard_id = ? AND provider = ? AND attempt = 'initial'");
-        $initial->execute([$id, $provider]);
+        $initial = $db->prepare("SELECT status, validation_failure, settled_at FROM postcard_inference_attempts WHERE postcard_id = ? AND claim_generation = ? AND provider = ? AND attempt = 'initial'");
+        $initial->execute([$id, $generation, $provider]);
         $first = $initial->fetch(PDO::FETCH_ASSOC);
         if (!$first || !$first['settled_at'] || !$first['validation_failure']) return ['ok' => true, 'execute' => false, 'reason' => 'repair_not_allowed'];
     }
@@ -186,8 +193,8 @@ function captive_postcard_inference_reserve(PDO $db, array $input): array
     }
     $hex = bin2hex(random_bytes(16));
     $request = substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-' . substr($hex, 12, 4) . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20);
-    $insert = $db->prepare("INSERT INTO postcard_inference_attempts (request_id, postcard_id, attempt, provider, model, route, status, estimated_gbp, pricing, created_at) VALUES (?, ?, ?, ?, ?, ?, 'reserved', ?, ?, UTC_TIMESTAMP(3))");
-    $insert->execute([$request, $id, $attempt, $provider, $model, $turn['route'], $estimate, json_encode($pricing, JSON_THROW_ON_ERROR)]);
+    $insert = $db->prepare("INSERT INTO postcard_inference_attempts (request_id, postcard_id, claim_generation, attempt, provider, model, route, status, estimated_gbp, pricing, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, UTC_TIMESTAMP(3))");
+    $insert->execute([$request, $id, $generation, $attempt, $provider, $model, $turn['route'], $estimate, json_encode($pricing, JSON_THROW_ON_ERROR)]);
     $db->prepare("UPDATE postcard_inference_turns SET status = 'generating', model = ?, updated_at = UTC_TIMESTAMP(3) WHERE postcard_id = ?")->execute([$model, $id]);
     return ['ok' => true, 'execute' => true, 'request_id' => $request, 'pricing' => $pricing, 'estimated_gbp' => $estimate];
 }
@@ -209,7 +216,7 @@ function captive_postcard_inference_settle(PDO $db, array $input): array
             'uncertain_gbp' => $actual === null ? (float)$row['estimated_gbp'] : 0];
     }
     $status = $input['status'] ?? '';
-    if (!in_array($status, ['success', 'generated', 'failed', 'cancelled', 'aborted', 'refused', 'validation_rejected', 'unknown', 'provider_error'], true)) throw new InvalidArgumentException('invalid status');
+    if (!in_array($status, ['success', 'generated', 'failed', 'cancelled', 'aborted', 'refused', 'validation_rejected', 'unknown', 'provider_error', 'not_sent'], true)) throw new InvalidArgumentException('invalid status');
     $usage = $input['usage'] ?? null;
     $prompt = $output = $cached = $uncached = $actual = null;
     if ($usage !== null) {
@@ -220,7 +227,7 @@ function captive_postcard_inference_settle(PDO $db, array $input): array
         $uncached = $prompt - $cached;
         if (isset($usage['uncached_tokens']) && $usage['uncached_tokens'] !== $uncached) throw new InvalidArgumentException('inconsistent usage');
         $actual = $row['provider'] === 'deepseek' ? captive_postcard_inference_cost($uncached, $cached, $output, json_decode($row['pricing'], true, 32, JSON_THROW_ON_ERROR)) : 0;
-    } elseif ($row['provider'] === 'ollama') {
+    } elseif ($row['provider'] === 'ollama' || $status === 'not_sent') {
         $actual = 0;
     }
     $latency = captive_postcard_inference_int($input, 'latency_ms', 0, 86400000);
@@ -229,8 +236,10 @@ function captive_postcard_inference_settle(PDO $db, array $input): array
     $failure = $status === 'validation_rejected'
         || (in_array($status, ['success', 'generated'], true) && !empty($input['validation_failure']));
     $error = empty($input['provider_error']) ? null : captive_postcard_inference_reason($input['provider_error']);
-    $update = $db->prepare('UPDATE postcard_inference_attempts SET settled_at = UTC_TIMESTAMP(3), status = ?, input_tokens = ?, output_tokens = ?, cached_tokens = ?, uncached_tokens = ?, actual_gbp = ?, latency_ms = ?, validation_failure = ?, provider_error = ? WHERE request_id = ?');
-    $update->execute([$status, $prompt, $output, $cached, $uncached, $actual, $latency, (int)$failure, $error, $request]);
+    $safeRetry = $row['provider'] === 'ollama' || $status === 'not_sent'
+        || ($status === 'provider_error' && ($input['definitive_provider_rejection'] ?? false) === true);
+    $update = $db->prepare('UPDATE postcard_inference_attempts SET settled_at = UTC_TIMESTAMP(3), status = ?, input_tokens = ?, output_tokens = ?, cached_tokens = ?, uncached_tokens = ?, actual_gbp = ?, latency_ms = ?, validation_failure = ?, provider_error = ?, safe_retry = ? WHERE request_id = ?');
+    $update->execute([$status, $prompt, $output, $cached, $uncached, $actual, $latency, (int)$failure, $error, (int)$safeRetry, $request]);
     $pricing = json_decode($row['pricing'], true, 32, JSON_THROW_ON_ERROR);
     return ['ok' => true, 'settled' => true, 'actual_gbp' => $actual, 'cost_gbp' => $actual,
         'cost_usd' => $actual === null ? null : $actual / $pricing['usd_to_gbp'],
@@ -245,18 +254,25 @@ function captive_postcard_inference_outcome(PDO $db, array $input, bool $fallbac
     $read = $db->prepare('SELECT * FROM postcard_inference_turns WHERE postcard_id = ? FOR UPDATE');
     $read->execute([$id]);
     $turn = $read->fetch(PDO::FETCH_ASSOC);
-    if (!$turn || !$postcard || $postcard['replied_at'] || $postcard['blocked'] || $postcard['mail_class'] !== 'reply' || !$postcard['claim_live'] || $turn['publication_result']) return ['ok' => true, 'execute' => false, 'reason' => 'turn_closed'];
+    if (!$turn || !$postcard || !captive_postcard_claim_matches($postcard, $input['claim_generation'] ?? null) || (int)$turn['claim_generation'] !== (int)$postcard['claim_generation'] || $postcard['replied_at'] || $postcard['blocked'] || $postcard['mail_class'] !== 'reply' || !$postcard['claim_live'] || $turn['publication_result']) return ['ok' => true, 'execute' => false, 'reason' => 'turn_closed'];
     $reason = captive_postcard_inference_reason($input['reason'] ?? $input['status'] ?? 'provider_error');
     if ($fallback) {
         if ($turn['route'] !== 'AUTO' || $turn['provider'] !== 'deepseek' || !in_array($turn['status'], ['claimed', 'generating'], true)) return ['ok' => true, 'execute' => false, 'reason' => 'fallback_not_allowed'];
-        $read = $db->prepare("SELECT COUNT(*) FROM postcard_inference_attempts WHERE postcard_id = ? AND provider = 'deepseek' AND (settled_at IS NULL OR validation_failure = 1 OR status IN ('success', 'generated'))");
-        $read->execute([$id]);
+        if (captive_postcard_retry_blocker($db, $id) !== null) return ['ok' => true, 'execute' => false, 'reason' => 'fallback_not_allowed'];
+        $read = $db->prepare("SELECT COUNT(*) FROM postcard_inference_attempts WHERE postcard_id = ? AND claim_generation = ? AND provider = 'deepseek' AND (settled_at IS NULL OR validation_failure = 1 OR status IN ('success', 'generated') OR (safe_retry = 0 AND status NOT IN ('not_sent', 'refused')))");
+        $read->execute([$id, (int)$postcard['claim_generation']]);
         if ((int)$read->fetchColumn() > 0) return ['ok' => true, 'execute' => false, 'reason' => 'fallback_not_allowed'];
         $db->prepare("UPDATE postcard_inference_turns SET provider = 'ollama', status = 'claimed', reason = 'local_fallback', fallback_reason = ?, updated_at = UTC_TIMESTAMP(3) WHERE postcard_id = ?")->execute([$reason, $id]);
         return ['ok' => true, 'execute' => true, 'provider' => 'ollama', 'reason' => $reason];
     }
     $status = $input['status'] ?? '';
     if (!in_array($status, ['generated', 'validation_rejected', 'held'], true)) throw new InvalidArgumentException('invalid outcome');
+    if ($status === 'validation_rejected') {
+        // Final screening can reject otherwise complete provider text. Retain
+        // usage while recording that no publishable candidate survived.
+        $db->prepare("UPDATE postcard_inference_attempts SET validation_failure = 1 WHERE postcard_id = ? AND claim_generation = ? AND settled_at IS NOT NULL AND status IN ('success', 'generated')")
+            ->execute([$id, (int)$postcard['claim_generation']]);
+    }
     $db->prepare('UPDATE postcard_inference_turns SET status = ?, reason = ?, updated_at = UTC_TIMESTAMP(3) WHERE postcard_id = ?')->execute([$status, $reason, $id]);
     return ['ok' => true, 'execute' => true];
 }

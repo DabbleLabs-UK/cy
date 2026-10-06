@@ -50,7 +50,7 @@ test('postcard cloud budget, lost acknowledgements, one reply and public/admin b
     const api = async (action, data = {}, extra = {}) => {
       const response = await fetch(`${base}/api/postcard-inference.php`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cy-Key': 'test-key', ...extra },
-        body: JSON.stringify({ action, ...data }),
+        body: JSON.stringify({ action, claim_generation: 0, ...data }),
       });
       const result = await response.json();
       assert.equal(response.status, 200, JSON.stringify(result) + errors.slice(-1500));
@@ -212,7 +212,8 @@ test('postcard cloud budget, lost acknowledgements, one reply and public/admin b
     const uncertainId = postcard();
     assert.equal((await route(uncertainId)).provider, 'deepseek');
     const uncertain = await reserve(uncertainId);
-    await api('settle', { request_id: uncertain.request_id, status: 'provider_error', usage: null, latency_ms: 10 });
+    await api('settle', { request_id: uncertain.request_id, status: 'provider_error',
+      definitive_provider_rejection: true, usage: null, latency_ms: 10 });
     assert.equal(sql(`SELECT actual_gbp IS NULL FROM postcard_inference_attempts WHERE request_id='${uncertain.request_id}'`), '1');
     assert.equal((await api('fallback', { postcard_id: uncertainId, reason: 'provider_unavailable' })).execute, true);
     const localRetry = await reserve(uncertainId, 'ollama');

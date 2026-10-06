@@ -73,7 +73,7 @@ import { createSomaRuntime } from './soma-runtime.js';
 import { restoreStartupSleepHistory } from './sleep-startup.js';
 import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
-import { PostcardInference, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
+import { PostcardInference, postcardFailureClass, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
 import { MemoryFormationInference } from './memory-formation-inference.js';
 import { canonicalPostcardContext } from './postcard-context.js';
 import { loadPostcardSenderContinuity, loadPostcardEnrichment, postcardSenderMemoryItems,
@@ -2614,6 +2614,8 @@ async function main() {
             throw error;
           }
         }
+        ac.signal.throwIfAborted();
+        if (postcardTurn) postcardTurn.markDispatched();
         gen = await provider.openStream({
           system,
           prompt: candidatePrompt,
@@ -2644,7 +2646,8 @@ async function main() {
         await finishRequest();
         console.warn(`[cy] provider ${provider.id} HTTP`, gen.status);
         await sleep(1000);
-        return { candidate, full: '', error: true, requestId: lease.id };
+        return { candidate, full: '', error: true, requestId: lease.id,
+          definitiveProviderRejection: [400, 401, 403, 404, 422, 429].includes(gen.status) };
       }
       let streamRes;
       try {
@@ -2692,6 +2695,11 @@ async function main() {
           ttftMs,
           requestId: lease.id,
         };
+      }
+      // A closed transport is not proof that a paid completion finished. Do
+      // not publish an apparently valid partial response or replay its request.
+      if (postcardTurn && !stats?.done) {
+        return { candidate, full: '', error: true, stats, ttftMs, requestId: lease.id };
       }
       const cleaned = stripScaffold(sanitize(candidate));
       if (provider.screensContent && cleaned.trim() && looksLikeRefusal(cleaned)) {
@@ -2766,9 +2774,25 @@ async function main() {
     const buffer = warden.newBuffer();
     // Persist a validated outcome before any visible reply bytes are emitted.
     // The ingest transaction separately records actual postcard publication.
-    if (postcardTurn) await postcardTurn.outcome('generated');
-    for (const chunk of buffer.push(accounted.out)) await onChunk(chunk, mode);
-    for (const chunk of buffer.flush({ tokenLimited: guarded.tokenLimited })) await onChunk(chunk, mode);
+    const chunks = [...buffer.push(accounted.out), ...buffer.flush({ tokenLimited: guarded.tokenLimited })];
+    if (postcardTurn) {
+      let visible = false;
+      for (const raw of chunks) {
+        const cleanedChunk = sanitize(raw);
+        if (looksLikeAssistantFrame(cleanedChunk)) break;
+        const chunk = stripScaffoldAccounted(cleanedChunk).out;
+        if (chunk.trim() && warden.screenOut(chunk).ok) { visible = true; break; }
+      }
+      if (!visible) {
+        await postcardTurn.outcome('validation_rejected', 'empty_response');
+        await logBurstStrip(rawFull, mode);
+        for (const result of attempts) await recordSpend(result.stats, mode, false);
+        recordInferenceOutcome(guarded.requestId, 'rejected-after-filtering');
+        return { ...guarded, full: '', characterDiscarded: true };
+      }
+      await postcardTurn.outcome('generated');
+    }
+    for (const chunk of chunks) await onChunk(chunk, mode);
     await logBurstStrip(rawFull, mode);
     for (let i = 0; i < attempts.length; i++) {
       await recordSpend(attempts[i].stats, mode, i === attempts.length - 1 && !!burstEmitted.trim());
@@ -3237,6 +3261,11 @@ async function main() {
 
   // ---- postcard mode: interrupt, transition, recognise, reply, remember ----
   async function doPostcard(pc) {
+    const defer = (failureClass = 'temporary') => emit({
+      kind: 'postcard_deferred', payload: {
+        id: pc.id, claim_generation: pc.claim_generation, failure_class: failureClass,
+      },
+    });
     // Required continuity is read before routing or any arrival/world side effect.
     // A failed read holds the claim under the existing retry/expiry policy rather
     // than generating an amnesic reply or creating a second memory store.
@@ -3253,7 +3282,7 @@ async function main() {
     if (!senderContinuity.ready) {
       recordReadiness();
       console.warn(`[cy] postcard held: sender memory ${senderContinuity.status.toLowerCase()}`);
-      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      defer();
       return;
     }
     let route;
@@ -3261,12 +3290,12 @@ async function main() {
       route = await postcardInference.route(pc, providers);
     } catch {
       console.warn('[cy] postcard held: routing/accounting unavailable');
-      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      defer();
       return;
     }
     if (!route.execute || !route.provider) {
       console.log(`[cy] postcard held: ${route.reason || 'existing_turn'}`);
-      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      defer();
       return;
     }
     const postcardTurn = postcardInference.turn(pc, route);
@@ -3358,6 +3387,7 @@ async function main() {
       kind: 'postcard_in',
       payload: {
         id: pc.id,
+        claim_generation: pc.claim_generation,
         from: pc.from_name || null,
         body: pc.body || null,
         image: pc.image_path || null,
@@ -3430,13 +3460,13 @@ async function main() {
       if (postcardMayFallback(r) && await postcardTurn.fallback(r.holdReason || 'provider_unavailable')) {
         r = await generate();
       }
-      if (!r.full) await postcardTurn.outcome(r.characterDiscarded ? 'validation_rejected' : 'held',
+      if (!r.full) await postcardTurn.outcome(postcardFailureClass(r) === 'quality' ? 'validation_rejected' : 'held',
         r.aborted ? 'interrupted' : r.error ? 'provider_unavailable' : 'no_valid_reply');
     } catch {
       // A lost accounting acknowledgement is ambiguous: hold rather than replay
       // a paid request or emit prose whose durable outcome was not recorded.
       console.warn('[cy] postcard held: durable accounting could not be confirmed');
-      r = { full: '', error: true };
+      r = { full: '', error: true, accountingError: true };
     }
     emitGen(r, 'letter', {
       zoneA: system,
@@ -3475,17 +3505,17 @@ async function main() {
         dreamEligible: false,
       });
       emit({ kind: 'postcard_out', payload: {
-        id: pc.id, reply_to: pc.id, to: pc.from_name || null, body: reply,
+        id: pc.id, reply_to: pc.id, claim_generation: pc.claim_generation,
+        to: pc.from_name || null, body: reply,
         environment_event_id: replyRecord.world_event.id,
       } });
       void autobiographicalMemory.queueSource(sourceFromReply(
         reply, pc, replyRecord.world_event.id, replyAt,
       )).catch((error) => console.warn(`[cy] reply memory enqueue deferred: ${error.message}`));
     } else {
-      // Do not let a failed/empty generation silently occupy the server's bounded
-      // reply tray forever. The server reclasses it as retained fan mail, and the
-      // next inbox poll creates the public archive receipt.
-      emit({ kind: 'postcard_deferred', payload: { id: pc.id } });
+      // Operational interruptions release with backoff, not a quality strike.
+      // The server independently checks the ledger before authorizing replay.
+      defer(postcardFailureClass(r));
     }
     formMemoryAfterVisibleOutput(cognition.groundedDirective, true);
     // remember them: a cheap compressed note + a standing nudge, written back to
@@ -3748,7 +3778,7 @@ async function main() {
     for (const pc of data.fan_mail || []) {
       const screen = pc.body ? warden.screenIn(pc.body) : { ok: true };
       if (!screen.ok) {
-        emit({ kind: 'postcard_blocked', payload: { id: pc.id, reason: screen.reason || 'screened' } });
+        emit({ kind: 'postcard_blocked', payload: { id: pc.id, claim_generation: pc.claim_generation, reason: screen.reason || 'screened' } });
         continue;
       }
       emit({
@@ -3769,7 +3799,7 @@ async function main() {
       // screen any text; an image-only postcard (no body) is always allowed
       const screen = pc.body ? warden.screenIn(pc.body) : { ok: true };
       if (!screen.ok) {
-        emit({ kind: 'postcard_blocked', payload: { id: pc.id, reason: screen.reason || 'screened' } });
+        emit({ kind: 'postcard_blocked', payload: { id: pc.id, claim_generation: pc.claim_generation, reason: screen.reason || 'screened' } });
         continue;
       }
       // Newest waiting visitor goes to the front. The server bounds this tray and
