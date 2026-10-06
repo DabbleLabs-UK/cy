@@ -13,16 +13,22 @@ $checks = [
     'disabled capability does not collect fan mail' => captive_postcard_fan_mail_supported(['fan_mail' => '0']) === false,
     'updated runner opts in to fan-mail collection' => captive_postcard_fan_mail_supported(['fan_mail' => '1']) === true,
     'abandoned runner claims expire after thirty minutes' => CY_REPLY_CLAIM_TTL_SECONDS === 30 * 60,
+    'temporary failures back off exponentially' => array_map('captive_postcard_retry_delay', [1, 2, 3, 4]) === [30, 60, 120, 240],
+    'temporary retries remain capped without terminalisation' => captive_postcard_retry_delay(999) === 900,
+    'generation zero legacy event is compatible' => captive_postcard_claim_matches(['claim_generation' => 0], null),
+    'new claims cannot accept an unfenced legacy event' => !captive_postcard_claim_matches(['claim_generation' => 1], null),
+    'stale claim cannot act on a later lease' => !captive_postcard_claim_matches(['claim_generation' => 2], 1),
+    'current generation is accepted' => captive_postcard_claim_matches(['claim_generation' => 2], 2),
     'runner can claim when no reply is in flight' => captive_postcard_can_claim_next(0) === true,
     'runner cannot claim a second simultaneous reply' => captive_postcard_can_claim_next(1) === false,
     'runner remains blocked if several claims somehow exist' => captive_postcard_can_claim_next(3) === false,
-    'first empty reply is retried rather than archived' => captive_postcard_failed_attempt(0) === [
+    'first completed quality failure is retried rather than archived' => captive_postcard_failed_attempt(0) === [
         'attempts' => 1, 'retry' => true, 'mail_class' => 'reply', 'retry_after_seconds' => 10,
     ],
-    'second empty reply still gets the final retry' => captive_postcard_failed_attempt(1) === [
+    'second completed quality failure still gets the final retry' => captive_postcard_failed_attempt(1) === [
         'attempts' => 2, 'retry' => true, 'mail_class' => 'reply', 'retry_after_seconds' => 10,
     ],
-    'third empty reply becomes terminal fan mail' => captive_postcard_failed_attempt(2) === [
+    'third completed quality failure becomes terminal fan mail' => captive_postcard_failed_attempt(2) === [
         'attempts' => 3, 'retry' => false, 'mail_class' => 'fan_final', 'retry_after_seconds' => 0,
     ],
     'only the first model attempt publishes the postcard arrival' =>

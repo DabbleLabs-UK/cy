@@ -63,21 +63,8 @@ try {
     // whether it came back out of the fan-mail bag. This also keeps events honest
     // when an older runner does not yet send those fields.
     $postcardProvenance = $db->prepare(
-        'SELECT posted_at, (promoted_at IS NOT NULL) AS promoted, reply_attempts
-         FROM postcards WHERE id = :id'
-    );
-    $postcardDeferred = $db->prepare(
-        "SELECT reply_attempts FROM postcards
-         WHERE id = :id AND mail_class = 'reply' AND replied_at IS NULL
-           AND delivered_at IS NOT NULL AND blocked = 0
-         FOR UPDATE"
-    );
-    $postcardRetry = $db->prepare(
-        'UPDATE postcards
-         SET reply_attempts = :attempts, mail_class = :mail_class,
-             delivered_at = NULL, deliver_at = :deliver_at
-         WHERE id = :id AND mail_class = \'reply\' AND replied_at IS NULL
-           AND delivered_at IS NOT NULL AND blocked = 0'
+        'SELECT posted_at, (promoted_at IS NOT NULL) AS promoted, reply_attempts, claim_generation, arrival_event_id
+         FROM postcards WHERE id = :id FOR UPDATE'
     );
     // Persist a completed drawing. Like visitor_seen this is a side-channel: the
     // per-pass `draw` events already carry the animation into the public stream,
@@ -393,7 +380,7 @@ try {
         if ($kind === 'postcard_out') {
             $p = $event['payload'];
             $postcardId = is_array($p) ? (int)($p['reply_to'] ?? $p['id'] ?? 0) : 0;
-            if (!captive_postcard_mark_replied($db, $postcardId, (string)$event['ts'])) {
+            if (!captive_postcard_mark_replied($db, $postcardId, (string)$event['ts'], $p['claim_generation'] ?? null)) {
                 continue; // A different delivery ID cannot publish a second reply.
             }
         }
@@ -403,6 +390,11 @@ try {
         if ($kind === 'postcard_blocked') {
             $p = $event['payload'];
             if (is_array($p) && (int)($p['id'] ?? 0) > 0) {
+                captive_postcard_queue_lock($db);
+                $screened = $db->prepare('SELECT mail_class, claim_generation FROM postcards WHERE id = ? FOR UPDATE');
+                $screened->execute([(int)$p['id']]);
+                $screenedRow = $screened->fetch(PDO::FETCH_ASSOC);
+                if (!$screenedRow || ($screenedRow['mail_class'] === 'reply' && !captive_postcard_claim_matches($screenedRow, $p['claim_generation'] ?? null))) continue;
                 $postcardBlocked->execute([
                     ':id' => (int)$p['id'],
                     ':reason' => mb_substr((string)($p['reason'] ?? 'screened'), 0, 80),
@@ -411,27 +403,13 @@ try {
             continue;
         }
 
-        // One empty/error generation is not a full tray. Release the claim and
-        // retry it after a short delay. Only after the bounded attempt allowance
-        // is exhausted does it become terminal fan mail and receive an archive
-        // event on the next inbox poll.
+        // Separate infrastructure interruption from completed quality failure.
+        // Replay/stale workers cannot consume another claim's allowance.
         if ($kind === 'postcard_deferred') {
             $p = $event['payload'];
             $postcardId = is_array($p) ? (int)($p['id'] ?? 0) : 0;
             if ($postcardId > 0) {
-                captive_postcard_queue_lock($db);
-                $postcardDeferred->execute([':id' => $postcardId]);
-                $claimed = $postcardDeferred->fetch();
-                if ($claimed) {
-                    $outcome = captive_postcard_failed_attempt((int)$claimed['reply_attempts']);
-                    $postcardRetry->execute([
-                        ':attempts' => $outcome['attempts'],
-                        ':mail_class' => $outcome['mail_class'],
-                        ':deliver_at' => gmdate('Y-m-d H:i:s', time() + $outcome['retry_after_seconds']),
-                        ':id' => $postcardId,
-                    ]);
-                    captive_postcard_inference_publication($db, $postcardId, 'deferred');
-                }
+                captive_postcard_defer($db, $postcardId, $p['claim_generation'] ?? null, (string)($p['failure_class'] ?? 'temporary'));
             }
             continue;
         }
@@ -494,14 +472,22 @@ try {
         if ($kind === 'postcard_in' && is_array($payload)) {
             $postcardId = (int)($payload['id'] ?? 0);
             if ($postcardId > 0) {
+                captive_postcard_queue_lock($db);
                 $postcardProvenance->execute([':id' => $postcardId]);
                 $source = $postcardProvenance->fetch();
-                if ($source && !captive_postcard_should_publish_arrival((int)$source['reply_attempts'])) {
+                if (!$source || !captive_postcard_claim_matches($source, $payload['claim_generation'] ?? null)
+                    || $source['arrival_event_id'] !== null
+                    || !captive_postcard_should_publish_arrival((int)$source['reply_attempts'])) {
                     continue;
                 }
+                // Existing pre-migration arrivals remain historical, not replayed.
+                $arrival = $db->prepare("SELECT seq FROM events WHERE kind = 'postcard_in' AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.id')) = ? LIMIT 1");
+                $arrival->execute([(string)$postcardId]);
+                if ($arrival->fetchColumn() !== false) continue;
                 $payload = captive_postcard_event_provenance($payload, $source ?: null);
             }
         }
+        if (in_array($kind, ['postcard_in', 'postcard_out'], true) && is_array($payload)) unset($payload['claim_generation']);
 
         $payloadJson = json_encode($payload);
         if ($payloadJson === false) {
@@ -554,6 +540,9 @@ try {
         $insert->bindValue(':kind', $kind, PDO::PARAM_STR);
         $insert->bindValue(':payload', $payloadJson, PDO::PARAM_STR);
         $insert->execute();
+        if ($kind === 'postcard_in' && $postcardId > 0) {
+            $db->prepare('UPDATE postcards SET arrival_event_id = ? WHERE id = ?')->execute([(int)$db->lastInsertId(), $postcardId]);
+        }
         if ($kind === 'postcard_out') {
             captive_postcard_inference_publication($db, $postcardId, 'published', (int)$db->lastInsertId());
         }

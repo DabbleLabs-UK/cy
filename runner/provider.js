@@ -214,7 +214,7 @@ export function looksLikeRefusal(text) {
 // line per content delta, then a final `{done:true, ...}` line carrying the
 // counters plus `usage` and computed `cost`. This is what lets run.js consume both
 // providers through the identical readNdjsonStream path.
-export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx }) {
+export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx, requireCompletion = false }) {
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let buf = '';
@@ -256,6 +256,10 @@ export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx }) {
         }
         const { done, value } = chunk;
         if (done) {
+          if (requireCompletion && !finishReason && !closed) {
+            controller.error(new Error('postcard provider stream ended without completion'));
+            return;
+          }
           if (!closed) {
             closed = true;
             controller.enqueue(enc.encode(JSON.stringify(finalObj()) + '\n'));
@@ -505,7 +509,9 @@ function makeDeepSeek(config, key) {
       return {
         ok: true,
         status: 200,
-        reader: deepseekToNdjsonReader(res.body.getReader(), { model: ds.model, priceRow: priceRow(), fx }),
+        reader: deepseekToNdjsonReader(res.body.getReader(), {
+          model: ds.model, priceRow: priceRow(), fx, requireCompletion: purpose === 'postcard',
+        }),
         model: ds.model,
       };
     },

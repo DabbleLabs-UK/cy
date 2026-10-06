@@ -63,7 +63,7 @@ async function startPhp(webRoot, port) {
   throw new Error(`PHP test server did not start: ${stderr}`);
 }
 
-test('lost inbox claim response reaches one terminal fan-mail archive without another reply',
+test('lost inbox claim response releases a stale lease and reclaims once without terminal retention',
   { skip: !enabled }, async () => {
     assert.ok(defaults && mysqlBin && phpBin && dbPort > 0, 'isolated test DB settings required');
     const webRoot = await mkdtemp(join(tmpdir(), 'cy-postcard-claim-web-'));
@@ -97,10 +97,11 @@ test('lost inbox claim response reaches one terminal fan-mail archive without an
         VALUES (1, 'A', 'normal claim', NOW(), NOW(), 'reply')`, dbName);
       await client.pollInbox();
       assert.deepEqual(received.at(-1).postcards.map((item) => item.id), [1]);
+      const firstGeneration = received.at(-1).postcards[0].claim_generation;
       assert.equal(scalar('SELECT delivered_at IS NOT NULL FROM postcards WHERE id = 1'), '1');
-      client.enqueue({ ts: '2026-10-01 03:00:00.000', kind: 'postcard_in', payload: { id: 1 } });
+      client.enqueue({ ts: '2026-10-01 03:00:00.000', kind: 'postcard_in', payload: { id: 1, claim_generation: firstGeneration } });
       client.enqueue({ ts: '2026-10-01 03:01:00.000', kind: 'postcard_out',
-        payload: { reply_to: 1, body: 'reply' } });
+        payload: { reply_to: 1, claim_generation: firstGeneration, body: 'reply' } });
       await client.flush();
       assert.equal(scalar('SELECT replied_at IS NOT NULL FROM postcards WHERE id = 1'), '1');
 
@@ -128,22 +129,28 @@ test('lost inbox claim response reaches one terminal fan-mail archive without an
 
       mysql('UPDATE postcards SET delivered_at = DATE_SUB(NOW(), INTERVAL 31 MINUTE) WHERE id = 2', dbName);
       await client.pollInbox();
-      assert.equal(scalar('SELECT mail_class FROM postcards WHERE id = 2'), 'fan_final');
-      assert.equal(scalar("SELECT COUNT(*) FROM postcards WHERE mail_class = 'reply' AND replied_at IS NULL"), '0',
-        'reply tray capacity is released');
-      assert.deepEqual(received.at(-1).fan_mail.map((item) => item.id), [2],
-        'expired abandoned claim must reach fan-mail screening/archive lane');
-
-      const terminal = received.at(-1).fan_mail[0];
-      client.enqueue({ ts: '2026-10-01 03:02:00.000', kind: 'fan_mail_in',
-        payload: { id: terminal.id, body: terminal.body, state: 'kept', may_reply: false } });
+      assert.equal(scalar('SELECT mail_class FROM postcards WHERE id = 2'), 'reply');
+      assert.equal(scalar('SELECT delivered_at IS NULL FROM postcards WHERE id = 2'), '1');
+      assert.equal(scalar('SELECT quality_failures FROM postcards WHERE id = 2'), '0');
+      assert.equal(scalar('SELECT temporary_failures FROM postcards WHERE id = 2'), '1');
+      assert.equal(scalar('SELECT deliver_at > NOW() FROM postcards WHERE id = 2'), '1', 'claim expiry backs off');
+      assert.equal(received.length, callbacksBeforeLoss, 'expiry does not immediately hot-loop');
+      mysql('UPDATE postcards SET deliver_at = DATE_SUB(NOW(), INTERVAL 1 SECOND) WHERE id = 2', dbName);
+      await client.pollInbox();
+      const reclaimed = received.at(-1).postcards[0];
+      assert.equal(reclaimed.id, 2);
+      assert.equal(reclaimed.claim_generation, 2, 'reclaim advances the fencing generation');
+      client.enqueue({ ts: '2026-10-01 03:02:00.000', kind: 'postcard_in',
+        payload: { id: 2, claim_generation: reclaimed.claim_generation } });
+      client.enqueue({ ts: '2026-10-01 03:03:00.000', kind: 'postcard_out',
+        payload: { reply_to: 2, claim_generation: reclaimed.claim_generation, body: 'one recovered reply' } });
       let ingestResponseLost = false;
       globalThis.fetch = async (...args) => {
         const response = await realFetch(...args);
         if (!ingestResponseLost && String(args[0]).endsWith('/api/ingest.php')) {
           ingestResponseLost = true;
           assert.equal(response.status, 200, await response.text());
-          throw new Error('simulated lost ingest response after archive commit');
+          throw new Error('simulated lost ingest response after reply commit');
         }
         return response;
       };
@@ -151,17 +158,18 @@ test('lost inbox claim response reaches one terminal fan-mail archive without an
       globalThis.fetch = realFetch;
       await client.flush();
       assert.equal(ingestResponseLost, true);
-      assert.equal(scalar("SELECT COUNT(*) FROM events WHERE kind = 'fan_mail_in' AND JSON_VALUE(payload, '$.id') = 2"), '1');
-      assert.equal(scalar("SELECT COUNT(*) FROM events WHERE kind = 'postcard_out' AND JSON_VALUE(payload, '$.reply_to') = 2"), '0');
+      assert.equal(scalar("SELECT COUNT(*) FROM events WHERE kind = 'fan_mail_in' AND JSON_VALUE(payload, '$.id') = 2"), '0');
+      assert.equal(scalar("SELECT COUNT(*) FROM events WHERE kind = 'postcard_in' AND JSON_VALUE(payload, '$.id') = 2"), '1');
+      assert.equal(scalar("SELECT COUNT(*) FROM events WHERE kind = 'postcard_out' AND JSON_VALUE(payload, '$.reply_to') = 2"), '1');
       assert.equal(scalar('SELECT reply_attempts FROM postcards WHERE id = 2'), '0');
       const archive = await realFetch(`${base}/api/postcard-archive.php`);
       const archiveBody = await archive.json();
       assert.equal(archive.status, 200, JSON.stringify(archiveBody));
-      assert.ok(archiveBody.items.some((item) => item.id === 2));
+      assert.ok(archiveBody.items.some((item) => item.id === 2), 'successful retry remains accessible in correspondence history');
       const callbacksBeforeRepeatPoll = received.length;
       await client.pollInbox();
       assert.equal(received.length, callbacksBeforeRepeatPoll, 'no second personal or fan-mail delivery');
-      assert.equal(scalar("SELECT COUNT(*) FROM ingest_delivery_receipts WHERE kind = 'fan_mail_in'"), '1');
+      assert.equal(scalar("SELECT COUNT(*) FROM ingest_delivery_receipts WHERE kind = 'postcard_out'"), '2');
     } finally {
       globalThis.fetch = realFetch;
       if (server && server.exitCode === null && server.signalCode === null) {

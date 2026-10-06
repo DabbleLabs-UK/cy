@@ -24,6 +24,13 @@ try {
 
     captive_postcard_queue_lock($db);
     captive_postcard_expire_stale_claims($db);
+    // Late definitive settlement can make an uncertain hold safe to retry.
+    $held = $db->query("SELECT id FROM postcards WHERE mail_class = 'reply' AND replied_at IS NULL AND blocked = 0 AND retry_hold IS NOT NULL FOR UPDATE")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($held as $row) {
+        if (captive_postcard_retry_blocker($db, (int)$row['id']) === null) {
+            $db->prepare('UPDATE postcards SET retry_hold = NULL WHERE id = ?')->execute([(int)$row['id']]);
+        }
+    }
     $postcards = [];
     if (captive_postcard_can_claim_next(captive_postcard_inflight_replies($db))) {
         // If the tray is completely quiet, use the free place for the oldest fan-mail
@@ -39,6 +46,7 @@ try {
         $postcards = $db->query(
             'SELECT p.id, p.visitor_id, p.from_name, p.body, p.image_path, p.image_source,
                     p.image_attrib, p.caption, p.posted_at, p.mail_class,
+                    p.claim_generation, p.processing_attempts, p.temporary_failures, p.quality_failures,
                     (p.promoted_at IS NOT NULL) AS promoted,
                     (SELECT MAX(pp.posted_at) FROM postcards pp
                        WHERE pp.visitor_id = p.visitor_id AND pp.id < p.id) AS prev_posted_at,
@@ -50,6 +58,7 @@ try {
              LEFT JOIN visitors v ON v.visitor_id = p.visitor_id
              WHERE p.mail_class = \'reply\' AND p.deliver_at <= NOW()
                    AND p.delivered_at IS NULL AND p.replied_at IS NULL AND p.blocked = 0
+                   AND p.retry_hold IS NULL
              ORDER BY
                 (p.posted_at <= (NOW() - INTERVAL 15 MINUTE)) DESC,
                 CASE WHEN p.posted_at <= (NOW() - INTERVAL 15 MINUTE) THEN p.posted_at END ASC,
@@ -63,7 +72,12 @@ try {
     if ($postcards) {
         $ids = array_column($postcards, 'id');
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $db->prepare("UPDATE postcards SET delivered_at = NOW() WHERE id IN ($placeholders)")->execute($ids);
+        $db->prepare("UPDATE postcards SET delivered_at = NOW(), claim_generation = claim_generation + 1, processing_attempts = processing_attempts + 1 WHERE id IN ($placeholders)")->execute($ids);
+        foreach ($postcards as &$postcard) {
+            $postcard['claim_generation'] = (int)$postcard['claim_generation'] + 1;
+            $postcard['processing_attempts'] = (int)$postcard['processing_attempts'] + 1;
+        }
+        unset($postcard);
     }
 
     // Fan-mail collection is capability-gated. An older Dell runner ignores the
@@ -117,6 +131,10 @@ try {
         }
         return [
             'id' => (int)$p['id'],
+            'claim_generation' => (int)$p['claim_generation'],
+            'processing_attempts' => (int)$p['processing_attempts'],
+            'temporary_failures' => (int)$p['temporary_failures'],
+            'quality_failures' => (int)$p['quality_failures'],
             'visitor_id' => $p['visitor_id'],
             'from_name' => $p['from_name'],
             'body' => $p['body'],
