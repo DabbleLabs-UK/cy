@@ -342,7 +342,7 @@ test('an aged sender source runs before a continuously replenished surfacing que
       return { job: { id: 82, context: { text: 'another request' } } };
     },
     async finishMemorySource(value) { completed.push(value); return { status: 'PROCESSED' }; },
-  }, generate: async () => '{"decision":"CREATE","type":"PERSON","privacyScope":"SENDER_RECALLABLE","content":"The sender has a dog called Alfie."}' });
+  }, generate: async () => '{"decision":"CREATE","type":"PERSON","content":"The sender has a dog called Alfie."}' });
   r.stopped = false;
   await r.tick();
   r.stop();
@@ -462,7 +462,7 @@ test('lost completion response retries the same claim token without regenerating
     },
   }, generate: async () => {
     generated += 1;
-    return '{"decision":"CREATE","type":"PERSON","privacyScope":"SENDER_RECALLABLE","content":"The sender has a dog called Alfie."}';
+    return '{"decision":"CREATE","type":"PERSON","content":"The sender has a dog called Alfie."}';
   } });
   const result = await r.processFormation({ id: 86, claim_token: 'claim-86', source: {
     sourceType: 'POSTCARD', sourceId: 'postcard:86', text: 'My dog is called Alfie.',
@@ -482,7 +482,7 @@ test('a clear same-sender unresolved topic produces a revisioned resolution', as
       ...candidate, type: 'UNRESOLVED_THREAD', content: 'The sender asked if Cy kept their question open.',
     }] }; },
     async finishMemorySource(value) { completed.push(value); return { status: 'PROCESSED' }; },
-  }, generate: async () => '{"decision":"RESOLVE","memoryRef":"C1"}' });
+  }, generate: async () => '{"decision":"RESOLVE","memoryRef":"FM1"}' });
   await r.processFormation({ id: 87, claim_token: 'claim-87', source: {
     sourceType: 'CY_REPLY', sourceId: 'postcard-reply:87', text: 'Yes, I answered that question.',
     sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender,

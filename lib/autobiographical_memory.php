@@ -11,18 +11,35 @@ const CY_MEMORY_REASONS = [
 const CY_MEMORY_CANDIDATE_LIMIT = 10;
 const CY_MEMORY_PUBLIC_LIMIT = 20;
 const CY_MEMORY_FORMATION_FAILURE_LIMIT = 6;
+const CY_MEMORY_FORMATION_REJECTION_CODES = [
+    'JSON_FORMAT', 'SCHEMA', 'ILLEGAL_ACTION', 'ILLEGAL_TYPE', 'UNKNOWN_REF',
+    'MISSING_FIELD', 'FORBIDDEN_FIELD', 'PRIVACY_PROVENANCE', 'APPLICATION_CONFLICT',
+];
 
-function captive_memory_formation_retry(int $failureStreak, string $category): array
+function captive_memory_formation_retry(int $failureStreak, string $category, int $modelInvalidStreak = 0): array
 {
+    $invalids = min(CY_MEMORY_FORMATION_FAILURE_LIMIT, max(0, $modelInvalidStreak));
     if ($category === 'PREEMPTED') {
-        return ['status' => 'RETRYABLE', 'failure_streak' => $failureStreak, 'delay_seconds' => 30];
+        return ['status' => 'RETRYABLE', 'failure_streak' => $failureStreak,
+            'model_invalid_streak' => $invalids, 'delay_seconds' => 30];
     }
     $failures = min(CY_MEMORY_FORMATION_FAILURE_LIMIT, max(0, $failureStreak) + 1);
+    if ($category === 'INVALID') $invalids = min(CY_MEMORY_FORMATION_FAILURE_LIMIT, $invalids + 1);
     // Operational outages and model-access timeouts must not permanently
     // condemn a valid durable source. Only repeated invalid model decisions
     // can reach terminal failure; all retries remain rate-limited.
-    return ['status' => $category === 'INVALID' && $failures >= CY_MEMORY_FORMATION_FAILURE_LIMIT ? 'FAILED' : 'RETRYABLE',
-        'failure_streak' => $failures, 'delay_seconds' => min(900, 30 * (2 ** ($failures - 1)))];
+    return ['status' => $category === 'INVALID' && $invalids >= CY_MEMORY_FORMATION_FAILURE_LIMIT ? 'FAILED' : 'RETRYABLE',
+        'failure_streak' => $failures, 'model_invalid_streak' => $invalids,
+        'delay_seconds' => min(900, 30 * (2 ** ($failures - 1)))];
+}
+
+function captive_memory_formation_rejection_code(mixed $value): ?string
+{
+    if ($value === null) return null;
+    if (!is_string($value) || !in_array($value, CY_MEMORY_FORMATION_REJECTION_CODES, true)) {
+        throw new InvalidArgumentException('invalid formation rejection code');
+    }
+    return $value;
 }
 
 function captive_memory_formation_filter(array $input): array
@@ -246,6 +263,7 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
     $id = (int)($input['job_id'] ?? 0);
     $token = $input['claim_token'] ?? null;
     $category = strtoupper((string)($input['result_category'] ?? 'ERROR'));
+    $rejectionCode = captive_memory_formation_rejection_code($input['rejection_code'] ?? null);
     $categories = ['CREATE','UPDATE','RESOLVE','NOTHING','INVALID','ERROR','TIMEOUT','PREEMPTED','CONFLICT'];
     if ($id < 1 || !in_array($category, $categories, true)
         || ($atomic && (!is_string($token) || !preg_match('/^[a-f0-9]{32}$/', $token)))) {
@@ -281,6 +299,12 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
         }
         if ($job['status'] !== 'PROCESSING' || !$token || !hash_equals((string)$job['claim_token'], (string)$token)) {
             throw new RuntimeException('formation claim conflict');
+        }
+        $inferenceRequest = $input['formation_request_id'] ?? null;
+        if ($inferenceRequest !== null) {
+            require_once __DIR__ . '/memory_formation_inference.php';
+            if (!is_string($inferenceRequest)) throw new InvalidArgumentException('invalid formation request');
+            captive_memory_inference_completion_lock($db, $job, $token, $inferenceRequest, $category);
         }
         $source = captive_memory_validate_source(json_decode($job['source_payload'], true, 32, JSON_THROW_ON_ERROR));
         $senderSource = in_array($job['source_type'], ['POSTCARD','CY_REPLY'], true);
@@ -334,20 +358,25 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
                     '[]', $memory['privacy_scope'],
                 ]);
         }
-        $retry = $finished ? ['status' => 'PROCESSED', 'failure_streak' => 0, 'delay_seconds' => 0]
-            : captive_memory_formation_retry((int)$job['failure_streak'], $category);
+        $retry = $finished ? ['status' => 'PROCESSED', 'failure_streak' => 0, 'model_invalid_streak' => 0, 'delay_seconds' => 0]
+            : captive_memory_formation_retry((int)$job['failure_streak'], $category, (int)$job['model_invalid_streak']);
         $error = isset($input['error']) ? mb_substr((string)$input['error'], 0, 1000) : null;
         $db->prepare("UPDATE autobiographical_memory_formation_queue
-            SET status = ?, failure_streak = ?, last_result_category = ?,
+            SET status = ?, failure_streak = ?, model_invalid_streak = ?, last_result_category = ?,
                 completed_at = IF(?,NOW(3),completed_at),
                 available_at = IF(?,available_at,DATE_ADD(NOW(3),INTERVAL ? SECOND)),
                 last_error = ?, updated_at = NOW(3) WHERE id = ?")
-            ->execute([$retry['status'], $retry['failure_streak'], $category, $finished ? 1 : 0,
+            ->execute([$retry['status'], $retry['failure_streak'], $retry['model_invalid_streak'], $category, $finished ? 1 : 0,
                 $finished ? 1 : 0, $retry['delay_seconds'], $error, $id]);
         $depth = captive_memory_queue_depth($db);
         $result = ['ok' => true, 'status' => $retry['status'], 'result_category' => $category, 'depth' => $depth,
             'failure_streak' => $retry['failure_streak'], 'retry_delay_seconds' => $retry['delay_seconds'],
+            'model_invalid_streak' => $retry['model_invalid_streak'], 'rejection_code' => $rejectionCode,
             'results' => $results, 'duplicate' => false];
+        if ($inferenceRequest !== null) {
+            captive_memory_inference_complete($db, $inferenceRequest, $category, $rejectionCode, $retry['status']);
+            $result['formation_request_id'] = $inferenceRequest;
+        }
         $db->prepare('INSERT INTO autobiographical_memory_formation_attempts
             (queue_id, claim_token, result_payload, source_type, source_id, started_at, completed_at,
              provider, model, prompt_chars, latency_ms, result_category, resulting_memory_id,

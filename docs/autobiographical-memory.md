@@ -28,6 +28,9 @@ queues, expiring prepared working sets, and owner-only attempt records containin
 provider/model, prompt size, latency, result category, queue depth and errors.
 Migration `sql/027_memory_formation_delivery.sql` adds claim receipts, consecutive
 failure counts and terminal/quarantine status without discarding old sources.
+Migration `028_memory_formation_contract.sql` adds an independent invalid-model
+decision counter. It starts at zero because the old failure count also included
+infrastructure errors; existing statuses and completion receipts are not reset.
 
 Memory types are EPISODIC, PERSON, MOTIF, UNRESOLVED_THREAD and SEMANTIC.
 Lifecycle states are ACTIVE, ARCHIVED and DELETED. Consistency is CONSISTENT,
@@ -71,16 +74,33 @@ existing memories. The active model must return one structured decision:
   clearly settles it, archiving it with a revision and resolving provenance; or
 - NOTHING.
 
+Sender POSTCARD/CY_REPLY formation uses an Ollama JSON Schema with separate
+action shapes and no additional properties. CREATE needs only type/content;
+NOTHING has no other fields. UPDATE/RESOLVE use exact offered `FM1`-style refs,
+distinct from shared-context labels. Without an eligible target those actions
+are absent from the schema. CY attaches sender-only scope, IDs and provenance;
+the parser independently enforces fields, reference membership and privacy.
+PERSON represents durable sender facts, UNRESOLVED_THREAD a persistent open
+issue, EPISODIC a meaningful episode rather than a personal-fact fallback, and
+trivial greetings normally yield NOTHING. Other source contracts are unchanged.
+
 The server validates the decision, provenance, version and privacy scope. UPDATE
 and RESOLVE use optimistic version checking. The operation and queue completion
 commit in one transaction, so replay of a claim token returns its original
 receipt without applying a second memory. Errors, invalid responses and timeouts
-use bounded exponential backoff. Six consecutive invalid model decisions enter
+use bounded exponential backoff. Six rejected model decisions for a source enter
 a retained FAILED state. Operational errors, timeouts and foreground preemption
-remain retryable at a capped rate so shared-model contention cannot discard a
+do not consume that separate invalid-decision allowance; they remain retryable
+at a capped rate so shared-model contention cannot discard a
 valid source. Formation cannot edit or backfill the structured
 world archive. A generated expression can become subjective autobiography but
 cannot become evidence for a grounded Soma subsystem.
+
+Owner-only attempt inspection exposes bounded structural rejection codes and
+both retry counters from the transactional receipt. It does not retain raw model
+responses or source text in the new diagnostics. The production timeout and
+preemption policy are unchanged. The opt-in synthetic probe is
+`scripts/probe-sender-formation-contract.mjs`; it never uses production memory.
 
 There is no automatic merge score. There is no model-generated chain-of-thought.
 A separate periodic consolidation process is not implemented. UPDATE can revise
@@ -126,8 +146,43 @@ inbox visitor record. Optional broader enrichment waits at most 750 ms for a
 compatible prepared set and cannot displace required continuity. Both providers
 use one privacy-filtered turn snapshot. See `postcard-inference.md` for timing
 evidence and limits; this does not promise exhaustive recall or completed memory
-formation for every exchange. Interactive foreground work preempts background
-memory work; interrupted jobs remain retryable.
+formation for every exchange. Interactive foreground work preempts local
+background memory work; interrupted jobs remain retryable. Remote sender
+formation uses no local-model lease and is not preempted by local foreground
+work. Pause and shutdown still cancel it.
+
+## Sender formation provider and accounting
+
+POSTCARD/CY_REPLY sources with canonical sender identity and SENDER_RECALLABLE
+provenance use a dedicated server setting: DEEPSEEK by default, LOCAL only by
+explicit owner selection, or OFF to retain work without inference. There is no
+provider fallback. All routes use the same canonical request, exact FM candidate
+references, parser, provenance rules and transactional apply/completion. DeepSeek
+uses the beta strict forced-tool encoding of the same decision schema; it does
+not own a second memory store. Its configured alias is deepseek-v4-flash; the
+actual returned model is recorded separately. Other formation/surfacing remains
+on its existing route.
+
+Every cloud attempt first reserves conservative cost in an independent ledger:
+the serialized request's UTF-8 byte length plus 4096 framing tokens, and the full
+260-output-token allowance. Defaults are concurrency 1, 20/100/1000 requests and
+GBP 0.05/0.25/2 per hour/day/month. The hour rolls; day/month use UTC calendar
+boundaries. Prices use conservative peak USD/M 0.30 uncached input, 0.006 cached
+input and 1.20 output, converted at GBP 0.79/USD. These are estimates, not invoices.
+The generous small-use allowance remains bounded during a backlog or viral event.
+Reply budgets are independent. Settings survive restart in SQL.
+
+Admission is unique per canonical queue claim. A lost admission acknowledgement
+cannot dispatch a second paid call for that claim. Unknown provider usage keeps
+its reservation; expiry releases concurrency but never retrospectively refunds
+uncertain cost. Settlement is idempotent. Decision/application results join the
+accounting row in the canonical completion transaction. Operational holds and
+failures use durable backoff, not the invalid-decision terminal counter. Completed,
+FAILED and quarantined jobs are not reset. Pending sources keep their original IDs.
+
+The existing inference panel separates REPLY and MEMORY caps, ranges and owner
+controls. Public output is aggregate only. No prompt, private source text or raw
+model response is added to the formation accounting ledger.
 
 The bounded recent-expression Zone B remains separate. It supplies immediate
 continuity; autobiography supplies selective longer-term continuity. If retrieval
@@ -158,8 +213,8 @@ These are engineering context and resource limits, not claims about cognition:
 - five formation-match candidates;
 - no fixed formation backlog cap; every unique source is retained durably;
 - four outward expressions per CY_EXPRESSION formation source;
-- one background memory model call at a time, with surfacing before formation and
-  postcard/reply sources before structured events and routine expressions;
+- one background memory model call at a time, with aged sender formation before
+  optional surfacing, then other formation;
 - eight server operations per request;
 - 20 public memory summaries per page;
 - 100 exact-person, 200 tag and 200 full-text pre-filter rows, with at most 500

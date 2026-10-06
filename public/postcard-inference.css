@@ -1,5 +1,8 @@
 /* Postcard inference stays inside the existing right-side instrument panel. */
 #postcard-inference { min-width: 0; color: var(--tel); font: 12px/1.45 var(--mono); overflow-wrap: anywhere; }
+#postcard-inference .pci-section { min-width: 0; }
+#postcard-inference .pci-section + .pci-section { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
+#postcard-inference .pci-heading { margin: 0 0 8px; font: inherit; font-weight: bold; letter-spacing: 0.08em; color: var(--tel-dim); }
 #postcard-inference .pci-state { margin: 0 0 8px; color: #e6b45e; }
 #postcard-inference .pci-route { margin: 0 0 8px; }
 #postcard-inference .pci-route small { display: block; color: var(--tel-dim); }

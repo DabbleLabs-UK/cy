@@ -74,6 +74,7 @@ import { restoreStartupSleepHistory } from './sleep-startup.js';
 import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
 import { PostcardInference, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
+import { MemoryFormationInference } from './memory-formation-inference.js';
 import { canonicalPostcardContext } from './postcard-context.js';
 import { loadPostcardSenderContinuity, loadPostcardEnrichment, postcardSenderMemoryItems,
   postcardMemoryDirective, postcardMemoryReadiness } from './postcard-memory.js';
@@ -717,6 +718,7 @@ async function main() {
   const deepseekKey = await loadDeepSeekKey(HERE);
   const providers = makeProviders(config, { deepseekKey });
   const postcardInference = new PostcardInference(config);
+  const senderFormationInference = new MemoryFormationInference(config);
   console.log(`[cy] providers: ollama ready; deepseek ${providers[DEEPSEEK].available() ? 'ready' : 'unavailable (no key file)'}`);
   let activeProviderId = OLLAMA;
   const activeProvider = () => providers[activeProviderId] || providers[OLLAMA];
@@ -2795,7 +2797,7 @@ async function main() {
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
     attempt = 'initial', admittedAwgSlot = false, format = null,
-    isEligible = null,
+    isEligible = null, providerOverride = null,
   }) {
     let startedAtMs = null;
     const waitTrace = new InferenceWaitTrace(purpose);
@@ -2821,7 +2823,7 @@ async function main() {
     }
     if (background) currentMemoryAbort = ac;
     else if (cancellationScope) generationCancellation.register(cancellationScope, ac, { purpose });
-    const provider = activeProvider();
+    const provider = providerOverride || activeProvider();
     let lease = null;
     let hostLease = null;
     let requestResult = 'error';
@@ -2873,6 +2875,11 @@ async function main() {
         outputChars = String(out.text || '').length;
         if (!out.ok) {
           requestResult = ac.signal.aborted ? 'aborted' : 'http-error';
+          // A failed transport is not an empty/invalid model decision. Keep it
+          // outside the sender formation model-invalid retry budget.
+          if (background && purpose === 'memory_formation' && !ac.signal.aborted) {
+            throw new Error(`memory formation provider HTTP ${Number(out.status) || 0}`);
+          }
           if (awgInReservedIdle && ac.signal.aborted) throw cancellationError(ac.signal);
           if (background && ac.signal.aborted) throw new DOMException('memory call aborted', 'AbortError');
           return returnMeta ? { ok: false, text: '', stats: out.stats || null, model: out.model || null } : '';
@@ -3121,6 +3128,9 @@ async function main() {
   autobiographicalMemory = new AutobiographicalMemoryRuntime({
     client,
     makeId: randomUUID,
+    senderFormationGenerate: ({ job, call, localGenerate }) => senderFormationInference.generate({
+      job, call, signal: call.signal, providers, localGenerate,
+    }),
     generate: (call) => rawGenerate({
       system: call.system,
       prompt: call.prompt,
@@ -3134,9 +3144,15 @@ async function main() {
       // is untouched.
       timeoutMs: call.background ? null : FOREGROUND_INFERENCE_TIMEOUT_MS,
       attempt: call.purpose || 'memory-background',
+      format: call.purpose === 'memory_formation' ? call.format || null : null,
+      // Sender LOCAL mode is explicit emergency local inference. Other memory
+      // consumers retain their existing provider selection.
+      providerOverride: call.senderFormationLocal ? providers[OLLAMA] : null,
     }),
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
-    canRunBackground: (kind) => inferPhase === 'idle'
+    canRunBackground: (kind) => kind === 'sender_formation'
+      ? !client.paused
+      : inferPhase === 'idle'
       && inferenceTempoPacer.remaining(Date.now(), client.tempo.speed) <= 0
       && backgroundTempoGate.canStart(Date.now())
       && (kind === 'surfacing' || (currentMode !== 'letter' && pendingPostcards.length === 0))

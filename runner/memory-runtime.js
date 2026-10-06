@@ -74,13 +74,15 @@ function isAbort(error) {
 
 export class AutobiographicalMemoryRuntime {
   constructor({
-    client, generate, makeId, now = () => Date.now(), contextBroker = null,
+    client, generate, senderFormationGenerate = null, makeId, now = () => Date.now(), contextBroker = null,
     canRunBackground = () => true, providerInfo = () => ({}),
     backgroundWaitMs = () => 250,
     backgroundTimeoutMs = BACKGROUND_TIMEOUT_MS,
   }) {
     this.client = client;
     this.generate = generate;
+    this.senderFormationGenerate = senderFormationGenerate;
+    this.remoteFormationActive = false;
     this.makeId = makeId;
     this.now = now;
     this.contextBroker = contextBroker;
@@ -133,6 +135,9 @@ export class AutobiographicalMemoryRuntime {
   }
 
   interruptBackground(reason = 'foreground') {
+    // Remote sender extraction does not occupy the local model. Foreground
+    // prose must not repeatedly cancel it merely to acquire that local slot.
+    if (this.remoteFormationActive && !['shutdown', 'pause'].includes(reason)) return;
     this.interruptReason = reason;
     if (this.activeAbort) this.activeAbort.abort();
   }
@@ -368,12 +373,12 @@ export class AutobiographicalMemoryRuntime {
     }
   }
 
-  async backgroundGenerate(call) {
+  async backgroundGenerate(call, generate = this.generate) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.backgroundTimeoutMs);
     this.activeAbort = controller;
     try {
-      return await this.generate({ ...call, signal: controller.signal, background: true });
+      return await generate({ ...call, signal: controller.signal, background: true });
     } finally {
       clearTimeout(timer);
       if (this.activeAbort === controller) this.activeAbort = null;
@@ -497,7 +502,8 @@ export class AutobiographicalMemoryRuntime {
   async processFormation(job, queueDepthBefore = 0) {
     const source = sanitizeCyExpressionSource(job.source || {});
     const started = this.now();
-    const provider = this.providerInfo() || {};
+    let provider = this.providerInfo() || {};
+    let formationRequestId = null;
     if (!source) {
       await this.client.finishMemorySource({
         job_id: Number(job.id), claim_token: job.claim_token,
@@ -514,6 +520,7 @@ export class AutobiographicalMemoryRuntime {
     let memoryId = null;
     let error = null;
     let operations = [];
+    let rejectionCode = null;
     try {
       const response = await this.client.queryMemories({
         query: { text: source.text || '', tags: source.tags || [], location: source.location || null },
@@ -529,13 +536,46 @@ export class AutobiographicalMemoryRuntime {
       }, null);
       const request = buildFormationRequest(source, candidates, grounded);
       call = request;
-      const raw = await this.backgroundGenerate(request);
+      let raw;
+      const senderScoped = ['POSTCARD', 'CY_REPLY'].includes(source.sourceType)
+        && source.subjectVisitorId && source.sourceVisibility === 'SENDER_RECALLABLE';
+      if (senderScoped && this.senderFormationGenerate) {
+        // Retrieval may have awaited HTTP before there was an abort controller.
+        // A pause/shutdown during that wait must not start a new paid request.
+        if (['pause', 'shutdown'].includes(this.interruptReason)
+            || !this.canRunBackground('sender_formation')) {
+          throw Object.assign(new Error('sender formation interrupted before dispatch'), { name: 'AbortError' });
+        }
+        this.remoteFormationActive = true;
+        try {
+          const result = await this.backgroundGenerate(request, (call) => this.senderFormationGenerate({
+            job, call,
+            localGenerate: (localCall) => {
+              this.remoteFormationActive = false;
+              // The server, not the cached mode hint, chooses LOCAL. Recheck
+              // local pacing after admission (including startup/mode changes).
+              if (!this.canRunBackground('sender_formation_local')) {
+                throw Object.assign(new Error('local formation slot unavailable'), { memoryFailureReason: 'local_busy' });
+              }
+              return this.generate(localCall);
+            },
+          }));
+          formationRequestId = result.requestId || null;
+          provider = { id: result.provider, model: result.actualModel || result.configuredModel };
+          raw = result.text;
+        } finally {
+          this.remoteFormationActive = false;
+        }
+      } else raw = await this.backgroundGenerate(request);
       const operation = parseFormationResponse(raw, {
         source,
         existing: request.candidates.map((candidate) => candidates.find((memory) => memory.id === candidate.id)).filter(Boolean),
         makeId: this.makeId,
       });
-      if (!operation.valid) category = 'INVALID';
+      if (!operation.valid) {
+        category = 'INVALID';
+        rejectionCode = operation.rejectionCode || 'SCHEMA';
+      }
       else if (operation.decision === 'NOTHING') category = 'NOTHING';
       else {
         category = operation.decision === 'ARCHIVE' ? 'RESOLVE' : operation.decision;
@@ -543,9 +583,14 @@ export class AutobiographicalMemoryRuntime {
         operations = [operation];
       }
     } catch (caught) {
-      error = errorText(caught);
+      formationRequestId = caught?.requestId || formationRequestId;
+      if (caught?.mode) provider = { id: caught.provider || null, model: caught.actualModel || caught.configuredModel || null };
+      // Provider adapters expose fixed, content-free failure classes. Never
+      // persist a remote error body or classify access/cap failures as INVALID.
+      error = caught?.memoryFailureReason || errorText(caught);
       if (/409|version conflict/i.test(error)) category = 'CONFLICT';
-      else category = isAbort(caught) ? (this.interruptReason ? 'PREEMPTED' : 'TIMEOUT') : 'ERROR';
+      else category = (isAbort(caught) || caught?.memoryFailureReason === 'cancelled') ? (this.interruptReason ? 'PREEMPTED' : 'TIMEOUT')
+        : caught?.memoryFailureReason === 'timeout' ? 'TIMEOUT' : 'ERROR';
     }
     const completion = {
       job_id: Number(job.id), claim_token: job.claim_token,
@@ -554,6 +599,8 @@ export class AutobiographicalMemoryRuntime {
       prompt_chars: promptChars(call), latency_ms: this.now() - started,
       queue_depth_before: Number(queueDepthBefore) || 0,
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
+      rejection_code: rejectionCode,
+      ...(formationRequestId ? { formation_request_id: formationRequestId } : {}),
     };
     let completed;
     try {
@@ -567,6 +614,8 @@ export class AutobiographicalMemoryRuntime {
         : /422/i.test(failure) ? 'INVALID' : 'ERROR';
       completed = await this.client.finishMemorySource({
         ...completion, result_category: category, operations: [], memory_id: null, error: failure,
+        rejection_code: category === 'CONFLICT' ? 'APPLICATION_CONFLICT'
+          : category === 'INVALID' ? 'PRIVACY_PROVENANCE' : null,
       });
     }
     category = completed?.result_category || category;
