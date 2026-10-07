@@ -4,7 +4,91 @@ const MAX_BARS = 120;
 const number = value => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const money = value => `GBP ${number(value).toFixed(4)}`;
+export function readableCost(value) {
+  const amount = number(value);
+  if (amount > 0 && amount < 0.0001) return '&lt;0.01p';
+  return amount > 0 && amount < 1 ? `${(amount * 100).toFixed(2)}p` : `&pound;${amount.toFixed(2)}`;
+}
 const count = value => Math.round(number(value)).toLocaleString('en-GB');
+const rangeLabel = range => ({ '1H': 'Last hour', '24H': 'Last 24 hours', '30D': 'Last 30 days', ALL: 'All time' }[range] || 'Last 24 hours');
+const metric = (label, value) => `<div><dt>${escape(label)}</dt><dd>${value}</dd></div>`;
+const row = (label, value) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`;
+
+export function routeLabel(settings = {}, kind = 'reply') {
+  if (kind === 'memory') return { OFF: 'Off - sources stay queued', LOCAL: 'Local model', DEEPSEEK: 'DeepSeek only' }[settings.mode] || 'Route unavailable';
+  if (!settings.enabled || settings.route === 'LOCAL') return 'Local model';
+  return settings.route === 'AUTO' ? 'DeepSeek with local fallback' : 'DeepSeek only';
+}
+
+export function statusLabel(data, kind = 'reply') {
+  const settings = data.settings || {};
+  // These modes replace historical status on the server. Do not invent a past call.
+  if (kind === 'memory' && settings.mode === 'OFF') return 'Memory processing paused; sources stay queued.';
+  if (kind === 'memory' && settings.mode === 'LOCAL') return 'Local memory processing selected.';
+  if (kind === 'reply' && (!settings.enabled || settings.route === 'LOCAL')) return 'Cloud replies disabled; replies use the local model.';
+  if (!data.status?.reason || data.status.reason === 'no_requests') return 'No recorded request';
+  return `Last recorded: ${inferenceStatus(data, kind)}`;
+}
+
+// Budget windows are cloud-only and independent of the selected history range.
+// Unknown cost is already included in estimated_gbp; never add it a second time.
+export function budgetMarkup(settings = {}, windows = {}) {
+  return `<table class="pci-budget"><caption>Cloud limits</caption><thead><tr><th scope="col">Window</th><th scope="col">Spend / cap</th><th scope="col">Calls / cap</th></tr></thead><tbody>${[
+    ['hour', 'Rolling hour'], ['day', 'Today UTC'], ['month', 'Month UTC'],
+  ].map(([key, label]) => {
+    const w = windows[key] || {}, cap = number(settings[`gbp_${key}`]), used = number(w.estimated_gbp);
+    const calls = number(w.requests), callCap = number(settings[`requests_${key}`]);
+    const limited = cap === 0 || used >= cap || (callCap > 0 && calls >= callCap);
+    return `<tr${limited ? ' class="pci-limit"' : ''}><th scope="row">${label}</th><td>${money(used)}<small>/ ${money(cap)}${cap === 0 ? ' (blocked)' : ''}</small>${number(w.uncertain_gbp) ? `<small>${money(w.uncertain_gbp)} unresolved</small>` : ''}</td><td>${count(calls)}<small>/ ${count(callCap)}</small></td></tr>`;
+  }).join('')}</tbody></table><p class="pci-note">Separate cloud budgets for replies and memory. Unresolved cost is included. A new call must fit its full reservation.</p>`;
+}
+
+export function summaryMarkup(data, kind, range) {
+  const t = data.totals || {}, memory = kind === 'memory';
+  const decisions = number(t.formed) + number(t.updated) + number(t.resolved) + number(t.nothing);
+  return `<p class="pci-period">${escape(rangeLabel(range))}</p><dl class="pci-metrics">${metric(memory ? 'Decisions completed' : 'Replies published', count(memory ? decisions : t.published))}${metric('Est. cloud spend', readableCost(t.estimated_gbp))}</dl>`;
+}
+
+export function attentionMarkup(data, kind, range) {
+  const t = data.totals || {}, items = [];
+  const settings = data.settings || {};
+  const cloud = kind === 'memory' ? settings.mode === 'DEEPSEEK' : settings.enabled && settings.route !== 'LOCAL';
+  const limits = cloud ? [['hour', 'hour'], ['day', 'day'], ['month', 'month']].filter(([key]) => {
+    const w = data.windows?.[key];
+    return w && ((settings[`gbp_${key}`] != null && number(w.estimated_gbp) >= number(settings[`gbp_${key}`]))
+      || (number(settings[`requests_${key}`]) > 0 && number(w.requests) >= number(settings[`requests_${key}`])));
+  }).map(([, label]) => label) : [];
+  if (limits.length) items.push(`<p class="pci-alert">Cloud limit reached: ${limits.join(', ')}</p>`);
+  if (kind === 'memory' && number(data.pending_count)) {
+    const age = data.oldest_pending_age_seconds;
+    const minutes = Math.ceil(number(age) / 60);
+    const oldest = age == null ? '' : minutes < 60 ? `${minutes}m` : minutes < 1440 ? `${Math.floor(minutes / 60)}h` : `${Math.floor(minutes / 1440)}d`;
+    items.push(`<p class="pci-backlog"><strong>${count(data.pending_count)} sources waiting</strong>${oldest ? ` - oldest ${oldest}` : ''}</p>`);
+  }
+  const issues = [[t.failures, 'failed'], [kind === 'memory' ? t.invalid : t.validation_failures, 'rejected'], [t.held, 'held'], [t.application_conflicts, 'update conflicts']]
+    .filter(([n]) => number(n)).map(([n, label]) => `${count(n)} ${label}`);
+  if (issues.length) items.push(`<p class="pci-alert">${escape(rangeLabel(range))}: ${issues.join(' / ')}</p>`);
+  if (number(t.uncertain_gbp)) items.push(`<p class="pci-alert">${money(t.uncertain_gbp)} unresolved cost, included above</p>`);
+  return items.join('');
+}
+
+export function detailMarkup(data, kind, range) {
+  const t = data.totals || {}, s = data.status || {}, memory = kind === 'memory';
+  const outcomes = memory
+    ? [['New memories', t.formed], ['Updated memories', t.updated], ['Topics resolved', t.resolved], ['No memory needed', t.nothing], ['Failed requests', t.failures], ['Invalid decisions', t.invalid], ['Held requests', t.held], ['Update conflicts', t.application_conflicts]]
+    : [['Replies published', t.published], ['Local fallbacks', t.fallbacks], ['Failed requests', t.failures], ['Rejected replies', t.validation_failures]];
+  return `<h4>${escape(rangeLabel(range))} - outcomes</h4><dl class="pci-stats">${row('Estimated cloud spend', money(t.estimated_gbp))}${outcomes.map(([label, n]) => row(label, count(n))).join('')}</dl>
+    <h4>Request details</h4><dl class="pci-stats">${[
+      ...(memory ? [['Sources waiting now', count(data.pending_count)], ['Oldest waiting source', data.oldest_pending_age_seconds == null ? 'None' : `${count(Math.ceil(number(data.oldest_pending_age_seconds) / 60))}m`]] : []),
+      ['Total requests', count(t.requests)], ['Cloud requests', count(t.cloud_requests)], ['Local requests', count(t.local_requests)],
+      ['Input tokens', count(t.input_tokens)], ['Output tokens', count(t.output_tokens)], ['Cached input', count(t.cached_tokens)], ['Uncached input', count(t.uncached_tokens)],
+      ['Mean request time', number(t.mean_latency_ms) ? `${(number(t.mean_latency_ms) / 1000).toFixed(1)}s` : 'No completed requests'],
+      ['Configured cloud model', data.pricing?.model || 'Unavailable'],
+      ['Reported provider', s.provider || 'No recorded request'],
+      [memory ? 'Last actual model' : 'Reported model', (memory ? s.actual_model : s.model) || 'No recorded request'],
+    ].map(([label, value]) => row(label, value)).join('')}</dl>
+    <p class="pci-note">Costs are token-based estimates, not invoices. USD per million tokens: ${escape(data.pricing?.input_uncached_per_million ?? '--')} input, ${escape(data.pricing?.input_cached_per_million ?? '--')} cached, ${escape(data.pricing?.output_per_million ?? '--')} output. GBP conversion: ${escape(data.pricing?.usd_to_gbp ?? '--')}.</p>`;
+}
 
 export function costBuckets(source) {
   const buckets = new Map();
@@ -115,7 +199,11 @@ export function settingsMarkup(settings, kind = 'reply') {
   const note = memory
     ? 'Memory formation has its own budget. DEEPSEEK holds queued sources when unavailable; it does not fall back locally. LOCAL explicitly uses local inference. OFF leaves sources queued.'
     : 'AUTO can fall back locally. DEEPSEEK holds the postcard if cloud inference is unavailable. Cloud off always uses local inference.';
-  return `<details class="pci-settings"><summary>${memory ? 'Memory' : 'Reply'} inference settings</summary><form class="pci-form">${route}${capFields.map(([key, label, min, max, step]) => `<label>${memory && key === 'concurrency' ? 'Concurrent memory requests' : label}<input name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${escape(settings[key])}"></label>`).join('')}<p class="pci-note">${note}</p><button type="submit">Save ${memory ? 'memory' : 'reply'} settings</button></form></details>`;
+  const input = (key, label) => {
+    const [, , min, max, step] = capFields.find(field => field[0] === key);
+    return `<input aria-label="${label}" name="${key}" type="number" min="${min}" max="${max}" step="${step}" required value="${escape(settings[key])}">`;
+  };
+  return `<details class="pci-settings"><summary>${memory ? 'Memory' : 'Reply'} settings</summary><form class="pci-form">${route}<label>Concurrent cloud calls${input('concurrency', 'Concurrent cloud calls')}</label><table class="pci-budget"><caption>Cloud limits</caption><thead><tr><th scope="col">Window</th><th scope="col">GBP cap</th><th scope="col">Call cap</th></tr></thead><tbody>${[['hour', 'Hour'], ['day', 'Day (UTC)'], ['month', 'Month (UTC)']].map(([key, label]) => `<tr><th scope="row">${label}</th><td>${input(`gbp_${key}`, `${label} GBP cap`)}</td><td>${input(`requests_${key}`, `${label} request cap`)}</td></tr>`).join('')}</tbody></table><p class="pci-note">${note}</p><button type="submit">Save ${memory ? 'memory' : 'reply'} settings</button></form></details>`;
 }
 
 export class PostcardInference {
@@ -127,7 +215,7 @@ export class PostcardInference {
     this.range = '24H';
     this.serial = 0;
     this.canAdmin = false;
-    this.root.innerHTML = `<p class="pci-state" role="status" aria-live="polite">Loading inference accounting...</p><div class="pci-current"></div><nav class="pci-ranges" aria-label="Inference history range">${INFERENCE_RANGES.map(range => `<button type="button" data-range="${range}" aria-pressed="${range === this.range}">${range}</button>`).join('')}</nav><div class="pci-graph"></div><div class="pci-totals"></div><div class="pci-admin"></div><p class="pci-message" role="status" aria-live="polite"></p>`;
+    this.root.innerHTML = `<p class="pci-route"></p><p class="pci-state" role="status" aria-live="polite">Loading inference accounting...</p><div class="pci-current"></div><div class="pci-attention"></div><details class="pci-details"><summary>Usage &amp; limits</summary><div class="pci-budgets"></div><h4>History range</h4><nav class="pci-ranges" aria-label="Inference history range">${INFERENCE_RANGES.map(range => `<button type="button" data-range="${range}" aria-pressed="${range === this.range}">${range}</button>`).join('')}</nav><div class="pci-graph"></div><div class="pci-totals"></div></details><div class="pci-admin"></div><p class="pci-message" role="status" aria-live="polite"></p>`;
     this.root.querySelectorAll('[data-range]').forEach(button => button.addEventListener('click', () => {
       if (this.saving) return;
       this.range = button.dataset.range;
@@ -148,35 +236,25 @@ export class PostcardInference {
       if (!data.ok) throw new Error('unavailable');
       if (serial === this.serial) this.render(data);
     } catch {
-      if (serial === this.serial) this.root.querySelector('.pci-state').textContent = 'Inference accounting unavailable; displayed figures may be out of date.';
+      if (serial === this.serial) {
+        this.root.querySelector('.pci-state').textContent = 'Accounting unavailable - figures may be out of date.';
+        this.root.querySelector('.pci-state').setAttribute('data-stale', 'true');
+      }
     }
   }
 
   render(data, replaceSettings = false) {
-    const totals = data.totals || {};
     const settings = data.settings || {};
-    const status = data.status || {};
-    const windows = data.windows || {};
     this.canAdmin = data.can_admin === true;
-    this.root.querySelector('.pci-state').textContent = inferenceStatus(data, this.kind);
+    this.root.querySelector('.pci-state').textContent = statusLabel(data, this.kind);
+    this.root.querySelector('.pci-state').removeAttribute('data-stale');
+    this.root.querySelector('.pci-route').textContent = routeLabel(settings, this.kind);
     this.root.querySelectorAll('[data-range]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.range === this.range)));
-    const memory = this.kind === 'memory';
-    const route = memory
-      ? `<p class="pci-route">${escape(settings.mode || 'Unavailable')} / ${escape(status.provider || 'awaiting selection')}<small>Configured: ${escape(status.configured_model || data.pricing?.model || 'Model unavailable')}</small><small>Last actual model: ${escape(status.actual_model || 'No recorded request')}</small></p>`
-      : `<p class="pci-route">${escape(settings.route || 'LOCAL')} / ${escape(status.provider || 'awaiting selection')}<small>${status.provider ? '' : 'Configured cloud: '}${escape(status.model || data.pricing?.model || 'Model unavailable')}</small></p>`;
-    this.root.querySelector('.pci-current').innerHTML = `${route}<p class="pci-note">${memory ? 'Memory formation' : 'Reply'} cloud budget only; independent caps. Hour is rolling; day and month use UTC.</p><dl class="pci-stats">${[['hour', 'Last hour', 'gbp_hour', 'requests_hour'], ['day', 'Today (UTC)', 'gbp_day', 'requests_day'], ['month', 'Month (UTC)', 'gbp_month', 'requests_month']].map(([key, label, costCap, requestCap]) => {
-      const window = windows[key] || {};
-      const committed = number(window.estimated_gbp);
-      const cap = number(settings[costCap]);
-      const used = cap > 0 ? `${Math.round(committed / cap * 100)}%` : 'Blocked';
-      return `<div><dt>${label}</dt><dd>${money(window.estimated_gbp)}</dd><dd class="pci-note">${used} of ${money(cap)} cap; ${count(window.requests)} / ${count(settings[requestCap])} requests${number(window.uncertain_gbp) ? `; ${money(window.uncertain_gbp)} unresolved` : ''}</dd></div>`;
-    }).join('')}</dl>`;
+    this.root.querySelector('.pci-current').innerHTML = summaryMarkup(data, this.kind, this.range);
+    this.root.querySelector('.pci-attention').innerHTML = attentionMarkup(data, this.kind, this.range);
+    this.root.querySelector('.pci-budgets').innerHTML = budgetMarkup(settings, data.windows);
     this.root.querySelector('.pci-graph').innerHTML = costChart(data.buckets, data);
-    const latency = number(totals.mean_latency_ms);
-    const outcomes = memory
-      ? `<div><dt>${escape(this.range)} completed decisions</dt><dd>${count(number(totals.formed) + number(totals.updated) + number(totals.resolved) + number(totals.nothing))}</dd></div><div><dt>Create / update / resolve / nothing</dt><dd>${count(totals.formed)} / ${count(totals.updated)} / ${count(totals.resolved)} / ${count(totals.nothing)}</dd></div><div><dt>Failed / invalid / held</dt><dd>${count(totals.failures)} / ${count(totals.invalid)} / ${count(totals.held)}</dd></div><div><dt>Pending sources / oldest age</dt><dd>${count(data.pending_count)} / ${data.oldest_pending_age_seconds == null ? 'None' : `${count(Math.ceil(number(data.oldest_pending_age_seconds) / 60))}m`}</dd></div>`
-      : `<div><dt>${escape(this.range)} replies published</dt><dd>${count(totals.published)}</dd></div><div><dt>Fallbacks / failed / rejected</dt><dd>${count(totals.fallbacks)} / ${count(totals.failures)} / ${count(totals.validation_failures)}</dd></div>`;
-    this.root.querySelector('.pci-totals').innerHTML = `<dl class="pci-stats">${outcomes}<div><dt>${escape(this.range)} estimated spend</dt><dd>${money(totals.estimated_gbp)}</dd>${number(totals.uncertain_gbp) ? `<dd class="pci-note">Includes ${money(totals.uncertain_gbp)} unresolved, reserved against caps.</dd>` : ''}</div><div><dt>Requests / cloud / local</dt><dd>${count(totals.requests)} / ${count(totals.cloud_requests)} / ${count(totals.local_requests)}</dd></div><div><dt>Tokens in / out</dt><dd>${count(totals.input_tokens)} / ${count(totals.output_tokens)}</dd></div><div><dt>Input cached / uncached</dt><dd>${count(totals.cached_tokens)} / ${count(totals.uncached_tokens)}</dd></div><div><dt>Mean request latency</dt><dd>${latency ? `${(latency / 1000).toFixed(1)}s` : 'No completed requests'}</dd></div></dl><p class="pci-note">Costs estimated from recorded token usage. Pricing: USD ${escape(data.pricing?.input_uncached_per_million ?? '--')} input / ${escape(data.pricing?.input_cached_per_million ?? '--')} cached / ${escape(data.pricing?.output_per_million ?? '--')} output per million tokens; GBP conversion ${escape(data.pricing?.usd_to_gbp ?? '--')}.</p>`;
+    this.root.querySelector('.pci-totals').innerHTML = detailMarkup(data, this.kind, this.range);
     const admin = this.root.querySelector('.pci-admin');
     if (!this.canAdmin) admin.innerHTML = '';
     else if (replaceSettings || !admin.querySelector('form')) {
