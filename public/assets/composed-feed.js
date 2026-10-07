@@ -348,7 +348,9 @@ export class ComposedFeed {
     const p = payload || {};
     const key = String(p.sleep_period_id || p.dream_id || p.id || ('dream-' + (timestampMs(ts) ?? this.dreamFields.size)));
     let field = this.dreamFields.get(key);
-    if (field) return field;
+    // A sleep period may resume after a postcard, journal or other visible item.
+    // Only its contiguous tail may grow; earlier segments stay where they ended.
+    if (field && this.flow.children[this.flow.children.length - 1] === field.block) return field;
     const block = document.createElement('article');
     block.className = 'cy-dream-field';
     block.dataset.kind = 'dream';
@@ -402,9 +404,11 @@ export class ComposedFeed {
       const field = this._dreamField(drawing, ts);
       const drawingId = String(drawing.id || field.key);
       let record = this.dreamDrawings.get(drawingId);
-      if (!record) {
+      if (!record || record.field !== field) {
         const svg = makeDreamSvg('abstract dream drawing');
         field.sketch.appendChild(svg);
+        // Keep earlier marks frozen in their segment. This segment owns only
+        // the subsequent stroke events, not a second copy of the old drawing.
         record = { field, svg, strokes: [] };
         this.dreamDrawings.set(drawingId, record);
       }

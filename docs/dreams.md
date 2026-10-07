@@ -27,7 +27,10 @@ fact, enter the prison incident ledger, or update grounded/legacy Soma state.
 Its only durable cognitive route is provenance-bearing autobiographical memory
 formation as subjective expression.
 
-The public renderer uses one dark dream field per sleep period. Fragments remain
+The public renderer uses one dark dream field per contiguous timeline segment
+within a sleep period. An intervening timeline item closes that visual segment;
+later dream prose and stroke events start a new field at their chronological
+position, without changing or copying the earlier field. Fragments remain
 separate and receive deterministic, non-overlapping layout values derived from
 event identity and fragment index. The abstract drawing is accumulated as a
 lightweight SVG inside the same field. A 4.8-second CSS fade is available only on
