@@ -93,6 +93,61 @@ plain.handle({
 assert.equal(col.children.length, 5, 'plain dream drawing integrates into the same block');
 assert.equal(dream.children[1].children[0].children.length, 1, 'plain dream field owns the drawing SVG');
 
+for (const bootstrap of [true, false]) {
+  for (const boundary of [
+    { kind: 'postcard_in', payload: { from: 'Reader', body: 'a postcard between dreams' }, blockKind: 'postcard-in' },
+    { kind: 'event', payload: { name: 'cell_search' }, blockKind: 'event' },
+  ]) {
+    plain.reset();
+    plain.beginDay('2026-09-08', '2026-09-08');
+    const context = `${bootstrap ? 'historical' : 'live'} ${boundary.kind} boundary`;
+    const emitDream = (id, fragment, ts) => plain.handle({
+      kind: 'dream', ts, payload: { id, sleep_period_id: 'one-sleep', fragments: [fragment] },
+    }, bootstrap);
+    const emitStroke = (seq, x, ts) => plain.handle({
+      kind: 'draw', ts, payload: {
+        id: 'one-drawing', dream: true, sleep_period_id: 'one-sleep',
+        strokes: [{ t: 'C', x, y: 50, r: 5 }], seq, total: 4,
+      },
+    }, bootstrap);
+    const svgFor = (block) => block.children[1].children[0].children[0];
+    const fragmentsFor = (block) => block.children[1].children[1].children.map((fragment) => fragment.textContent);
+    const snapshotSvg = (svg) => ({ viewBox: svg.viewBox, paths: svg.children.map((path) => path.d) });
+
+    emitDream('before-boundary', 'the first fragment', '2026-09-08 23:10:00');
+    emitStroke(0, 15, '2026-09-08 23:11:00');
+    emitStroke(1, 30, '2026-09-08 23:12:00');
+    assert.equal(col.children.length, 2, `${context}: contiguous dream events share one field`);
+    const firstDream = col.children[1];
+    const firstSvg = svgFor(firstDream);
+    assert.equal(firstSvg.children.length, 2, `${context}: contiguous drawing chunks accumulate`);
+    const firstSnapshot = snapshotSvg(firstSvg);
+
+    plain.handle({ kind: boundary.kind, payload: boundary.payload, ts: '2026-09-08 23:13:00' }, bootstrap);
+    const boundaryBlock = col.children[2];
+    emitDream('after-boundary', 'the second fragment', '2026-09-08 23:14:00');
+    emitStroke(2, 65, '2026-09-08 23:15:00');
+    emitStroke(3, 80, '2026-09-08 23:16:00');
+    const secondDream = col.children[3];
+
+    assert.deepEqual(col.children.slice(1).map((block) => block.dataset.kind),
+      ['dream', boundary.blockKind, 'dream'], `${context}: dream segments preserve event order without duplicates`);
+    assert.equal(col.children[1], firstDream, `${context}: the first dream stays in place`);
+    assert.equal(col.children[2], boundaryBlock, `${context}: the boundary event stays in place`);
+    assert.deepEqual(fragmentsFor(firstDream), ['the first fragment'], `${context}: earlier fragments remain frozen`);
+    assert.deepEqual(fragmentsFor(secondDream), ['the second fragment'], `${context}: later fragments stay after the boundary`);
+    assert.equal(svgFor(firstDream), firstSvg, `${context}: earlier drawing keeps its original SVG`);
+    assert.deepEqual(snapshotSvg(firstSvg), firstSnapshot, `${context}: later strokes cannot redraw the earlier segment`);
+    const secondSvg = svgFor(secondDream);
+    assert.ok(secondSvg && secondSvg !== firstSvg, `${context}: later strokes have their own drawing SVG`);
+    assert.equal(secondSvg.children.length, 2, `${context}: the later drawing contains only its own stroke chunks`);
+    const allPaths = [...firstSvg.children, ...secondSvg.children].map((path) => path.d);
+    assert.equal(new Set(allPaths).size, 4, `${context}: each distinct stroke appears exactly once`);
+    assert.match(secondDream.children[0].children[0].textContent, /^23:14:00 \(/,
+      `${context}: the new dream segment starts at its own event time`);
+  }
+}
+
 plain.reset();
 plain.beginDay('2026-09-09', '2026-09-09');
 plain.handle({ kind: 'event', ts: '2026-09-09 19:00:00', payload: { name: 'no_eggs' } }, true);

@@ -26,13 +26,33 @@ function makeEl(tag) {
     },
     set className(v) { el._className = String(v); el._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
     get className() { return el._className || ''; },
-    appendChild(c) { c.parentNode = el; el.children.push(c); return c; },
-    removeChild(c) { const i = el.children.indexOf(c); if (i >= 0) el.children.splice(i, 1); return c; },
+    appendChild(c) {
+      if (c.parentNode) c.parentNode.removeChild(c);
+      c.parentNode = el;
+      el.children.push(c);
+      return c;
+    },
+    removeChild(c) {
+      const i = el.children.indexOf(c);
+      if (i >= 0) { el.children.splice(i, 1); c.parentNode = null; }
+      return c;
+    },
     get firstChild() { return el.children[0] || null; },
+    get lastElementChild() { return el.children[el.children.length - 1] || null; },
+    remove() { if (el.parentNode) el.parentNode.removeChild(el); },
     addEventListener(type, fn) { (el._listeners[type] ||= []).push(fn); },
+    removeEventListener(type, fn) { el._listeners[type] = (el._listeners[type] || []).filter((listener) => listener !== fn); },
     dispatchEvent(event) { for (const fn of el._listeners[event.type] || []) fn(event); },
     setAttribute(name, value) { el[name] = String(value); },
-    set textContent(v) { el._text = String(v); if (v === '') el.children = []; },
+    getAttribute(name) { return el[name] ?? null; },
+    removeAttribute(name) { delete el[name]; },
+    hasAttribute(name) { return name in el; },
+    querySelectorAll() { return []; },
+    set textContent(v) {
+      el._text = String(v);
+      for (const child of el.children) child.parentNode = null;
+      el.children = [];
+    },
     get textContent() { return el._text; },
   };
   return el;
@@ -42,9 +62,13 @@ globalThis.document = {
   createElement: (tag) => makeEl(tag),
   createElementNS: (_ns, tag) => makeEl(tag),
   createTextNode: (value) => { const node = makeEl('#text'); node.textContent = value; return node; },
+  addEventListener() {},
+  removeEventListener() {},
 };
+globalThis.window = { addEventListener() {}, removeEventListener() {}, getSelection: () => null };
 
 const { ComposedFeed, HandwritingLane } = await import('../public/assets/composed-feed.js');
+const { Postcards } = await import('../public/assets/postcard.js');
 
 const lane = new HandwritingLane();
 let releaseFirst;
@@ -200,6 +224,234 @@ dreamFeed.event('lights on', '', '2026-09-09 06:30:00', 'prison');
 assert.equal(dreamBlock._classes.has('is-live'), false, 'a completed dream has no live animation class');
 assert.ok([...dreamFragments.children].every((fragment) => !fragment._classes.has('is-new')), 'completed fragments are static');
 assert.equal(dreamFeed.pens.length, 0, 'dream text and drawings create no Pen renderer resources');
+
+// The reported event IDs and timestamps are retained here. Text is
+// synthetic so the regression depends only on placement, not private messages.
+const interruptedDreamHistory = [
+  { id: 2252008, type: 'dream', ts: '2026-10-07 01:09:00.050', payload: {
+    id: 'dream-2252008', sleep_period_id: 'sleep-2026-10-06', fragments: ['before the postcard'],
+  } },
+  { id: 2252103, type: 'postcard_reply_begin', ts: '2026-10-07 01:12:15.386', payload: {
+    id: 67, from: 'regression sender',
+  } },
+  { id: 2252117, type: 'postcard_out', ts: '2026-10-07 01:12:17.361', payload: {
+    id: 67, to: 'regression sender', body: 'reply between dream segments',
+  } },
+  { id: 2252274, type: 'dream', ts: '2026-10-07 01:17:33.009', payload: {
+    id: 'dream-2252274', sleep_period_id: 'sleep-2026-10-06', fragments: ['after the postcard at 01:17'],
+  } },
+  { id: 2252551, type: 'dream', ts: '2026-10-07 01:27:08.104', payload: {
+    id: 'dream-2252551', sleep_period_id: 'sleep-2026-10-06', fragments: ['after the postcard at 01:27'],
+  } },
+  { id: 2253159, type: 'dream', ts: '2026-10-07 01:48:15.988', payload: {
+    id: 'dream-2253159', sleep_period_id: 'sleep-2026-10-06', fragments: ['after the postcard at 01:48'],
+  } },
+];
+
+function dreamFragmentsIn(block) {
+  return block.children[1].children[1].children;
+}
+
+function snapshotNode(node) {
+  return {
+    tag: node.tag,
+    text: node.textContent,
+    style: Object.fromEntries(Object.entries(node.style).filter(([, value]) => typeof value !== 'function')),
+    viewBox: node.getAttribute('viewBox'),
+    path: node.getAttribute('d'),
+    children: node.children.map(snapshotNode),
+  };
+}
+
+function assertUniqueTree(node, seen = new Set()) {
+  assert.equal(seen.has(node), false, 'a chronology node occurs exactly once in the DOM');
+  seen.add(node);
+  for (const child of node.children) {
+    assert.equal(child.parentNode, node, 'a chronology child retains its actual parent');
+    assertUniqueTree(child, seen);
+  }
+}
+
+function newDreamChronology(instant) {
+  const renderer = new ComposedFeed(makeEl('div'), { chars: [] });
+  const cards = new Postcards(renderer.contentRoot(), { chars: [] }, {
+    inline: true, lane: renderer.animationLane(),
+  });
+  renderer.setInstant(instant);
+  cards.setInstant(instant);
+  return { renderer, cards, instant };
+}
+
+function dispatchDreamHistory(view, events) {
+  const { renderer, cards, instant } = view;
+  for (const event of events) {
+    const payload = event.payload;
+    if (event.type === 'dream') {
+      cards.finishAnimations();
+      renderer.dream(payload, event.ts, !instant);
+    } else if (event.type === 'draw') {
+      cards.finishAnimations();
+      renderer.draw(payload, event.ts, !instant);
+    } else if (event.type === 'postcard_reply_begin') {
+      renderer.finishAnimations();
+      renderer.closeEntry(event.ts);
+      cards.begin(payload);
+    } else if (event.type === 'postcard_out') {
+      cards.reply(payload.body, payload);
+      cards.settle();
+    } else {
+      assert.fail('unhandled regression event: ' + event.type);
+    }
+  }
+}
+
+function chronologySnapshot(view) {
+  return view.renderer.flow.children.map((block) => {
+    if (block.dataset.kind === 'dream') {
+      return {
+        kind: 'dream', sleepPeriod: block.dataset.dreamId,
+        time: block.children[0].children[0].textContent.slice(0, 8),
+        events: dreamFragmentsIn(block).map((fragment) => fragment.dataset.eventId),
+        canvas: snapshotNode(block.children[1]),
+      };
+    }
+    const card = view.cards.cards.find((item) => item.el === block);
+    assert.ok(card, 'each non-dream item is the actual inline postcard');
+    return { kind: 'postcard', id: card.id, body: card.msg.textContent };
+  });
+}
+
+const interruptedViews = [];
+for (const instant of [false, true]) {
+  const view = newDreamChronology(instant);
+  const { renderer, cards } = view;
+  dispatchDreamHistory(view, interruptedDreamHistory.slice(0, 1));
+  const earlier = renderer.flow.children[0];
+  dispatchDreamHistory(view, interruptedDreamHistory.slice(1, 3));
+  const postcard = cards.cards[0].el;
+  const earlierCanvas = snapshotNode(earlier.children[1]);
+  const earlierTime = earlier.children[0].children[0].textContent;
+  for (const event of interruptedDreamHistory.slice(3)) {
+    dispatchDreamHistory(view, [event]);
+    assert.equal(renderer.flow.children.length, 3,
+      'later dreams in the same sleep period begin one new segment after the postcard');
+    assert.deepEqual(renderer.flow.children.slice(0, 2), [earlier, postcard],
+      'later dream fragments neither move the earlier segment nor displace the postcard');
+    assert.deepEqual(snapshotNode(earlier.children[1]), earlierCanvas,
+      'later dreams leave earlier text, drawing, spacing and height-affecting child structure unchanged');
+    assert.equal(earlier.children[0].children[0].textContent, earlierTime,
+      'later dreams do not replace the earlier segment timestamp');
+  }
+  const later = renderer.flow.children[2];
+  assert.notEqual(later, earlier, 'a resumed sleep period owns a fresh physical field');
+  assert.equal(later.dataset.dreamId, earlier.dataset.dreamId, 'both segments retain their shared sleep identity');
+  assert.deepEqual(dreamFragmentsIn(earlier).map((fragment) => fragment.dataset.eventId), ['dream-2252008']);
+  assert.deepEqual(dreamFragmentsIn(later).map((fragment) => fragment.dataset.eventId),
+    ['dream-2252274', 'dream-2252551', 'dream-2253159'],
+    'the three later contiguous dreams remain grouped once and in arrival order');
+  assert.match(later.children[0].children[0].textContent, /^01:17:33 /,
+    'the resumed segment starts at its own first event time');
+  assert.equal(cards.cards.length, 1, 'the completed reply is retained exactly once');
+  assert.equal(cards.cards[0].msg.textContent, 'reply between dream segments');
+  assert.equal(earlier._classes.has('is-live'), false, 'the earlier field remains static');
+  assert.equal(later._classes.has('is-live'), !instant, 'only a live resumed field has the animation hook');
+  assertUniqueTree(renderer.flow);
+  interruptedViews.push(view);
+}
+assert.deepEqual(chronologySnapshot(interruptedViews[0]), chronologySnapshot(interruptedViews[1]),
+  'live delivery and instant history produce identical content and chronology');
+
+// incoming() may move an already-open inline card. Match browser appendChild
+// semantics so a fake duplicate node cannot conceal the real boundary.
+const movedPostcardView = newDreamChronology(true);
+dispatchDreamHistory(movedPostcardView, interruptedDreamHistory.slice(0, 2));
+const openCard = movedPostcardView.cards.active.el;
+movedPostcardView.cards.incoming(interruptedDreamHistory[1].payload);
+assert.deepEqual(movedPostcardView.renderer.flow.children,
+  [movedPostcardView.renderer.flow.children[0], openCard],
+  'moving the active postcard to the end does not duplicate its DOM node');
+dispatchDreamHistory(movedPostcardView, interruptedDreamHistory.slice(2));
+assert.deepEqual(chronologySnapshot(movedPostcardView), chronologySnapshot(interruptedViews[1]));
+assertUniqueTree(movedPostcardView.renderer.flow);
+
+const pagedDreamView = newDreamChronology(true);
+dispatchDreamHistory(pagedDreamView, interruptedDreamHistory.slice(3));
+assert.equal(pagedDreamView.renderer.flow.children.length, 1, 'a history tail starts with its own contiguous dream field');
+const oldTail = pagedDreamView.renderer.flow.children[0];
+const beforePrepend = pagedDreamView.renderer.scrollState();
+pagedDreamView.cards.reset();
+pagedDreamView.renderer.reset();
+assert.equal(oldTail.parentNode, null, 'reset detaches the previously loaded tail');
+assert.equal(pagedDreamView.renderer.dreamFields.size, 0, 'reset clears dream grouping state before an older page is replayed');
+dispatchDreamHistory(pagedDreamView, interruptedDreamHistory);
+pagedDreamView.renderer.restoreAfterPrepend(beforePrepend);
+assert.deepEqual(chronologySnapshot(pagedDreamView), chronologySnapshot(interruptedViews[1]),
+  'loading earlier history and replaying reconstructs the same dream/postcard order as a full load');
+assertUniqueTree(pagedDreamView.renderer.flow);
+
+for (const [kind, insertBoundary] of [
+  ['event', (renderer) => renderer.event('a visible event', '', '2026-10-07 01:12:00', 'prison')],
+  ['journal', (renderer) => {
+    renderer.beginEntry('2026-10-07 01:12:00', 'journal');
+    renderer.write('waking words remain between dreams', 'journal');
+    renderer.closeEntry('2026-10-07 01:13:00');
+  }],
+  ['day', (renderer) => renderer.beginDay('2026-10-08', '2026-10-08')],
+  ['other sleep period', (renderer) => renderer.dream({
+    id: 'other-sleep-event', sleep_period_id: 'another-sleep', fragments: ['another sleep period'],
+  }, '2026-10-07 01:12:00', false)],
+]) {
+  const view = newDreamChronology(true);
+  dispatchDreamHistory(view, [interruptedDreamHistory[0]]);
+  const earlier = view.renderer.flow.children[0];
+  const earlierCanvas = snapshotNode(earlier.children[1]);
+  insertBoundary(view.renderer);
+  const boundary = view.renderer.flow.children[1];
+  dispatchDreamHistory(view, interruptedDreamHistory.slice(3));
+  assert.equal(view.renderer.flow.children.length, 3, kind + ' closes the previous contiguous dream field');
+  assert.deepEqual(view.renderer.flow.children.slice(0, 2), [earlier, boundary], kind + ' stays between the two dream fields');
+  assert.deepEqual(snapshotNode(earlier.children[1]), earlierCanvas, kind + ' prevents changes to the earlier canvas');
+  assert.equal(dreamFragmentsIn(view.renderer.flow.children[2]).length, 3,
+    kind + ' allows subsequent compatible dreams to share the new field');
+  assertUniqueTree(view.renderer.flow);
+}
+
+for (const instant of [false, true]) {
+  const view = newDreamChronology(instant);
+  const drawing = (seq) => ({
+    id: 2260000 + seq, type: 'draw', ts: '2026-10-07 01:' + (10 + seq * 4) + ':00',
+    payload: {
+      id: 'shared-drawing-id', dream: true, dream_id: 'sleep-2026-10-06',
+      sleep_period_id: 'sleep-2026-10-06', strokes: [{ t: 'D', x: 10 + seq * 20, y: 20 + seq * 10 }],
+      seq, total: 3,
+    },
+  });
+  dispatchDreamHistory(view, [interruptedDreamHistory[0], drawing(0)]);
+  const earlier = view.renderer.flow.children[0];
+  const earlierSvg = earlier.children[1].children[0].children[0];
+  assert.equal(earlierSvg.children.length, 1, 'the initial drawing chunk shares its contiguous dream field');
+  dispatchDreamHistory(view, interruptedDreamHistory.slice(1, 3));
+  const frozenCanvas = snapshotNode(earlier.children[1]);
+  dispatchDreamHistory(view, [drawing(1), interruptedDreamHistory[3], drawing(2)]);
+  assert.equal(view.renderer.flow.children.length, 3, 'a later drawing chunk opens a field after the postcard');
+  assert.deepEqual(snapshotNode(earlier.children[1]), frozenCanvas,
+    'a repeated drawing ID never adds new strokes to the earlier field or changes its bounds');
+  const later = view.renderer.flow.children[2];
+  const laterSketch = later.children[1].children[0];
+  assert.equal(laterSketch.children.length, 1, 'contiguous chunks reuse one SVG within the resumed segment');
+  const laterSvg = laterSketch.children[0];
+  assert.notEqual(laterSvg, earlierSvg, 'a drawing continued across a postcard gets a separate SVG');
+  assert.deepEqual(earlierSvg.children.map((path) => path.getAttribute('d')), ['M10.00,20.00 L10.20,20.00']);
+  assert.deepEqual(laterSvg.children.map((path) => path.getAttribute('d')),
+    ['M30.00,30.00 L30.20,30.00', 'M50.00,40.00 L50.20,40.00'],
+    'the resumed drawing contains exactly the later chunks without copying earlier strokes');
+  assert.equal(earlierSvg.children.length + laterSvg.children.length, 3, 'each drawing stroke appears once across the complete chronology');
+  assert.equal(dreamFragmentsIn(later)[0].dataset.eventId, 'dream-2252274', 'a later text fragment joins the resumed drawing field');
+  assertUniqueTree(view.renderer.flow);
+  view.cards.reset();
+  view.renderer.reset();
+  assert.equal(view.renderer.dreamDrawings.size, 0, 'reset discards drawing records for replay');
+}
 
 const manyDreams = new ComposedFeed(makeEl('div'), { chars: [] });
 manyDreams.setInstant(true);

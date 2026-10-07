@@ -54,7 +54,7 @@ let goLive = null;
 let scrollSettleToken = 0;
 let suppressPaging = false;
 const draws = new Map();          // drawing id -> { svg, strokes[] }
-const dreams = new Map();         // sleep period id -> one fragmentary dream field
+const dreams = new Map();         // sleep period id -> latest contiguous dream segment
 
 // ---- boot ---------------------------------------------------------------
 
@@ -217,7 +217,8 @@ function ensureDream(payload, ts) {
   const p = payload || {};
   const key = String(p.sleep_period_id || p.dream_id || p.id || ('dream-' + colEl.childElementCount));
   let dream = dreams.get(key);
-  if (dream) return dream;
+  // Match the handwritten chronology: never grow a field across another item.
+  if (dream && colEl.children[colEl.children.length - 1] === dream.el) return dream;
   const b = makeBlock('dream');
   const meta = document.createElement('div');
   meta.className = 'pl-meta pl-dream-meta';
@@ -479,10 +480,11 @@ function addDraw(p, ts) {
     const dream = ensureDream(p, ts);
     const id = String(p.id || dream.key);
     let record = draws.get(id);
-    if (!record) {
+    if (!record || record.field !== dream) {
       const svg = makeDreamSvg('abstract dream drawing');
       dream.sketch.appendChild(svg);
-      record = { svg, strokes: [], dream: true };
+      // Stroke events belong once, to the segment current when they arrived.
+      record = { svg, strokes: [], dream: true, field: dream };
       draws.set(id, record);
     }
     record.strokes.push(...p.strokes);
