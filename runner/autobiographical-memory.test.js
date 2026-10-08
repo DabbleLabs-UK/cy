@@ -12,8 +12,11 @@ import {
   parseSurfacingResponse,
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
+  isCyAuthoredSource,
   sourceFromExpression,
+  sourceFromDreamExpression,
   sourceFromEnvironmentRecord,
+  sourceFromPostcard,
   sourceFromReply,
 } from './autobiographical-memory.js';
 
@@ -150,5 +153,106 @@ const publicZone = redactAutobiographicalMemoryFromTelemetry(
 );
 assert.match(publicZone, /private memory context omitted/);
 assert.doesNotMatch(publicZone, /cell and machine seem to rhyme/);
+
+// ---- Regression: a thing Cy says about himself cannot become a PERSON fact
+// about the addressee (production memory cf87c2d2). Cy's reply to postcard #27
+// ("no tv... screw took it... 14 cards now, jody") was stored as a PERSON
+// memory "The sender says they have no TV... they report having 14 cards". ----
+
+const cyReply = {
+  sourceType: 'CY_REPLY', sourceId: 'postcard-reply:27', occurredAt: '2026-10-07T00:00:00Z',
+  text: 'no tv. had one once, screw took it, said it was contraband. 14 cards now, jody.',
+  sourceVisibility: 'SENDER_RECALLABLE', participantLabel: 'Jody', subjectVisitorId: sender,
+};
+// The exact inversion: a CREATE PERSON from Cy's own reply is refused
+// deterministically, as a terminal NOTHING (not a retryable INVALID).
+const invertedPerson = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'PERSON',
+  content: 'The sender says they have no TV in their cell and report having 14 cards.',
+}), { source: cyReply, existing: [], makeId: () => 'must-not-be-created' });
+assert.equal(invertedPerson.decision, 'NOTHING', 'a PERSON memory from a CY_REPLY must be refused');
+assert.equal(invertedPerson.valid, true, 'the refusal is terminal, not a retryable INVALID');
+assert.equal(invertedPerson.blockedReason, 'CY_AUTHORED_PERSON_BLOCKED');
+assert.equal('memoryId' in invertedPerson, false);
+
+// The guard is narrow: a CY_REPLY may still form a first-person EPISODIC memory
+// (the legitimate case, e.g. the correct production memory 3a2b7e0f).
+const episodicFromReply = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'EPISODIC',
+  content: 'I told Jody I have no TV; a screw took mine.',
+}), { source: cyReply, existing: [], makeId: () => 'episodic-ok' });
+assert.equal(episodicFromReply.decision, 'CREATE');
+assert.equal(episodicFromReply.type, 'EPISODIC');
+assert.equal(episodicFromReply.memoryId, 'episodic-ok');
+
+// A CY_REPLY must not graft Cy's self-statements onto an existing PERSON memory.
+const personTarget = {
+  ...base, id: 'person-mem', type: 'PERSON', status: 'ACTIVE',
+  privacyScope: 'SENDER_RECALLABLE', subjectVisitorId: sender, version: 2,
+};
+const blockedUpdate = parseFormationResponse(JSON.stringify({
+  decision: 'UPDATE', memoryRef: 'FM1', content: 'The sender has no TV and 14 cards.',
+}), { source: cyReply, existing: [personTarget], makeId: () => 'x' });
+assert.equal(blockedUpdate.decision, 'NOTHING', 'a CY_REPLY must not UPDATE a PERSON memory');
+assert.equal(blockedUpdate.blockedReason, 'CY_AUTHORED_PERSON_BLOCKED');
+
+// Genuine sender-authored POSTCARD is NOT weakened: it may still CREATE and
+// UPDATE a PERSON memory about its author.
+const postcard = {
+  sourceType: 'POSTCARD', sourceId: 'postcard:30', occurredAt: '2026-10-07T00:00:00Z',
+  text: 'i have no telly in here, they took it', sourceVisibility: 'SENDER_RECALLABLE',
+  participantLabel: 'Jody', subjectVisitorId: sender,
+};
+const personFromPostcard = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'PERSON',
+  content: 'The sender told Cy they have no television in their cell.',
+}), { source: postcard, existing: [], makeId: () => 'person-from-postcard' });
+assert.equal(personFromPostcard.decision, 'CREATE');
+assert.equal(personFromPostcard.type, 'PERSON');
+assert.equal(personFromPostcard.memoryId, 'person-from-postcard');
+const personUpdateFromPostcard = parseFormationResponse(JSON.stringify({
+  decision: 'UPDATE', memoryRef: 'FM1', content: 'The sender again said they have no television.',
+}), { source: postcard, existing: [personTarget], makeId: () => 'x' });
+assert.equal(personUpdateFromPostcard.decision, 'UPDATE');
+
+// The other Cy-authored sources (generic formation path) are guarded too, while
+// world-authored ENVIRONMENT_EVENT is not.
+for (const st of ['CY_EXPRESSION', 'DREAM_EXPRESSION']) {
+  const r = parseFormationResponse(JSON.stringify({
+    decision: 'CREATE', type: 'PERSON', privacyScope: 'INTERNAL_ONLY',
+    content: 'The other person has no television and counts cards.',
+  }), {
+    source: { sourceType: st, sourceId: `${st}:1`, sourceVisibility: 'INTERNAL_ONLY', subjectVisitorId: null, text: 'no tv. 14 cards.' },
+    existing: [], makeId: () => 'nope',
+  });
+  assert.equal(r.decision, 'NOTHING', `${st} must not form a PERSON memory`);
+  assert.equal(r.blockedReason, 'CY_AUTHORED_PERSON_BLOCKED');
+}
+const worldPerson = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'PERSON', privacyScope: 'INTERNAL_ONLY',
+  content: 'An officer on the wing is strict about the television rule.',
+}), {
+  source: { sourceType: 'ENVIRONMENT_EVENT', sourceId: 'env-1', sourceVisibility: 'INTERNAL_ONLY', subjectVisitorId: null, text: 'an officer enforced the rule' },
+  existing: [], makeId: () => 'world-ok',
+});
+assert.equal(worldPerson.decision, 'CREATE', 'world-authored sources may still form PERSON memories');
+assert.equal(worldPerson.type, 'PERSON');
+
+// Authorship classification: explicit marker wins; sourceType is the fallback,
+// so sources already enqueued before any marker existed (the backlog) are
+// still classified correctly.
+assert.equal(isCyAuthoredSource({ sourceType: 'CY_REPLY' }), true);
+assert.equal(isCyAuthoredSource({ sourceType: 'CY_EXPRESSION' }), true);
+assert.equal(isCyAuthoredSource({ sourceType: 'DREAM_EXPRESSION' }), true);
+assert.equal(isCyAuthoredSource({ sourceType: 'POSTCARD' }), false);
+assert.equal(isCyAuthoredSource({ sourceType: 'ENVIRONMENT_EVENT' }), false);
+assert.equal(isCyAuthoredSource({ sourceType: 'POSTCARD', authoredBy: 'CY' }), true);
+assert.equal(isCyAuthoredSource({ sourceType: 'CY_REPLY', authoredBy: 'SENDER' }), false);
+assert.equal(isCyAuthoredSource(sourceFromReply('i kept counting cards tonight', { id: 27, visitor_id: sender, from_name: 'Jody' }, 'env-27')), true);
+assert.equal(isCyAuthoredSource(sourceFromDreamExpression(['a screw took the set'], 'dream:1')), true);
+assert.equal(isCyAuthoredSource(sourceFromPostcard({ id: 30, visitor_id: sender, from_name: 'Jody', body: 'hello' }, 'env-30')), false);
+
+// The sender prompt now also forbids it explicitly.
+assert.match(replyFormation.system, /never CREATE or UPDATE a PERSON memory/);
 
 console.log('autobiographical-memory.test.js: all checks passed');
