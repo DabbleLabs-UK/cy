@@ -14,6 +14,7 @@
 // same letter is not delivered twice.
 
 import { appendFile, readFile, writeFile, rename, mkdir, open } from 'node:fs/promises';
+import { statSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 
@@ -101,6 +102,7 @@ export class Client {
     this._inboxTimer = null;
     this._tempoTimer = null;
     this._flushPromise = null;
+    this._memoryRequestsActive = 0;
     this._memorySourceWork = Promise.resolve();
     this._stopped = false;
   }
@@ -161,6 +163,7 @@ export class Client {
   }
 
   flush() {
+    if (this.maintenance?.refresh().state === 'held') return Promise.resolve();
     if (this._flushPromise) return this._flushPromise;
     this._flushPromise = this._flushPending().finally(() => {
       this._flushPromise = null;
@@ -456,6 +459,13 @@ export class Client {
   }
 
   async pollInbox() {
+    const release = this.maintenance ? this.maintenance.enter() : () => {};
+    if (!release) return;
+    try { return await this.pollAdmittedInbox(); }
+    finally { release(); }
+  }
+
+  async pollAdmittedInbox() {
     let data;
     if (this.config.dryRun) {
       try {
@@ -553,6 +563,20 @@ export class Client {
   }
 
   async _memoryRequest(action, payload = {}, signal = null) {
+    this._memoryRequestsActive++;
+    try { return await this._trackedMemoryRequest(action, payload, signal); }
+    finally { this._memoryRequestsActive--; }
+  }
+
+  maintenancePending() {
+    const diskPending = [this.queuePath, this.memorySourcesPath].some(path => {
+      try { return statSync(path).size > 0; }
+      catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+    });
+    return this.batch.length + Number(!!this._flushPromise) + this._memoryRequestsActive + Number(diskPending);
+  }
+
+  async _trackedMemoryRequest(action, payload = {}, signal = null) {
     if (this.config.dryRun) {
       if (action === 'query' || action === 'sender_continuity') {
         return { ok: true, candidates: [], mechanisms: [], privacy_filter: { applied: true, dry_run: true } };

@@ -100,5 +100,19 @@ Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs ($now
 Assert-True ((Get-CyRestartRequestDisposition -NowMs $nowMs -RequestedAtMs ($nowMs + 60000) -MaxAgeSeconds 300) -eq 'STALE') `
     'a restart request timestamped in the future is STALE, not ACT'
 
+$request = [pscustomobject]@{ version = 1; id = 'maintenance-test' }
+$status = [pscustomobject]@{ version = 1; requestId = $request.id; pid = 123; state = 'held'; active = 0; updatedAt = $now.ToUniversalTime().ToString('o') }
+Assert-True (Test-CyMaintenanceHeld $request $status 123 $now) 'fresh exact-process hold protects startup before power heartbeat exists'
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 124 $now)) 'hold for another process cannot disable watchdog'
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 123 $now.AddSeconds(6))) 'stale hold cannot disable watchdog'
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 123 $now.AddSeconds(-1))) 'future hold cannot disable watchdog'
+$status.state = 'draining'
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 123 $now)) 'draining is not a maintenance acknowledgement'
+$status.state = 'error'
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 123 $now)) 'error is not a maintenance acknowledgement'
+$status.state = 'held'; $status.active = 1
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 123 $now)) 'active work is not held'
+$status.active = 0; $status.requestId = 'old-request'
+Assert-True (-not (Test-CyMaintenanceHeld $request $status 123 $now)) 'stale request identity cannot disable watchdog'
 Write-Output ''
 Write-Output "cy-watchdog-lib.test.ps1: all $n checks passed"
