@@ -323,6 +323,18 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
     if (target.type === 'PERSON' && isCyAuthoredSource(source)) {
       return { decision: 'NOTHING', valid: true, blockedReason: 'CY_AUTHORED_PERSON_BLOCKED' };
     }
+    // A curated PUBLIC_RECALLABLE memory (e.g. the user-approved 8-by-4 motif)
+    // is never a valid target for model-mediated generic formation UPDATE.
+    // A generic world/dream/expression source previously overwrote that motif
+    // wholesale, dropping its curated content and tags and leaving its public
+    // summary stale. PUBLIC memories are curated only via explicit seed/admin
+    // paths (which call captive_memory_apply directly, not this parser), so
+    // this is a terminal NOTHING, not a retryable INVALID. Sender-correspondence
+    // UPDATEs are unaffected: they route through parseSenderFormationResponse
+    // and their targets are structurally SENDER_RECALLABLE only.
+    if (target.privacyScope === 'PUBLIC_RECALLABLE') {
+      return { decision: 'NOTHING', valid: true, blockedReason: 'PUBLIC_RECALLABLE_UPDATE_BLOCKED' };
+    }
     return {
       decision: 'UPDATE', valid: true, memoryId: target.id, expectedVersion: target.version,
       content, publicSummary: target.privacyScope === 'PUBLIC_RECALLABLE'
