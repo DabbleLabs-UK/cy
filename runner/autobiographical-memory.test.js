@@ -255,4 +255,56 @@ assert.equal(isCyAuthoredSource(sourceFromPostcard({ id: 30, visitor_id: sender,
 // The sender prompt now also forbids it explicitly.
 assert.match(replyFormation.system, /never CREATE or UPDATE a PERSON memory/);
 
+// ---- Regression: generic formation must not UPDATE a curated
+// PUBLIC_RECALLABLE memory. Reproduces the 8-by-4 MOTIF corruption, where a
+// DREAM_EXPRESSION (and earlier ENVIRONMENT_EVENT) wholesale-overwrote the
+// user-approved public motif, dropping its content/tags and leaving its
+// public summary stale. ----
+
+const publicMotif = {
+  ...base, id: 'motif-8x4', type: 'MOTIF', status: 'ACTIVE',
+  privacyScope: 'PUBLIC_RECALLABLE', version: 4,
+  content: 'Cy once noticed an 8 by 4 analogy linking his cell and computational confinement.',
+  publicSummary: 'An old idea linked confinement and the machine.',
+  classification: 'user-approved autobiographical motif',
+};
+for (const st of ['DREAM_EXPRESSION', 'ENVIRONMENT_EVENT', 'CY_EXPRESSION']) {
+  const r = parseFormationResponse(JSON.stringify({
+    decision: 'UPDATE', memoryRef: 'C1', content: 'The wall is gone. Why Root? This is how we do it.',
+  }), {
+    source: { sourceType: st, sourceId: `${st}:9`, sourceVisibility: 'INTERNAL_ONLY', subjectVisitorId: null, text: 'the wall is gone' },
+    existing: [publicMotif], makeId: () => 'must-not-apply',
+  });
+  assert.equal(r.decision, 'NOTHING', `${st} must not UPDATE a PUBLIC_RECALLABLE memory`);
+  assert.equal(r.valid, true, 'terminal refusal, not a retryable INVALID');
+  assert.equal(r.blockedReason, 'PUBLIC_RECALLABLE_UPDATE_BLOCKED');
+  assert.equal('memoryId' in r, false, 'no memory id is minted for a blocked PUBLIC update');
+}
+
+// Not over-blocked: a generic source may still UPDATE a non-PUBLIC target.
+const internalTarget = {
+  ...base, id: 'internal-mem', type: 'EPISODIC', status: 'ACTIVE',
+  privacyScope: 'INTERNAL_ONLY', version: 2, content: 'an earlier internal recollection',
+  publicSummary: null, classification: 'internal note',
+};
+const okInternal = parseFormationResponse(JSON.stringify({
+  decision: 'UPDATE', memoryRef: 'C1', content: 'a refined internal recollection',
+}), {
+  source: { sourceType: 'DREAM_EXPRESSION', sourceId: 'dream:10', sourceVisibility: 'INTERNAL_ONLY', subjectVisitorId: null, text: 'refined' },
+  existing: [internalTarget], makeId: () => 'u',
+});
+assert.equal(okInternal.decision, 'UPDATE', 'a generic UPDATE of a non-PUBLIC target is unaffected');
+assert.equal(okInternal.memoryId, 'internal-mem');
+
+// Sender-correspondence UPDATE remains healthy (routes through the sender
+// parser; its targets are structurally SENDER_RECALLABLE, never PUBLIC).
+const senderUpd = parseFormationResponse(JSON.stringify({
+  decision: 'UPDATE', memoryRef: 'FM1', content: 'the shared thread continued',
+}), {
+  source: { sourceType: 'CY_REPLY', sourceId: 'postcard-reply:9', sourceVisibility: 'SENDER_RECALLABLE', subjectVisitorId: sender, participantLabel: 'Jody', text: 'aye' },
+  existing: [{ ...base, id: 'sender-ep', type: 'EPISODIC', status: 'ACTIVE', privacyScope: 'SENDER_RECALLABLE', subjectVisitorId: sender, version: 1 }],
+  makeId: () => 'u',
+});
+assert.equal(senderUpd.decision, 'UPDATE', 'sender UPDATE of a SENDER_RECALLABLE memory remains healthy');
+
 console.log('autobiographical-memory.test.js: all checks passed');
