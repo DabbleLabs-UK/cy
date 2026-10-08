@@ -15,6 +15,28 @@ export const MEMORY_SCOPES = Object.freeze([
 ]);
 export const MEMORY_CONSISTENCY = Object.freeze(['CONSISTENT', 'CONFLICTED', 'UNCERTAIN']);
 
+// Sources whose text is Cy's own first-person voice. For these the text is
+// never testimony authored by a correspondent, so it can never be the basis
+// for a PERSON memory about that correspondent: Cy describing his own cell,
+// feelings or situation (even while addressing a named sender) must not become
+// a PERSON fact about the sender. PERSON memories belong only to sources the
+// correspondent authored (a POSTCARD) or an observed world actor. The prompt
+// already says as much for CY_REPLY, but the model still produced the
+// inversion in production (memory cf87c2d2), so the rule is also enforced
+// deterministically in the formation parsers below.
+export const CY_AUTHORED_SOURCE_TYPES = Object.freeze([
+  'CY_REPLY', 'CY_EXPRESSION', 'DREAM_EXPRESSION',
+]);
+
+export function isCyAuthoredSource(source) {
+  if (!source) return false;
+  // Prefer an explicit authorship marker if present, but fall back to the
+  // source type so sources already enqueued before any such field existed
+  // (the durable formation backlog) are still classified correctly.
+  if (source.authoredBy) return source.authoredBy === 'CY';
+  return CY_AUTHORED_SOURCE_TYPES.includes(source.sourceType);
+}
+
 // ENGINEERING context-budget limits. These are not psychological capacities.
 export const MEMORY_CANDIDATE_LIMIT = 10;
 export const MEMORY_SURFACE_LIMIT = 3;
@@ -137,6 +159,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
         'RESOLVE when the offered topic is explicitly answered, settled, completed, withdrawn or no longer open. UPDATE only when it remains genuinely open and has materially changed. Never use UPDATE merely to record the answer to a settled question. No resolution from silence.',
         'Content must conservatively abstract only supported facts. Do not invent motives, withholding, reluctance, deception, uncertainty or emotions unless directly supported by the source. An unknown result does not mean the sender is unwilling to share it.',
         'A POSTCARD is the sender speaking. A CY_REPLY is Cy speaking, not new testimony about the sender. Preserve who said what and uncertainty.',
+        'From a CY_REPLY never CREATE or UPDATE a PERSON memory: Cy describing his own cell, situation or feelings is never a fact about the sender.',
         'Examples of decisions (not facts about this sender): "my dog is called Alfie" -> CREATE PERSON, content "The sender says their dog is called Alfie.";',
         '"I am waiting for an important result and will tell you next time" -> CREATE UNRESOLVED_THREAD; "Hi, hope you are okay" -> NOTHING;',
         'Contrast: offered FM1 awaits an application decision; "it was approved, that is settled" -> RESOLVE FM1, not UPDATE. "the decision is delayed until next week; I am still waiting" -> UPDATE FM1 because it remains open. With no offered candidates, never UPDATE or RESOLVE.',
@@ -222,6 +245,12 @@ function parseSenderFormationResponse(raw, { source, existing, makeId }) {
   if (allowed.some(key => !Object.hasOwn(parsed, key))) return invalid('MISSING_FIELD');
   if (parsed.decision === 'NOTHING') return { decision: 'NOTHING', valid: true };
   if (parsed.decision === 'CREATE' && !MEMORY_TYPES.includes(parsed.type)) return invalid('ILLEGAL_TYPE');
+  // Cy's own reply is not testimony about the sender: never let it mint a
+  // PERSON memory about the correspondent (production defect cf87c2d2).
+  // Terminal NOTHING, not INVALID, so the source is not re-tried.
+  if (parsed.decision === 'CREATE' && parsed.type === 'PERSON' && isCyAuthoredSource(source)) {
+    return { decision: 'NOTHING', valid: true, blockedReason: 'CY_AUTHORED_PERSON_BLOCKED' };
+  }
   let target = null;
   if (parsed.decision === 'UPDATE' || parsed.decision === 'RESOLVE') {
     const match = /^FM([1-5])$/.exec(typeof parsed.memoryRef === 'string' ? parsed.memoryRef : '');
@@ -230,6 +259,11 @@ function parseSenderFormationResponse(raw, { source, existing, makeId }) {
     if (target.status !== 'ACTIVE' || target.privacyScope !== 'SENDER_RECALLABLE'
         || target.subjectVisitorId !== source.subjectVisitorId) return invalid('PRIVACY_PROVENANCE');
     if (parsed.decision === 'RESOLVE' && target.type !== 'UNRESOLVED_THREAD') return invalid('SCHEMA');
+    // Nor may Cy's own reply graft his self-statements onto an existing PERSON
+    // memory about the sender via UPDATE.
+    if (parsed.decision === 'UPDATE' && target.type === 'PERSON' && isCyAuthoredSource(source)) {
+      return { decision: 'NOTHING', valid: true, blockedReason: 'CY_AUTHORED_PERSON_BLOCKED' };
+    }
   }
   if (parsed.decision === 'RESOLVE') return { decision: 'ARCHIVE', valid: true,
     memoryId: target.id, expectedVersion: target.version, source };
@@ -284,6 +318,11 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
     const refMatch = /^C([1-5])$/.exec(String(parsed.memoryRef || ''));
     const target = refMatch ? existing[Number(refMatch[1]) - 1] : null;
     if (!target) return { decision: 'NOTHING', valid: false };
+    // A Cy-authored source (CY_EXPRESSION / DREAM_EXPRESSION) must not rewrite
+    // a PERSON memory with Cy's own self-description.
+    if (target.type === 'PERSON' && isCyAuthoredSource(source)) {
+      return { decision: 'NOTHING', valid: true, blockedReason: 'CY_AUTHORED_PERSON_BLOCKED' };
+    }
     return {
       decision: 'UPDATE', valid: true, memoryId: target.id, expectedVersion: target.version,
       content, publicSummary: target.privacyScope === 'PUBLIC_RECALLABLE'
@@ -294,6 +333,10 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
   }
   if (!MEMORY_TYPES.includes(parsed.type) || !MEMORY_SCOPES.includes(parsed.privacyScope)) {
     return { decision: 'NOTHING', valid: false };
+  }
+  // A Cy-authored source cannot mint a PERSON memory about anyone else.
+  if (parsed.type === 'PERSON' && isCyAuthoredSource(source)) {
+    return { decision: 'NOTHING', valid: true, blockedReason: 'CY_AUTHORED_PERSON_BLOCKED' };
   }
   const privacyScope = source && source.sourceVisibility === 'SENDER_RECALLABLE'
     ? 'SENDER_RECALLABLE' : parsed.privacyScope;
