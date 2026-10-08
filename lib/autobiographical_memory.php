@@ -11,6 +11,8 @@ const CY_MEMORY_REASONS = [
 const CY_MEMORY_CANDIDATE_LIMIT = 10;
 const CY_MEMORY_PUBLIC_LIMIT = 20;
 const CY_MEMORY_FORMATION_FAILURE_LIMIT = 6;
+const CY_MEMORY_GENERIC_SOURCE_TYPES = ['ENVIRONMENT_EVENT', 'DREAM_EXPRESSION', 'CY_EXPRESSION'];
+const CY_MEMORY_GENERIC_CADENCE_MS = 1800000;
 const CY_MEMORY_FORMATION_REJECTION_CODES = [
     'JSON_FORMAT', 'SCHEMA', 'ILLEGAL_ACTION', 'ILLEGAL_TYPE', 'UNKNOWN_REF',
     'MISSING_FIELD', 'FORBIDDEN_FIELD', 'PRIVACY_PROVENANCE', 'APPLICATION_CONFLICT',
@@ -52,6 +54,14 @@ function captive_memory_formation_filter(array $input): array
         throw new InvalidArgumentException('invalid formation claim filter');
     }
     return ['sender_only' => $senderOnly, 'min_age_seconds' => $age, 'visitor_id' => $visitor];
+}
+
+function captive_memory_generic_source_type(mixed $type): string
+{
+    if (!is_string($type) || !in_array($type, CY_MEMORY_GENERIC_SOURCE_TYPES, true)) {
+        throw new InvalidArgumentException('invalid generic formation source type');
+    }
+    return $type;
 }
 
 function captive_memory_formation_health(PDO $db): array
@@ -191,14 +201,11 @@ function captive_memory_enqueue_source(PDO $db, array $source): array
     ];
 }
 
-function captive_memory_claim_source(PDO $db, array $filter = []): ?array
+function captive_memory_prepare_formation_queue(PDO $db, bool $genericOnly = false): void
 {
-    $filter = captive_memory_formation_filter($filter);
-    $db->beginTransaction();
-    try {
-        // Old generic environment copies of correspondence lack a sender scope.
-        // Retain their bytes/provenance, but never let them form public memories.
-        $db->exec("UPDATE autobiographical_memory_formation_queue q
+    // Old generic environment copies of correspondence lack a sender scope.
+    // Retain their bytes/provenance, but never let them form public memories.
+    $db->exec("UPDATE autobiographical_memory_formation_queue q
             JOIN environment_events e ON e.event_id = q.source_id
             SET q.status = 'QUARANTINED', q.claim_token = NULL,
                 q.last_result_category = 'UNLINKED_CORRESPONDENCE',
@@ -206,7 +213,7 @@ function captive_memory_claim_source(PDO $db, array $filter = []): ?array
             WHERE q.source_type = 'ENVIRONMENT_EVENT' AND q.subject_visitor_id IS NULL
               AND q.status IN ('PENDING','RETRYABLE')
               AND e.event_type IN ('postcard','postcard_reply','postcard_with_image')");
-        $db->exec(
+    $db->exec(
             "UPDATE autobiographical_memory_formation_queue
              SET status = 'RETRYABLE',
                  available_at = DATE_ADD(NOW(3), INTERVAL LEAST(900, 30 * POW(2, LEAST(failure_streak, 5))) SECOND),
@@ -214,42 +221,162 @@ function captive_memory_claim_source(PDO $db, array $filter = []): ?array
                  last_result_category = 'TIMEOUT',
                  last_error = 'recovered after interrupted processing', updated_at = NOW(3)
              WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)"
-        );
-        $where = $filter['sender_only'] ? " AND source_type IN ('POSTCARD','CY_REPLY') AND subject_visitor_id IS NOT NULL" : '';
-        $params = [$filter['min_age_seconds']];
-        if ($filter['visitor_id'] !== null) {
-            $where .= ' AND subject_visitor_id = ?';
-            $params[] = $filter['visitor_id'];
+            . ($genericOnly ? " AND source_type IN ('ENVIRONMENT_EVENT','DREAM_EXPRESSION','CY_EXPRESSION')" : '')
+    );
+}
+
+// Internal selector: callers own the transaction and the generic admission lock.
+// The HTTP claim filter cannot supply this class or opt out of admission.
+function captive_memory_claim_source_in_transaction(PDO $db, array $filter, mixed $genericSourceType = null): ?array
+{
+    if ($genericSourceType !== null) {
+        $genericSourceType = captive_memory_generic_source_type($genericSourceType);
+        if ($filter['sender_only'] || $filter['visitor_id'] !== null) {
+            throw new InvalidArgumentException('generic formation cannot use sender claim filters');
         }
-        $select = $db->prepare(
+    }
+    $where = $filter['sender_only'] ? " AND source_type IN ('POSTCARD','CY_REPLY') AND subject_visitor_id IS NOT NULL" : '';
+    $params = [$filter['min_age_seconds']];
+    if ($filter['visitor_id'] !== null) {
+        $where .= ' AND subject_visitor_id = ?';
+        $params[] = $filter['visitor_id'];
+    }
+    $order = 'priority DESC, queued_at ASC, id ASC';
+    if ($genericSourceType !== null) {
+        $where .= " AND source_type = ? AND subject_visitor_id IS NULL AND privacy_scope <> 'SENDER_RECALLABLE'";
+        $params[] = $genericSourceType;
+        $order = '(attempts = 0 AND queued_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)) DESC, queued_at ASC, id ASC';
+    }
+    $select = $db->prepare(
             "SELECT * FROM autobiographical_memory_formation_queue
              WHERE status IN ('PENDING', 'RETRYABLE') AND available_at <= NOW(3)
                AND queued_at <= DATE_SUB(NOW(3), INTERVAL ? SECOND)" . $where . "
-             ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE"
-        );
-        $select->execute($params);
-        $row = $select->fetch();
-        if (!$row) {
-            $db->commit();
-            return null;
-        }
-        $stmt = $db->prepare(
+             ORDER BY " . $order . ' LIMIT 1 FOR UPDATE'
+    );
+    $select->execute($params);
+    $row = $select->fetch();
+    if (!$row) return null;
+    // Old clients keep their ordinary priority ordering, but a generic row
+    // can only be claimed after the outer caller enters durable admission.
+    if ($genericSourceType === null && in_array($row['source_type'], CY_MEMORY_GENERIC_SOURCE_TYPES, true)) return null;
+    $stmt = $db->prepare(
             "UPDATE autobiographical_memory_formation_queue
              SET status = 'PROCESSING', attempts = attempts + 1,
                  claim_token = ?, started_at = NOW(3), updated_at = NOW(3) WHERE id = ?"
-        );
-        $token = bin2hex(random_bytes(16));
-        $stmt->execute([$token, (int)$row['id']]);
+    );
+    $token = bin2hex(random_bytes(16));
+    $stmt->execute([$token, (int)$row['id']]);
+    $row['source'] = json_decode((string)$row['source_payload'], true) ?: [];
+    $row['attempts'] = (int)$row['attempts'] + 1;
+    $row['claim_token'] = $token;
+    return $row;
+}
+
+function captive_memory_claim_source(PDO $db, array $filter = []): ?array
+{
+    $filter = captive_memory_formation_filter($filter);
+    $db->beginTransaction();
+    try {
+        captive_memory_prepare_formation_queue($db);
+        $row = captive_memory_claim_source_in_transaction($db, $filter);
         $db->commit();
-        $row['source'] = json_decode((string)$row['source_payload'], true) ?: [];
-        $row['attempts'] = (int)$row['attempts'] + 1;
-        $row['claim_token'] = $token;
+        if ($row === null && !$filter['sender_only'] && $filter['visitor_id'] === null) {
+            return captive_memory_claim_generic_source($db, $filter['min_age_seconds'])['job'];
+        }
         return $row;
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
         }
         throw $e;
+    }
+}
+
+function captive_memory_generic_admission(string $reason, int $waitMs, ?array $job = null): array
+{
+    return ['job' => $job, 'admission' => [
+        'reason' => $reason,
+        'wait_ms' => max(0, min(CY_MEMORY_GENERIC_CADENCE_MS, $waitMs)),
+    ]];
+}
+
+function captive_memory_claim_generic_source(PDO $db, int $minAgeSeconds = 0): array
+{
+    $filter = captive_memory_formation_filter(['min_age_seconds' => $minAgeSeconds]);
+    $lockName = null;
+    $locked = false;
+    try {
+        // No host-global lock: independent CY databases do not block each other.
+        $database = $db->query('SELECT DATABASE()')->fetchColumn();
+        if (!is_string($database) || $database === '' || $db->inTransaction()) {
+            return captive_memory_generic_admission('UNAVAILABLE', 30000);
+        }
+        $lockName = 'cy_generic_memory:' . substr(hash('sha256', $database), 0, 40);
+        $lock = $db->prepare('SELECT GET_LOCK(?, 0)');
+        $lock->execute([$lockName]);
+        $acquired = $lock->fetchColumn();
+        if ((string)$acquired !== '1') {
+            return captive_memory_generic_admission((string)$acquired === '0' ? 'BUSY' : 'UNAVAILABLE', 30000);
+        }
+        $locked = true;
+        $db->beginTransaction();
+        captive_memory_prepare_formation_queue($db, true);
+        $senderReady = $db->query("SELECT COUNT(*) FROM autobiographical_memory_formation_queue
+            WHERE source_type IN ('POSTCARD','CY_REPLY') AND subject_visitor_id IS NOT NULL
+              AND (status = 'PROCESSING' OR (status IN ('PENDING','RETRYABLE')
+                  AND available_at <= NOW(3) AND queued_at <= DATE_SUB(NOW(3), INTERVAL 120 SECOND)))")->fetchColumn();
+        if ($senderReady === false) throw new RuntimeException('generic sender admission unavailable');
+        if ((int)$senderReady > 0) {
+            $result = captive_memory_generic_admission('SENDER_PRIORITY', 30000);
+        } else {
+            // All claims count, including failures, preemptions and terminal rows.
+            // Use database time so a restarted or skewed runner cannot reset it.
+            $wait = $db->query("SELECT COALESCE(LEAST(1800000, GREATEST(0,
+                    1800000 - FLOOR(TIMESTAMPDIFF(MICROSECOND, MAX(started_at), NOW(3)) / 1000))), 0)
+                FROM autobiographical_memory_formation_queue
+                WHERE source_type IN ('ENVIRONMENT_EVENT','DREAM_EXPRESSION','CY_EXPRESSION')")->fetchColumn();
+            if ($wait === false || !is_numeric($wait)) throw new RuntimeException('generic cadence unavailable');
+            if ((int)$wait > 0) {
+                $result = captive_memory_generic_admission('CADENCE', (int)$wait);
+            } else {
+                $types = $db->prepare("SELECT source_type FROM autobiographical_memory_formation_queue
+                    WHERE source_type IN ('ENVIRONMENT_EVENT','DREAM_EXPRESSION','CY_EXPRESSION')
+                    GROUP BY source_type
+                    HAVING SUM(status IN ('PENDING','RETRYABLE') AND available_at <= NOW(3)
+                        AND queued_at <= DATE_SUB(NOW(3), INTERVAL ? SECOND) AND subject_visitor_id IS NULL
+                        AND privacy_scope <> 'SENDER_RECALLABLE') > 0
+                    ORDER BY MAX(started_at) ASC,
+                        FIELD(source_type,'ENVIRONMENT_EVENT','DREAM_EXPRESSION','CY_EXPRESSION') ASC LIMIT 1");
+                $types->execute([$filter['min_age_seconds']]);
+                $type = $types->fetchColumn();
+                $job = $type === false ? null : captive_memory_claim_source_in_transaction(
+                    $db, $filter, captive_memory_generic_source_type($type)
+                );
+                $result = captive_memory_generic_admission($job ? 'ADMITTED' : 'EMPTY', $job ? CY_MEMORY_GENERIC_CADENCE_MS : 30000, $job);
+                if ($job) {
+                    $age = $db->prepare('SELECT GREATEST(0, TIMESTAMPDIFF(SECOND, queued_at, NOW(3)))
+                        FROM autobiographical_memory_formation_queue WHERE id = ?');
+                    $age->execute([(int)$job['id']]);
+                    $result['admission']['source_type'] = $job['source_type'];
+                    $result['admission']['queue_age_seconds'] = (int)$age->fetchColumn();
+                    $result['depth'] = captive_memory_queue_depth($db);
+                }
+            }
+        }
+        $db->commit();
+        return $result;
+    } catch (Throwable $e) {
+        // No fallback claimant when durable admission cannot be established.
+        return captive_memory_generic_admission('UNAVAILABLE', 30000);
+    } finally {
+        if ($locked) {
+            try {
+                if ($db->inTransaction()) $db->rollBack();
+            } finally {
+                $release = $db->prepare('SELECT RELEASE_LOCK(?)');
+                $release->execute([$lockName]);
+            }
+        }
     }
 }
 

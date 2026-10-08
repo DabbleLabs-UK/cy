@@ -299,7 +299,7 @@ test('durable priority starts conservative and clears only after both queues are
   r.stopped = false;
   await r.tick();
   r.stop();
-  assert.deepEqual(claims, ['formation', 'surfacing', 'formation']);
+  assert.deepEqual(claims, ['formation', 'surfacing'], 'generic formation requires a budgeted idle slot');
   assert.equal(r.hasPriorityWork(), false);
 });
 

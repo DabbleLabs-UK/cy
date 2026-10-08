@@ -105,6 +105,10 @@ try {
         ]);
     }
 
+    if ($action === 'claim_generic_source') {
+        captive_json_response(['ok' => true] + captive_memory_claim_generic_source($db));
+    }
+
     if ($action === 'complete_source' || $action === 'finish_source') {
         captive_json_response(captive_memory_finish_source($db, $input, $action === 'finish_source'));
     }
