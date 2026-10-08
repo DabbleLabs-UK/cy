@@ -171,7 +171,7 @@ test('sender formation isolated budgets, replay receipts, privacy and canonical 
     await change(defaults);
 
     // Non-correspondence/private-unlinked legacy sources never enter this route.
-    const generic = {...source('generic'),sourceType:'CY_EXPRESSION'};
+    const generic = {...source('generic'),sourceType:'CY_EXPRESSION',subjectVisitorId:null,sourceVisibility:'INTERNAL_ONLY'};
     await memory('enqueue_source',{source:generic});
     const genericJob = (await memory('claim_source',{})).job;
     assert.equal(genericJob.source_type,'CY_EXPRESSION');

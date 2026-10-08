@@ -136,8 +136,8 @@ assert.match(source,
   /onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\)/,
   'shared lease loss cancels the owning request with a reason');
 assert.match(source,
-  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(reason\) => abortWithReason\(ac, reason \|\| 'LEASE_LOSS'\),[\s\S]{0,200}?preemptible: awgInReservedIdle,/,
-  'the raw generate call site (the only one AWG uses) is preemptible only for its own reserved-idle AWG slot');
+  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(reason\) => abortWithReason\(ac, reason \|\| 'LEASE_LOSS'\),[\s\S]{0,200}?preemptible: awgInReservedIdle \|\| genericFormation,/,
+  'only reserved-idle AWG and bounded generic formation leases are preemptible');
 assert.match(source,
   /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose: requestPurpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\),\s*\n\s*\}\)\);/,
   'the foreground streaming call site is unchanged: never preemptible, no LEASE_PREEMPTED reason threading');

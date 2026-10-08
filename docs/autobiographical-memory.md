@@ -108,6 +108,30 @@ or merge one supplied higher-level memory while retaining revisions and sources.
 
 ## Candidate retrieval
 
+### Bounded generic formation service
+
+Generic ENVIRONMENT_EVENT, DREAM_EXPRESSION and CY_EXPRESSION sources remain
+durable evidence, not a backlog that must be drained. Natural runner idle slots
+offer AWG first refusal, then one generic formation admission at most every
+30 minutes. Optional recall cannot continually overtake an owed generic slot;
+sender formation and interactive work retain priority. Generic local inference
+keeps the existing 120-second timeout and is preemptible by interactive shared
+model work. Failure or preemption still consumes the half-hour allowance.
+
+The server serializes admissions and derives the allowance from persisted claim
+times, including through the legacy unfiltered claim API. Restart or a lost
+claim response cannot grant another burst. It selects the eligible generic
+source class least recently admitted, then prefers unattempted sources queued
+in the last 24 hours (oldest first). Older eligible work is a fallback; it is
+not deleted, reset or bulk-drained. This prevents environment traffic from
+permanently excluding dream and journal sources while admitting new experience.
+
+Content-free runner diagnostics record admission/defer reason, source class,
+queue reference/age, allowance, inference limit and outcome. Canonical attempt
+records retain actual queue depth and normal validation/retry results. Admission
+is evidence of service, not evidence that a useful memory was formed. Providers,
+sender protections, privacy, and the Cy-authored PERSON guard are unchanged.
+
 The server discovers candidates across the full active store through indexed
 exact-person, structured-tag and MariaDB full-text paths, then deterministically
 filters privacy. The indexed pre-filter admits at most 100 person, 200 tag and

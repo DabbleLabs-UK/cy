@@ -673,6 +673,10 @@ export class Client {
     });
   }
 
+  async claimGenericMemorySource() {
+    return this._memoryRequest('claim_generic_source');
+  }
+
   async finishMemorySource(value) {
     return this._memoryRequest('finish_source', value || {});
   }

@@ -107,6 +107,18 @@ test('pause or shutdown during retrieval cannot launch paid formation afterward'
   }
 });
 
+test('foreground during sender retrieval does not cancel subsequent remote formation', async () => {
+  let finishRead, calls = 0;
+  const { runtime, completions } = fixture(async () => { calls++; return result(); });
+  runtime.client.queryMemories = () => new Promise(resolve => { finishRead = resolve; });
+  const pending = runtime.processFormation(job);
+  runtime.interruptBackground('foreground');
+  finishRead({ candidates: [] });
+  assert.equal((await pending).status, 'CREATE');
+  assert.equal(calls, 1);
+  assert.equal(completions[0].provider, 'deepseek');
+});
+
 test('non-sender formation remains on the original local callback', async () => {
   let localCalls = 0;
   const { runtime, completions } = fixture(async () => { throw new Error('unexpected sender route'); }, async () => {

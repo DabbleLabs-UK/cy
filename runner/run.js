@@ -2821,7 +2821,7 @@ async function main() {
     system, prompt, opts, purpose = 'drawing', accountingMode = purpose,
     timeoutMs = null, signal = null, background = false, returnMeta = false,
     attempt = 'initial', admittedAwgSlot = false, format = null,
-    isEligible = null, providerOverride = null,
+    isEligible = null, providerOverride = null, genericFormation = false,
   }) {
     let startedAtMs = null;
     const waitTrace = new InferenceWaitTrace(purpose);
@@ -2878,9 +2878,9 @@ async function main() {
           purpose,
           signal: ac.signal,
           onLost: (reason) => abortWithReason(ac, reason || 'LEASE_LOSS'),
-          // Only AWG's reserved-idle slot yields to interactive Feddit traffic
-          // mid-request. CY's own foreground/background work is unaffected.
-          preemptible: awgInReservedIdle,
+          // Bounded generic formation is also expendable when interactive
+          // Feddit work arrives. Sender formation routing remains unchanged.
+          preemptible: awgInReservedIdle || genericFormation,
         }));
       }
       const requestOpts = typeof provider.applySharedProfile === 'function'
@@ -3149,9 +3149,23 @@ async function main() {
     return result;
   }
 
+  const genericMemoryAvailability = ({ ownInference = false } = {}) => {
+    if (!running) return { allowed: false, reason: 'STOPPED' };
+    if (client.paused) return { allowed: false, reason: 'PAUSED' };
+    if (pendingPostcards.length || pendingWarden.length || pendingDrawRequests.length) {
+      return { allowed: false, reason: 'INTERACTIVE_PENDING' };
+    }
+    if (inferPhase !== 'idle' && activeInferencePurpose !== 'memory_surfacing'
+        && !(ownInference && activeInferencePurpose === 'memory_formation')) {
+      return { allowed: false, reason: 'INFERENCE_BUSY' };
+    }
+    return { allowed: true, reason: 'IDLE_SLOT' };
+  };
   autobiographicalMemory = new AutobiographicalMemoryRuntime({
     client,
     makeId: randomUUID,
+    genericAvailability: genericMemoryAvailability,
+    onGenericService: (detail) => recordInferenceDiagnostic({ event: 'generic-memory-service', ...detail }),
     senderFormationGenerate: ({ job, call, localGenerate }) => senderFormationInference.generate({
       job, call, signal: call.signal, providers, localGenerate,
     }),
@@ -3163,6 +3177,9 @@ async function main() {
       accountingMode: call.purpose,
       signal: call.signal || null,
       background: !!call.background,
+      genericFormation: !!call.genericFormation,
+      isEligible: call.genericFormation
+        ? () => genericMemoryAvailability({ ownInference: true }).allowed : null,
       // Foreground calls through this shared callback get the same ceiling as
       // every other foreground path; background (memory_surfacing) behaviour
       // is untouched.
@@ -4835,7 +4852,7 @@ async function main() {
     // is running. Its candidate is not allowed to mutate an unsynchronized
     // world merely because it was admitted earlier.
     if (!worldMirrorReady) {
-      return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED' };
+      return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED', slotConsumed: !!result.run };
     }
     vitals.worldSimulation = result.state;
     if (result.status === 'ACCEPTED') {
@@ -4910,12 +4927,23 @@ async function main() {
     const end = Date.now() + ms;
     const startingTempoEpoch = tempoEpoch;
     const startingRegimeEpoch = regimeEpoch;
+    let awgUsedSlot = false;
     if (awgReservation) {
       try {
-        await runAwgDuringIdle(Math.max(0, end - Date.now()), awgReservation);
+        const result = await runAwgDuringIdle(Math.max(0, end - Date.now()), awgReservation);
+        awgUsedSlot = !!result?.run || result?.slotConsumed === true;
       } catch (error) {
+        awgUsedSlot = true;
         console.error(`[cy] AWG failed safely: ${error && error.message || error}`);
       }
+    }
+    // AWG gets first refusal. A merely due but ineligible AWG must not veto
+    // memory forever. One server-budgeted job may use this natural idle slot;
+    // existing cancellation handles incoming mail, pause and shutdown.
+    if (autobiographicalMemory) {
+      await autobiographicalMemory.serviceGenericDuringIdle({
+        awgUsedSlot, idleBudgetMs: Math.max(0, end - Date.now()),
+      });
     }
     while (running && Date.now() < end) {
       const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;

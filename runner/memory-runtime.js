@@ -25,6 +25,8 @@ const BACKGROUND_TIMEOUT_MS = 120000;
 const RETRY_DELAY_SECONDS = 30;
 const SENDER_FORMATION_MIN_AGE_SECONDS = 120;
 const SENDER_RESERVED_INTERVAL_MS = 10 * 60 * 1000;
+const GENERIC_SERVICE_INTERVAL_MS = 30 * 60 * 1000;
+const GENERIC_EMPTY_POLL_MS = 60 * 1000;
 
 function stableContext(value = {}) {
   return {
@@ -78,6 +80,8 @@ export class AutobiographicalMemoryRuntime {
     canRunBackground = () => true, providerInfo = () => ({}),
     backgroundWaitMs = () => 250,
     backgroundTimeoutMs = BACKGROUND_TIMEOUT_MS,
+    genericAvailability = () => ({ allowed: true, reason: 'IDLE_SLOT' }),
+    onGenericService = () => {},
   }) {
     this.client = client;
     this.generate = generate;
@@ -90,6 +94,14 @@ export class AutobiographicalMemoryRuntime {
     this.backgroundWaitMs = backgroundWaitMs;
     this.providerInfo = providerInfo;
     this.backgroundTimeoutMs = backgroundTimeoutMs;
+    this.genericAvailability = genericAvailability;
+    this.onGenericService = onGenericService;
+    this.nextGenericAt = 0;
+    this.genericReservation = false;
+    this.genericRecallPending = false;
+    this.activeTick = null;
+    this.activeWorkKind = null;
+    this.lastGenericDiagnostic = { reason: null, at: 0 };
     this.working = { directive: '', selected: [], inspection: null };
     this.desired = null;
     // Provenance only: the ids explicitly inserted into the most recently
@@ -271,8 +283,17 @@ export class AutobiographicalMemoryRuntime {
     return this.working;
   }
 
-  async tick() {
-    if (this.stopped || this.busy) return;
+  tick() {
+    if (this.activeTick) return this.activeTick;
+    const work = this.runTick();
+    this.activeTick = work;
+    const clear = () => { if (this.activeTick === work) this.activeTick = null; };
+    work.then(clear, clear);
+    return work;
+  }
+
+  async runTick() {
+    if (this.stopped || this.busy || this.genericReservation) return;
     if (!this.canRunBackground('surfacing') && !this.canRunBackground('sender_formation')) {
       // A tempo reservation can be minutes long. Polling it four times a second
       // adds no value and makes a supposedly quiet interval needlessly busy.
@@ -292,6 +313,7 @@ export class AutobiographicalMemoryRuntime {
       // slot. The optional surfacing queue can be perpetually replenished and
       // must not prevent durable correspondence from forming memory.
       if (this.canRunBackground('sender_formation')) {
+        this.activeWorkKind = 'sender';
         const sender = await this.client.claimMemorySource({
           senderOnly: true, minAgeSeconds: SENDER_FORMATION_MIN_AGE_SECONDS,
         });
@@ -307,25 +329,21 @@ export class AutobiographicalMemoryRuntime {
           }
         }
       }
-      if (!didWork && this.canRunBackground('surfacing')) {
+      if (!didWork && !this.genericRecallPending && this.canRunBackground('surfacing')) {
+        this.activeWorkKind = 'surfacing';
         const surfacing = await this.client.claimMemorySurfacing();
         if (surfacing && surfacing.job) {
           didWork = true;
           await this.processSurfacing(surfacing.job);
         }
       }
-      if (!didWork && this.canRunBackground('formation')) {
-        const formation = await this.client.claimMemorySource();
-        checkedFormation = true;
-        if (formation && formation.job) {
-          didWork = true;
-          await this.processFormation(formation.job, formation.depth || 0);
-        }
-      }
+      // Generic work is serviced only by the bounded natural-idle reservation.
+      // An empty recall queue must not become an unbounded backlog drain.
     } catch {
       // Durable server rows remain pending or are recovered as retryable.
     } finally {
       this.busy = false;
+      this.activeWorkKind = null;
       // A completed job may reveal another ready or retryable row only on the
       // next claim, so retain priority for the immediate follow-up poll. When
       // both queues have been checked empty, AWG may use a later idle window.
@@ -373,7 +391,89 @@ export class AutobiographicalMemoryRuntime {
     }
   }
 
+  reportGeneric(reason, detail = {}) {
+    const now = this.now();
+    if (this.lastGenericDiagnostic.reason !== reason || now - this.lastGenericDiagnostic.at >= 60000
+        || reason === 'ADMITTED' || reason === 'RESULT') {
+      this.lastGenericDiagnostic = { reason, at: now };
+      try { this.onGenericService({ reason, at: new Date(now).toISOString(), ...detail }); } catch {}
+    }
+    return { status: reason, ...detail };
+  }
+
+  async serviceGenericDuringIdle({ awgUsedSlot = false, idleBudgetMs = 0 } = {}) {
+    if (this.stopped) return this.reportGeneric('STOPPED');
+    if (awgUsedSlot) return this.reportGeneric('AWG_SLOT_USED');
+    if (idleBudgetMs < 1000) return this.reportGeneric('NO_IDLE_SLOT');
+    if (this.now() < this.nextGenericAt) return this.reportGeneric('CADENCE', { wait_ms: this.nextGenericAt - this.now() });
+    if (this.genericReservation) return this.reportGeneric('RESERVATION_BUSY');
+    if (this.activeSenderFormation || this.remoteFormationActive || this.activeWorkKind === 'sender') {
+      return this.reportGeneric('SENDER_PRIORITY');
+    }
+    const availability = this.genericAvailability();
+    if (!availability.allowed) return this.reportGeneric(availability.reason);
+    this.genericReservation = true;
+    let ownsWork = false;
+    try {
+      // Only optional recall can be displaced; await its abort/completion before
+      // taking ownership. Never wait indefinitely for a slow network request.
+      if (this.busy) {
+        if (this.activeWorkKind !== 'surfacing') return this.reportGeneric('BACKGROUND_BUSY');
+        // If settlement exceeds this short wait, keep the next optional recall
+        // from overtaking the owed slot. Sender work remains free to run.
+        this.genericRecallPending = true;
+        this.interruptBackground('generic-reservation');
+        let timer;
+        await Promise.race([
+          this.activeTick || Promise.resolve(),
+          new Promise(resolve => { timer = setTimeout(resolve, 2000); }),
+        ]).finally(() => clearTimeout(timer));
+        if (this.busy) return this.reportGeneric('RECALL_SETTLING');
+      }
+      const ready = this.genericAvailability();
+      if (this.stopped || !ready.allowed) return this.reportGeneric(this.stopped ? 'STOPPED' : ready.reason);
+      this.busy = true;
+      ownsWork = true;
+      this.activeWorkKind = 'generic';
+      this.interruptReason = null;
+      this.nextGenericAt = this.now() + GENERIC_EMPTY_POLL_MS;
+      const response = await this.client.claimGenericMemorySource();
+      const admission = response?.admission || {};
+      if (!response?.job) {
+        this.nextGenericAt = this.now() + Math.max(GENERIC_EMPTY_POLL_MS, Number(admission.wait_ms) || 0);
+        return this.reportGeneric(admission.reason || 'EMPTY', { wait_ms: this.nextGenericAt - this.now() });
+      }
+      // The server enforces this across restarts and lost acknowledgements.
+      // Preemption or failure still consumes the small service allowance.
+      this.nextGenericAt = this.now() + GENERIC_SERVICE_INTERVAL_MS;
+      const job = response.job;
+      this.reportGeneric('ADMITTED', {
+        queue_id: Number(job.id), source_type: job.source?.sourceType,
+        age_seconds: Math.max(0, Number(response.admission?.queue_age_seconds) || 0),
+        interval_ms: GENERIC_SERVICE_INTERVAL_MS, inference_limit_ms: this.backgroundTimeoutMs,
+      });
+      const result = await this.processFormation(job, response.depth || 0, { genericService: true });
+      this.reportGeneric('RESULT', { queue_id: Number(job.id), source_type: job.source?.sourceType, result: result.status });
+      return result;
+    } catch {
+      return this.reportGeneric('SERVICE_ERROR');
+    } finally {
+      if (ownsWork) {
+        this.genericRecallPending = false;
+        this.busy = false;
+        this.activeWorkKind = null;
+        this.activeAbort = null;
+        this.interruptReason = null;
+      }
+      this.genericReservation = false;
+      this.schedule(25);
+    }
+  }
+
   async backgroundGenerate(call, generate = this.generate) {
+    if (this.interruptReason && (!this.remoteFormationActive || ['pause', 'shutdown'].includes(this.interruptReason))) {
+      throw Object.assign(new Error('memory work interrupted before dispatch'), { name: 'AbortError' });
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.backgroundTimeoutMs);
     this.activeAbort = controller;
@@ -499,7 +599,7 @@ export class AutobiographicalMemoryRuntime {
     }
   }
 
-  async processFormation(job, queueDepthBefore = 0) {
+  async processFormation(job, queueDepthBefore = 0, { genericService = false } = {}) {
     const source = sanitizeCyExpressionSource(job.source || {});
     const started = this.now();
     let provider = this.providerInfo() || {};
@@ -566,7 +666,13 @@ export class AutobiographicalMemoryRuntime {
         } finally {
           this.remoteFormationActive = false;
         }
-      } else raw = await this.backgroundGenerate(request);
+      } else {
+        if (genericService && (this.stopped || !this.genericAvailability().allowed)) {
+          this.interruptReason = this.interruptReason || 'generic-slot-unavailable';
+          throw Object.assign(new Error('generic formation slot interrupted'), { name: 'AbortError' });
+        }
+        raw = await this.backgroundGenerate({ ...request, genericFormation: genericService });
+      }
       const operation = parseFormationResponse(raw, {
         source,
         existing: request.candidates.map((candidate) => candidates.find((memory) => memory.id === candidate.id)).filter(Boolean),
