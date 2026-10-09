@@ -211,6 +211,7 @@ import {
   MEMORY_EXPRESSION_BATCH_LIMIT,
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
+  environmentFormationAdmission,
   sourceFromEnvironmentRecord,
   sourceFromDreamExpression,
   sourceFromExpression,
@@ -1102,9 +1103,18 @@ async function main() {
     if (cyObserved && autobiographicalMemory) {
       const source = sourceFromEnvironmentRecord(record);
       if (source) {
-        void autobiographicalMemory.queueSource(source).catch((error) => {
-          console.warn(`[cy] memory source enqueue deferred: ${error.message}`);
-        });
+        // Arrival-side sustainability boundary: only plausible episodes become
+        // durable formation candidates. Repetitive world texture and non-terminal
+        // episode stages are not separately formed (one coherent episode -> one
+        // representative source). Significant/adverse occurrences are always kept.
+        // This gates ONLY generic ENVIRONMENT_EVENT formation enqueue; the
+        // retrieval/surfacing query below is deliberately left unchanged.
+        const admission = environmentFormationAdmission(record);
+        if (admission.admit) {
+          void autobiographicalMemory.queueSource(source).catch((error) => {
+            console.warn(`[cy] memory source enqueue deferred: ${error.message}`);
+          });
+        }
         pendingMemoryQuery = {
           text: source.text,
           tags: source.tags,
