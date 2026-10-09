@@ -66,6 +66,22 @@ export function retrievalTerms(text) {
   return [...new Set(terms.filter((term) => term.length >= 3))].slice(0, 48);
 }
 
+// Deterministic tag floor for GENERIC formation (ENVIRONMENT_EVENT,
+// DREAM_EXPRESSION, CY_EXPRESSION). The generic path previously took tags only
+// from the local model's volunteered `tags` array, which it almost never emits,
+// so in production every generic memory landed with zero tags. Derive tags from
+// trustworthy source metadata and the memory's own content instead, still
+// honouring any valid model-supplied tags as a bonus. Structured source tags
+// come first so content words never crowd them out of the 12-tag cap. The
+// sender path keeps its own content-based derivation and is left unchanged.
+export function genericFormationTags(parsedTags, source, content) {
+  return list([
+    ...(source && Array.isArray(source.tags) ? source.tags : []),
+    ...retrievalTerms(content),
+    ...(Array.isArray(parsedTags) ? parsedTags : []),
+  ], null, 12);
+}
+
 export function assertPromptSafe(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value || {});
   if (HIDDEN_IDENTIFIER.test(text) || INTERNAL_ID_TEST.test(text)) {
@@ -313,7 +329,7 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
   try { assertPromptSafe(content); } catch { return { decision: 'NOTHING', valid: false }; }
   const consistencyStatus = MEMORY_CONSISTENCY.includes(parsed.consistencyStatus)
     ? parsed.consistencyStatus : 'UNCERTAIN';
-  const tags = list(parsed.tags, null, 12);
+  const tags = genericFormationTags(parsed.tags, source, content);
   if (parsed.decision === 'UPDATE') {
     const refMatch = /^C([1-5])$/.exec(String(parsed.memoryRef || ''));
     const target = refMatch ? existing[Number(refMatch[1]) - 1] : null;

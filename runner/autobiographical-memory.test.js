@@ -307,4 +307,54 @@ const senderUpd = parseFormationResponse(JSON.stringify({
 });
 assert.equal(senderUpd.decision, 'UPDATE', 'sender UPDATE of a SENDER_RECALLABLE memory remains healthy');
 
+// --- Generic formation deterministic tag floor. In production every generic
+// memory landed with zero tags because the local model volunteers no `tags`
+// array; the floor derives tags from trustworthy source metadata + content. ---
+
+// Generic UPDATE must never emit an empty tag set (an empty set would let the
+// server wipe existing tags); here it derives from the new content.
+assert.ok(okInternal.tags.length > 0, 'generic UPDATE derives a non-empty tag floor');
+assert.ok(okInternal.tags.includes('refined'), 'generic UPDATE tag floor includes content retrieval terms');
+
+// Generic CREATE with no model-supplied tags still gets trustworthy tags from
+// structured source metadata and the memory content.
+const genericSource = {
+  sourceType: 'ENVIRONMENT_EVENT', sourceId: 'env:42', sourceVisibility: 'INTERNAL_ONLY',
+  subjectVisitorId: null, text: 'yard time', tags: ['routine', 'exercise_yard'],
+};
+const genericCreate = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'EPISODIC', privacyScope: 'INTERNAL_ONLY',
+  content: 'Cy walked the yard and counted the fence posts.',
+}), { source: genericSource, existing: [], makeId: () => 'generic-new' });
+assert.equal(genericCreate.decision, 'CREATE');
+assert.ok(genericCreate.tags.length > 0, 'generic CREATE derives a non-empty tag floor without model tags');
+assert.ok(genericCreate.tags.includes('routine') && genericCreate.tags.includes('exercise_yard'),
+  'generic CREATE tag floor includes trustworthy structured source metadata');
+assert.ok(genericCreate.tags.includes('walked') || genericCreate.tags.includes('fence'),
+  'generic CREATE tag floor includes content retrieval terms');
+assert.ok(genericCreate.tags.indexOf('routine') < genericCreate.tags.indexOf('walked'),
+  'structured source tags are ordered ahead of content terms under the cap');
+
+// Valid model-volunteered tags are still honoured as a bonus.
+const genericWithModelTags = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'EPISODIC', privacyScope: 'INTERNAL_ONLY',
+  content: 'A short note.', tags: ['modeltag'],
+}), { source: genericSource, existing: [], makeId: () => 'g2' });
+assert.ok(genericWithModelTags.tags.includes('modeltag'), 'valid model-supplied generic tags are still honoured');
+
+// Sender path is UNCHANGED: it derives tags from content only and ignores
+// source metadata tags (proving it was not switched to the generic floor).
+const senderCreate = parseFormationResponse(JSON.stringify({
+  decision: 'CREATE', type: 'PERSON', content: 'The sender mentioned their allotment.',
+}), {
+  source: { sourceType: 'POSTCARD', sourceId: 'postcard:42', sourceVisibility: 'SENDER_RECALLABLE',
+    subjectVisitorId: sender, participantLabel: 'Jody', tags: ['should-not-appear'] },
+  existing: [], makeId: () => 'sc',
+});
+assert.equal(senderCreate.decision, 'CREATE');
+assert.ok(senderCreate.tags.length > 0, 'sender CREATE still derives tags from content');
+assert.ok(senderCreate.tags.includes('allotment'), 'sender tags come from content');
+assert.ok(!senderCreate.tags.includes('should-not-appear'),
+  'sender path ignores source metadata tags (unchanged behaviour)');
+
 console.log('autobiographical-memory.test.js: all checks passed');
