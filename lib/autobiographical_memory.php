@@ -13,6 +13,13 @@ const CY_MEMORY_PUBLIC_LIMIT = 20;
 const CY_MEMORY_FORMATION_FAILURE_LIMIT = 6;
 const CY_MEMORY_GENERIC_SOURCE_TYPES = ['ENVIRONMENT_EVENT', 'DREAM_EXPRESSION', 'CY_EXPRESSION'];
 const CY_MEMORY_GENERIC_CADENCE_MS = 1800000;
+// Bounded retention for generic formation candidates. Recent-first selection
+// means a generic source not admitted within this window is never examined;
+// aging it to a terminal EXPIRED state keeps the claimable queue from becoming
+// an ever-growing archive. The window is deliberately generous so this is a
+// gradual, uniform age-out, never a bulk purge of accumulated history.
+const CY_MEMORY_GENERIC_RETENTION_DAYS = 30;
+const CY_MEMORY_GENERIC_EXPIRY_BATCH = 100;
 const CY_MEMORY_FORMATION_REJECTION_CODES = [
     'JSON_FORMAT', 'SCHEMA', 'ILLEGAL_ACTION', 'ILLEGAL_TYPE', 'UNKNOWN_REF',
     'MISSING_FIELD', 'FORBIDDEN_FIELD', 'PRIVACY_PROVENANCE', 'APPLICATION_CONFLICT',
@@ -223,6 +230,51 @@ function captive_memory_prepare_formation_queue(PDO $db, bool $genericOnly = fal
              WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)"
             . ($genericOnly ? " AND source_type IN ('ENVIRONMENT_EVENT','DREAM_EXPRESSION','CY_EXPRESSION')" : '')
     );
+    if ($genericOnly) {
+        // Bounded retention: a generic candidate not admitted within the window
+        // is never examined under recent-first selection. Age such stragglers to
+        // a terminal EXPIRED state so the claimable queue cannot grow without
+        // bound. Database time drives the window (no runner-clock skew); the
+        // actual transition lives in captive_memory_expire_stale_generic_sources.
+        $t = $db->query('SELECT NOW(3) AS now, DATE_SUB(NOW(3), INTERVAL '
+            . CY_MEMORY_GENERIC_RETENTION_DAYS . ' DAY) AS cutoff')->fetch(PDO::FETCH_ASSOC);
+        if ($t) {
+            captive_memory_expire_stale_generic_sources($db, (string)$t['now'], (string)$t['cutoff']);
+        }
+    }
+}
+
+// Age generic formation candidates that were never admitted within the
+// retention window to a terminal EXPIRED state. The row and its provenance are
+// retained (world history is untouched, stored separately); sender-scoped rows
+// are never affected. Rate-limited per sweep via the batch so the sweep is
+// always a gradual, uniform age-out rather than a bulk purge. now/cutoff are
+// supplied by the caller from authoritative database time; the portable
+// derived-table batch keeps the statement valid on MariaDB and under test.
+function captive_memory_expire_stale_generic_sources(
+    PDO $db, string $now, string $cutoff, int $batch = CY_MEMORY_GENERIC_EXPIRY_BATCH
+): int {
+    $batch = max(1, $batch);
+    $stmt = $db->prepare(
+        "UPDATE autobiographical_memory_formation_queue
+         SET status = 'EXPIRED', claim_token = NULL,
+             last_result_category = 'EXPIRED_UNREACHED',
+             last_error = 'generic candidate aged out unprocessed past retention window',
+             updated_at = :now
+         WHERE id IN (
+           SELECT id FROM (
+             SELECT id FROM autobiographical_memory_formation_queue
+             WHERE status IN ('PENDING','RETRYABLE')
+               AND source_type IN ('ENVIRONMENT_EVENT','DREAM_EXPRESSION','CY_EXPRESSION')
+               AND subject_visitor_id IS NULL
+               AND queued_at < :cutoff
+             ORDER BY queued_at ASC
+             LIMIT $batch
+           ) AS due
+         )"
+    );
+    $stmt->execute([':now' => $now, ':cutoff' => $cutoff]);
+    return $stmt->rowCount();
 }
 
 // Internal selector: callers own the transaction and the generic admission lock.

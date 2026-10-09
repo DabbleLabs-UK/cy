@@ -16,6 +16,8 @@ import {
   sourceFromExpression,
   sourceFromDreamExpression,
   sourceFromEnvironmentRecord,
+  environmentFormationAdmission,
+  environmentFormationSignificant,
   sourceFromPostcard,
   sourceFromReply,
 } from './autobiographical-memory.js';
@@ -356,5 +358,77 @@ assert.ok(senderCreate.tags.length > 0, 'sender CREATE still derives tags from c
 assert.ok(senderCreate.tags.includes('allotment'), 'sender tags come from content');
 assert.ok(!senderCreate.tags.includes('should-not-appear'),
   'sender path ignores source metadata tags (unchanged behaviour)');
+
+// --- Generic ENVIRONMENT_EVENT formation admission (arrival-side boundary) ---
+// Builds a record in the real shape: descriptors hoisted to world_event top,
+// rich detail nested under world_event.world (verified against production JSON).
+const envRecord = (id, { event_type, event_family = 'ambient_world', detail = {} } = {}) => ({
+  world_event: { id, event_type, event_family, timestamp: '2026-10-09T00:00:00Z',
+    context: { location: 'cell', description: `${event_type} happened` },
+    participants: { actor: 'officer_01' }, world: detail },
+});
+const admit = (record) => environmentFormationAdmission(record);
+
+// Provenance preserved: an admitted episode still yields a source linked to the
+// exact world event id.
+const searchComplete = envRecord('env-search-1', {
+  event_type: 'cell_search_search_complete', event_family: 'custody',
+  detail: { search_episode: { id: 'srch-9', stage: 'SEARCH_COMPLETE' },
+    associative_learning: { outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' }] } },
+});
+assert.deepEqual(admit(searchComplete), { admit: true, reason: 'SIGNIFICANT' },
+  'a completed search with an occurred adverse outcome is significant and admitted');
+assert.equal(sourceFromEnvironmentRecord(searchComplete).sourceId, 'env-search-1',
+  'admitted episode preserves provenance to its real world event');
+
+// Episode coalescing: non-terminal stages are not separately formed.
+assert.deepEqual(admit(envRecord('env-search-2', {
+  event_type: 'cell_search_search_ongoing', event_family: 'custody',
+  detail: { search_episode: { id: 'srch-9', stage: 'SEARCH_ONGOING' },
+    associative_learning: { outcomes: [{ outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'unknown' }] } },
+})), { admit: false, reason: 'EPISODE_NON_TERMINAL' }, 'a mid-search stage is coalesced away');
+
+// Instrumental open/resolve pair collapses to the resolved record only.
+assert.deepEqual(admit(envRecord('env-ins-1', {
+  event_type: 'instrumental_officer_order_resolved', event_family: 'custody',
+  detail: { instrumental: { archetype_id: 'officer_order', stage: 'WORLD_OUTCOME_RESOLVED' },
+    associative_learning: { outcomes: [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'did_not_occur' }] } },
+})), { admit: true, reason: 'EPISODE_REPRESENTATIVE' }, 'instrumental resolved (benign) is the representative record');
+assert.deepEqual(admit(envRecord('env-ins-2', {
+  event_type: 'instrumental_officer_order_opened', event_family: 'custody',
+  detail: { instrumental: { archetype_id: 'officer_order', stage: 'OPPORTUNITY_OPEN' },
+    associative_learning: { outcomes: [{ outcome_class: 'DEPRIVATION_OR_LOSS', status: 'unknown' }] } },
+})), { admit: false, reason: 'EPISODE_NON_TERMINAL' }, 'instrumental opened is coalesced away');
+
+// Repetitive texture: homeostasis family and cross-family noise are not formed.
+assert.deepEqual(admit(envRecord('env-meal', { event_type: 'breakfast_eaten', event_family: 'homeostasis' })),
+  { admit: false, reason: 'LOW_INFORMATION' }, 'routine homeostasis texture is denied');
+assert.deepEqual(admit(envRecord('env-over', { event_type: 'overheard', event_family: 'social' })),
+  { admit: false, reason: 'LOW_INFORMATION' }, 'overheard noise is denied');
+assert.deepEqual(admit(envRecord('env-sleep', { event_type: 'sleep_state_asleep', event_family: 'homeostasis' })),
+  { admit: false, reason: 'LOW_INFORMATION' }, 'sleep-state transitions are denied');
+
+// Significance override preserves an unusual occurrence even for a normally
+// repetitive type (injury during an otherwise trivial moment).
+assert.deepEqual(admit(envRecord('env-meal-hurt', { event_type: 'cold_tea', event_family: 'homeostasis',
+  detail: { physical: { injury: 'minor' } } })),
+  { admit: true, reason: 'SIGNIFICANT' }, 'injury rescues an otherwise-denied repetitive type');
+assert.deepEqual(admit(envRecord('env-noise-harm', { event_type: 'noise_night', event_family: 'social',
+  detail: { associative_learning: { outcomes: [{ outcome_class: 'PHYSICAL_HARM', status: 'occurred' }] } } })),
+  { admit: true, reason: 'SIGNIFICANT' }, 'an occurred adverse outcome rescues a noise type');
+
+// Default admit for a plausible standalone episode; benign/absent outcomes are
+// NOT significant (no backdoor).
+assert.deepEqual(admit(envRecord('env-kind', { event_type: 'officer_kindness', event_family: 'social' })),
+  { admit: true, reason: 'DEFAULT' }, 'a meaningful standalone social event is admitted by default');
+assert.equal(environmentFormationSignificant({ world: { associative_learning: {
+  outcomes: [{ outcome_class: 'SOCIAL_HOSTILITY', status: 'did_not_occur' }] } } }), false,
+  'did_not_occur outcomes are not significant');
+
+// Correspondence and malformed records never become generic candidates.
+assert.deepEqual(admit(envRecord('env-pc', { event_type: 'postcard', event_family: 'mail' })),
+  { admit: false, reason: 'CORRESPONDENCE' }, 'postcard world records are not generic candidates');
+assert.deepEqual(admit({ world_event: { event_type: 'overheard' } }),
+  { admit: false, reason: 'NO_WORLD' }, 'a record without a world id is rejected');
 
 console.log('autobiographical-memory.test.js: all checks passed');

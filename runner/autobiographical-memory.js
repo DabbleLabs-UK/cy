@@ -496,6 +496,87 @@ export function sourceFromEnvironmentRecord(record) {
   };
 }
 
+// --- Generic ENVIRONMENT_EVENT formation admission ---------------------------
+// The world fires hundreds of low-level events per day. Forming a durable
+// memory-formation job for every one is neither sustainable (arrival vastly
+// exceeds the bounded formation service) nor faithful to autobiographical
+// memory: Cy should retain plausible episodes, not individually examine every
+// tick of world texture. This boundary decides, at enqueue time, which
+// ENVIRONMENT_EVENT world records become generic formation candidates. It
+// changes ONLY what becomes a candidate - world history, sender/postcard
+// memory, DREAM_EXPRESSION/CY_EXPRESSION sources, the protected generic
+// cadence, source-class fairness, tagging, the PUBLIC_RECALLABLE guard and the
+// Cy-authored PERSON guard are all untouched.
+
+// Pure routine physiological/texture family (meals, lights, tea, eggs, sleep
+// state) plus a few cross-family noise types carry little durable
+// autobiographical value and dominate volume. Genuinely significant instances
+// are still rescued by environmentFormationSignificant below.
+const ENVIRONMENT_LOW_INFORMATION_FAMILIES = Object.freeze(['homeostasis']);
+const ENVIRONMENT_LOW_INFORMATION_EVENT_TYPES = Object.freeze([
+  'overheard', 'noise_night', 'location_transition',
+  'sleep_state_asleep', 'sleep_state_awake', 'delayed_unlock', 'assoc_cancelled',
+]);
+// Fixed adverse outcome vocabulary. An outcome that actually OCCURRED (not
+// 'did_not_occur'/'unknown'), or a present injury, marks a record as worth
+// remembering even when its event type is normally repetitive.
+const ENVIRONMENT_ADVERSE_OUTCOME_CLASSES = Object.freeze([
+  'COERCIVE_LOSS_OF_CONTROL', 'SOCIAL_HOSTILITY', 'DEPRIVATION_OR_LOSS', 'PHYSICAL_HARM',
+]);
+
+// The rich world detail (situation, outcomes, episode, injury) lives under
+// world_event.world; descriptors (event_type/family) are hoisted to the top.
+function environmentWorldDetail(world) {
+  return world && typeof world.world === 'object' && world.world ? world.world : (world || {});
+}
+
+export function environmentFormationSignificant(world) {
+  const detail = environmentWorldDetail(world);
+  const injury = String(detail.physical && detail.physical.injury || '').toLowerCase();
+  if (injury && !['unknown', 'none'].includes(injury)) return true;
+  const damage = String(detail.somatic && detail.somatic.tissue
+    && detail.somatic.tissue.damage_status || '').toUpperCase();
+  if (damage && !['UNKNOWN', 'NONE'].includes(damage)) return true;
+  const outcomes = detail.associative_learning && detail.associative_learning.outcomes;
+  return Array.isArray(outcomes) && outcomes.some((outcome) => outcome
+    && outcome.status === 'occurred'
+    && ENVIRONMENT_ADVERSE_OUTCOME_CLASSES.includes(outcome.outcome_class));
+}
+
+// Returns { admit, reason }. run.js enqueues a generic ENVIRONMENT_EVENT
+// formation source only when admit is true; reasons are content-free diagnostic
+// labels. Episode coalescing admits exactly one representative record per
+// coherent episode - the resolved/completed stage, which carries the outcome
+// and links its earlier stages via provenance - so one real episode becomes one
+// autobiographical source rather than many fragments.
+export function environmentFormationAdmission(record) {
+  const world = record && record.world_event;
+  if (!world || !world.id) return { admit: false, reason: 'NO_WORLD' };
+  const type = String(world.event_type || '');
+  if (['postcard', 'postcard_with_image', 'postcard_reply'].includes(type)) {
+    return { admit: false, reason: 'CORRESPONDENCE' };
+  }
+  if (environmentFormationSignificant(world)) return { admit: true, reason: 'SIGNIFICANT' };
+  const detail = environmentWorldDetail(world);
+  const search = detail.search_episode;
+  if (search && search.id) {
+    return String(search.stage || '').toUpperCase() === 'SEARCH_COMPLETE'
+      ? { admit: true, reason: 'EPISODE_REPRESENTATIVE' }
+      : { admit: false, reason: 'EPISODE_NON_TERMINAL' };
+  }
+  const instrumental = detail.instrumental;
+  if (instrumental && instrumental.archetype_id) {
+    return String(instrumental.stage || '').toUpperCase() === 'WORLD_OUTCOME_RESOLVED'
+      ? { admit: true, reason: 'EPISODE_REPRESENTATIVE' }
+      : { admit: false, reason: 'EPISODE_NON_TERMINAL' };
+  }
+  if (ENVIRONMENT_LOW_INFORMATION_FAMILIES.includes(String(world.event_family || ''))
+      || ENVIRONMENT_LOW_INFORMATION_EVENT_TYPES.includes(type)) {
+    return { admit: false, reason: 'LOW_INFORMATION' };
+  }
+  return { admit: true, reason: 'DEFAULT' };
+}
+
 export function sourceFromPostcard(postcard, environmentEventId) {
   if (!postcard || !postcard.id) return null;
   return {
