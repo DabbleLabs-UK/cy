@@ -954,9 +954,20 @@ function captive_memory_add_source(PDO $db, string $memoryId, array $source): vo
 
 function captive_memory_replace_tags(PDO $db, string $memoryId, array $tags): void
 {
+    $tags = captive_memory_tags($tags);
+    // Tag replacement is wholesale. An empty set would DELETE every existing
+    // tag, so an UPDATE that volunteered no tags silently erased curated or
+    // derived tags (this is what wiped the 8-by-4 motif). Treat an empty set as
+    // "no change" and preserve existing tags. CREATE has no prior tags, so this
+    // is a harmless no-op there. Privacy DELETE clears tags via its own direct
+    // DELETE (see captive_memory_apply) and is unaffected. A non-empty set still
+    // replaces wholesale, so ordinary retag/refresh semantics are unchanged.
+    if ($tags === []) {
+        return;
+    }
     $db->prepare('DELETE FROM autobiographical_memory_tags WHERE memory_id = ?')->execute([$memoryId]);
     $insert = $db->prepare('INSERT INTO autobiographical_memory_tags (memory_id, tag) VALUES (?, ?)');
-    foreach (captive_memory_tags($tags) as $tag) {
+    foreach ($tags as $tag) {
         $insert->execute([$memoryId, $tag]);
     }
 }
