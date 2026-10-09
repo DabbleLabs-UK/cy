@@ -4,6 +4,18 @@
 # values, the same way run.js exports readNdjsonStream/generationHitTokenLimit
 # for its own test to call directly.
 
+function Test-CyMaintenanceHeld {
+    param($Request, $Status, [int]$RunnerPid, [datetime]$Now)
+    try {
+        $age = ($Now.ToUniversalTime() - ([datetime]$Status.updatedAt).ToUniversalTime()).TotalSeconds
+        return $Request.version -eq 1 -and $Status.version -eq 1 `
+            -and [string]$Request.id -match '^[A-Za-z0-9_.-]{1,128}$' `
+            -and $Status.requestId -ceq $Request.id -and $Status.pid -eq $RunnerPid `
+            -and $Status.state -ceq 'held' -and $Status.active -eq 0 `
+            -and $age -ge 0 -and $age -le 5
+    } catch { return $false }
+}
+
 # A freshly restarted runner inherits whatever power.json the PREVIOUS
 # (already-dead) process last wrote, which can be arbitrarily old. Judging
 # that file's raw age would call a brand-new, healthy process "stale" before

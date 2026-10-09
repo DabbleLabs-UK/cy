@@ -96,6 +96,19 @@ if ($restartDisposition -eq 'ACT') {
 
 # See cy-watchdog-lib.ps1 (Test-CyHeartbeatFresh) for the startup-grace logic
 # and its rationale.
+if ($env:CY_MAINTENANCE_DIR -and $runners.Count -eq 1) {
+    try {
+        $maintenanceRequest = Get-Content -LiteralPath (Join-Path $env:CY_MAINTENANCE_DIR 'request.json') -Raw | ConvertFrom-Json
+        $maintenanceStatus = Get-Content -LiteralPath (Join-Path $env:CY_MAINTENANCE_DIR 'cy-status.json') -Raw | ConvertFrom-Json
+        # Process enumeration can outlast a status refresh. Compare the status
+        # against validation time, not the timestamp captured before enumeration.
+        if (Test-CyMaintenanceHeld -Request $maintenanceRequest -Status $maintenanceStatus `
+            -RunnerPid $runners[0].ProcessId -Now (Get-Date)) {
+            Write-Output 'Cy watchdog: fresh maintenance hold acknowledged by the current runner.'
+            exit 0
+        }
+    } catch { } # Missing, stale or invalid status never disables normal recovery.
+}
 $heartbeatFresh = $false
 if (Test-Path -LiteralPath $heartbeatPath) {
     $heartbeatMtime = (Get-Item -LiteralPath $heartbeatPath).LastWriteTime

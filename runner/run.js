@@ -219,6 +219,7 @@ import {
   sourceFromReply,
 } from './autobiographical-memory.js';
 import { AutobiographicalMemoryRuntime } from './memory-runtime.js';
+import { MaintenanceGate } from './maintenance-gate.js';
 import { InferenceCoordinator } from './inference-coordinator.js';
 import {
   GenerationCancellationRegistry,
@@ -521,6 +522,12 @@ function firstWord(text) {
 
 async function main() {
   const config = await loadConfig();
+  const maintenance = new MaintenanceGate();
+  maintenance.start();
+  // A supervisor restart must honor an outstanding hold before startup recovery
+  // or background queues can admit work. Removing the request explicitly resumes.
+  let releaseStartup = maintenance.enter();
+  while (!releaseStartup) { await sleep(500); releaseStartup = maintenance.enter(); }
   const vitalsPath = join(STATE_DIR, 'vitals.json');
   const contextPath = join(STATE_DIR, 'context.jsonl');
   const blockedLogPath = join(STATE_DIR, 'blocked.log');
@@ -590,6 +597,7 @@ async function main() {
 
   const warden = createWarden(config, blockedLogPath);
   const client = new Client(config, STATE_DIR);
+  client.maintenance = maintenance;
   await loadInitialRegime(client);
   let worldMirrorReady = !!config.dryRun;
   client.onWorldMirrorConflict = (conflicts) => {
@@ -599,6 +607,8 @@ async function main() {
   let worldMirrorSyncPending = null;
   async function syncWorldMirror() {
     if (worldMirrorReady || worldMirrorSyncPending) return worldMirrorSyncPending;
+    const releaseSync = maintenance.enter();
+    if (!releaseSync) return null;
     worldMirrorSyncPending = (async () => {
       const world = await synchronizeWorldMirror(vitals.worldSimulation, client, async (next) => {
         vitals.worldSimulation = reconcileWorldSimulationState(next);
@@ -611,7 +621,7 @@ async function main() {
       console.log('[cy] world mirror synchronized');
     })().catch((error) => {
       console.error(`[cy] world mirror not synchronized; dependent world work held: ${error.message}`);
-    }).finally(() => { worldMirrorSyncPending = null; });
+    }).finally(() => { worldMirrorSyncPending = null; releaseSync(); });
     return worldMirrorSyncPending;
   }
   const worldMirrorSyncTimer = setInterval(() => {
@@ -643,6 +653,7 @@ async function main() {
     'world_thread_record',
   ]);
   const emit = (ev) => {
+    if (maintenance.blocked && maintenance.active === 0 && ['host', 'power'].includes(ev?.kind)) return;
     if (ev && DURABLE_STATE_EVENT_KINDS.has(ev.kind)) urgentVitalsDirty = true;
     client.enqueue(ev);
   };
@@ -3172,6 +3183,7 @@ async function main() {
     return { allowed: true, reason: 'IDLE_SLOT' };
   };
   autobiographicalMemory = new AutobiographicalMemoryRuntime({
+    maintenance,
     client,
     makeId: randomUUID,
     genericAvailability: genericMemoryAvailability,
@@ -3214,6 +3226,12 @@ async function main() {
     providerInfo: () => ({ id: activeProvider().id, model: activeProvider().model }),
   });
   autobiographicalMemory.start();
+  maintenance.additionalActive = () => {
+    const persistence = vitalsPersistenceStatus(vitals);
+    return Number(!!worldMirrorSyncPending) + autobiographicalMemory.pendingSourceWrites
+      + autobiographicalMemory.pendingPreparations + pendingPostcards.length + pendingWarden.length
+      + client.maintenancePending() + Number(!!(persistence?.pending || persistence?.inProgress));
+  };
 
   function refreshPendingMemory(generationRef = null, groundedContext = null) {
     if (!pendingMemoryQuery) return autobiographicalMemory.working;
@@ -4453,6 +4471,14 @@ async function main() {
 
   // ---- vitals tick every tickMs ----
   const tickTimer = setInterval(async () => {
+    // Draining work retains ordinary timers. Once held, do not evolve the world
+    // or invoke the prose-stall watchdog merely because maintenance is long.
+    const maintenanceState = maintenance.refresh().state;
+    if (maintenanceState === 'held' || maintenanceState === 'error') return;
+    if (maintenance.blocked && maintenance.active === 0) return;
+    const releaseTick = maintenance.enter({ drainExisting: maintenanceState === 'draining' });
+    if (!releaseTick) return;
+    try {
     const now = Date.now();
     const { mins } = londonParts(new Date(now));
     const asleep = effectiveAsleep(mins);
@@ -4689,6 +4715,7 @@ async function main() {
         reportPersistenceError('deferred periodic save', error);
       });
     }
+    } finally { releaseTick(); }
   }, config.tickMs);
 
   // ---- host metrics every 10s ----
@@ -4783,7 +4810,7 @@ async function main() {
     pwWin = { min: Infinity, max: -Infinity, sum: 0, n: 0 };
     // a whole-pound crossing still forces the next in-world cost injection
     const pound = Math.floor(snap.cost_total);
-    if (pound > lastPound) {
+    if (pound > lastPound && maintenance.refresh().state === 'running') {
       lastPound = pound;
       forceCost = true;
       soma.observe(
@@ -4805,6 +4832,7 @@ async function main() {
   }, POWER_SAMPLE_MS);
 
   async function runAwgDuringIdle(idleBudgetMs, awgReservation = null) {
+    if (maintenance.refresh().state !== 'running') return { status: 'SKIPPED', reason: 'MAINTENANCE' };
     if (!worldMirrorReady) return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED' };
     const nowMs = Date.now();
     // Brief routine movements, active searches and lockdowns defer background
@@ -4956,6 +4984,7 @@ async function main() {
       });
     }
     while (running && Date.now() < end) {
+      if (maintenance.refresh().state !== 'running') break;
       const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;
       const regimeChanged = breakOnRegime && regimeEpoch !== startingRegimeEpoch;
       if (pendingPostcards.length || pendingWarden.length || tempoChanged || regimeChanged) break;
@@ -5262,6 +5291,13 @@ async function main() {
   // ---- main generation loop ----
   async function genLoop() {
     while (running) {
+      // Finish already-claimed inbox work before reporting held. No new inbox
+      // polls can claim anything while the request exists.
+      const releaseMaintenance = maintenance.enter({
+        drainExisting: pendingPostcards.length > 0 || pendingWarden.length > 0,
+      });
+      if (!releaseMaintenance) { await sleep(500); continue; }
+      try {
       // OPERATOR PAUSE (owner-only, admin ?111): the whole point is to make NO
       // generation calls to ollama at all, so the machine's idle CPU/memory/draw
       // can be read and the host figures reconciled. Every other timer (vitals,
@@ -5802,6 +5838,7 @@ async function main() {
         // that never reached the provider still takes a small breather.
         await sleep(700);
       }
+      } finally { releaseMaintenance(); }
     }
   }
 
@@ -5810,6 +5847,7 @@ async function main() {
   async function shutdown() {
     if (shuttingDown) return;
     shuttingDown = true;
+    maintenance.stop();
     running = false;
     console.log('\n[cy] shutting down - flushing...');
     generationCancellation.abortAll('SHUTDOWN');
@@ -5888,6 +5926,7 @@ async function main() {
     `[cy] prompt zones (chars): A(fixed,cached)=${ZONE_A.length} | ` +
       `B(context,append-only)=${contextBuf.length}/${CONTEXT_HARD} | C(volatile,sample)=${sampleC.length}`,
   );
+  releaseStartup();
   await genLoop();
 }
 
