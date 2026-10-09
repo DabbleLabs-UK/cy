@@ -5,6 +5,13 @@ Default-off operational control, not an owner pause or a model setting. Set
 supervisor AND watchdog environments. Neither configuration nor directory is
 created automatically. It must not be a public web directory.
 
+For an explicitly approved operational bootstrap, `runner/cy-maintenance-launch.ps1`
+accepts `-Mode Supervisor` or `-Mode Watchdog` and `-Directory` pointing to that
+existing directory. It sets the environment for the original supervisor/watchdog
+launch target and preserves its exit code. Configure both launch paths consistently;
+the wrapper does not stop or replace any running process and is not a drain mechanism.
+Its disposable fixture tests are `runner/cy-maintenance-launch.test.ps1`.
+
 Atomically write `request.json` containing `{"version":1,"id":"unique-window-id"}`.
 The runner stops admitting generation iterations, inbox claims and background
 memory jobs. Already admitted work runs normally, including its existing timeout,
