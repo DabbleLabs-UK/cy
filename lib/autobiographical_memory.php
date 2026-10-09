@@ -866,6 +866,7 @@ function captive_memory_rows_by_ids(PDO $db, array $ids): array
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     $stmt = $db->prepare(
         "SELECT m.*, GROUP_CONCAT(DISTINCT t.tag ORDER BY t.tag SEPARATOR ',') AS tags,
+                GROUP_CONCAT(DISTINCT s.source_type ORDER BY s.source_type SEPARATOR ',') AS source_kinds,
                 COUNT(DISTINCT CONCAT(s.source_type, ':', s.source_id)) AS source_count
          FROM autobiographical_memories m
          LEFT JOIN autobiographical_memory_tags t ON t.memory_id = m.id
@@ -980,6 +981,14 @@ function captive_memory_candidate_items(array $ranked, ?string $visitorId): arra
             'tags' => $row['tags_array'],
             'reasons' => $row['retrieval_reasons'],
             'sourceCount' => (int)$row['source_count'],
+            // Target origin kinds (structured provenance), used by the generic
+            // UPDATE consolidation guard in the runner. Like matched*/provenance
+            // above this is instrumentation: filterMemoriesBeforePrompt
+            // whitelists model-facing fields, so it never reaches a model prompt.
+            'sourceKinds' => array_values(array_filter(
+                explode(',', (string)($row['source_kinds'] ?? '')),
+                static fn(string $kind): bool => $kind !== ''
+            )),
         ];
     }, $ranked);
 }

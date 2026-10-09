@@ -9,6 +9,7 @@ import {
   formatAutobiographicalMemory,
   memoryVisibleTo,
   parseFormationResponse,
+  genericUpdateConsolidates,
   parseSurfacingResponse,
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
@@ -430,5 +431,90 @@ assert.deepEqual(admit(envRecord('env-pc', { event_type: 'postcard', event_famil
   { admit: false, reason: 'CORRESPONDENCE' }, 'postcard world records are not generic candidates');
 assert.deepEqual(admit({ world_event: { event_type: 'overheard' } }),
   { admit: false, reason: 'NO_WORLD' }, 'a record without a world id is rejected');
+
+// --- Generic UPDATE consolidation guard (real production failure shapes) -----
+const genTarget = (over = {}) => ({
+  id: 'mem-t', type: 'EPISODIC', status: 'ACTIVE', version: 3,
+  privacyScope: 'INTERNAL_ONLY', subjectVisitorId: null,
+  content: 'default content', classification: 'c', publicSummary: null,
+  sourceKinds: ['ENVIRONMENT_EVENT'], ...over,
+});
+const genSrc = (sourceType) => ({ sourceType, sourceId: `${sourceType}:1`,
+  sourceVisibility: 'INTERNAL_ONLY', subjectVisitorId: null, text: 't' });
+const genUpdate = (sourceType, target, newContent) => parseFormationResponse(
+  JSON.stringify({ decision: 'UPDATE', memoryRef: 'C1', content: newContent }),
+  { source: genSrc(sourceType), existing: [target], makeId: () => 'x' });
+
+// 67789c69: a dream must not overwrite a world-grounded memory (and it kept the
+// old UNRESOLVED_THREAD type while doing so). Terminal NOTHING, not a clobber.
+assert.deepEqual(
+  genUpdate('DREAM_EXPRESSION',
+    genTarget({ type: 'UNRESOLVED_THREAD', sourceKinds: ['ENVIRONMENT_EVENT'],
+      content: 'Had the thought that there are no eggs at home.' }),
+    'Tape still stuck on my palm / Sweep clipboard creaked open by itself / Miss Trace counting backwards'),
+  { decision: 'NOTHING', valid: true, blockedReason: 'GENERIC_UPDATE_NOT_CONSOLIDATING' },
+  'dream cannot clobber a world-grounded memory (67789c69 shape)');
+
+// e4a153ca: a dream must not overwrite a waking CY_EXPRESSION memory.
+assert.equal(
+  genUpdate('DREAM_EXPRESSION',
+    genTarget({ sourceKinds: ['CY_EXPRESSION'],
+      content: 'dis ting aint right fam, somethin dont add up bout dese cells' }),
+    'under water, bubbles form at my feet / a thing like a smile / flesh under lights').blockedReason,
+  'GENERIC_UPDATE_NOT_CONSOLIDATING', 'dream cannot clobber a waking-expression memory (e4a153ca shape)');
+
+// 60773963: an identical-content UPDATE is a material no-op and is rejected.
+assert.equal(
+  genUpdate('ENVIRONMENT_EVENT',
+    genTarget({ content: 'I had a cup of cold tea at 18:44 on October 7th, 2026.' }),
+    'I had a cup of cold tea at 18:44 on October 7th, 2026.').blockedReason,
+  'GENERIC_UPDATE_NOT_CONSOLIDATING', 'no-op UPDATE rejected (60773963 shape)');
+
+// Same-kind unrelated replacement (would clobber a different topic) is rejected.
+assert.equal(
+  genUpdate('ENVIRONMENT_EVENT',
+    genTarget({ content: 'I had a cup of cold tea in the morning.' }),
+    'Bill mentioned the library closes early on Fridays.').blockedReason,
+  'GENERIC_UPDATE_NOT_CONSOLIDATING', 'unrelated same-kind replacement rejected');
+
+// POSITIVE: same-kind topical extension genuinely consolidates (allowed).
+const gExtend = genUpdate('ENVIRONMENT_EVENT',
+  genTarget({ content: 'Officers searched the cell and took a notebook.' }),
+  'Officers searched the cell and took a notebook; the search left the cell in disarray.');
+assert.equal(gExtend.decision, 'UPDATE', 'same-kind topical extension consolidates');
+assert.equal(gExtend.blockedReason, undefined);
+
+// POSITIVE: same-origin dream-thread consolidation (new dream shares the motif).
+assert.equal(
+  genUpdate('DREAM_EXPRESSION',
+    genTarget({ sourceKinds: ['DREAM_EXPRESSION'], content: 'the lock will not turn / Reg knows / lights out' }),
+    'the lock will not turn / Reg knows again / lights out in every cell').decision,
+  'UPDATE', 'same-origin same-topic dream consolidation is allowed');
+
+// Unknown provenance (no sourceKinds): still gated by no-op/topic, not origin.
+assert.equal(
+  genUpdate('DREAM_EXPRESSION',
+    genTarget({ sourceKinds: [], content: 'walking the yard at dawn' }),
+    'walking the yard at dawn, the gulls overhead').decision,
+  'UPDATE', 'with unknown provenance a topical extension still consolidates');
+
+// The sender/DeepSeek path is NOT subject to this guard: an unrelated sender
+// UPDATE still consolidates exactly as before (6fa54a81 lane preserved).
+assert.equal(
+  parseFormationResponse(JSON.stringify({ decision: 'UPDATE', memoryRef: 'FM1', content: 'A completely different sender topic.' }), {
+    source: { sourceType: 'CY_REPLY', sourceId: 'postcard-reply:1', sourceVisibility: 'SENDER_RECALLABLE',
+      subjectVisitorId: sender, participantLabel: 'J', text: 'x' },
+    existing: [{ ...base, id: 'sfm', type: 'EPISODIC', status: 'ACTIVE', privacyScope: 'SENDER_RECALLABLE',
+      subjectVisitorId: sender, version: 1, content: 'original sender memory', sourceKinds: ['CY_REPLY'] }],
+    makeId: () => 'x',
+  }).decision,
+  'UPDATE', 'sender UPDATE is never gated by the generic consolidation guard');
+
+// Direct unit checks of the invariant.
+assert.equal(genericUpdateConsolidates(genSrc('DREAM_EXPRESSION'),
+  { content: 'cold tea', sourceKinds: ['ENVIRONMENT_EVENT'] }, 'a dream about the sea'), false,
+  'cross-kind is not consolidation');
+assert.equal(genericUpdateConsolidates(genSrc('ENVIRONMENT_EVENT'),
+  { content: 'x y', sourceKinds: ['ENVIRONMENT_EVENT'] }, 'x y'), false, 'no-op is not consolidation');
 
 console.log('autobiographical-memory.test.js: all checks passed');

@@ -303,6 +303,39 @@ function extractJson(raw) {
   try { return JSON.parse(text.slice(first, last + 1)); } catch { return null; }
 }
 
+function normalizeContent(text) {
+  return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// A generic (ENVIRONMENT_EVENT / DREAM_EXPRESSION / CY_EXPRESSION) UPDATE may
+// only CONSOLIDATE the same memory: it must be compatible with the target's
+// recorded origin kind and genuinely extend/refine it - never a wholesale
+// replacement of an unrelated or differently-grounded memory, and never a
+// no-op. Production showed dreams clobbering world/waking-grounded memories and
+// churning one record through unrelated contents. The target's actual source
+// kinds (structured provenance supplied by the server) are the PRIMARY gate; a
+// content-token floor is only a secondary anti-clobber check, not a sole
+// similarity threshold. The healthy sender/DeepSeek path does not use this
+// parser and is unaffected.
+export function genericUpdateConsolidates(source, target, newContent) {
+  const prev = normalizeContent(target && target.content);
+  const next = normalizeContent(newContent);
+  if (!next || next === prev) return false; // material no-op
+  const newKind = String((source && source.sourceType) || '');
+  const targetKinds = Array.isArray(target && target.sourceKinds)
+    ? target.sourceKinds.map(String) : [];
+  // Cross-kind clobber: a dream may not overwrite a world- or waking-grounded
+  // memory (and vice versa). When the target's provenance is known, the new
+  // source kind must already be one that built it.
+  if (targetKinds.length && !targetKinds.includes(newKind)) return false;
+  const prevTokens = new Set(retrievalTerms(prev));
+  if (!prevTokens.size) return true; // nothing distinctive to preserve
+  const nextTokens = retrievalTerms(next);
+  const extendsPrev = [...prevTokens].every((term) => nextTokens.includes(term));
+  const shared = nextTokens.filter((term) => prevTokens.has(term)).length;
+  return extendsPrev || shared >= 2; // recognisably the same topic
+}
+
 export function parseFormationResponse(raw, { source, existing = [], makeId } = {}) {
   if (['POSTCARD', 'CY_REPLY'].includes(source?.sourceType)) {
     return parseSenderFormationResponse(raw, { source, existing, makeId });
@@ -350,6 +383,16 @@ export function parseFormationResponse(raw, { source, existing = [], makeId } = 
     // and their targets are structurally SENDER_RECALLABLE only.
     if (target.privacyScope === 'PUBLIC_RECALLABLE') {
       return { decision: 'NOTHING', valid: true, blockedReason: 'PUBLIC_RECALLABLE_UPDATE_BLOCKED' };
+    }
+    // A generic UPDATE must genuinely consolidate the same memory/topic and be
+    // compatible with the target's origin kind. Otherwise it would clobber an
+    // unrelated or differently-grounded memory (e.g. a dream overwriting
+    // world-grounded content) or be a no-op. Terminal NOTHING - the source is
+    // simply not formed this cycle rather than destroying the target; forming a
+    // distinct memory instead would need the model to choose CREATE with its own
+    // type/scope, which it did not.
+    if (!genericUpdateConsolidates(source, target, content)) {
+      return { decision: 'NOTHING', valid: true, blockedReason: 'GENERIC_UPDATE_NOT_CONSOLIDATING' };
     }
     return {
       decision: 'UPDATE', valid: true, memoryId: target.id, expectedVersion: target.version,

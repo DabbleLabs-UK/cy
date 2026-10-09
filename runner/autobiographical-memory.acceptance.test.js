@@ -28,6 +28,7 @@ const memory = (overrides = {}) => ({
   subjectVisitorId: null, content: 'The cell dimensions recalled the machine.',
   publicSummary: null, consistencyStatus: 'UNCERTAIN', version: 2,
   tags: ['cell', 'machine'], reasons: ['SIMILAR_SUBJECT'],
+  sourceKinds: ['ENVIRONMENT_EVENT'],
   ...overrides,
 });
 const source = {
@@ -61,7 +62,9 @@ test('C create', () => {
 });
 
 test('D update versions memory without changing its source', () => {
-  const op = parseFormationResponse('{"decision":"UPDATE","memoryRef":"C1","content":"The search now seems recurrent."}', {
+  // A genuine same-kind consolidation (extends the existing cell/machine memory)
+  // - unrelated replacement is now a terminal NOTHING, exercised separately.
+  const op = parseFormationResponse('{"decision":"UPDATE","memoryRef":"C1","content":"The cell dimensions recalled the machine, and the search made the walls feel closer."}', {
     source, existing: [memory()], makeId: () => 'unused',
   });
   assert.equal(op.decision, 'UPDATE');
