@@ -82,6 +82,7 @@ export class AutobiographicalMemoryRuntime {
     backgroundTimeoutMs = BACKGROUND_TIMEOUT_MS,
     genericAvailability = () => ({ allowed: true, reason: 'IDLE_SLOT' }),
     onGenericService = () => {},
+    maintenance = null,
   }) {
     this.client = client;
     this.generate = generate;
@@ -96,6 +97,7 @@ export class AutobiographicalMemoryRuntime {
     this.backgroundTimeoutMs = backgroundTimeoutMs;
     this.genericAvailability = genericAvailability;
     this.onGenericService = onGenericService;
+    this.maintenance = maintenance;
     this.nextGenericAt = 0;
     this.genericReservation = false;
     this.genericRecallPending = false;
@@ -115,6 +117,7 @@ export class AutobiographicalMemoryRuntime {
     // yet, so lower-priority world generation must wait for the first poll.
     this.priorityPending = true;
     this.pendingSourceWrites = 0;
+    this.pendingPreparations = 0;
     this.activeAbort = null;
     this.interruptReason = null;
     this.timer = null;
@@ -180,6 +183,7 @@ export class AutobiographicalMemoryRuntime {
     const fingerprint = memoryContextFingerprint(context);
     this.desired = { fingerprint, visitorId: context.currentVisitorId, generationRef: context.generationRef };
     if (!this.compatibleWorking(fingerprint, context.currentVisitorId)) this.clearWorking('PENDING');
+    this.pendingPreparations++;
     const prepare = (async () => {
       try {
         const cached = await this.client.getPreparedMemorySet({
@@ -207,7 +211,7 @@ export class AutobiographicalMemoryRuntime {
           this.clearWorking('UNAVAILABLE', errorText(error));
         }
       }
-    })();
+    })().finally(() => { this.pendingPreparations--; });
     if (deadlineMs > 0) {
       const remaining = Math.max(0, started + deadlineMs - this.now());
       await Promise.race([
@@ -293,6 +297,13 @@ export class AutobiographicalMemoryRuntime {
   }
 
   async runTick() {
+    const release = this.maintenance ? this.maintenance.enter() : () => {};
+    if (!release) { this.schedule(500); return; }
+    try { return await this.runAdmittedTick(); }
+    finally { release(); }
+  }
+
+  async runAdmittedTick() {
     if (this.stopped || this.busy || this.genericReservation) return;
     if (!this.canRunBackground('surfacing') && !this.canRunBackground('sender_formation')) {
       // A tempo reservation can be minutes long. Polling it four times a second
@@ -360,6 +371,13 @@ export class AutobiographicalMemoryRuntime {
   // This supplies a bounded turn even when visible expression would otherwise
   // take every model slot. Incoming interactive work may still abort it.
   async serviceAgedSenderBeforeExpression() {
+    const release = this.maintenance ? this.maintenance.enter() : () => {};
+    if (!release) return { status: 'DEFERRED', reason: 'MAINTENANCE' };
+    try { return await this.serviceAdmittedSenderBeforeExpression(); }
+    finally { release(); }
+  }
+
+  async serviceAdmittedSenderBeforeExpression() {
     if (this.stopped) return { status: 'DEFERRED' };
     if (this.lastReservedSenderAt && this.now() - this.lastReservedSenderAt < SENDER_RESERVED_INTERVAL_MS) {
       return { status: 'NOT_DUE' };
@@ -402,6 +420,13 @@ export class AutobiographicalMemoryRuntime {
   }
 
   async serviceGenericDuringIdle({ awgUsedSlot = false, idleBudgetMs = 0 } = {}) {
+    const release = this.maintenance ? this.maintenance.enter() : () => {};
+    if (!release) return { status: 'DEFERRED', reason: 'MAINTENANCE' };
+    try { return await this.serviceAdmittedGenericDuringIdle({ awgUsedSlot, idleBudgetMs }); }
+    finally { release(); }
+  }
+
+  async serviceAdmittedGenericDuringIdle({ awgUsedSlot = false, idleBudgetMs = 0 } = {}) {
     if (this.stopped) return this.reportGeneric('STOPPED');
     if (awgUsedSlot) return this.reportGeneric('AWG_SLOT_USED');
     if (idleBudgetMs < 1000) return this.reportGeneric('NO_IDLE_SLOT');
