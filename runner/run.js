@@ -4901,6 +4901,12 @@ async function main() {
       return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED', slotConsumed: !!result.run };
     }
     vitals.worldSimulation = result.state;
+    if (result.drought && result.drought.active) {
+      const objectCount = result.applied && Array.isArray(result.applied.validationCandidate?.objects)
+        ? result.applied.validationCandidate.objects.length : 0;
+      console.log(`[cy-awg] drought-response active streak=${result.drought.streak} outcome=${result.status}`
+        + ` threads=${JSON.stringify((result.run && result.run.threadChanges) || [])} objects=${objectCount}`);
+    }
     if (result.status === 'ACCEPTED') {
       reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
     }
