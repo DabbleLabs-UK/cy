@@ -12,6 +12,12 @@ const CY_MEMORY_CANDIDATE_LIMIT = 10;
 const CY_MEMORY_PUBLIC_LIMIT = 20;
 const CY_MEMORY_FORMATION_FAILURE_LIMIT = 6;
 const CY_MEMORY_GENERIC_SOURCE_TYPES = ['ENVIRONMENT_EVENT', 'DREAM_EXPRESSION', 'CY_EXPRESSION'];
+// Source types that are provenance markers rather than evidence OF the content.
+// An OWNER_CORRECTION records who/why a correction happened; it never defines
+// what kind of evidence the resulting content represents, so it must never
+// become a memory's current origin kind (that would erase the real origin and,
+// via the consolidation guard, change which sources may later update it).
+const CY_MEMORY_NON_EVIDENCE_SOURCE_TYPES = ['OWNER_CORRECTION'];
 const CY_MEMORY_GENERIC_CADENCE_MS = 1800000;
 // Bounded retention for generic formation candidates. Recent-first selection
 // means a generic source not admitted within this window is never examined;
@@ -742,12 +748,42 @@ function captive_memory_snapshot(array $memory): array
         'status' => $memory['status'],
         'privacy_scope' => $memory['privacy_scope'],
         'epistemic_status' => 'SUBJECTIVE_AUTOBIOGRAPHICAL_MEMORY',
+        'origin_kind' => $memory['origin_kind'] ?? null,
         'consistency_status' => $memory['consistency_status'],
         'content' => $memory['content'],
         'public_summary' => $memory['public_summary'],
         'classification' => $memory['classification'],
         'name_recallable' => (bool)$memory['name_recallable'],
     ];
+}
+
+// The origin kind of a memory's CURRENT content: the kind of evidence that
+// content represents. Maintained at write time so the consolidation guard can
+// protect the current content without consulting the full historical
+// source-kind set (which keeps kinds that only ever contaminated the record).
+function captive_memory_resolve_origin_kind(string $decision, array $op, ?array $current): ?string
+{
+    // An explicit declaration always wins. An OWNER_CORRECTION that restores
+    // earlier content declares that content's evidence kind here (e.g. a
+    // restored waking memory is CY_EXPRESSION, never OWNER_CORRECTION).
+    $explicit = strtoupper(trim((string)($op['originKind'] ?? '')));
+    if ($explicit !== '') {
+        return mb_substr($explicit, 0, 32);
+    }
+    $sourceType = strtoupper(trim((string)($op['source']['sourceType'] ?? '')));
+    if ($decision === 'CREATE') {
+        // A CREATE is always evidence of some kind; record it verbatim.
+        return $sourceType !== '' ? mb_substr($sourceType, 0, 32) : null;
+    }
+    // UPDATE: a genuine evidence source becomes the current origin kind (for the
+    // automated generic path the runner guard has already proven it is the same
+    // kind). A non-evidence correction preserves the existing origin kind so a
+    // correction can never erase what kind of evidence the content represents.
+    if ($sourceType !== '' && !in_array($sourceType, CY_MEMORY_NON_EVIDENCE_SOURCE_TYPES, true)) {
+        return mb_substr($sourceType, 0, 32);
+    }
+    return isset($current['origin_kind']) && $current['origin_kind'] !== null
+        ? (string)$current['origin_kind'] : null;
 }
 
 function captive_memory_validate_operation(array $operation): array
@@ -769,6 +805,14 @@ function captive_memory_validate_operation(array $operation): array
     if (isset($operation['consistencyStatus'])
         && !in_array($operation['consistencyStatus'], CY_MEMORY_CONSISTENCY, true)) {
         throw new InvalidArgumentException('invalid consistency status');
+    }
+    if (isset($operation['originKind'])) {
+        $originKind = strtoupper(trim((string)$operation['originKind']));
+        if ($originKind === ''
+            || !preg_match('/^[A-Z0-9_]{1,32}$/', $originKind)
+            || in_array($originKind, CY_MEMORY_NON_EVIDENCE_SOURCE_TYPES, true)) {
+            throw new InvalidArgumentException('invalid origin kind');
+        }
     }
     if (in_array($decision, ['CREATE', 'UPDATE'], true)) {
         $source = $operation['source'] ?? null;
@@ -989,6 +1033,11 @@ function captive_memory_candidate_items(array $ranked, ?string $visitorId): arra
                 explode(',', (string)($row['source_kinds'] ?? '')),
                 static fn(string $kind): bool => $kind !== ''
             )),
+            // Origin kind of the CURRENT content (authoritative cross-kind gate
+            // for the generic UPDATE consolidation guard). Unlike sourceKinds
+            // above it reflects only the current content, so a kind that only
+            // contaminated this memory historically cannot reopen the gate.
+            'originKind' => (string)($row['origin_kind'] ?? ''),
         ];
     }, $ranked);
 }
@@ -1045,6 +1094,7 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
             $memory = [
                 'memory_type' => $op['type'], 'status' => 'ACTIVE',
                 'privacy_scope' => $op['privacyScope'],
+                'origin_kind' => captive_memory_resolve_origin_kind('CREATE', $op, null),
                 'consistency_status' => $op['consistencyStatus'] ?? 'UNCERTAIN',
                 'content' => mb_substr(trim((string)($op['content'] ?? '')), 0, 2000),
                 'public_summary' => isset($op['publicSummary']) ? mb_substr(trim((string)$op['publicSummary']), 0, 600) : null,
@@ -1056,14 +1106,15 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
             }
             $stmt = $db->prepare(
                 'INSERT INTO autobiographical_memories
-                    (id, memory_type, status, privacy_scope, consistency_status, subject_visitor_id,
+                    (id, memory_type, status, privacy_scope, origin_kind, consistency_status, subject_visitor_id,
                      content, public_summary, classification, name_recallable, created_at, updated_at)
-                 VALUES (:id, :type, :status, :scope, :consistency, :visitor,
+                 VALUES (:id, :type, :status, :scope, :origin_kind, :consistency, :visitor,
                          :content, :public_summary, :classification, :name_recallable, NOW(3), NOW(3))'
             );
             $stmt->execute([
                 ':id' => $id, ':type' => $memory['memory_type'], ':status' => 'ACTIVE',
-                ':scope' => $memory['privacy_scope'], ':consistency' => $memory['consistency_status'],
+                ':scope' => $memory['privacy_scope'], ':origin_kind' => $memory['origin_kind'],
+                ':consistency' => $memory['consistency_status'],
                 ':visitor' => $op['source']['subjectVisitorId'] ?? null, ':content' => $memory['content'],
                 ':public_summary' => $memory['public_summary'], ':classification' => $memory['classification'],
                 ':name_recallable' => $memory['name_recallable'],
@@ -1084,6 +1135,7 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
                 $memory = [
                     'memory_type' => $current['memory_type'], 'status' => 'ACTIVE',
                     'privacy_scope' => $current['privacy_scope'],
+                    'origin_kind' => captive_memory_resolve_origin_kind('UPDATE', $op, $current),
                     'consistency_status' => $op['consistencyStatus'] ?? $current['consistency_status'],
                     'content' => mb_substr(trim((string)($op['content'] ?? '')), 0, 2000),
                     'public_summary' => array_key_exists('publicSummary', $op) ? mb_substr(trim((string)$op['publicSummary']), 0, 600) : $current['public_summary'],
@@ -1094,13 +1146,15 @@ function captive_memory_apply(PDO $db, array $rawOperation): array
                 $upd = $db->prepare(
                     'UPDATE autobiographical_memories
                      SET content = :content, public_summary = :public_summary,
-                         classification = :classification, consistency_status = :consistency,
+                         classification = :classification, origin_kind = :origin_kind,
+                         consistency_status = :consistency,
                          version = :version, updated_at = NOW(3)
                      WHERE id = :id'
                 );
                 $upd->execute([
                     ':content' => $memory['content'], ':public_summary' => $memory['public_summary'],
-                    ':classification' => $memory['classification'], ':consistency' => $memory['consistency_status'],
+                    ':classification' => $memory['classification'], ':origin_kind' => $memory['origin_kind'],
+                    ':consistency' => $memory['consistency_status'],
                     ':version' => $version, ':id' => $id,
                 ]);
             } elseif ($decision === 'ARCHIVE') {

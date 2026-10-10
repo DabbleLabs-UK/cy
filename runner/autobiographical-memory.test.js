@@ -510,6 +510,48 @@ assert.equal(
   }).decision,
   'UPDATE', 'sender UPDATE is never gated by the generic consolidation guard');
 
+// --- Origin-kind loophole: contamination history must not reopen cross-kind --
+// e4a153ca was dream-clobbered then canonically restored to its waking
+// CY_EXPRESSION content. Its RETAINED provenance still lists DREAM_EXPRESSION
+// (history is never discarded), but its CURRENT origin kind is CY_EXPRESSION.
+// A new dream that even shares topic tokens must still be blocked - the gate is
+// the current origin kind, not the historical set. Before this fix the dream in
+// sourceKinds would have re-admitted the clobber.
+const e4Restored = (over = {}) => genTarget({
+  originKind: 'CY_EXPRESSION',
+  // real post-restore history: built by waking expression, contaminated by
+  // dreams, corrected by the owner.
+  sourceKinds: ['CY_EXPRESSION', 'DREAM_EXPRESSION', 'OWNER_CORRECTION'],
+  content: 'dis noise got me trippn bout dese cells dey watchin for sumthin to snap',
+  ...over,
+});
+assert.equal(
+  genUpdate('DREAM_EXPRESSION', e4Restored(),
+    'the cells are cold again / the noise never stops / Reg knows').blockedReason,
+  'GENERIC_UPDATE_NOT_CONSOLIDATING',
+  'a dream cannot reopen the gate via historical contamination (e4a153ca restored shape)');
+// Same shape: a genuine same-kind waking extension still consolidates.
+assert.equal(
+  genUpdate('CY_EXPRESSION', e4Restored(),
+    'dis noise got me trippn bout dese cells dey watchin for sumthin to snap an i cant sleep').decision,
+  'UPDATE',
+  'same-kind waking extension still consolidates after restore (origin kind honoured)');
+// The current origin kind overrides historical membership directly.
+assert.equal(genericUpdateConsolidates(genSrc('DREAM_EXPRESSION'),
+  { originKind: 'CY_EXPRESSION', sourceKinds: ['CY_EXPRESSION', 'DREAM_EXPRESSION', 'OWNER_CORRECTION'],
+    content: 'the cells and the noise' }, 'the cells and the noise once more'), false,
+  'dream in history does not make a CY_EXPRESSION-origin memory dream-compatible');
+assert.equal(genericUpdateConsolidates(genSrc('CY_EXPRESSION'),
+  { originKind: 'CY_EXPRESSION', sourceKinds: ['CY_EXPRESSION', 'DREAM_EXPRESSION'],
+    content: 'the cells and the noise' }, 'the cells and the noise once more'), true,
+  'same-kind source consolidates regardless of extra historical kinds');
+// A dream-origin memory is still consolidatable by dreams (genuine dream thread).
+assert.equal(genericUpdateConsolidates(genSrc('DREAM_EXPRESSION'),
+  { originKind: 'DREAM_EXPRESSION', sourceKinds: ['DREAM_EXPRESSION'],
+    content: 'the lock will not turn / Reg knows' },
+  'the lock will not turn / Reg knows again'), true,
+  'a genuine dream thread still consolidates with dreams');
+
 // Direct unit checks of the invariant.
 assert.equal(genericUpdateConsolidates(genSrc('DREAM_EXPRESSION'),
   { content: 'cold tea', sourceKinds: ['ENVIRONMENT_EVENT'] }, 'a dream about the sea'), false,

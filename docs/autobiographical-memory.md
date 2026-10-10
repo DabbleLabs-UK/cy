@@ -106,6 +106,21 @@ There is no automatic merge score. There is no model-generated chain-of-thought.
 A separate periodic consolidation process is not implemented. UPDATE can revise
 or merge one supplied higher-level memory while retaining revisions and sources.
 
+A generic (ENVIRONMENT_EVENT / DREAM_EXPRESSION / CY_EXPRESSION) UPDATE may only
+CONSOLIDATE a memory whose CURRENT content is of the same origin kind: it must
+be a material change, same-topic, and cross-kind compatible (a dream may not
+overwrite world- or waking-grounded content, and vice versa). The cross-kind
+gate uses the memory's `origin_kind` - the evidence kind of the content that is
+live right now - not the full historical source-kind set. `origin_kind` is
+maintained at write time: a CREATE records the creating evidence kind; an
+evidence UPDATE sets the new kind; an OWNER_CORRECTION preserves (or explicitly
+restates via `originKind`) the kind of evidence the restored content represents,
+never becoming `OWNER_CORRECTION` itself. Because the gate reads the current
+origin kind rather than history, a source kind that only contaminated a memory
+once and was later corrected away cannot reopen the cross-kind path, while all
+revision and source provenance stays fully intact. The healthy sender/DeepSeek
+correspondence path does not use this guard and is unaffected.
+
 ## Candidate retrieval
 
 ### Bounded generic formation service
