@@ -209,6 +209,7 @@ import {
 } from './location-regime.js';
 import {
   MEMORY_EXPRESSION_BATCH_LIMIT,
+  memoryEpistemicNature,
   publicMemoryQueryTelemetry,
   redactAutobiographicalMemoryFromTelemetry,
   environmentFormationAdmission,
@@ -3131,6 +3132,7 @@ async function main() {
       add({
         id: `memory:${memory.id}`, sourceId: `memory:${memory.id}`, section: 'autobiographical_memory',
         provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
+        epistemicDetail: memoryEpistemicNature(memory),
         privacyScope: memory.privacyScope || 'INTERNAL_ONLY', senderId: memory.subjectVisitorId || null,
         priority: 70, content: sanitizeCharacterContext(memory.content || memory.publicSummary),
       });

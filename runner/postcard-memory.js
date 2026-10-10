@@ -1,6 +1,6 @@
 // Foreground continuity reads the existing canonical store, without inference.
 // Background model-mediated enrichment remains optional and independently timed.
-import { filterMemoriesBeforePrompt, formatAutobiographicalMemory } from './autobiographical-memory.js';
+import { filterMemoriesBeforePrompt, formatAutobiographicalMemory, memoryEpistemicNature } from './autobiographical-memory.js';
 
 export const SENDER_MEMORY_WAIT_MS = 5000;
 export const POSTCARD_ENRICHMENT_WAIT_MS = 750;
@@ -69,6 +69,7 @@ export function postcardSenderMemoryItems(sender) {
   return sender.selected.map(memory => ({
     id: `memory:${memory.id}`, sourceId: `memory:${memory.id}`, section: 'autobiographical_memory',
     provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
+    epistemicDetail: memoryEpistemicNature(memory),
     privacyScope: memory.privacyScope, senderId: memory.subjectVisitorId,
     priority: 100, mandatory: true,
     content: `${memory.type.toLowerCase()} recollection (${memory.consistencyStatus.toLowerCase()}): ${memory.content}`,
