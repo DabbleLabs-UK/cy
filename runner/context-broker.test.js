@@ -126,6 +126,24 @@ test('model-facing rendering excludes raw source and sender identifiers', () => 
   assert.doesNotMatch(rendered, /visitor-secret|event-secret/);
 });
 
+test('epistemicDetail refines a memory origin without relabelling the policy class', () => {
+  const packet = buildContextPacket({
+    consumer: CONTEXT_CONSUMERS.CY_PROSE,
+    items: [item('dream', {
+      section: 'autobiographical_memory', provenanceClass: 'SUBJECTIVE MEMORY',
+      knowledgeScope: 'CY_BELIEVES', epistemicDetail: 'a dream you had',
+      content: "Mr Sweep's clipboard waits.",
+    })],
+  });
+  const rendering = renderContextPacket(packet);
+  // Coarse policy label intact (still routable/filterable), fine origin adjacent.
+  assert.match(rendering, /\[SUBJECTIVE MEMORY\] \(a dream you had\)/);
+  // The detail sits OUTSIDE the brackets: the class itself is not relabelled.
+  assert.doesNotMatch(rendering, /\[SUBJECTIVE MEMORY \(/);
+  const journal = renderWakingJournalContextPacket(packet);
+  assert.match(journal, /subjective memory \(a dream you had\): Mr Sweep's clipboard waits/);
+});
+
 test('waking journal preserves grounded facts and memory without echoable XML controls', () => {
   const packet = buildContextPacket({
     consumer: CONTEXT_CONSUMERS.CY_PROSE,

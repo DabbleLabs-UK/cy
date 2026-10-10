@@ -171,6 +171,7 @@ export function createContextItem({
   provenanceClass = 'UNKNOWN',
   knowledgeScope = 'UNKNOWN_TO_CY',
   privacyScope = 'INTERNAL_ONLY',
+  epistemicDetail = null,
   senderId = null,
   castMemberId = null,
   content = '',
@@ -189,6 +190,11 @@ export function createContextItem({
     provenanceClass: safeEpistemic(provenanceClass),
     knowledgeScope: safeKnowledge(knowledgeScope),
     privacyScope: safePrivacy(privacyScope),
+    // A short natural refinement of the coarse provenance label (e.g. which
+    // KIND of subjective memory: a dream, a correspondent's claim, an observed
+    // event). It never relabels or widens the policy-bearing provenanceClass;
+    // it is rendered as an adjacent note so one kind is not read as another.
+    epistemicDetail: (() => { const d = text(epistemicDetail); return d ? d.slice(0, 60) : null; })(),
     senderId: senderId == null ? null : safeId(senderId),
     castMemberId: castMemberId == null ? null : safeId(castMemberId),
     content: body,
@@ -339,7 +345,10 @@ export function buildContextPacket({
 function renderItem(item, index) {
   // Never render internal source IDs, visitor IDs or admin metadata to a model.
   // Local references preserve structure without exposing those identifiers.
-  return `[${item.provenanceClass}] [C${index + 1}] ${item.content}`;
+  // The epistemic detail (if any) sits OUTSIDE the policy label brackets so the
+  // coarse provenance class is never relabelled, only naturally refined.
+  const detail = item.epistemicDetail ? ` (${item.epistemicDetail})` : '';
+  return `[${item.provenanceClass}]${detail} [C${index + 1}] ${item.content}`;
 }
 
 export function renderContextPacket(packet) {
@@ -373,7 +382,8 @@ export function renderWakingJournalContextPacket(packet) {
       const content = item.content
         .replace(/^<PRIVATE_CURRENT_FACTS>\s*\n/, '')
         .replace(/\n\s*<\/PRIVATE_CURRENT_FACTS>\s*$/, '');
-      lines.push(`- ${item.provenanceClass.toLowerCase()}: ${content}`);
+      const detail = item.epistemicDetail ? ` (${item.epistemicDetail})` : '';
+      lines.push(`- ${item.provenanceClass.toLowerCase()}${detail}: ${content}`);
     }
   }
   return lines.join('\n');

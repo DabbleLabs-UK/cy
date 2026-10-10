@@ -37,6 +37,29 @@ export function isCyAuthoredSource(source) {
   return CY_AUTHORED_SOURCE_TYPES.includes(source.sourceType);
 }
 
+// The epistemic ORIGIN of a memory's current content, as the smallest natural
+// phrase that stops one kind of recollection from masquerading as another: a
+// dream read as an event, a correspondent's claim read as fact, Cy's own past
+// thought read as observation, curated canon read as a fleeting impression.
+// Derived from origin_kind (the evidence kind of the current canonical content,
+// maintained server-side independently of historical provenance), NOT from the
+// memory type. Intentionally terse and voice-appropriate - not a metadata dump.
+// An unknown origin yields '' so callers keep their existing generic framing.
+const MEMORY_EPISTEMIC_NATURES = Object.freeze({
+  ENVIRONMENT_EVENT: 'something you experienced',
+  DREAM_EXPRESSION: 'a dream you had',
+  CY_EXPRESSION: 'a thought you had before',
+  CY_REPLY: 'something you said to a correspondent',
+  POSTCARD: 'something a correspondent told you',
+  USER_APPROVED_SPEC: 'a long-held part of your past',
+  AMBIENT_EVENT: 'something you noticed around you',
+});
+
+export function memoryEpistemicNature(memory) {
+  const kind = String((memory && memory.originKind) || '').toUpperCase();
+  return MEMORY_EPISTEMIC_NATURES[kind] || '';
+}
+
 // ENGINEERING context-budget limits. These are not psychological capacities.
 export const MEMORY_CANDIDATE_LIMIT = 10;
 export const MEMORY_SURFACE_LIMIT = 3;
@@ -116,6 +139,10 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
         privacyScope: memory.privacyScope,
         subjectVisitorId: memory.subjectVisitorId || null,
         epistemicStatus: 'SUBJECTIVE_AUTOBIOGRAPHICAL_MEMORY',
+        // Evidence kind of the current content, carried through so consumers can
+        // express it naturally (see memoryEpistemicNature). Not model-facing by
+        // itself; it is rendered into a short natural phrase, never dumped.
+        originKind: memory.originKind || null,
         consistencyStatus: memory.consistencyStatus || 'UNCERTAIN',
         content: assertPromptSafe(String(content).replace(INTERNAL_ID_REPLACE, '[private reference]')),
         publicSummary: memory.publicSummary
@@ -501,9 +528,14 @@ export function formatAutobiographicalMemory(memories) {
     'These are memories, not authoritative world facts. Contradictions and uncertainty must remain uncertain.',
   ];
   for (const memory of visible) {
+    const nature = memoryEpistemicNature(memory);
     lines.push('', 'MEMORY');
     lines.push(`type: ${String(memory.type || 'EPISODIC').toLowerCase()}`);
-    lines.push('epistemic status: subjective autobiographical memory');
+    // Keep the standing "this is a subjective memory, not fact" framing, and,
+    // when the origin is known, name it in the same line so a dream is not read
+    // as an event nor a correspondent's claim as fact.
+    lines.push('epistemic status: subjective autobiographical memory'
+      + (nature ? ` (${nature})` : ''));
     lines.push(`consistency: ${String(memory.consistencyStatus || 'UNCERTAIN').toLowerCase()}`);
     lines.push(`content: ${assertPromptSafe(memory.content)}`);
   }

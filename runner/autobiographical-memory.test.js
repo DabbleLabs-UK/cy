@@ -7,6 +7,7 @@ import {
   buildSurfacingRequest,
   filterMemoriesBeforePrompt,
   formatAutobiographicalMemory,
+  memoryEpistemicNature,
   memoryVisibleTo,
   parseFormationResponse,
   genericUpdateConsolidates,
@@ -558,5 +559,54 @@ assert.equal(genericUpdateConsolidates(genSrc('DREAM_EXPRESSION'),
   'cross-kind is not consolidation');
 assert.equal(genericUpdateConsolidates(genSrc('ENVIRONMENT_EVENT'),
   { content: 'x y', sourceKinds: ['ENVIRONMENT_EVENT'] }, 'x y'), false, 'no-op is not consolidation');
+
+// --- Epistemic fidelity at recall: origin must survive into the prompt -------
+// Real production shapes from the memory audit. Each memory's CURRENT origin
+// kind must reach CY as a short natural phrase so one kind cannot masquerade as
+// another. origin_kind (not type) carries this.
+const natureCases = [
+  ['DREAM_EXPRESSION', 'a dream you had'],
+  ['CY_EXPRESSION', 'a thought you had before'],
+  ['ENVIRONMENT_EVENT', 'something you experienced'],
+  ['POSTCARD', 'something a correspondent told you'],
+  ['USER_APPROVED_SPEC', 'a long-held part of your past'],
+];
+for (const [kind, phrase] of natureCases) {
+  assert.equal(memoryEpistemicNature({ originKind: kind }), phrase, `nature for ${kind}`);
+}
+assert.equal(memoryEpistemicNature({ originKind: 'WHATEVER' }), '', 'unknown origin yields no phrase');
+assert.equal(memoryEpistemicNature({}), '', 'missing origin yields no phrase');
+
+// filterMemoriesBeforePrompt must carry origin_kind through to consumers.
+const filteredOrigin = filterMemoriesBeforePrompt(
+  [{ ...base, id: 'm-env', type: 'EPISODIC', privacyScope: 'INTERNAL_ONLY',
+    content: 'I suffered a physical injury.', originKind: 'ENVIRONMENT_EVENT' }], {});
+assert.equal(filteredOrigin[0].originKind, 'ENVIRONMENT_EVENT', 'filter carries originKind');
+
+// formatAutobiographicalMemory: the SAME memory text now reads differently by
+// origin (before: all identical "subjective autobiographical memory").
+const fmtNature = (originKind, content, extra = {}) => formatAutobiographicalMemory(
+  [{ id: 'x', type: 'EPISODIC', privacyScope: 'INTERNAL_ONLY', consistencyStatus: 'UNCERTAIN',
+    content, originKind, ...extra }]);
+// e4a153ca restored waking content -> read as Cy's prior thought, not an event.
+assert.match(fmtNature('CY_EXPRESSION', "dis ting ain't right fam"),
+  /subjective autobiographical memory \(a thought you had before\)/, 'CY_EXPRESSION recall names its origin');
+// 67789c69-shape dream material -> read as a dream, not an ordinary episode.
+assert.match(fmtNature('DREAM_EXPRESSION', "Mr Sweep's clipboard waits"),
+  /subjective autobiographical memory \(a dream you had\)/, 'dream recall names itself a dream');
+// 8c0b36d8 injury -> observed world event.
+assert.match(fmtNature('ENVIRONMENT_EVENT', 'I suffered a physical injury.'),
+  /subjective autobiographical memory \(something you experienced\)/, 'world event recall names observation');
+// 9516e629 Bob -> a correspondent's claim, not fact.
+assert.match(fmtNature('POSTCARD', 'The sender, Bob, says a truck is coming out of the jail.',
+  { type: 'PERSON', privacyScope: 'SENDER_RECALLABLE', subjectVisitorId: sender }),
+  /subjective autobiographical memory \(something a correspondent told you\)/, 'sender claim named as told');
+// 8-by-4 motif (curated canon) -> established past. Cross-visitor uses publicSummary.
+assert.match(fmtNature('USER_APPROVED_SPEC', 'An old idea linked the dimensions of confinement with the limits of the machine.',
+  { type: 'MOTIF', privacyScope: 'PUBLIC_RECALLABLE' }),
+  /subjective autobiographical memory \(a long-held part of your past\)/, 'curated motif named as established past');
+// Back-compat: an unknown origin keeps the original generic line verbatim.
+assert.match(fmtNature('', 'something with no recorded origin'),
+  /epistemic status: subjective autobiographical memory\ncons/, 'unknown origin keeps the generic framing line');
 
 console.log('autobiographical-memory.test.js: all checks passed');
