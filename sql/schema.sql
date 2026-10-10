@@ -257,6 +257,12 @@ CREATE TABLE autobiographical_memories (
     status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
     privacy_scope VARCHAR(24) NOT NULL,
     epistemic_status VARCHAR(48) NOT NULL DEFAULT 'SUBJECTIVE_AUTOBIOGRAPHICAL_MEMORY',
+    -- Origin kind of the CURRENT canonical content (the evidence kind it
+    -- represents, never OWNER_CORRECTION). The generic UPDATE consolidation
+    -- guard gates on this, not on the full historical source-kind set, so a
+    -- kind that only contaminated the record historically can never reopen the
+    -- cross-kind path. See sql/031_memory_origin_kind.sql.
+    origin_kind VARCHAR(32) NULL,
     consistency_status VARCHAR(16) NOT NULL DEFAULT 'UNCERTAIN',
     subject_visitor_id CHAR(32) NULL,
     content TEXT NOT NULL,
@@ -342,11 +348,11 @@ CREATE TABLE autobiographical_memory_queries (
 
 -- Explicit user-approved initial motif. It is data, not a permanent prompt rule.
 INSERT INTO autobiographical_memories
-    (id, memory_type, status, privacy_scope, consistency_status, content,
+    (id, memory_type, status, privacy_scope, origin_kind, consistency_status, content,
      public_summary, classification, created_at, updated_at)
 VALUES
     ('00000000-0000-4000-8000-000000008004', 'MOTIF', 'ACTIVE',
-     'PUBLIC_RECALLABLE', 'UNCERTAIN',
+     'PUBLIC_RECALLABLE', 'USER_APPROVED_SPEC', 'UNCERTAIN',
      'Cy once noticed an 8 by 4 analogy linking his cell and computational confinement. He is unsure whether the coincidence means anything.',
      'An old idea linked the dimensions of confinement with the limits of the machine.',
      'user-approved autobiographical motif', NOW(3), NOW(3));
@@ -371,6 +377,7 @@ SELECT id, 1, 'CREATE', JSON_OBJECT(
     'memory_type', memory_type,
     'privacy_scope', privacy_scope,
     'epistemic_status', epistemic_status,
+    'origin_kind', origin_kind,
     'consistency_status', consistency_status,
     'content', content,
     'public_summary', public_summary,

@@ -309,25 +309,41 @@ function normalizeContent(text) {
 
 // A generic (ENVIRONMENT_EVENT / DREAM_EXPRESSION / CY_EXPRESSION) UPDATE may
 // only CONSOLIDATE the same memory: it must be compatible with the target's
-// recorded origin kind and genuinely extend/refine it - never a wholesale
+// CURRENT origin kind and genuinely extend/refine it - never a wholesale
 // replacement of an unrelated or differently-grounded memory, and never a
 // no-op. Production showed dreams clobbering world/waking-grounded memories and
-// churning one record through unrelated contents. The target's actual source
-// kinds (structured provenance supplied by the server) are the PRIMARY gate; a
-// content-token floor is only a secondary anti-clobber check, not a sole
-// similarity threshold. The healthy sender/DeepSeek path does not use this
-// parser and is unaffected.
+// churning one record through unrelated contents.
+//
+// The cross-kind gate uses the target's CURRENT origin kind (originKind:
+// structured provenance of the content that is live right now), NOT the full
+// historical source-kind set. A memory that was contaminated once retains the
+// offending kind in its history forever; gating on history meant a dream that
+// had previously clobbered a since-restored waking memory could still pass. The
+// origin kind is maintained at write time server-side (an OWNER_CORRECTION that
+// restores waking content keeps originKind=CY_EXPRESSION, not the dream that
+// contaminated it), so restoring a memory cannot leave it dream-update-
+// compatible. sourceKinds remains the fallback only when originKind is unknown
+// (legacy rows not yet carrying it). A content-token floor is a secondary
+// anti-clobber check, not a sole similarity threshold. The healthy
+// sender/DeepSeek path does not use this parser and is unaffected.
 export function genericUpdateConsolidates(source, target, newContent) {
   const prev = normalizeContent(target && target.content);
   const next = normalizeContent(newContent);
   if (!next || next === prev) return false; // material no-op
   const newKind = String((source && source.sourceType) || '');
-  const targetKinds = Array.isArray(target && target.sourceKinds)
-    ? target.sourceKinds.map(String) : [];
+  const originKind = String((target && target.originKind) || '');
   // Cross-kind clobber: a dream may not overwrite a world- or waking-grounded
-  // memory (and vice versa). When the target's provenance is known, the new
-  // source kind must already be one that built it.
-  if (targetKinds.length && !targetKinds.includes(newKind)) return false;
+  // memory (and vice versa).
+  if (originKind) {
+    // Authoritative: the new source kind must match the current content's kind.
+    if (newKind !== originKind) return false;
+  } else {
+    // Fallback for rows without a recorded current origin kind: the new source
+    // kind must at least appear among the kinds that built the memory.
+    const targetKinds = Array.isArray(target && target.sourceKinds)
+      ? target.sourceKinds.map(String) : [];
+    if (targetKinds.length && !targetKinds.includes(newKind)) return false;
+  }
   const prevTokens = new Set(retrievalTerms(prev));
   if (!prevTokens.size) return true; // nothing distinctive to preserve
   const nextTokens = retrievalTerms(next);
