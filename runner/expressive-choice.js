@@ -15,6 +15,18 @@ export const EXPRESSIVE_CHOICE_CLASSIFICATION = Object.freeze([
 ]);
 export const EXPRESSIVE_CHOICE_MECHANISM = 'MODEL-MEDIATED SUBJECTIVE CHARACTER CHOICE';
 export const EXPRESSIVE_SINGLE_OPTION_MECHANISM = 'DETERMINISTIC SINGLE AVAILABLE ACTION - ENGINEERING';
+export const EXPRESSIVE_JOURNAL_DEFAULT_MECHANISM = 'DETERMINISTIC JOURNAL DEFAULT - NO MODEL-WORTHY ALTERNATIVE';
+
+// Non-journal actions that do NOT warrant spending a model inference (and its
+// KV/cache eviction of the following prose call) when they are the only
+// alternative(s) to journal. The deterministic temp=0 chooser does not select
+// silence over journal: 7d production (501 silence offers) chose it 0 times, so
+// offering it merely forced a redundant inference that always resolved to
+// journal. Draw IS genuinely chosen (~1 in 8 offers) and is therefore NOT here,
+// so a drawing opportunity still consults the model. Any future action is treated
+// as model-worthy by default (it is not on this list), so this never silently
+// bypasses a new capability.
+export const EXPRESSIVE_NON_MODEL_WORTHY_ACTIONS = Object.freeze(['silence']);
 export const EXPRESSIVE_CHOICE_FALLBACK_CLASSIFICATION = 'EXPRESSIVE CHOICE FALLBACK - ENGINEERING';
 export const EXPRESSIVE_CHOICE_FALLBACK_ACTION = 'journal';
 
@@ -304,20 +316,50 @@ export async function chooseExpressiveAction(request, { generate } = {}) {
   });
 }
 
+// Whether the available set contains a genuine model-worthy alternative to
+// journal. Journal itself and the never-selected silence do not warrant a model
+// call; any other non-journal action (drawing, or a future capability) does.
+export function expressiveChoiceNeedsModel(availableActions) {
+  const ids = (Array.isArray(availableActions) ? availableActions : [])
+    .map((value) => typeof value === 'string' ? value : value && value.id)
+    .filter(Boolean);
+  if (!ids.includes('journal')) return ids.length > 1;
+  return ids.some((id) => id !== 'journal'
+    && !EXPRESSIVE_NON_MODEL_WORTHY_ACTIONS.includes(id));
+}
+
 // A single available form is not a character decision. Avoid spending an
 // inference request and shared lease asking the model to return the sole ID.
-// Multiple forms retain the existing subjective chooser and its fallback.
+// Equally, a set whose only alternatives to journal are ones the model never
+// selects (silence) is journal by default - taking that deterministically avoids
+// a per-cycle inference AND stops its differing prompt from evicting the prose
+// KV cache. A genuine creative alternative (drawing) still consults the model.
 export async function selectAvailableExpressiveAction(request, options = {}) {
   const actions = request && Array.isArray(request.availableActions)
     ? request.availableActions : [];
   if (actions.length === 0) return null;
-  if (actions.length > 1) return chooseExpressiveAction(request, options);
+  if (actions.length > 1 && expressiveChoiceNeedsModel(actions)) {
+    return chooseExpressiveAction(request, options);
+  }
+  if (actions.length === 1) {
+    return expressiveChoiceInspection(request, {
+      action: actions[0].id,
+      focusRefs: [],
+      reasonType: 'engineering_single_option',
+      selectionMechanism: EXPRESSIVE_SINGLE_OPTION_MECHANISM,
+      classification: ['ENGINEERING_SINGLE_AVAILABLE_ACTION'],
+      fallbackUsed: false,
+      fallback: null,
+    });
+  }
+  // Multiple nominal actions, but none worth a model call beside journal.
+  const ids = actions.map((item) => item.id);
   return expressiveChoiceInspection(request, {
-    action: actions[0].id,
+    action: ids.includes('journal') ? 'journal' : ids[0],
     focusRefs: [],
-    reasonType: 'engineering_single_option',
-    selectionMechanism: EXPRESSIVE_SINGLE_OPTION_MECHANISM,
-    classification: ['ENGINEERING_SINGLE_AVAILABLE_ACTION'],
+    reasonType: 'engineering_journal_default',
+    selectionMechanism: EXPRESSIVE_JOURNAL_DEFAULT_MECHANISM,
+    classification: ['ENGINEERING_JOURNAL_DEFAULT_NO_MODEL_WORTHY_ALTERNATIVE'],
     fallbackUsed: false,
     fallback: null,
   });

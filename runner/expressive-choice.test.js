@@ -26,7 +26,9 @@ import {
   recordExpressiveJournal,
   recordExpressiveOpportunity,
   selectAvailableExpressiveAction,
+  expressiveChoiceNeedsModel,
   EXPRESSIVE_SINGLE_OPTION_MECHANISM,
+  EXPRESSIVE_JOURNAL_DEFAULT_MECHANISM,
 } from './expressive-choice.js';
 import { availableExpressiveActions, LOCATIONS } from './location-regime.js';
 import { INSTRUMENTAL_ACTION_SELECTION } from './instrumental-agency.js';
@@ -137,15 +139,31 @@ assert.equal(await selectAvailableExpressiveAction(
   { generate: async () => { chooserCalls++; } },
 ), null, 'no options remain a quiet no-op');
 assert.equal(chooserCalls, 0);
-const twoOptions = await selectAvailableExpressiveAction(buildExpressiveChoiceRequest({
+// journal+silence has no model-worthy alternative (the deterministic chooser
+// never selects silence over journal; 7d prod: 0/501). It defaults to journal
+// WITHOUT an inference, so its differing prompt cannot evict the prose KV cache.
+assert.equal(expressiveChoiceNeedsModel(['journal', 'silence']), false);
+const journalDefault = await selectAvailableExpressiveAction(buildExpressiveChoiceRequest({
   ...base, availableActions: ['journal', 'silence'],
+}), { generate: async () => { chooserCalls++; throw new Error('chooser must not run'); } });
+assert.equal(chooserCalls, 0, 'journal+silence must not spend an inference');
+assert.equal(journalDefault.selectedAction, 'journal');
+assert.equal(journalDefault.selectionMechanism, EXPRESSIVE_JOURNAL_DEFAULT_MECHANISM);
+assert.equal(journalDefault.reasonType, 'engineering_journal_default');
+
+// A drawing opportunity IS a genuine creative choice, so the model still runs
+// and its decision (draw or, if it ever did, silence) is honoured.
+assert.equal(expressiveChoiceNeedsModel(['journal', 'draw']), true);
+assert.equal(expressiveChoiceNeedsModel(['journal', 'draw', 'silence']), true);
+const drawOffered = await selectAvailableExpressiveAction(buildExpressiveChoiceRequest({
+  ...base, availableActions: ['journal', 'draw', 'silence'],
 }), { generate: async () => {
   chooserCalls++;
-  return '{"action":"silence","focusRefs":[]}';
+  return '{"action":"draw","focusRefs":[]}';
 } });
-assert.equal(chooserCalls, 1);
-assert.equal(twoOptions.selectedAction, 'silence');
-assert.equal(twoOptions.selectionMechanism, EXPRESSIVE_CHOICE_MECHANISM);
+assert.equal(chooserCalls, 1, 'a drawing opportunity consults the model');
+assert.equal(drawOffered.selectedAction, 'draw');
+assert.equal(drawOffered.selectionMechanism, EXPRESSIVE_CHOICE_MECHANISM);
 
 // D/K. Invalid output or a provider failure uses the fixed engineering journal
 // fallback, not an emotion, drive, salience or utility calculation.
