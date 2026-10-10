@@ -372,3 +372,37 @@ export function incidentsDirective(ledger, opts = {}) {
   }
   return lines.join('\n');
 }
+
+// Orient the NEXT waking entry relative to the LAST one, from real world timing
+// rather than wording. The waking journal is a continuation of Cy's own prose and
+// is told to stay on "the one thing you cannot stop chewing on"; with nothing to
+// pull against, the same concern wins every burst even when nothing about it has
+// changed. This returns the structural facts the prompt needs to let the day
+// develop: the single most salient concrete thing that has happened SINCE he last
+// wrote (so there is a fresh real subject to settle on), and whether in fact
+// NOTHING has happened since (so he is steered off re-announcing an unchanged
+// state). It bans no words and penalises no tokens; a concern recurs naturally the
+// moment a new incident about it is filed. Open unresolved threads always count as
+// live material. `lastIncidentMs` is the authoritative "something happened" clock
+// the silence engine already maintains.
+export function selectJournalTurn(ledger, { lastJournalAtMs = 0, lastIncidentMs = 0 } = {}) {
+  const list = Array.isArray(ledger) ? ledger : [];
+  const since = Number(lastJournalAtMs) || 0;
+  const parse = (t) => { const n = Date.parse(t); return Number.isFinite(n) ? n : 0; };
+  // Salience: an open unresolved thread outranks a verified transition, which
+  // outranks a recorded event, which outranks ambient texture.
+  const rank = (i) => (i.open && !i.resolved ? 3 : 0)
+    + (i.evidenceClass === 'WORLD_TRANSITION' ? 2
+      : i.evidenceClass === 'OBSERVED_EVENT' ? 1 : 0);
+  let pick = null;
+  for (const inc of list) {
+    if (!inc || inc.resolved) continue;
+    if (parse(inc.ts) <= since) continue; // only things filed since the last entry
+    // Iterating chronologically and taking >= keeps the newest among the most
+    // salient fresh incidents.
+    if (!pick || rank(inc) >= rank(pick)) pick = inc;
+  }
+  const freshLine = pick ? incidentLine(pick) : '';
+  const nothingNew = !freshLine && (Number(lastIncidentMs) || 0) <= since;
+  return { freshLine, nothingNew };
+}

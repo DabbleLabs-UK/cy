@@ -50,6 +50,7 @@ import {
   completionDirective,
   completionBudget,
   bansDirective,
+  turnDirective,
   wingnoiseDirective,
   applyBurstSeparator,
   NUM_CTX,
@@ -121,6 +122,7 @@ import {
   pushIncident,
   incidentsDirective,
   incidentLine,
+  selectJournalTurn,
   reconcileObjectIncidentThreads,
   resolveThreads,
 } from './incidents.js';
@@ -573,6 +575,10 @@ async function main() {
   vitals.ledger = reconcileLedger(vitals.ledger);
   if (!Array.isArray(vitals.recentOpeners)) vitals.recentOpeners = [];
   if (typeof vitals.lastIncidentMs !== 'number') vitals.lastIncidentMs = 0;
+  // When Cy last wrote a WAKING journal entry. Drives the development steer so a
+  // new entry orients on what has happened since, not on re-announcing an
+  // unchanged state. Postcards, dreams and drawings do not update it.
+  if (typeof vitals.lastJournalAtMs !== 'number') vitals.lastJournalAtMs = 0;
   if (typeof vitals.lastWingNoiseMs !== 'number') vitals.lastWingNoiseMs = 0;
   // drawing state (rides on the vitals object so it persists with everything else)
   if (typeof vitals.lastDrawMs !== 'number') vitals.lastDrawMs = 0;
@@ -5563,6 +5569,13 @@ async function main() {
         burstGroundedDirective = ctx.groundedSoma;
         burstMemoryQuery = ctx.autobiographicalMemoryInspection;
         ctx.bans = bans;
+        // Development steer: orient this entry on what has actually happened since
+        // the last one, or steer off re-announcing an unchanged state. Structural
+        // (real world timing), not a phrase ban. Computed once per burst.
+        ctx.turn = turnDirective(selectJournalTurn(vitals.ledger, {
+          lastJournalAtMs: vitals.lastJournalAtMs,
+          lastIncidentMs: vitals.lastIncidentMs,
+        }));
         ctx.length = completionDirective(targetOpts.num_predict);
         if (!ctx.sharedContext) ctx.regime = regimeDirective(mins);
         burstForm = selectedAction;
@@ -5674,6 +5687,9 @@ async function main() {
       else if (discards >= MAX_DISCARDS) await recordOutcome('discarded-repeat-cap');
       else if (burstEmitted.trim()) {
         lastPublishedWakingExpressionMs = Date.now();
+        // Mark when he last actually wrote, so the next entry's development steer
+        // measures "since you last wrote" from a real published entry.
+        vitals.lastJournalAtMs = lastPublishedWakingExpressionMs;
         vitals.expressiveCadence = recordExpressiveJournal(vitals.expressiveCadence, {
           nowMs: lastPublishedWakingExpressionMs,
         });
