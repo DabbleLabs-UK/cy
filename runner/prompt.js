@@ -350,6 +350,28 @@ export function bansDirective(recentOpeners = []) {
   return 'OPENERS. not with: ' + words.join(', ') + '.';
 }
 
+// DEVELOPMENT STEER (waking journal only). ONE_SUBJECT keeps an entry coherent by
+// holding him to a single subject, but across entries it also pins him to the same
+// fixation when nothing new pulls against it. This is the structural counterweight,
+// built from real world timing (see selectJournalTurn), NOT a phrase ban or a
+// frequency penalty: when something concrete has happened since he last wrote, it
+// offers that as the fresh single subject so the day moves; when nothing has, it
+// tells him not to set the same unchanged state down again. It only informs WHICH
+// subject - ONE_SUBJECT and his voice are untouched. Empty when there is ordinary
+// fresh continuity to ride, so a genuinely developing concern is never interrupted.
+export function turnDirective({ freshLine = '', nothingNew = false } = {}) {
+  if (freshLine) {
+    return 'NEW SINCE YOU LAST WROTE: ' + freshLine + '. that is the freshest real thing. '
+      + 'if the thing you keep going back to has nothing new in it, let this be the one thing instead.';
+  }
+  if (nothingNew) {
+    return 'nothing new since you last wrote. do not set the same feeling or the same lack down again - '
+      + 'it is already on the page. let it rest, or take ONE real thing in the cell right now - '
+      + 'the cold, the light, a mark on the wall - and stay on only that.';
+  }
+  return '';
+}
+
 // ---- DREAM MODE -------------------------------------------------------------
 //
 // Asleep, he does not write journal entries - he emits MURMURS. This is the one
@@ -550,6 +572,9 @@ export function buildDirectives(v, mode, ctx = {}) {
   // and the form is re-sampled per burst; the form (the shape) is dead last.
   if (style) parts.push(style);
   if (ctx.bans) parts.push(ctx.bans);
+  // The development steer is per-burst and belongs close to the generation cue so
+  // it reads freshest; it only informs which single subject ONE_SUBJECT holds to.
+  if (ctx.turn) parts.push(ctx.turn);
   if (ctx.length) parts.push(ctx.length);
   if (ctx.form) parts.push(ctx.form);
   return parts.join('\n\n');
