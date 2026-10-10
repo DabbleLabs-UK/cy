@@ -15,6 +15,7 @@ import {
   normaliseMessageState,
 } from './message-object-lifecycle.js';
 import { advanceWorldEntity, compactTerminalThread, worldEntityRevision } from './world-mirror.js';
+import { noDurableChangeStreak } from './awg-health.js';
 
 export const AWG_SCHEMA = 'cy.ambient-world-candidate';
 export const AWG_SCHEMA_VERSION = 1;
@@ -69,6 +70,28 @@ export const AWG_MAX_OPEN_THREADS = 8;
 export const AWG_DEDUPE_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const AWG_RECENT_EVENT_LIMIT = 12;
 export const AWG_RECENT_RUN_LIMIT = 20;
+
+// DROUGHT RESPONSE. The generator can collapse onto its cheapest branch: a
+// self-contained EVENT that opens no thread, touches no object and resolves
+// itself. Those are legitimate (ordinary uneventful interactions exist), but a
+// long unbroken run of them means the persistent-simulation substrate has gone
+// unused. When the trailing count of accepted-but-non-durable events reaches the
+// threshold, the NEXT proposal withholds ONLY the trivial option (thread action
+// NONE with no object). The model may still open or continue a thread, pass or
+// move an object, or decline with NO_EVENT - it simply cannot emit one more
+// moment that leaves nothing behind. It is self-clearing: any durable event
+// resets the streak, so consequence is never forced on every cycle and no
+// object/thread is manufactured merely to satisfy a metric (an invented object
+// still faces full validation and an empty one yields NO_EVENT, not bad state).
+export const AWG_DROUGHT_RESPONSE_ENABLED = true;
+export const AWG_DROUGHT_STREAK = 4;
+
+export function awgDroughtActive(stateValue, {
+  enabled = AWG_DROUGHT_RESPONSE_ENABLED, threshold = AWG_DROUGHT_STREAK,
+} = {}) {
+  if (!enabled) return false;
+  return noDurableChangeStreak(stateValue) >= threshold;
+}
 
 // ENGINEERING INFERENCE SCHEDULING.
 export const INFERENCE_PRIORITIES = Object.freeze({
@@ -540,7 +563,7 @@ function epistemicProposalBranches(proposal, otherCastIds) {
 }
 
 export function buildAwgProposalFormat(stateValue, {
-  plausibleCastIds = [], currentLocation = null, nowMs = Date.now(),
+  plausibleCastIds = [], currentLocation = null, nowMs = Date.now(), droughtActive = false,
 } = {}) {
   const state = reconcileWorldSimulationState(stateValue);
   const generationFacts = selectAwgGenerationFacts(state, {
@@ -707,6 +730,19 @@ export function buildAwgProposalFormat(stateValue, {
       return branch;
     }));
   }
+  // Under drought, withhold ONLY the trivial option from the EVENT branches: a
+  // thread-NONE event must now carry at least one object (a passed note, a moved
+  // or confiscated item - a durable transition). Thread-opening branches and
+  // continuations are already durable and are left untouched, and NO_EVENT
+  // remains available, so the model is pushed off the empty branch without being
+  // forced to invent drama.
+  if (droughtActive) {
+    for (const branch of eventBranches) {
+      if (branch?.properties?.thread?.properties?.action?.const === 'NONE') {
+        branch.properties.objects = { ...branch.properties.objects, minItems: 1 };
+      }
+    }
+  }
   return {
     oneOf: [
       {
@@ -722,6 +758,7 @@ export function buildAwgProposalFormat(stateValue, {
 
 export function buildAwgCall(contextRendering, {
   state = null, currentLocation = null, plausibleCastIds = [], recentEvents = [], nowMs = Date.now(),
+  droughtActive = false,
 } = {}) {
   const worldState = reconcileWorldSimulationState(state);
   const generationFacts = selectAwgGenerationFacts(worldState, {
@@ -785,6 +822,9 @@ export function buildAwgCall(contextRendering, {
       '- CONTINUATION is allowed only through one supplied thread branch; code supplies its authoritative type and event references.',
       '- A continuation must be a new development of that exact thread summary. Do not rename it or switch to another subject.',
       '- For EVENT, use thread action NONE unless the event creates a concrete unresolved consequence that later events can continue.',
+      ...(droughtActive ? [
+        '- RECENT WORLD DROUGHT: the last several events were self-contained and left nothing behind. For THIS proposal, prefer to open or continue a situation that persists (a note or message passed, an item moved or taken, an officer action with a real consequence), or return NO_EVENT. Do not emit another exchange that resolves itself and changes nothing.',
+      ] : []),
       '- Code derives resolved state from thread action and derives thread type from event family/current thread. Do not output either field.',
       '- Every EVENT or CONTINUATION needs at least one concrete observation stating who perceived what.',
       '- Choose one epistemic branch: OBSERVED uses only a cy/CY_* observation; WORLD_ONLY excludes cy from both participants and observations.',
@@ -816,7 +856,7 @@ export function buildAwgCall(contextRendering, {
       '- If the supplied facts do not ground a valid event, return exactly {"decision":"NO_EVENT"}.',
       '- Return only JSON matching the enforced output schema.',
     ].join('\n'),
-    format: buildAwgProposalFormat(worldState, { plausibleCastIds, currentLocation, nowMs }),
+    format: buildAwgProposalFormat(worldState, { plausibleCastIds, currentLocation, nowMs, droughtActive }),
     options: { ...AWG_MODEL_OPTIONS },
     purpose: 'ambient_world_generation',
   };
@@ -1496,6 +1536,9 @@ export async function runAmbientWorldCycle({
   const started = clock();
   const ranAt = new Date(nowMs).toISOString();
   const runId = id((makeId || ((prefix) => `${prefix}:${nowMs}`))('awg-run'));
+  const droughtStreak = noDurableChangeStreak(original);
+  const droughtActive = AWG_DROUGHT_RESPONSE_ENABLED && droughtStreak >= AWG_DROUGHT_STREAK;
+  const drought = { active: droughtActive, streak: droughtStreak };
   const stateWithRun = clone(original);
   stateWithRun.lastRunAt = ranAt;
   let candidate = null;
@@ -1503,7 +1546,7 @@ export async function runAmbientWorldCycle({
   try {
     if (typeof generate !== 'function') throw new Error('PROVIDER_UNAVAILABLE');
     const call = buildAwgCall(contextRendering, {
-      state: stateWithRun, currentLocation, plausibleCastIds, recentEvents, nowMs,
+      state: stateWithRun, currentLocation, plausibleCastIds, recentEvents, nowMs, droughtActive,
     });
     proposal = parseAwgCandidate(await generate(call));
     candidate = materialiseAwgProposal(proposal, stateWithRun, {
@@ -1516,38 +1559,38 @@ export async function runAmbientWorldCycle({
     const validationLatencyMs = Math.max(0, clock() - validationStarted);
     if (!validation.valid) {
       const run = {
-        runId, ranAt, candidateType: clean(candidate.decision).toUpperCase() || 'INVALID',
+        runId, ranAt, drought, candidateType: clean(candidate.decision).toUpperCase() || 'INVALID',
         candidateOutput: candidate, validationStatus: 'REJECTED', rejectionReason: validation.errors.join(', '),
         createdWorldEventIds: [], threadChanges: [], modelLatencyMs: Math.max(0, clock() - started - validationLatencyMs),
         validationLatencyMs,
       };
       stateWithRun.recentRuns = [...stateWithRun.recentRuns, run].slice(-AWG_RECENT_RUN_LIMIT);
-      return { status: 'REJECTED', validation, run, state: stateWithRun, latencyMs: Math.max(0, clock() - started) };
+      return { status: 'REJECTED', validation, run, drought, state: stateWithRun, latencyMs: Math.max(0, clock() - started) };
     }
     if (validation.candidate.decision === 'NO_EVENT') {
       const run = {
-        runId, ranAt, candidateType: 'NO_EVENT', candidateOutput: validation.candidate,
+        runId, ranAt, drought, candidateType: 'NO_EVENT', candidateOutput: validation.candidate,
         validationStatus: 'ACCEPTED_NO_EVENT', rejectionReason: null, createdWorldEventIds: [], threadChanges: [],
         modelLatencyMs: Math.max(0, clock() - started - validationLatencyMs), validationLatencyMs,
       };
       stateWithRun.recentRuns = [...stateWithRun.recentRuns, run].slice(-AWG_RECENT_RUN_LIMIT);
-      return { status: 'NO_EVENT', validation, run, state: stateWithRun, latencyMs: Math.max(0, clock() - started) };
+      return { status: 'NO_EVENT', validation, run, drought, state: stateWithRun, latencyMs: Math.max(0, clock() - started) };
     }
     const applied = applyAwgCandidate(stateWithRun, validation, { makeId, acceptedAt: ranAt });
     applied.validationCandidate = validation.candidate;
     const run = {
-      runId, ranAt, candidateType: validation.candidate.decision, candidateOutput: validation.candidate,
+      runId, ranAt, drought, candidateType: validation.candidate.decision, candidateOutput: validation.candidate,
       validationStatus: 'ACCEPTED', rejectionReason: null,
       createdWorldEventIds: [applied.event.id], threadChanges: applied.changes,
       modelLatencyMs: Math.max(0, clock() - started - validationLatencyMs), validationLatencyMs,
     };
     applied.state.recentRuns = [...applied.state.recentRuns, run].slice(-AWG_RECENT_RUN_LIMIT);
-    return { status: 'ACCEPTED', validation, applied, run, state: applied.state, latencyMs: Math.max(0, clock() - started) };
+    return { status: 'ACCEPTED', validation, applied, run, drought, state: applied.state, latencyMs: Math.max(0, clock() - started) };
   } catch (error) {
     const cancelled = isInferenceCancellation(error);
     const abortReason = cancelled ? cancellationReason(error) : null;
     const run = {
-      runId, ranAt, candidateType: cancelled ? 'CANCELLED' : 'FAILED', candidateOutput: candidate || proposal,
+      runId, ranAt, drought, candidateType: cancelled ? 'CANCELLED' : 'FAILED', candidateOutput: candidate || proposal,
       validationStatus: cancelled ? 'NOT_RUN' : 'FAILED',
       rejectionReason: cancelled ? `ABORTED/${abortReason}` : clean(error && error.message, 300),
       createdWorldEventIds: [], threadChanges: [], modelLatencyMs: Math.max(0, clock() - started), validationLatencyMs: 0,
@@ -1557,6 +1600,7 @@ export async function runAmbientWorldCycle({
       status: cancelled ? 'CANCELLED' : 'FAILED',
       error: run.rejectionReason,
       run,
+      drought,
       state: stateWithRun,
       latencyMs: Math.max(0, clock() - started),
     };
