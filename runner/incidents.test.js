@@ -9,6 +9,8 @@ import {
   reconcileObjectIncidentThreads,
   unresolvedThreads,
   pushIncident,
+  isAuthoritativeOpenThread,
+  incidentLine,
 } from './incidents.js';
 import { buildPrompt, buildDirectives, turnDirective, JOURNAL_CONTINUATION_CHARS } from './prompt.js';
 
@@ -47,6 +49,78 @@ test('ambient texture and an ordinary search cannot establish object loss', () =
   assert.equal(search.open, undefined);
   assert.equal(search.threadKind, undefined);
   assert.deepEqual(unresolvedThreads([ambient, search]), []);
+});
+
+test('ambient texture never mints a durable open causal thread (reply/promise/transfer are colour, not threads)', () => {
+  // Drive the three open-prone TEXTURE_ANY builders deterministically. With
+  // phase day the pool is TEXTURE_DAY, so `both` has 9 entries and index k is
+  // selected by rnd = (k + 0.5) / 9: 0 = reply, 3 = promise, 4 = transfer.
+  const atIndex = (k) => makeIncident('texture', { phase: 'association', rnd: () => (k + 0.5) / 9 });
+  const reply = atIndex(0);
+  const promise = atIndex(3);
+  const transfer = atIndex(4);
+  // Guard: we really did exercise the phantom-prone wordings...
+  assert.match(reply.detail, /still nothing back from/);
+  assert.match(promise.verb + ' ' + promise.detail, /promised to pass it on.*two days ago/);
+  assert.match(transfer.actor + ' ' + transfer.detail, /word of a transfer.*nothing since/);
+  // ...yet none of them claim open causal status.
+  for (const inc of [reply, promise, transfer]) {
+    assert.equal(inc.open, undefined, `${inc.detail} must not be an open thread`);
+    assert.equal(inc.threadKind, undefined);
+    assert.equal(inc.evidenceClass, 'AMBIENT_TEXTURE');
+    assert.equal(isAuthoritativeOpenThread(inc), false);
+  }
+  // The prose survives as an impression; there is no STILL OPEN block.
+  const prompt = incidentsDirective([reply, promise, transfer], { rnd: () => 0 });
+  assert.match(prompt, /unverified impression: still nothing back from/);
+  assert.match(prompt, /word of a transfer/);
+  assert.doesNotMatch(prompt, /STILL OPEN/);
+  assert.deepEqual(unresolvedThreads([reply, promise, transfer]), []);
+});
+
+test('an officer refusal is recorded but is not a durable open thread (no resolution machinery)', () => {
+  const refusal = makeIncident('officer', { actorKey: 'locke', slight: 'knocked you back', evType: 'refusal', rnd: () => 0 });
+  assert.equal(refusal.open, undefined);
+  assert.equal(refusal.threadKind, undefined);
+  assert.equal(isAuthoritativeOpenThread(refusal), false);
+  // but the refusal itself is still a usable recorded impression
+  assert.match(incidentLine(refusal), /knocked you back/);
+  assert.deepEqual(unresolvedThreads([refusal]), []);
+});
+
+test('reconcileLedger demotes a persisted texture phantom in place, preserving the line, and keeps a real custody thread', () => {
+  const custody = makeObjectTransitionIncident({
+    before: oldObject, after: confiscated, sourceEventId: 'event-search-1',
+    actor: 'Mr Locke', observedByCy: true,
+  });
+  // A persisted live phantom exactly like the production "still nothing back
+  // from Mark" entry, alongside the authoritative custody thread.
+  const ledger = reconcileLedger([
+    { ts: '2026-10-11 12:34:31.165', actor: '', verb: '', object: '',
+      detail: 'still nothing back from Mark', resolved: false,
+      evidenceClass: 'AMBIENT_TEXTURE', open: true, threadKind: 'reply', subject: 'Mark' },
+    custody,
+  ]);
+  const [phantom, keptCustody] = ledger;
+  // Phantom: only the false open flag is stripped; the line, evidence class and
+  // classification metadata stay, so nothing of the record's provenance is lost.
+  assert.equal(phantom.open, undefined);
+  assert.equal(phantom.detail, 'still nothing back from Mark');
+  assert.equal(phantom.evidenceClass, 'AMBIENT_TEXTURE');
+  assert.equal(phantom.threadKind, 'reply'); // preserved (dormant, never rendered while not open)
+  assert.equal(phantom.resolved, false); // demotion is not a false resolution
+  assert.equal(isAuthoritativeOpenThread(phantom), false);
+  // Authoritative custody thread survives untouched.
+  assert.equal(keptCustody.open, true);
+  assert.equal(keptCustody.threadKind, 'object_custody');
+  assert.equal(isAuthoritativeOpenThread(keptCustody), true);
+  // Only the real thread shows under STILL OPEN.
+  assert.deepEqual(unresolvedThreads(ledger, { objects: [confiscated] }),
+    ['the confiscated photo remains in officer custody']);
+  const prompt = incidentsDirective(ledger, { objects: [confiscated], rnd: () => 0 });
+  assert.match(prompt, /still nothing back from Mark/); // still present as an impression
+  assert.match(prompt, /STILL OPEN:/);
+  assert.doesNotMatch(prompt, /- still nothing back from Mark/); // but not AS a still-open item
 });
 
 test('only a revisioned, observed object transition establishes custody', () => {
@@ -198,15 +272,21 @@ test('selectJournalTurn gives no steer when something happened but is not in the
 test('selectJournalTurn prefers an open unresolved thread over a newer non-open incident', () => {
   const now = Date.now();
   const lastJournalAtMs = now - 120000;
-  const refusal = makeIncident('officer', { actorKey: 'locke', slight: 'knocked you back', evType: 'refusal', rnd: () => 0 });
-  assert.equal(refusal.open, true); // guard: this builder yields an open 'owed' thread
+  // A legitimate open thread (authoritative object-custody transition) must
+  // outrank a newer non-open incident. Phantom texture/owed threads are no
+  // longer open, so the ranking is exercised with a real resolvable thread.
+  const custody = makeObjectTransitionIncident({
+    before: oldObject, after: confiscated, sourceEventId: 'event-search-1',
+    actor: 'Mr Locke', observedByCy: true,
+  });
+  assert.equal(custody.open, true); // guard: object custody is a genuine open thread
   const ledger = [
-    { ...refusal, ts: localTs(now - 20000) }, // open thread, older
+    { ...custody, ts: localTs(now - 20000) }, // open thread, older
     { ...makeIncident('wing', { line: 'a door went heavy on the 2s' }), ts: localTs(now - 10000) }, // newest, never open
   ];
   const turn = selectJournalTurn(ledger, { lastJournalAtMs, lastIncidentMs: now - 10000 });
-  assert.ok(turn.freshLine && /locke/i.test(turn.freshLine),
-    'the open officer thread outranks a newer non-open incident');
+  assert.ok(turn.freshLine && /photo/i.test(turn.freshLine),
+    'the open custody thread outranks a newer non-open incident');
 });
 
 test('turnDirective wording: fresh offers a new one-thing; nothing-new steers off restatement; otherwise empty', () => {

@@ -163,19 +163,68 @@ const TEXTURE_NIGHT = [
   (c) => ({ actor: 'the wall', verb: 'cold', object: 'through the blanket', detail: 'same as every night' }),
 ];
 
+// ---- open-thread invariant ------------------------------------------------
+//
+// STILL OPEN must mean a continuing world situation whose later AUTHORITATIVE
+// evidence can progress or resolve it - not merely that a line of prose sounded
+// like a loose end. An incident may therefore carry durable `open:true` status
+// only when both hold:
+//   1. its threadKind is one a live resolver actually services, and
+//   2. its evidence is authoritative (a recorded event or a world transition),
+//      never ambient texture.
+// The serviced kinds are:
+//   - object_custody: minted only by makeObjectTransitionIncident from a
+//     revisioned world transition, and resolved by reconcileObjectIncidentThreads
+//     against the current authoritative object state;
+//   - reply/message/mail: an awaiting-word-from-outside wait, cleared by
+//     resolveThreads when an inbound postcard arrives.
+// Ambient-texture rumour/promise/transfer colour and the officer 'owed' refusal
+// have no resolution machinery at all: left open they would read as "unfinished"
+// only until they aged out of the rolling ledger. They stay in the ledger as
+// ordinary impressions - the prose and its evidence class are preserved - but
+// they never claim open causal status.
+const RESOLVABLE_THREAD_KINDS = new Set(['reply', 'message', 'mail']);
+const AUTHORITATIVE_EVIDENCE = new Set(['OBSERVED_EVENT', 'WORLD_TRANSITION']);
+
+export function isAuthoritativeOpenThread(inc) {
+  if (!inc || !inc.open || inc.resolved) return false;
+  if (inc.threadKind === 'object_custody') {
+    return inc.evidenceClass === 'WORLD_TRANSITION' && !!inc.objectEvidence;
+  }
+  return RESOLVABLE_THREAD_KINDS.has(inc.threadKind)
+    && AUTHORITATIVE_EVIDENCE.has(inc.evidenceClass);
+}
+
 // ---- ledger ---------------------------------------------------------------
 
 export function initLedger() {
   return [];
 }
 
-// Fill in any missing shape from a persisted ledger.
+// Fill in any missing shape from a persisted ledger, and demote any persisted
+// open thread that does not satisfy the open-thread invariant (legacy
+// ambient-texture reply/promise/transfer threads, officer 'owed'). The incident
+// line and its evidence class are preserved as an ordinary impression; only the
+// false open/thread status is dropped. Authoritative threads (object custody, a
+// live awaiting-word wait) are left untouched. This corrects pre-existing live
+// phantoms canonically at load time, with no history erased.
 export function reconcileLedger(saved) {
   if (!Array.isArray(saved)) return initLedger();
   return saved
     .filter((x) => x && typeof x === 'object')
     .slice(-LEDGER_MAX)
-    .map((x) => ({ resolved: false, evidenceClass: 'LEGACY_UNVERIFIED', ...x }));
+    .map((x) => {
+      const inc = { resolved: false, evidenceClass: 'LEGACY_UNVERIFIED', ...x };
+      // Demote only the false open status; keep threadKind/subject and the whole
+      // record so provenance is intact and classification-dependent rendering
+      // (e.g. the legacy `taken` sanitisation in incidentsDirective) still works.
+      // Every open-gated effect - STILL OPEN rendering, journal salience - keys on
+      // `open`, so clearing it is sufficient to retire a phantom thread.
+      if (inc.open && !inc.resolved && !isAuthoritativeOpenThread(inc)) {
+        delete inc.open;
+      }
+      return inc;
+    });
 }
 
 // Build an incident of `kind` from templates. Returns the record WITHOUT a ts
@@ -184,17 +233,24 @@ export function makeIncident(kind, ctx = {}) {
   const build = BUILDERS[kind] || BUILDERS.texture;
   const c = { rnd: Math.random, relations: {}, ...ctx };
   const rec = build(c) || {};
+  const evidenceClass = ctx.environmentEventId ? 'OBSERVED_EVENT'
+    : kind === 'texture' ? 'AMBIENT_TEXTURE' : 'OBSERVED_AMBIGUOUS';
+  const threadKind = rec.threadKind || (rec.open ? 'thread' : null);
+  // Promote to a durable open thread only when it names a situation the world can
+  // actually resolve (see isAuthoritativeOpenThread). object_custody is minted
+  // solely by makeObjectTransitionIncident, never here.
+  const canOpen = !!rec.open
+    && RESOLVABLE_THREAD_KINDS.has(threadKind)
+    && AUTHORITATIVE_EVIDENCE.has(evidenceClass);
   return {
     actor: rec.actor || '',
     verb: rec.verb || '',
     object: rec.object || '',
     detail: rec.detail || '',
     resolved: false,
-    evidenceClass: ctx.environmentEventId ? 'OBSERVED_EVENT'
-      : kind === 'texture' ? 'AMBIENT_TEXTURE' : 'OBSERVED_AMBIGUOUS',
+    evidenceClass,
     ...(ctx.environmentEventId ? { sourceEventId: ctx.environmentEventId } : {}),
-    ...(rec.open && !['taken', 'object_custody'].includes(rec.threadKind)
-      ? { open: true, threadKind: rec.threadKind || 'thread', subject: rec.subject || '' } : {}),
+    ...(canOpen ? { open: true, threadKind, subject: rec.subject || '' } : {}),
   };
 }
 
