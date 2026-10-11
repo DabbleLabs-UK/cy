@@ -7,6 +7,16 @@ require __DIR__ . '/../lib/admin.php';
 require __DIR__ . '/../lib/tempo.php';
 require __DIR__ . '/../lib/implementation_registry.php';
 
+// This document carries the import map (see cy_import_map() below), which is what
+// cache-busts every statically-imported JS/CSS module to its current ?v=<mtime>
+// URL. That protection is only as fresh as the HTML itself: if a browser serves a
+// stale cached copy of this page on reload, it replays an old import map and keeps
+// loading old modules (the stale-centre-timeline bug). The page is cheap and fully
+// dynamic (day number, admin state, map mtimes), so require revalidation on every
+// load. `no-cache` still allows storage + conditional revalidation; it does not
+// disable caching of the versioned module/asset URLs the map points at.
+header('Cache-Control: no-cache');
+
 // Point the viewer at the fake replay feed with ?stream=test so the renderer
 // can be exercised with no database present.
 $useTest = isset($_GET['stream']) && $_GET['stream'] === 'test';
