@@ -194,6 +194,62 @@ const CAST_NAME_PATTERN = new RegExp(
 );
 const CAST_ID_BY_NAME = new Map(CAST_NAME_ALIASES);
 
+// Subject-of-talk detection. A non-participant may be the TOPIC of a summary
+// without being physically present ("Bill tells Cy about Fisher", "discuss Mr
+// Keyes' schedule"); such a name must NOT be forced into participants. But a
+// name that is directly acting, speaking or being addressed as present IS a
+// participant and must stay flagged. The old heuristic only cleared a name
+// IMMEDIATELY preceded by `about|regarding|concerning`, so it false-rejected
+// legitimate absent references defeated by a title ("about Mr. Keyes"), a
+// discussion verb ("discuss Keyes"), or a nested/reported clause ("...talking
+// about Fisher having a conversation with Locke"). This walks the words
+// governing the name instead: skipping titles and neutral connectors, the FIRST
+// governing cue decides - a topic cue means subject (allowed), a
+// presence/address cue (or a crossed clause boundary) means present (flagged).
+// It never coerces anyone into participants and defaults to "present" when no
+// topic cue governs, so presence/speaker truthfulness is not weakened.
+const NAME_TITLE = /^(?:mr|mrs|miss|ms|dr)\.?$/;
+const NAME_TOPIC_CUES = new Set([
+  'about', 'regarding', 'concerning', 'discuss', 'discussed', 'discussing', 'discusses',
+  'mention', 'mentioned', 'mentioning', 'mentions', 'gossip', 'gossiping', 'gossiped',
+  'rumour', 'rumours', 'rumor', 'rumors', 'news', 'story', 'stories', 'word', 'hearsay',
+]);
+const NAME_PRESENCE_CUES = new Set([
+  'ask', 'asks', 'asked', 'asking', 'tell', 'tells', 'told', 'telling',
+  'approach', 'approached', 'approaches', 'approaching', 'hit', 'hits',
+  'gave', 'give', 'gives', 'giving', 'pass', 'passes', 'passed', 'passing',
+  'hand', 'hands', 'handed', 'handing', 'sat', 'sit', 'sits', 'sitting',
+  'stood', 'stand', 'stands', 'standing', 'threaten', 'threatened', 'threatens',
+  'confront', 'confronted', 'confronts', 'met', 'meet', 'meets', 'meeting',
+  'join', 'joined', 'joins', 'joining', 'nodded', 'nods', 'warn', 'warned', 'warns',
+  'showed', 'shows', 'show', 'shoved', 'grabbed', 'grabs', 'grab',
+  'punched', 'punches', 'punch', 'addressed', 'addresses', 'address',
+  'shouted', 'shouts', 'shout', 'spoke', 'speaks', 'speak', 'speaking',
+]);
+const NAME_BOUNDARY_CUES = new Set(['then', 'after', 'before', 'when', 'while', 'so', 'but']);
+const NAME_SCAN_WINDOW = 12;
+const normWord = (token) => token.toLowerCase().replace(/^[^a-z]+|[^a-z]+$/g, '');
+
+export function isSubjectOfTalk(before, after) {
+  // The name as the immediate agent of a present action ("Fisher punched...") is
+  // present, whatever precedes it.
+  const forward = clean(after, 120).trim().split(/\s+/).map(normWord).filter(Boolean);
+  if (forward.length && NAME_PRESENCE_CUES.has(forward[0])) return false;
+  const tokens = clean(before, 400).trim().split(/\s+/);
+  let scanned = 0;
+  for (let i = tokens.length - 1; i >= 0 && scanned < NAME_SCAN_WINDOW; i -= 1) {
+    const raw = tokens[i];
+    const word = normWord(raw);
+    if (!word) continue;
+    if (NAME_TITLE.test(word)) continue; // a title is not the governing cue
+    if (NAME_TOPIC_CUES.has(word)) return true; // governed by discussion -> subject
+    if (NAME_PRESENCE_CUES.has(word)) return false; // acting/addressed -> present
+    if (NAME_BOUNDARY_CUES.has(word) || /[.;:!?]$/.test(raw)) return false; // crossed a clause
+    scanned += 1; // neutral connector/noun/adjective/name -> keep looking back
+  }
+  return false; // no governing topic cue found -> treat as present (conservative)
+}
+
 function castIdentityErrors(text, participants, candidate) {
   const source = clean(text, 1200);
   const names = [...source.matchAll(CAST_NAME_PATTERN)].map((match) => ({
@@ -209,15 +265,18 @@ function castIdentityErrors(text, participants, candidate) {
     }
     if (participants.has(current.castId)) continue;
     const before = source.slice(0, current.index);
-    // "Fisher asked Cy about Bill" reports a subject, not Bill's presence.
-    if (/\b(?:about|regarding|concerning)\s+$/i.test(before)) continue;
+    const after = source.slice(current.index + current.name.length);
     // A world-only delivery may name its recipient without making that person
     // an observer. A later read may identify the recorded sender as provenance.
+    // (Message sender/recipient rules are unchanged.)
     const messageActions = (candidate.objects || []).map((object) => object?.messageAction).filter(Boolean);
     if (/\b(?:to|for)\s+$/i.test(before)
       && messageActions.some((action) => id(action.recipientId) === current.castId)) continue;
     if (/\bfrom\s+$/i.test(before)
       && messageActions.some((action) => id(action.senderId) === current.castId)) continue;
+    // An absent person named as the subject of talk is allowed; a present or
+    // addressed one is not. Never coerces anyone into participants.
+    if (isSubjectOfTalk(before, after)) continue;
     errors.push('NAMED_CAST_NOT_PARTICIPANT');
   }
   return errors;
