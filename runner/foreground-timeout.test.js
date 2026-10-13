@@ -113,7 +113,7 @@ assert.ok(rawGrantAt >= 0 && rawGrantAt < rawStartAt && rawStartAt < rawTimeoutA
 ok('shared-host queueing is excluded from provider timeout accounting');
 
 // ---- 6. AWG keeps a finite purpose-specific provider timeout ----
-assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeoutMs: AWG_TIMEOUT_MS,[\s\S]{0,160}?admittedAwgSlot: true/,
+assert.match(source, /generate: \(call\) => \{[\s\S]{0,900}?rawGenerate\(\{[\s\S]{0,700}?timeoutMs: AWG_TIMEOUT_MS,[\s\S]{0,160}?admittedAwgSlot: true/,
   'AWG receives its finite background timeout after explicit reserved-slot admission');
 assert.doesNotMatch(source, /timeoutMs: AWG_TIMEOUT_MS[\s\S]{0,40}FOREGROUND_INFERENCE_TIMEOUT_MS/,
   'AWG is never given the foreground timeout in addition to its own');
