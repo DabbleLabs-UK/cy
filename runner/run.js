@@ -253,6 +253,7 @@ import {
   selectAwgGenerationFacts,
   shouldRunAwg,
 } from './ambient-world-generator.js';
+import { captureAwgRequest, captureAwgResponse, captureAwgOutcome } from './awg-capture.js';
 import { normaliseMessageState } from './message-object-lifecycle.js';
 import { advanceWorldEntity, compactAcknowledgedRetiredObjects,
   synchronizeWorldMirror } from './world-mirror.js';
@@ -4867,6 +4868,8 @@ async function main() {
       fallback: '',
     });
     if (!context.ok) return { status: 'SKIPPED', reason: 'CONTEXT_BROKER_FAILURE' };
+    // One-shot, behaviour-neutral capture token (null unless armed). See awg-capture.js.
+    let awgCaptureDir = null;
     const result = await runAmbientWorldCycle({
       state: vitals.worldSimulation,
       contextRendering: context.rendering,
@@ -4879,21 +4882,36 @@ async function main() {
       plausibleCastIds: plausibleCastAtLocation(vitals.locationRegime.current.id).map((item) => item.key),
       recentEvents: recentWorldHistory,
       makeId: (prefix) => `${prefix}-${randomUUID()}`,
-      generate: (call) => rawGenerate({
-        system: call.system,
-        prompt: call.prompt,
-        format: call.format,
-        opts: options(vitals, config.threads, 'journal', call.options),
-        purpose: call.purpose,
-        accountingMode: 'ambient_world_generation',
-        // The reservation admits the request; it is not a kill timer. Real DELL
-        // prompt evaluation can exceed the remaining visible idle interval. The
-        // normal inference pacer charges any overrun before the next visible call.
-        timeoutMs: AWG_TIMEOUT_MS,
-        attempt: 'ambient-world-candidate',
-        admittedAwgSlot: true,
-      }),
+      generate: (call) => {
+        // opts computed once (identical value to before) and passed to rawGenerate
+        // unchanged; the capture only observes it.
+        const opts = options(vitals, config.threads, 'journal', call.options);
+        awgCaptureDir = captureAwgRequest(STATE_DIR, {
+          call, opts, model: activeProvider().model, providerId: activeProvider().id,
+          recentWorldHistory, worldSimulation: vitals.worldSimulation, locationRegime: vitals.locationRegime,
+          plausibleCastIds: plausibleCastAtLocation(vitals.locationRegime.current.id).map((item) => item.key),
+          currentLocation: locationContextId(vitals.locationRegime.current.id),
+          contextRendering: context.rendering, contextInspection: context.inspection,
+        });
+        const out = rawGenerate({
+          system: call.system,
+          prompt: call.prompt,
+          format: call.format,
+          opts,
+          purpose: call.purpose,
+          accountingMode: 'ambient_world_generation',
+          // The reservation admits the request; it is not a kill timer. Real DELL
+          // prompt evaluation can exceed the remaining visible idle interval. The
+          // normal inference pacer charges any overrun before the next visible call.
+          timeoutMs: AWG_TIMEOUT_MS,
+          attempt: 'ambient-world-candidate',
+          admittedAwgSlot: true,
+        });
+        // Returns the identical response promise; records raw only when armed.
+        return captureAwgResponse(awgCaptureDir, out);
+      },
     });
+    if (awgCaptureDir) captureAwgOutcome(awgCaptureDir, result);
     // An ingest conflict or reconnect gate can close while background inference
     // is running. Its candidate is not allowed to mutate an unsynchronized
     // world merely because it was admitted earlier.
