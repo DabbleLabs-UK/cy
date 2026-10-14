@@ -34,12 +34,30 @@ function candidateObjectCount(run) {
   return Array.isArray(c && c.objects) ? c.objects.length : 0;
 }
 
-// Did this accepted run actually move persistent world state?
+// Did this accepted run actually move persistent world state? (threads/objects)
+// This is DELIBERATELY unchanged by structured actions: a resolved headcount /
+// check / search-with-no-result is grounded world activity but changes no
+// persistent state, so it is NOT a durable change.
 export function runChangedDurableState(run) {
   if (!isAccepted(run)) return false;
   const threadChanged = Array.isArray(run.threadChanges) && run.threadChanges.length > 0;
   const objectTouched = candidateObjectCount(run) > 0;
   return threadChanged || objectTouched;
+}
+
+// Did this accepted run carry a structured physical action?
+function runHasStructuredAction(run) {
+  const action = run && run.candidateOutput && run.candidateOutput.action;
+  return !!(action && typeof action === 'object' && action.actionClass);
+}
+
+// Grounded SUBSTANTIVE world activity: either a durable change OR a structured
+// physical action. The distinction from runChangedDurableState is the whole point
+// of the smallest-clean split: a headcount is substantive (not an empty event) but
+// not durable, so it counts here yet does NOT reset the no-durable-change streak.
+export function runIsGroundedSubstantive(run) {
+  if (!isAccepted(run)) return false;
+  return runChangedDurableState(run) || runHasStructuredAction(run);
 }
 
 // Accepted candidates participants (for concentration).
@@ -91,6 +109,8 @@ export function awgHealthReport(stateValue) {
   const participantCounts = {};
   let durable = 0;
   let objectBearing = 0;
+  let groundedSubstantive = 0;
+  let actionBearing = 0;
   for (const run of accepted) {
     const family = candidateFamily(run) || 'UNKNOWN';
     familyCounts[family] = (familyCounts[family] || 0) + 1;
@@ -101,6 +121,8 @@ export function awgHealthReport(stateValue) {
     }
     if (runChangedDurableState(run)) durable += 1;
     if (candidateObjectCount(run) > 0) objectBearing += 1;
+    if (runIsGroundedSubstantive(run)) groundedSubstantive += 1;
+    if (run.candidateOutput && run.candidateOutput.action && run.candidateOutput.action.actionClass) actionBearing += 1;
   }
   const family = topShare(familyCounts);
   const participant = topShare(participantCounts);
@@ -111,6 +133,11 @@ export function awgHealthReport(stateValue) {
     durableChangeRate: accepted.length ? durable / accepted.length : 0,
     durableChanges: durable,
     objectBearingAccepted: objectBearing,
+    // Grounded substantive = durable change OR a structured physical action.
+    // Kept distinct from durableChanges: a headcount is substantive, not durable.
+    groundedSubstantive,
+    groundedSubstantiveRate: accepted.length ? groundedSubstantive / accepted.length : 0,
+    actionBearingAccepted: actionBearing,
     threadActionCounts,
     familyCounts,
     familyConcentration: family.topShare,

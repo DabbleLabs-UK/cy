@@ -61,6 +61,33 @@ export const AWG_KNOWN_LOCATIONS = Object.freeze([
   'chapel', 'workshop', 'library', 'healthcare', 'visits', 'officer_desk', 'corridor',
 ]);
 
+// STRUCTURED GENERIC PHYSICAL ACTION (optional). Lets AWG represent an ordinary
+// item-less world action (a headcount, a search that finds nothing, a move, a
+// check, a refusal) as structured fields instead of only free-text summary, so
+// validators can check actor/role/location plausibility and materialisation can
+// preserve it as real world evidence without inventing consequences. Reuses the
+// existing actor/target concept and the deterministic environment archetypes;
+// conversation (SOCIAL_REQUEST) deliberately carries no action.
+export const AWG_ACTION_CLASSES = Object.freeze([
+  'HEADCOUNT', 'CELL_SEARCH', 'ESCORT_MOVE', 'CHECK', 'REFUSAL', 'ORDER', 'WING_DISTURBANCE',
+]);
+// Classes that only an officer can perform (role plausibility).
+const AWG_OFFICER_ACTION_CLASSES = new Set(['HEADCOUNT', 'CELL_SEARCH', 'ESCORT_MOVE', 'CHECK', 'REFUSAL', 'ORDER']);
+// Non-person targets reuse the known-location vocabulary (e.g. searched the CELL).
+export const AWG_ACTION_TARGETS = Object.freeze(['cell', 'wing', 'landing', 'cell_block']);
+// actionClass -> deterministic environment archetype (materialisation grounding).
+const AWG_ACTION_ARCHETYPE = Object.freeze({
+  CELL_SEARCH: 'cell_search', WING_DISTURBANCE: 'persistent_night_noise',
+  REFUSAL: 'cancelled_activity', HEADCOUNT: 'calm_routine', CHECK: 'calm_routine',
+  ESCORT_MOVE: 'ambient_world_event', ORDER: 'ambient_world_event',
+});
+// Which locations each action class is plausible at (location plausibility).
+const AWG_ACTION_LOCATIONS = Object.freeze({
+  CELL_SEARCH: ['cell'], HEADCOUNT: ['cell', 'wing', 'landing'], CHECK: ['cell', 'wing', 'landing'],
+  ESCORT_MOVE: AWG_KNOWN_LOCATIONS, ORDER: AWG_KNOWN_LOCATIONS, REFUSAL: AWG_KNOWN_LOCATIONS,
+  WING_DISTURBANCE: ['wing', 'landing', 'cell'],
+});
+
 // ENGINEERING WORLD PACING.
 export const AWG_CADENCE_MS = 45 * 60 * 1000;
 export const AWG_MIN_EVENT_SPACING_MS = 30 * 60 * 1000;
@@ -745,6 +772,23 @@ export function buildAwgProposalFormat(stateValue, {
           summary: { const: null },
         },
       },
+      // Optional structured physical action (null when none). Not in `required`,
+      // so old/omitting proposals stay valid. Conversation leaves this null.
+      action: {
+        oneOf: [
+          { type: 'null' },
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['actionClass', 'actorId'],
+            properties: {
+              actionClass: { type: 'string', enum: AWG_ACTION_CLASSES },
+              actorId: { type: 'string', enum: castIds },
+              targetId: { enum: [null, ...castIds, ...AWG_ACTION_TARGETS] },
+            },
+          },
+        ],
+      },
     },
   };
   const eventBranches = epistemicProposalBranches(eventProposal, otherCastIds);
@@ -789,18 +833,33 @@ export function buildAwgProposalFormat(stateValue, {
       return branch;
     }));
   }
-  // Under drought, withhold ONLY the trivial option from the EVENT branches: a
-  // thread-NONE event must now carry at least one object (a passed note, a moved
-  // or confiscated item - a durable transition). Thread-opening branches and
-  // continuations are already durable and are left untouched, and NO_EVENT
-  // remains available, so the model is pushed off the empty branch without being
-  // forced to invent drama.
+  // Under drought, withhold ONLY the empty trivial option from the EVENT branches:
+  // a thread-NONE event must now be SUBSTANTIVE - carry at least one object (a
+  // passed/moved/confiscated item) OR a structured physical action (a headcount,
+  // search, move, check, refusal - grounded world activity that need not change
+  // persistent state). Each thread-NONE branch is replaced by two grammar-clean
+  // variants (object-bearing, action-bearing); the empty conversation variant is
+  // dropped. Thread-opening branches and continuations are already substantive and
+  // are left untouched, and NO_EVENT remains available, so the model is pushed off
+  // the empty branch without being forced to invent drama or a persistent change.
   if (droughtActive) {
+    const rebuilt = [];
     for (const branch of eventBranches) {
       if (branch?.properties?.thread?.properties?.action?.const === 'NONE') {
-        branch.properties.objects = { ...branch.properties.objects, minItems: 1 };
+        const objectVariant = clone(branch);
+        objectVariant.properties.objects = { ...objectVariant.properties.objects, minItems: 1 };
+        const actionVariant = clone(branch);
+        actionVariant.required = [...actionVariant.required, 'action'];
+        // require a non-null structured action (the object alternative of the oneOf)
+        actionVariant.properties.action = actionVariant.properties.action.oneOf
+          .find((alt) => alt.type === 'object');
+        rebuilt.push(objectVariant, actionVariant);
+      } else {
+        rebuilt.push(branch);
       }
     }
+    eventBranches.length = 0;
+    eventBranches.push(...rebuilt);
   }
   return {
     oneOf: [
@@ -1296,6 +1355,30 @@ export function validateAwgCandidate(candidateValue, stateValue, {
   });
   if (clean(candidate.eventFamily).toUpperCase() === 'RUMOUR' && !claims.length) errors.push('RUMOUR_CLAIM_REQUIRED');
 
+  // Optional structured physical action. Conversation (SOCIAL_REQUEST) must not
+  // carry one, so talk can never satisfy the physical-action structure. Actor
+  // must be a present participant of plausible role; location must fit the class.
+  const act = candidate.action && typeof candidate.action === 'object' && !Array.isArray(candidate.action)
+    ? candidate.action : null;
+  if (act) {
+    const actionClass = clean(act.actionClass).toUpperCase();
+    const actorId = id(act.actorId);
+    if (!AWG_ACTION_CLASSES.includes(actionClass)) errors.push('INVALID_ACTION_CLASS');
+    if (clean(candidate.eventFamily).toUpperCase() === 'SOCIAL_REQUEST') errors.push('SOCIAL_REQUEST_ACTION_FORBIDDEN');
+    if (!KNOWN_CAST_IDS.has(actorId)) errors.push('ACTION_ACTOR_UNKNOWN');
+    else if (!participantSet.has(actorId)) errors.push('ACTION_ACTOR_NOT_PARTICIPANT');
+    if (AWG_OFFICER_ACTION_CLASSES.has(actionClass) && !OFFICER_IDS.has(actorId)) errors.push('ACTION_ACTOR_ROLE_MISMATCH');
+    if (act.targetId != null) {
+      const targetId = id(act.targetId);
+      const personTarget = KNOWN_CAST_IDS.has(targetId);
+      const locationTarget = AWG_ACTION_TARGETS.includes(clean(act.targetId));
+      if (!personTarget && !locationTarget) errors.push('INVALID_ACTION_TARGET');
+      if (personTarget && !participantSet.has(targetId)) errors.push('ACTION_TARGET_NOT_PARTICIPANT');
+    }
+    const allowedLoc = AWG_ACTION_LOCATIONS[actionClass];
+    if (allowedLoc && !allowedLoc.includes(clean(candidate.location))) errors.push('ACTION_LOCATION_IMPLAUSIBLE');
+  }
+
   const threadAction = clean(candidate.thread && candidate.thread.action).toUpperCase() || 'NONE';
   const continuationThreadId = id(candidate.continuationOf && candidate.continuationOf.threadId);
   if (decision === 'CONTINUATION') {
@@ -1401,6 +1484,11 @@ export function validateAwgCandidate(candidateValue, stateValue, {
         content: clean(claim.content, 800),
         truthStatus: clean(claim.truthStatus).toUpperCase(),
       })),
+      action: act ? {
+        actionClass: clean(act.actionClass).toUpperCase(),
+        actorId: id(act.actorId),
+        targetId: act.targetId != null ? id(act.targetId) : null,
+      } : null,
     },
     cyObserved,
     cyObservation: cyObservation || null,
@@ -1450,10 +1538,16 @@ export function applyAwgCandidate(stateValue, validation, {
     observedInformationClaims: clone(observedInformationClaims),
     resolved: !!candidate.resolved,
     sourceThreadId: id(candidate.continuationOf && candidate.continuationOf.threadId) || null,
-    actorId: id(messageAction && (['CREATE', 'DELIVER'].includes(clean(messageAction.action).toUpperCase())
-      ? messageAction.senderId : messageAction.recipientId)) || candidate.participants[0] || null,
-    targetId: id(messageAction && (['CREATE', 'DELIVER'].includes(clean(messageAction.action).toUpperCase())
-      ? messageAction.recipientId : messageAction.senderId)) || candidate.participants[1] || null,
+    // A structured action (when present) sets actor/target/actionClass explicitly;
+    // otherwise fall back to the existing message/positional derivation for
+    // backward compatibility with old/action-less proposals.
+    actionClass: candidate.action ? clean(candidate.action.actionClass, 40).toUpperCase() || null : null,
+    actorId: (candidate.action && id(candidate.action.actorId))
+      || id(messageAction && (['CREATE', 'DELIVER'].includes(clean(messageAction.action).toUpperCase())
+        ? messageAction.senderId : messageAction.recipientId)) || candidate.participants[0] || null,
+    targetId: (candidate.action && candidate.action.targetId != null && id(candidate.action.targetId))
+      || id(messageAction && (['CREATE', 'DELIVER'].includes(clean(messageAction.action).toUpperCase())
+        ? messageAction.recipientId : messageAction.senderId)) || candidate.participants[1] || null,
   };
   const changes = [];
   const action = clean(candidate.thread && candidate.thread.action).toUpperCase() || 'NONE';
@@ -1544,8 +1638,15 @@ export function awgEventToEnvironment(result) {
   if (!result || !result.accepted || !result.event) return null;
   const event = result.event;
   const observation = result.cyObservation;
+  // A structured physical action grounds into its matching deterministic
+  // archetype (reusing the existing environment vocabulary); otherwise the generic
+  // ambient_world_event archetype, exactly as before. No consequence is invented:
+  // only the archetype label, actor/target and agency are set from the action.
+  const actionClass = clean(event.actionClass, 40).toUpperCase() || null;
+  const archetypeId = (actionClass && AWG_ACTION_ARCHETYPE[actionClass]) || 'ambient_world_event';
+  const actionAgency = actionClass && AWG_OFFICER_ACTION_CLASSES.has(actionClass) ? 'officer' : null;
   return {
-    archetypeId: 'ambient_world_event',
+    archetypeId,
     eventType: event.eventType,
     summary: result.cyObserved && observation ? clean(observation.summary, 800) : null,
     world: {
@@ -1557,7 +1658,11 @@ export function awgEventToEnvironment(result) {
         previous_event_ids: event.sourceThreadId ? [event.sourceThreadId] : [],
       },
       temporal: { onset: 'event', persistence: event.resolved ? 'completed' : 'ongoing', recurrence: 'unknown' },
-      situation: { resolution_status: event.resolved ? 'resolved' : 'unresolved' },
+      situation: {
+        resolution_status: event.resolved ? 'resolved' : 'unresolved',
+        ...(actionAgency ? { agency: actionAgency } : {}),
+        ...(actionClass ? { action_class: actionClass } : {}),
+      },
     },
     observation: result.cyObserved && observation ? {
       modality: observation.access === 'CY_PARTIAL_HEARD' ? 'heard' : observation.access === 'CY_LEARNS_LATER' ? 'reported' : 'direct',

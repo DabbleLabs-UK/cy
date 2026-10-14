@@ -109,7 +109,12 @@ function openBranches(bs) {
   return bs.filter((b) => b?.properties?.thread?.properties?.action?.const === 'OPEN');
 }
 
-test('drought schema requires an object on thread-NONE EVENT branches only', () => {
+// A NONE branch is "action-required" if it mandates a non-null structured action.
+const requiresAction = (b) => Array.isArray(b.required) && b.required.includes('action')
+  && b.properties.action && b.properties.action.type === 'object';
+const requiresObject = (b) => b.properties.objects && b.properties.objects.minItems === 1;
+
+test('drought makes thread-NONE EVENT branches substantive: object-bearing OR action-bearing, never empty', () => {
   const state = reconcileWorldSimulationState({});
   const opts = { plausibleCastIds: ['bill', 'fisher'], currentLocation: 'cell' };
 
@@ -117,7 +122,8 @@ test('drought schema requires an object on thread-NONE EVENT branches only', () 
   const baseNone = noneBranches(eventBranches(base));
   assert.ok(baseNone.length > 0, 'baseline has thread-NONE EVENT branches');
   for (const b of baseNone) {
-    assert.equal(b.properties.objects.minItems, undefined, 'baseline NONE branch does not require objects');
+    assert.equal(requiresObject(b), false, 'baseline NONE branch does not require objects (conversation allowed)');
+    assert.equal(requiresAction(b), false, 'baseline NONE branch does not require an action');
   }
 
   const dry = buildAwgProposalFormat(state, { ...opts, droughtActive: true });
@@ -125,11 +131,16 @@ test('drought schema requires an object on thread-NONE EVENT branches only', () 
   const dryNone = noneBranches(dryEvents);
   const dryOpen = openBranches(dryEvents);
   assert.ok(dryNone.length > 0 && dryOpen.length > 0, 'both NONE and OPEN branches exist under drought');
+  // every drought NONE branch is substantive; none is empty (neither object nor action)
   for (const b of dryNone) {
-    assert.equal(b.properties.objects.minItems, 1, 'drought NONE branch requires an object');
+    assert.ok(requiresObject(b) || requiresAction(b), 'drought NONE branch must require an object OR a structured action');
+    assert.ok(!(requiresObject(b) && requiresAction(b)), 'a drought NONE variant requires exactly one of object/action');
   }
+  // and BOTH kinds are offered (object-bearing and action-bearing escapes exist)
+  assert.ok(dryNone.some(requiresObject), 'an object-bearing drought NONE branch exists');
+  assert.ok(dryNone.some(requiresAction), 'an action-bearing drought NONE branch exists');
   for (const b of dryOpen) {
-    assert.equal(b.properties.objects.minItems, undefined, 'drought leaves OPEN branches free');
+    assert.equal(requiresObject(b), false, 'drought leaves OPEN branches free');
   }
   // NO_EVENT remains a legal choice under drought.
   assert.ok(dry.oneOf.some((b) => b?.properties?.decision?.const === 'NO_EVENT'));
