@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateAwgCandidate, applyAwgCandidate, awgEventToEnvironment, buildAwgProposalFormat,
-  reconcileWorldSimulationState,
+  reconcileWorldSimulationState, parseAwgCandidate, materialiseAwgProposal,
 } from './ambient-world-generator.js';
 import {
   runChangedDurableState, runIsGroundedSubstantive, noDurableChangeStreak, awgHealthReport,
@@ -107,6 +107,52 @@ test('backward compatibility: an action-less proposal validates and materialises
   assert.equal(applied.event.actorId, 'cy', 'falls back to positional actor derivation');
   applied.validationCandidate = r.candidate;
   assert.equal(awgEventToEnvironment(applied).archetypeId, 'ambient_world_event', 'no action -> generic archetype, unchanged');
+});
+
+// ---- end-to-end: parsed proposal -> materialise -> validate -> environment --
+// This is the production path (runAmbientWorldCycle). It would have caught the
+// materialiseAwgProposal allowlist bug that rejected the top-level `action` key.
+test('end-to-end: a parsed proposal with a valid action survives materialise + validate + environment', () => {
+  const raw = {
+    decision: 'EVENT', eventFamily: 'OFFICER_ACTIVITY', participants: ['cy', 'sweep'],
+    objective: { eventType: 'headcount', summary: 'Mr Sweep ran the count.' },
+    objects: [], observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Mr Sweep ran the count.' }],
+    informationClaims: [],
+    thread: { action: 'NONE', id: null, summary: null },
+    action: { actionClass: 'HEADCOUNT', actorId: 'sweep', targetId: null },
+  };
+  const proposal = parseAwgCandidate(JSON.stringify(raw)); // as production parses the model output
+  const candidate = materialiseAwgProposal(proposal, null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['sweep'], makeId: (p) => `${p}-1`,
+  });
+  assert.deepEqual(candidate.action, { actionClass: 'HEADCOUNT', actorId: 'sweep', targetId: null },
+    'materialisation preserves the structured action');
+  const validation = validateAwgCandidate(candidate, null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['sweep'] });
+  assert.equal(validation.valid, true, validation.errors.join(','));
+  const applied = applyAwgCandidate(null, validation, { makeId: (p) => `${p}-1`, acceptedAt: candidate.occurredAt });
+  assert.equal(applied.event.actorId, 'sweep');
+  assert.equal(applied.event.actionClass, 'HEADCOUNT');
+  applied.validationCandidate = validation.candidate;
+  const envm = awgEventToEnvironment(applied);
+  assert.equal(envm.archetypeId, 'calm_routine');
+  assert.equal(envm.world.situation.action_class, 'HEADCOUNT');
+  assert.equal(applied.changes.length, 0, 'no invented object/thread consequence');
+});
+
+test('end-to-end backward compatibility: a parsed proposal WITHOUT action still materialises', () => {
+  const raw = {
+    decision: 'EVENT', eventFamily: 'SOCIAL_REQUEST', participants: ['cy', 'bill'],
+    objective: { eventType: 'chat', summary: 'Cy and Bill talk.' },
+    objects: [], observations: [{ observerId: 'cy', access: 'CY_DIRECT', summary: 'Cy and Bill talk.' }],
+    informationClaims: [],
+    thread: { action: 'NONE', id: null, summary: null },
+  };
+  const candidate = materialiseAwgProposal(parseAwgCandidate(JSON.stringify(raw)), null, {
+    nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill'], makeId: (p) => `${p}-1`,
+  });
+  assert.equal(candidate.action, null, 'absent action normalises to null (no throw)');
+  const validation = validateAwgCandidate(candidate, null, { nowMs: NOW, currentLocation: 'cell', plausibleCastIds: ['bill'] });
+  assert.equal(validation.valid, true, validation.errors.join(','));
 });
 
 // ---- health / drought distinction ------------------------------------------

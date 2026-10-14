@@ -1017,8 +1017,11 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
   }
   assertProposalKeys(proposal, new Set([
     'decision', 'eventFamily', 'participants', 'objective', 'objects',
-    'observations', 'informationClaims', 'thread',
+    'observations', 'informationClaims', 'thread', 'action',
   ]), 'PROPOSAL');
+  if (proposal.action != null) {
+    assertProposalKeys(proposal.action, new Set(['actionClass', 'actorId', 'targetId']), 'ACTION');
+  }
   if (!AWG_KNOWN_LOCATIONS.includes(clean(currentLocation))) throw new Error('UNKNOWN_LOCATION');
   const state = reconcileWorldSimulationState(stateValue);
   const allowedCast = new Set(proposalCastIds(plausibleCastIds));
@@ -1125,6 +1128,13 @@ export function materialiseAwgProposal(proposalValue, stateValue, {
     continuationOf: decision === 'CONTINUATION' ? {
       threadId: openThread.id,
       eventIds: [...(openThread.sourceEventIds || [])],
+    } : null,
+    // Carry the optional structured action through materialisation (normalised);
+    // absent/null stays null so action-less proposals are unaffected.
+    action: proposal.action != null ? {
+      actionClass: clean(proposal.action.actionClass, 40).toUpperCase(),
+      actorId: id(proposal.action.actorId),
+      targetId: proposal.action.targetId != null ? id(proposal.action.targetId) : null,
     } : null,
     publicTimeline: { eligible: !!publicText, text: publicText },
   };
