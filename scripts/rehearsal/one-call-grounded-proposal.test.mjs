@@ -6,9 +6,16 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
   FIELD_ORDER, buildOneCallPacket, buildOneCallRequest, evaluateOneCall,
-  oneCallFormat, prepareOneCall, runOneCallAttempt,
+  oneCallFormat, prepareOneCall, runOneCallAttempt as unguardedAttempt,
+  compactModelPacket, expandModelPacket,
 } from './one-call-grounded-proposal.mjs';
 import { fingerprint } from './grounded-occurrence.mjs';
+import { TOKENIZER_METHOD } from './one-call-context-budget.mjs';
+
+// Fake receipt for FAKE generator tests only. Exact real-tokenizer tests are separate.
+const fakePreflight = request => ({ requestFingerprint: fingerprint(request), method: TOKENIZER_METHOD,
+  model: request.model, inputTokens: 100, effectiveContext: 3072, outputAllowance: 420 });
+const runOneCallAttempt = options => unguardedAttempt({ preflight: fakePreflight, ...options });
 
 const nowMs = Date.parse('2026-10-13T20:58:28.359Z');
 function capture() {
@@ -75,6 +82,40 @@ test('model contract has no abstention branch and classification is last', () =>
   assert.equal(request.format.properties.effects.minItems, 0);
   assert.equal(request.format.properties.effects.maxItems, 0);
   assert.deepEqual(request.format.properties.target.oneOf.map(b => b.properties?.kind?.const || 'NULL'), ['NULL', 'ACTOR']);
+});
+
+test('model-facing compaction is lossless, including all grounding fields and source IDs', () => {
+  const c = capture();
+  c.recentWorldHistory.push({ id: 'old:1', timestamp: '2026-10-13T20:40:00Z', eventFamily: 'CUSTODY',
+    participants: ['locke'], summary: 'Mr Locke approached the cell door.', cyObserved: true });
+  const packet = buildOneCallPacket(c, { nowMs });
+  const compact = compactModelPacket(packet);
+  assert.deepEqual(expandModelPacket(compact), packet);
+  const request = buildOneCallRequest(c, packet);
+  assert.deepEqual(JSON.parse(request.prompt.split('\n\n').at(-1)), compact);
+  assert.ok(request.prompt.includes('eligibility alone is not co-presence'));
+  assert.ok(request.prompt.includes('Historical facts are context, not incidents to repeat'));
+  assert.deepEqual(request.format, oneCallFormat(packet));
+  assert.deepEqual(request.options, c.postBody.options);
+});
+
+test('unrecognised future actor/fact fields fail compaction rather than silently losing information', () => {
+  const packet = buildOneCallPacket(capture(), { nowMs });
+  packet.actors[0].newGroundingField = 'must not disappear';
+  assert.throws(() => compactModelPacket(packet), /UNSUPPORTED_ACTOR_COMPACTION/);
+});
+
+test('missing, overflowed or stale exact-token preflight prevents any generator call', async () => {
+  for (const preflight of [undefined,
+    request => ({ ...fakePreflight(request), inputTokens: 3120 }),
+    request => ({ ...fakePreflight(request), inputTokens: 2719 }),
+    request => ({ ...fakePreflight(request), requestFingerprint: 'stale' })]) {
+    let calls = 0;
+    const result = await unguardedAttempt({ capture: capture(), nowMs, admitted: true, preflight,
+      generate: async () => { calls++; return JSON.stringify(ordinary()); } });
+    assert.equal(calls, 0); assert.equal(result.generateInvocations, 0);
+    assert.match(result.reason, /TOKEN_PREFLIGHT/);
+  }
 });
 
 test('sparse world allows ordinary non-durable occurrence with empty effects', () => {

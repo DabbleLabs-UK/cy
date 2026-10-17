@@ -1,5 +1,11 @@
 # One-call grounded AWG proposal - rehearsal handoff
 
+The original 6ad0e7a preparation below is retained as design history, NOT the
+current run instruction. The 17 October context audit found provider-side input
+truncation. Use [the corrected token-budget handoff](one-call-context-budget.md)
+and its new verified package, mandatory exact-token preflight and truncate=false
+transport envelope. Do not reuse the old -ready request or unguarded harness.
+
 PREPARED ONLY. No model inference has been run for this prototype. No production
 integration, merge, deployment or runner restart is authorised by this handoff.
 

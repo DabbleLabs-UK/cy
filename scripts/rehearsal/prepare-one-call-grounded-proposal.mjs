@@ -11,6 +11,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readVerifiedCapture } from './prepare-grounded-occurrence.mjs';
 import { prepareOneCall, FIELD_ORDER } from './one-call-grounded-proposal.mjs';
+import { exactContextPreflight } from './one-call-context-budget.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -22,12 +23,12 @@ function main() {
   syncBuiltinESMExports();
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
-    console.log('OFFLINE ONLY: --capture <verified-frozen-bundle> --out <new-local-directory> [--proposal <saved-json>]');
+    console.log('OFFLINE ONLY: --capture <verified-frozen-bundle> --out <new-local-directory> [--proposal <saved-json>] [--model-store <verified-model-store>]');
     return;
   }
   const opts = {};
   for (let i = 0; i < args.length; i += 2) {
-    assert.ok(['--capture', '--out', '--proposal'].includes(args[i]) && args[i + 1]
+    assert.ok(['--capture', '--out', '--proposal', '--model-store'].includes(args[i]) && args[i + 1]
       && !Object.hasOwn(opts, args[i].slice(2)), 'Unknown/duplicate/incomplete option; no inference mode exists');
     opts[args[i].slice(2)] = args[i + 1];
   }
@@ -35,6 +36,10 @@ function main() {
   const { capture, nowMs, proof } = readVerifiedCapture(opts.capture);
   const prepared = prepareOneCall(capture, { nowMs,
     raw: opts.proposal ? fs.readFileSync(opts.proposal, 'utf8') : null });
+  // Exact tokenizer + complete rendered template + full output reserve, BEFORE
+  // creating a READY package. This process cannot contact an Ollama endpoint.
+  const contextPreflight = exactContextPreflight(prepared.request,
+    { ...(opts['model-store'] ? { modelStore: opts['model-store'] } : {}) });
   const output = path.resolve(opts.out);
   assert.ok(!fs.existsSync(output), 'Output must be a new directory');
   const candidate = path.join(fs.realpathSync(path.dirname(output)), path.basename(output));
@@ -48,7 +53,8 @@ function main() {
   const artifacts = {
     'affordance-packet.json': prepared.packet,
     'one-call-request.json': prepared.request,
-    'one-call-wire-body.json': Buffer.from(JSON.stringify({ ...prepared.request, stream: false, keep_alive: '5m' })),
+    'one-call-wire-body.json': Buffer.from(JSON.stringify({ ...prepared.request, stream: false, keep_alive: '5m', truncate: false })),
+    'context-preflight.json': contextPreflight,
     'model-facing-schema.json': prepared.request.format,
     'property-order.json': { topLevel: [...FIELD_ORDER],
       occurrence: Object.keys(prepared.request.format.properties.occurrence.properties),

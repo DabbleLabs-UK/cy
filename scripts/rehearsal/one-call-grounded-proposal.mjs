@@ -8,6 +8,7 @@ import {
 } from '../../runner/ambient-world-generator.js';
 import { CAST, OFFICERS } from '../../runner/cast.js';
 import { normaliseMessageState } from '../../runner/message-object-lifecycle.js';
+import { validateContextReceipt } from './one-call-context-budget.mjs';
 
 const clone = value => structuredClone(value);
 const object = properties => ({ type: 'object', additionalProperties: false,
@@ -120,6 +121,42 @@ export function oneCallFormat(packet) {
   });
 }
 
+// Lossless table encoding only. The full packet remains the checker's authority.
+// Repeated field names/defaults/derivable prefixes are shared, not omitted facts.
+export function compactModelPacket(packet) {
+  const result = clone(packet);
+  const actorColumns = ['id', 'name', 'role'];
+  const factColumns = ['ref', 'recordedAt', 'atMs', 'location', 'participants', 'cyObserved', 'eventType', 'summary'];
+  requireThat(packet.actors.every(a => a.ref === `actor:${a.id}`
+    && a.eligibility === (a.id === 'cy' ? 'CURRENT_SELF' : 'PRODUCTION_PLAUSIBLE_NOT_CONFIRMED_PRESENT')
+    && Object.keys(a).length === 5), 'UNSUPPORTED_ACTOR_COMPACTION');
+  requireThat(packet.recentFacts.every(f => f.ref === `event:${f.sourceId}`
+    && f.temporalScope === 'HISTORICAL_NOT_ONGOING_OR_COPRESENCE'
+    && Object.keys(f).length === 10), 'UNSUPPORTED_FACT_COMPACTION');
+  result.actors = { columns: actorColumns, refPrefix: 'actor:', selfId: 'cy',
+    selfEligibility: 'CURRENT_SELF', otherEligibility: 'PRODUCTION_PLAUSIBLE_NOT_CONFIRMED_PRESENT',
+    rows: packet.actors.map(a => actorColumns.map(key => clone(a[key]))) };
+  result.recentFacts = { columns: factColumns, sourceIdFromRefPrefix: 'event:',
+    temporalScope: 'HISTORICAL_NOT_ONGOING_OR_COPRESENCE',
+    rows: packet.recentFacts.map(f => factColumns.map(key => clone(f[key]))) };
+  return result;
+}
+
+export function expandModelPacket(compact) {
+  const result = clone(compact), actors = compact.actors, facts = compact.recentFacts;
+  result.actors = actors.rows.map(row => {
+    const a = Object.fromEntries(actors.columns.map((key, index) => [key, clone(row[index])]));
+    return { ref: actors.refPrefix + a.id, ...a,
+      eligibility: a.id === actors.selfId ? actors.selfEligibility : actors.otherEligibility };
+  });
+  result.recentFacts = facts.rows.map(row => {
+    const f = Object.fromEntries(facts.columns.map((key, index) => [key, clone(row[index])]));
+    requireThat(f.ref.startsWith(facts.sourceIdFromRefPrefix), 'INVALID_COMPACT_FACT_REF');
+    return { ...f, sourceId: f.ref.slice(facts.sourceIdFromRefPrefix.length), temporalScope: facts.temporalScope };
+  });
+  return result;
+}
+
 export function buildOneCallRequest(capture, packet) {
   return { model: capture.model,
     system: 'REHEARSAL ONLY. Propose one small concrete new happening whose prerequisites fit the supplied world. '
@@ -133,7 +170,8 @@ export function buildOneCallRequest(capture, packet) {
       'Use existing listed entities only. Fixed surroundings (floor, walls, cell door), bodily activity and anonymous sounds are not new inventory. Any movable item named or handled must match the supplied object target. Do not invent unlisted property even when target is null. Targets need not have effects; effects may be empty. This prototype does not create new objects or threads.',
       'An effect must name the matching target and an explicitly supplied legal operation, and must be described in the occurrence. Do not add a hidden effect. Partial hearing cannot transfer/confiscate/read property. Include current-state, each actor/target, origin and channel refs; episode presence also needs its episode ref.',
       'Choose the final eventFamily only after describing the actual occurrence. A family label cannot waive physical, identity or knowledge checks. Return exactly one JSON object, without commentary, fences or repair.',
-      JSON.stringify(packet),
+      'Packet tables follow columns in order. Shared eligibility applies to every actor row; refPrefix plus id gives its source ref. Each historical sourceId is its ref without sourceIdFromRefPrefix. No historical fact asserts current presence.',
+      JSON.stringify(compactModelPacket(packet)),
     ].join('\n\n'), format: oneCallFormat(packet), options: clone(capture.postBody.options) };
 }
 
@@ -375,13 +413,13 @@ export function prepareOneCall(capture, { nowMs, raw = null, currentCapture = ca
 // A future authorised isolated harness can inject its ONE transport here. This
 // module contains none. Tests inject fakes; preparation CLI never calls this API.
 export async function runOneCallAttempt({ capture, nowMs, admitted, generate, signal,
-  timeoutMs = AWG_TIMEOUT_MS, getCurrentCapture = () => capture } = {}) {
+  preflight, timeoutMs = AWG_TIMEOUT_MS, getCurrentCapture = () => capture } = {}) {
   const started = performance.now();
-  let calls = 0, timer, unlink, requestFingerprint = null;
+  let calls = 0, timer, unlink, requestFingerprint = null, contextPreflight = null;
   const controller = new AbortController();
   const result = (status, reason, extra = {}) => ({ status, reason, generateInvocations: calls,
     requestFingerprint, repairCalls: 0, replacementCalls: 0, elapsedMs: performance.now() - started,
-    applied: false, abortReason: signal?.aborted ? String(signal.reason || 'CANCELLED') : null, ...extra });
+    applied: false, contextPreflight, abortReason: signal?.aborted ? String(signal.reason || 'CANCELLED') : null, ...extra });
   if (!admitted) return result('SKIPPED', 'NOT_ADMITTED');
   if (signal?.aborted) return result('NO_WORLD_EVENT', 'CANCELLED');
   const initial = fingerprint(capture);
@@ -391,6 +429,8 @@ export async function runOneCallAttempt({ capture, nowMs, admitted, generate, si
     requireThat(fingerprint(await getCurrentCapture()) === initial, 'STALE_CAPTURE');
     const prepared = prepareOneCall(capture, { nowMs });
     requestFingerprint = fingerprint(prepared.request);
+    requireThat(typeof preflight === 'function', 'TOKEN_PREFLIGHT_REQUIRED');
+    contextPreflight = validateContextReceipt(prepared.request, await preflight(clone(prepared.request)));
     const deadline = new Promise((_, reject) => {
       const cancel = reason => { controller.abort(reason); reject(new Error(reason)); };
       timer = setTimeout(() => cancel('TIMEOUT'), timeoutMs);
