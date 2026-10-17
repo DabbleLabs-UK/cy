@@ -25,6 +25,8 @@ State fingerprint:
 Every frame has empty permitted effects, only known Cy SELF presence, no NPC
 presence transition, and no Cy relocation. The anonymous source is not a cast ID,
 new person record, recognised voice, relationship or persistent location claim.
+The compact prompt's otherKnownParticipants list is an empty list of additional
+bound identities, NOT a claim that nobody else is physically present.
 Prerequisites are state:current, actor:cy, the origin/channel refs and a versioned
 permission-rule ref. Permission rules describe allowed NEW activity, not evidence
 that activity has already occurred. Their small bodily/acoustic vocabulary is

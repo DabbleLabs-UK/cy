@@ -151,7 +151,7 @@ export function prepareFrameSelector(capture, { nowMs } = {}) {
         current: { location: bound.current.location, activity: bound.current.activity, clock: bound.current.londonClock },
         frames: bound.frames.map(f => ({ frameId: f.frameId, domain: f.operationDomain,
           actorIdentity: f.identity.status, origin: f.origin.location, observer: ['cy', f.observerLocation],
-          access: f.observationChannel.access, othersPresent: false, effects: [] })) }),
+          access: f.observationChannel.access, otherKnownParticipants: [], effects: [] })) }),
     ].join('\n\n'),
     format: frameSelectorFormat(bound), options: clone(capture.postBody.options),
   };

@@ -90,6 +90,8 @@ test('schema is frameId -> content, with exact frame-specific slots, no occurren
   assert.ok(!/NO_EVENT|eventFamily|sourceRefs|observerId|occurrence/.test(JSON.stringify(p.request.format)));
   assert.equal(p.wire.truncate, false); assert.equal(p.wire.stream, false);
   assert.deepEqual(p.request.options, fixture().postBody.options);
+  assert.ok(!p.request.prompt.includes('othersPresent'));
+  assert.ok(p.request.prompt.includes('"otherKnownParticipants":[]'));
 });
 
 test('bodily operations compile from bounded choices without relocating Cy or inventing property', () => {
