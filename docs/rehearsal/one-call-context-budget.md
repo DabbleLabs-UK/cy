@@ -116,8 +116,8 @@ Supporting other shapes requires a separate exact tokenizer/template audit.
 The guard requires `input + num_predict + 1 <= num_ctx`, not merely input fit.
 It binds the receipt to the whole request fingerprint and validates the 3072
 profile. Missing/failed/mismatched preflight prevents the generator callback.
-`runOneCallAttempt` now REQUIRES an injected preflight; old unguarded callers make
-zero model calls. It retains no-repair/no-replacement and the 420000-ms request
+The updated `runOneCallAttempt` REQUIRES an injected preflight; callers of this
+updated interface that omit it make zero model calls. It retains no-repair/no-replacement and the 420000-ms request
 deadline AFTER successful metadata-only preflight.
 
 The corrected wire additionally sets `truncate:false`. This disables provider
@@ -161,9 +161,11 @@ await runOneCallAttempt({ capture, nowMs, admitted: true,
 The transport must send exactly `{...request, stream:false, keep_alive:'5m',
 truncate:false}` and honour AbortSignal as before. It must compare the actual
 wire hash and never modify, truncate, repair or replace a request. The previous
-external batch wrapper is NOT usable unchanged: mandatory preflight now rejects
-it before its send callback. No new count or behavioural experiment is authorised
-by this handoff.
+external batch wrapper is NOT usable unchanged: it hard-codes the old 6ad0e7a
+worktree and -ready package, which remain historical artifacts and have not been
+silently rewritten. A future authorised controller must select THIS correction
+branch/package and supply the mandatory preflight before using the updated
+interface. No new count or behavioural experiment is authorised by this handoff.
 
 ## Tests
 
