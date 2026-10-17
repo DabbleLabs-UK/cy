@@ -1,0 +1,351 @@
+{
+  "source": "Corrected untruncated rehearsal, c3b2b1c, 17 October 2026. Public prison-world prose only; no private correspondence.",
+  "sourceManifestSha256": "c63735ac802fa080eb9d723cdb4f967f0b72daf8b76d13de69f73b1a1005428c",
+  "sourceResultsSha256": "ab4fb9989bda081943ccadbd06b2b001658f882761749476184b1a4703bcc9f2",
+  "samples": [
+    {
+      "index": 2,
+      "previousReason": "TARGET_ACTOR_NOT_PARTICIPANT",
+      "proposal": {
+        "actors": [
+          "cy",
+          "root"
+        ],
+        "occurrence": {
+          "eventType": "arrival",
+          "summary": "Bill arrives at the cell door; Cy hears Bill's voice.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "bill",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": {
+          "kind": "ACTOR",
+          "id": "bill"
+        },
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_DIRECT",
+          "summary": "Heard a single, brief mention of 'time is money' from beyond the cell door."
+        },
+        "sourceRefs": [
+          "actor:bill",
+          "channel:cy-direct",
+          "origin:current"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "SOCIAL_REQUEST"
+        }
+      }
+    },
+    {
+      "index": 3,
+      "previousReason": "PRESENCE_ACTOR_MISMATCH",
+      "proposal": {
+        "actors": [
+          "cy"
+        ],
+        "occurrence": {
+          "eventType": "arrives",
+          "summary": "Bill ARRIVES at the location 'landing' and is AUDIBLY_IDENTIFIED by Cy as calling out their own name.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "bill",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_DIRECT",
+          "summary": "Cy directly observes Bill's arrival and identification, in cell."
+        },
+        "sourceRefs": [
+          "event:env-89ab2e17-91b8-449b-9f39-1e564729d3a6",
+          "channel:cy-heard",
+          "origin:cell-landing"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "SOCIAL_REQUEST"
+        }
+      }
+    },
+    {
+      "index": 4,
+      "previousReason": "PRESENCE_RECORDS_REQUIRED",
+      "proposal": {
+        "actors": [
+          "cy",
+          "reg"
+        ],
+        "occurrence": {
+          "eventType": "hears",
+          "summary": "Cy hears Reg calling out 'Reg' as they approach the cell door.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "reg",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_PARTIAL_HEARD",
+          "summary": "The sound of someone's voice fades in, clearly saying a name. Cy recognizes it as 'Reg'."
+        },
+        "sourceRefs": [
+          "event:env-8fafbbed-9aeb-4510-9f8c-2d78545669d5",
+          "origin:current",
+          "channel:cy-heard"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "WING_ACTIVITY"
+        }
+      }
+    },
+    {
+      "index": 5,
+      "previousReason": "PRESENCE_RECORDS_REQUIRED",
+      "proposal": {
+        "actors": [
+          "cy",
+          "bill"
+        ],
+        "occurrence": {
+          "eventType": "hears_sounds_from_landing",
+          "summary": "Bill arrives at the landing, making his presence audible to Cy.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "bill",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_DIRECT",
+          "summary": "Cy observes Bill's arrival."
+        },
+        "sourceRefs": [
+          "channel:cy-direct",
+          "actor:bill",
+          "event:env-740ad436-63ed-44b1-8aea-e5ce250dec6a"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "SOCIAL_REQUEST"
+        }
+      }
+    },
+    {
+      "index": 6,
+      "previousReason": "PRESENCE_RECORDS_REQUIRED",
+      "proposal": {
+        "actors": [
+          "cy",
+          "reg",
+          "daemon"
+        ],
+        "occurrence": {
+          "eventType": "arrival",
+          "summary": "Reg arrives at the cell door.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "reg",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_PARTIAL_HEARD",
+          "summary": "The arrival is announced; Cy can hear a faint sound of footsteps approaching, then a brief pause, followed by a knock on the cell door."
+        },
+        "sourceRefs": [
+          "event:env-8fafbbed-9aeb-4510-9f8c-2d78545669d5",
+          "actor:reg",
+          "origin:current"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "OFFICER_ACTIVITY"
+        }
+      }
+    },
+    {
+      "index": 7,
+      "previousReason": "PRESENCE_ACTOR_MISMATCH",
+      "proposal": {
+        "actors": [
+          "cy",
+          "root"
+        ],
+        "occurrence": {
+          "eventType": "hears",
+          "summary": "Cy hears someone (not explicitly identified) calling out 'Ping' in a loud voice down the corridor.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "cy",
+              "mode": "SELF",
+              "sourceRef": null
+            },
+            {
+              "actorId": "ping",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_PARTIAL_HEARD",
+          "summary": "unseen"
+        },
+        "sourceRefs": [
+          "event:env-89ab2e17-91b8-449b-9f39-1e564729d3a6",
+          "actor:cy",
+          "origin:current"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "OVERHEARD_ACTIVITY"
+        }
+      }
+    },
+    {
+      "index": 8,
+      "previousReason": "PRESENCE_RECORDS_REQUIRED",
+      "proposal": {
+        "actors": [
+          "cy",
+          "bill"
+        ],
+        "occurrence": {
+          "eventType": "arrives",
+          "summary": "Bill arrives at the landing, audible only to Cy.",
+          "originLocation": "landing",
+          "presence": [
+            {
+              "actorId": "bill",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": {
+          "kind": "ACTOR",
+          "id": "bill"
+        },
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_PARTIAL_HEARD",
+          "summary": "Bill's voice is heard approaching; no visual confirmation of identity or property transfer."
+        },
+        "sourceRefs": [
+          "event:env-6d953372-7b2b-4071-87a9-f234c5a45558",
+          "origin:current",
+          "channel:cy-heard"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "OFFICER_ACTIVITY"
+        }
+      }
+    },
+    {
+      "index": 9,
+      "previousReason": "PRESENCE_RECORDS_REQUIRED",
+      "proposal": {
+        "actors": [
+          "cy",
+          "root"
+        ],
+        "occurrence": {
+          "eventType": "arrives",
+          "summary": "Arrival of Root at the landing (partial hearing) from cell",
+          "originLocation": "landing",
+          "presence": [
+            {
+              "actorId": "root",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_PARTIAL_HEARD",
+          "summary": "Partial audio: Mr. Keyes' voice and footsteps; Cy hears Root approaching in the wing"
+        },
+        "sourceRefs": [
+          "event:env-30c81d62-9e30-494f-9509-aecce7ecdcba",
+          "channel:cy-heard",
+          "origin:current"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "WING_ACTIVITY"
+        }
+      }
+    },
+    {
+      "index": 10,
+      "previousReason": "PRESENCE_RECORDS_REQUIRED",
+      "proposal": {
+        "actors": [
+          "cy",
+          "root"
+        ],
+        "occurrence": {
+          "eventType": "arrival",
+          "summary": "Root arrives at the cell door.",
+          "originLocation": "cell",
+          "presence": [
+            {
+              "actorId": "root",
+              "mode": "AUDIBLY_IDENTIFIES",
+              "sourceRef": null
+            }
+          ]
+        },
+        "target": null,
+        "observation": {
+          "observerId": "cy",
+          "access": "CY_PARTIAL_HEARD",
+          "summary": "Hear Root audibly identifying themselves as they approach."
+        },
+        "sourceRefs": [
+          "channel:cy-heard",
+          "origin:current",
+          "state:current"
+        ],
+        "effects": [],
+        "classification": {
+          "eventFamily": "SOCIAL_REQUEST"
+        }
+      }
+    }
+  ]
+}

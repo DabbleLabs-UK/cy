@@ -1,0 +1,9 @@
+# Pin only the new rehearsal files so byte-hashed packages survive Windows checkout.
+.gitattributes text eol=lf
+scripts/rehearsal/semantic-core.mjs text eol=lf
+scripts/rehearsal/semantic-core-replay.mjs text eol=lf
+scripts/rehearsal/prepare-semantic-core.mjs text eol=lf
+scripts/rehearsal/semantic-core.test.mjs text eol=lf
+scripts/rehearsal/fixtures/semantic-core-corrected-output-regression.json text eol=lf
+docs/rehearsal/reduced-semantic-core.md text eol=lf
+docs/rehearsal/semantic-core-schema.json text eol=lf
