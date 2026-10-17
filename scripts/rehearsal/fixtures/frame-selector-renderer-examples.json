@@ -1,0 +1,21 @@
+{
+  "source": "DETERMINISTIC_TEST_FIXTURES_ONLY",
+  "inferenceExecuted": false,
+  "samples": [
+    {
+      "domain": "CY_IN_PLACE",
+      "content": { "operationId": "TAP_FINGERS", "modifier": "BRIEFLY" },
+      "expectedOccurrence": "Cy briefly taps his fingers against his palm in the cell."
+    },
+    {
+      "domain": "ADJACENT_NONVERBAL",
+      "content": { "operationId": "FOOTSTEPS", "detail": "FAINT" },
+      "expectedOccurrence": "Cy hears faint footsteps from the landing."
+    },
+    {
+      "domain": "ADJACENT_SPEECH",
+      "content": { "utterance": "hello, anyone still awake?" },
+      "expectedOccurrence": "Cy hears an unidentified voice say \"hello, anyone still awake?\" from the landing."
+    }
+  ]
+}
