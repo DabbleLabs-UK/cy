@@ -36,7 +36,9 @@ test('exact three domains; eligible roster never creates a named NPC, object or 
   assert.ok(Object.isFrozen(b) && Object.isFrozen(b.frames) && Object.isFrozen(b.frames[0].semanticRoles));
   assert.throws(() => { b.frames[0].identity.status = 'BILL'; }, TypeError);
   for (const f of b.frames) {
-    assert.equal(f.stateFingerprint, b.stateFingerprint); assert.ok(f.frameId.includes(b.stateFingerprint.slice(0, 16)));
+    assert.equal(f.stateFingerprint, b.stateFingerprint);
+    const { frameId, ...record } = f;
+    assert.equal(frameId, `gf1:${f.operationDomain.toLowerCase()}:${fingerprint(record).slice(0, 16)}`);
     assert.deepEqual(f.relevantRevisions, b.relevantRevisions); assert.deepEqual(f.permittedEffects, []);
     assert.equal(f.permittedPresenceTransition.relocateCy, false); assert.equal(f.permittedPresenceTransition.others, 'NONE');
     assert.ok(f.prerequisiteRefs.includes('state:current') && f.prerequisiteRefs.includes('actor:cy'));
@@ -159,6 +161,16 @@ test('no free summary, roles, observer, source refs, effects or family accepted 
   expectInvalid({ modifier: 'SLOWLY', operationId: 'SHIFT_WEIGHT' }, DOMAINS[0], /PROPERTY_ORDER/);
 });
 
+test('runtime enum validation rejects JSON types that JavaScript could otherwise coerce into valid IDs', () => {
+  for (const value of [['SHIFT_WEIGHT'], { toString: 'SHIFT_WEIGHT' }, null, true, 0])
+    expectInvalid({ operationId: value }, DOMAINS[0], /UNAVAILABLE_BODILY_OPERATION/);
+  for (const value of [['SLOWLY'], {}, false, 0])
+    expectInvalid({ operationId: 'SHIFT_WEIGHT', modifier: value }, DOMAINS[0], /UNAVAILABLE_BODILY_MODIFIER/);
+  expectInvalid({ operationId: ['FOOTSTEPS'] }, DOMAINS[1], /UNAVAILABLE_ACOUSTIC_OPERATION/);
+  expectInvalid({ operationId: 'FOOTSTEPS', detail: ['FAINT'] }, DOMAINS[1], /UNAVAILABLE_ACOUSTIC_DETAIL/);
+  expectInvalid({ utterance: ['hello'] }, DOMAINS[2], /UTTERANCE/);
+});
+
 test('unknown/stale frame, altered bound fields, and duplicate JSON keys fail without discarded contradictions', () => {
   const c = fixture(), { bound, raw } = select(c, DOMAINS[0], { operationId: 'SHIFT_WEIGHT' });
   const p = JSON.parse(raw); p.frameId += ':stale';
@@ -249,6 +261,8 @@ test('verified real frozen capture has EXACT three frames, preserved records, an
     const { capture, nowMs: capturedNow, proof } = readVerifiedCapture(capturePath);
     const p = prepareFrameSelector(capture, { nowMs: capturedNow });
     assert.deepEqual(p.bound.frames.map(f => f.operationDomain), DOMAINS);
+    assert.deepEqual(p.request.format, JSON.parse(fs.readFileSync(path.join(root,
+      'docs/rehearsal/grounded-frame-selector-schema.json'), 'utf8')));
     assert.equal(p.bound.historyPolicy.retainedFacts, 11); assert.equal(proof.productionCodeModified, false);
     assert.ok(!p.request.prompt.includes('no eggs') && !p.request.prompt.includes('Keyes demanded'));
     const examples = JSON.parse(fs.readFileSync(new URL('./fixtures/frame-selector-renderer-examples.json', import.meta.url), 'utf8'));
@@ -278,4 +292,13 @@ test('production directories and earlier prototype paths remain byte-identical t
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const files = fs.readdirSync(path.join(root, 'runner')).filter(f => /\.(?:js|mjs)$/.test(f));
   assert.ok(files.every(f => !/grounded-frame-selector/.test(fs.readFileSync(path.join(root, 'runner', f), 'utf8'))));
+});
+
+test('offline preparer has help only, rejects inference flags and does not install a provider path', () => {
+  const cli = path.join(root, 'scripts/rehearsal/prepare-grounded-frame-selector.mjs');
+  const help = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8', windowsHide: true });
+  assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /OFFLINE ONLY/);
+  const forbidden = spawnSync(process.execPath, [cli, '--run', '10'], { encoding: 'utf8', windowsHide: true });
+  assert.notEqual(forbidden.status, 0); assert.match(forbidden.stderr, /no inference mode exists/);
+  assert.ok(!/fetch\(|http\.request\(|https\.request\(|net\.connect\(/.test(fs.readFileSync(cli, 'utf8')));
 });

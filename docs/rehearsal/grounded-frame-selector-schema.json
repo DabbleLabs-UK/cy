@@ -1,0 +1,105 @@
+{
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frameId",
+        "content"
+      ],
+      "properties": {
+        "frameId": {
+          "const": "gf1:cy_in_place:d73ffcc8c27c8943"
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operationId"
+          ],
+          "properties": {
+            "operationId": {
+              "enum": [
+                "SHIFT_WEIGHT",
+                "STRETCH_HANDS",
+                "TAP_FINGERS"
+              ]
+            },
+            "modifier": {
+              "enum": [
+                null,
+                "SLOWLY",
+                "BRIEFLY"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frameId",
+        "content"
+      ],
+      "properties": {
+        "frameId": {
+          "const": "gf1:adjacent_nonverbal:4d4c648e93f97e71"
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operationId"
+          ],
+          "properties": {
+            "operationId": {
+              "enum": [
+                "FOOTSTEPS",
+                "KNOCKING",
+                "COUGHING"
+              ]
+            },
+            "detail": {
+              "enum": [
+                null,
+                "FAINT",
+                "BRIEF",
+                "IRREGULAR"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frameId",
+        "content"
+      ],
+      "properties": {
+        "frameId": {
+          "const": "gf1:adjacent_speech:115f7f92014af5c7"
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "utterance"
+          ],
+          "properties": {
+            "utterance": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^(?:(?:hello|hi|hey|oi)(?: (?:there|out there))?(?:[,!:.] (?:(?:is )?(?:anyone|anybody|someone|somebody)(?: else)?(?: still)? (?:awake|there|listening)(?: out there)?|(?:can|could) (?:(?:anyone|anybody|someone|somebody)|you)(?: out there)? (?:hear|answer) me(?: please)?|(?:i am|i'm)(?: still)? (?:awake|here|listening)|(?:who is|who's) there))?|(?:(?:is )?(?:anyone|anybody|someone|somebody)(?: else)?(?: still)? (?:awake|there|listening)(?: out there)?|(?:can|could) (?:(?:anyone|anybody|someone|somebody)|you)(?: out there)? (?:hear|answer) me(?: please)?|(?:i am|i'm)(?: still)? (?:awake|here|listening)|(?:who is|who's) there))[.!?]?$"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

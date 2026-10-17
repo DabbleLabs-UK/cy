@@ -48,6 +48,8 @@ const self = "(?:i am|i'm)(?: still)? (?:awake|here|listening)";
 const question = "(?:who is|who's) there";
 const body = `(?:${availability}|${contact}|${self}|${question})`;
 export const UTTERANCE_PATTERN = `^(?:${greeting}(?:[,!:.] ${body})?|${body})[.!?]?$`;
+const permissionFingerprint = fingerprint({ policy: FRAME_POLICY, body: BODY_OPERATIONS,
+  bodyModifiers: BODY_MODIFIERS, sound: ACOUSTIC_OPERATIONS, soundDetails: ACOUSTIC_DETAILS, utterance: UTTERANCE_PATTERN });
 const utteranceMatcher = new RegExp(UTTERANCE_PATTERN);
 function validateUtterance(text) {
   requireThat(typeof text === 'string' && text.length >= 1 && text.length <= 120
@@ -89,9 +91,8 @@ export function buildGroundedFrames(capture, { nowMs } = {}) {
     const origin = packet.origins.find(o => o.ref === originRef);
     if (!channel || !origin) return;
     const anonymous = domain !== 'CY_IN_PLACE';
-    frames.push({
-      frameId: `gf1:${stateFingerprint.slice(0, 16)}:${domain.toLowerCase()}`,
-      stateFingerprint, relevantRevisions, policy: FRAME_POLICY, operationDomain: domain,
+    const record = {
+      stateFingerprint, relevantRevisions, policy: FRAME_POLICY, permissionFingerprint, operationDomain: domain,
       semanticRoles: {
         actor: anonymous ? { kind: 'EPHEMERAL_UNIDENTIFIED_SOURCE', entityId: null }
           : { kind: 'KNOWN_SELF', entityId: 'cy' },
@@ -107,7 +108,8 @@ export function buildGroundedFrames(capture, { nowMs } = {}) {
       prerequisiteRefs: [packet.current.ref, 'actor:cy', origin.ref, channel.ref,
         `permission:${FRAME_POLICY}:${anonymous ? 'cell-adjacent-hearing' : 'self-in-place'}`],
       contentSlotSchema: slotSchema(domain),
-    });
+    };
+    frames.push({ frameId: `gf1:${domain.toLowerCase()}:${fingerprint(record).slice(0, 16)}`, ...record });
   }
   if (admittedLocation && packet.actors.some(a => a.id === 'cy')) {
     add('CY_IN_PLACE', 'origin:current', 'channel:cy-direct');
@@ -181,12 +183,14 @@ function parseSelection(raw) {
 function validateContent(frame, content) {
   if (frame.operationDomain === 'CY_IN_PLACE') {
     exactKeys(content, ['operationId'], ['modifier']);
-    requireThat(Object.hasOwn(BODY_OPERATIONS, content.operationId), 'UNAVAILABLE_BODILY_OPERATION');
-    requireThat(content.modifier == null || Object.hasOwn(BODY_MODIFIERS, content.modifier), 'UNAVAILABLE_BODILY_MODIFIER');
+    requireThat(typeof content.operationId === 'string' && Object.hasOwn(BODY_OPERATIONS, content.operationId), 'UNAVAILABLE_BODILY_OPERATION');
+    requireThat(content.modifier == null || (typeof content.modifier === 'string'
+      && Object.hasOwn(BODY_MODIFIERS, content.modifier)), 'UNAVAILABLE_BODILY_MODIFIER');
   } else if (frame.operationDomain === 'ADJACENT_NONVERBAL') {
     exactKeys(content, ['operationId'], ['detail']);
-    requireThat(Object.hasOwn(ACOUSTIC_OPERATIONS, content.operationId), 'UNAVAILABLE_ACOUSTIC_OPERATION');
-    requireThat(content.detail == null || Object.hasOwn(ACOUSTIC_DETAILS, content.detail), 'UNAVAILABLE_ACOUSTIC_DETAIL');
+    requireThat(typeof content.operationId === 'string' && Object.hasOwn(ACOUSTIC_OPERATIONS, content.operationId), 'UNAVAILABLE_ACOUSTIC_OPERATION');
+    requireThat(content.detail == null || (typeof content.detail === 'string'
+      && Object.hasOwn(ACOUSTIC_DETAILS, content.detail)), 'UNAVAILABLE_ACOUSTIC_DETAIL');
   } else {
     exactKeys(content, ['utterance']); validateUtterance(content.utterance);
   }
