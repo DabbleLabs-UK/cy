@@ -13,3 +13,7 @@ scripts/rehearsal/prepare-grounded-frame-selector.mjs text eol=lf
 scripts/rehearsal/fixtures/frame-selector-renderer-examples.json text eol=lf
 docs/rehearsal/grounded-frame-selector.md text eol=lf
 docs/rehearsal/grounded-frame-selector-schema.json text eol=lf
+scripts/rehearsal/sequential-frame-selector.mjs text eol=lf
+scripts/rehearsal/sequential-frame-selector.test.mjs text eol=lf
+scripts/rehearsal/prepare-sequential-frame-selector.mjs text eol=lf
+docs/rehearsal/sequential-frame-selector.md text eol=lf
