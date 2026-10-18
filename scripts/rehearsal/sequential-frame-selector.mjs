@@ -2,14 +2,14 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
 import { fingerprint } from './grounded-occurrence.mjs';
-import { prepareFrameSelector, runFrameSelectorAttempt } from './grounded-frame-selector.mjs';
+import { prepareGuidedFrameSelector, runGuidedFrameSelectorAttempt } from './frame-repetition-guidance.mjs';
 import { noDurableChangeStreak } from '../../runner/awg-health.js';
 import { createEnvironmentEvent } from '../../runner/environment-schema.js';
 import { applyAwgCandidate, awgEventToEnvironment, buildAwgCall, findNextAwgEligibility,
   AWG_RECENT_RUN_LIMIT, AWG_TIMEOUT_MS } from '../../runner/ambient-world-generator.js';
 
 export const SEQUENTIAL_ATTEMPTS = 10;
-export const SEQUENTIAL_POLICY = 'cy.rehearsal.sequential-frames.v1';
+export const SEQUENTIAL_POLICY = 'cy.rehearsal.sequential-frames-guided.v1';
 const clone = value => structuredClone(value);
 const iso = value => new Date(value).toISOString();
 function freeze(value) {
@@ -41,8 +41,7 @@ export function projectShadowEnvironment(applied, { id, nowMs }) {
 }
 
 function diagnosticFeedback(capture, prepared, nowMs) {
-  // Build the OLD production call for inspection only. Never send it or copy its guidance
-  // into the prototype. This exposes precisely the before-generation feedback difference.
+  // Retain exact old production guidance as an audit comparison, not a second injection.
   const production = buildAwgCall('', { state: capture.worldSimulation, nowMs,
     currentLocation: capture.currentLocation, plausibleCastIds: capture.plausibleCastIds,
     recentEvents: capture.recentWorldHistory, droughtActive: false });
@@ -50,8 +49,10 @@ function diagnosticFeedback(capture, prepared, nowMs) {
   const end = production.prompt.indexOf('- If the supplied facts', start);
   return {
     modelVisible: { system: prepared.request?.system ?? null, prompt: prepared.request?.prompt ?? null,
-      historyMaterial: [], duplicateGuidance: [], droughtGuidance: [],
-      semanticHistoryVisible: false, opaqueStateBoundFrameIdsOnly: true },
+      historyMaterial: clone(prepared.repetitionGuidance.entries),
+      duplicateGuidance: [prepared.repetitionGuidance.text], droughtGuidance: [],
+      semanticHistoryVisible: prepared.repetitionGuidance.entries.length > 0,
+      opaqueStateBoundFrameIdsOnly: false },
     validatorVisible: { recentAccepted: clone(capture.worldSimulation.recentAccepted || []),
       recentWorldHistory: clone(capture.recentWorldHistory || []),
       lastAcceptedAt: capture.worldSimulation.lastAcceptedAt || null },
@@ -72,7 +73,8 @@ function requestChanges(previous, current, previousCapture, capture) {
     if (!isDeepStrictEqual(previousCapture.worldSimulation[field], capture.worldSimulation[field])) reason.push(label);
   }
   if (!isDeepStrictEqual(previousCapture.recentWorldHistory, capture.recentWorldHistory)) reason.push('RECENT_WORLD_HISTORY_CHANGED');
-  reason.push('NO_READABLE_REPEAT_GUIDANCE_ADDED');
+  if (!isDeepStrictEqual(previous.repetitionGuidance.entries, current.repetitionGuidance.entries)) reason.push('READABLE_REPEAT_GUIDANCE_CHANGED');
+  else reason.push('READABLE_REPEAT_GUIDANCE_UNCHANGED');
   return { changed: paths.length > 0, reason, paths,
     previousRequestHash: fingerprint(previous.request), requestHash: fingerprint(current.request),
     frameDomainsUnchanged: isDeepStrictEqual(previous.bound.frames.map(f => f.operationDomain), current.bound.frames.map(f => f.operationDomain)) };
@@ -93,7 +95,7 @@ export function createSequentialFrameSession(originalCapture, { nowMs } = {}) {
     assert.ok(Number.isSafeInteger(eligibility.eligibleAt), 'NO_ELIGIBLE_LOGICAL_OPPORTUNITY');
     const attemptMs = eligibility.eligibleAt;
     const capture = clone(shadow);
-    const prepared = prepareFrameSelector(capture, { nowMs: attemptMs });
+    const prepared = prepareGuidedFrameSelector(capture, { nowMs: attemptMs });
     assert.ok(prepared.request && prepared.bound.frames.length, 'NO_AVAILABLE_FRAMES');
     active = freeze({ step: completed + 1, nowMs: attemptMs, logicalAt: iso(attemptMs),
       logicalWaitMs: attemptMs - cursorMs, eligibility,
@@ -107,7 +109,7 @@ export function createSequentialFrameSession(originalCapture, { nowMs } = {}) {
     assert.equal(running, false, 'CONCURRENT_STEP_FORBIDDEN');
     const ticket = prepareNext(); running = true;
     try {
-      const result = await runFrameSelectorAttempt({ capture: clone(ticket.shadowBefore), nowMs: ticket.nowMs,
+      const result = await runGuidedFrameSelectorAttempt({ capture: clone(ticket.shadowBefore), nowMs: ticket.nowMs,
         admitted: true, generate, preflight, signal, timeoutMs,
         getCurrentCapture: () => clone(shadow) });
       assert.equal(fingerprint(shadow), ticket.shadowBeforeHash, 'SHADOW_CHANGED_DURING_REQUEST');

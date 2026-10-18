@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createSequentialFrameSession, runTenSequentialAttempts, projectShadowEnvironment } from './sequential-frame-selector.mjs';
 import { prepareFrameSelector } from './grounded-frame-selector.mjs';
+import { prepareGuidedFrameSelector, GUIDANCE_HEADING } from './frame-repetition-guidance.mjs';
 import { fingerprint } from './grounded-occurrence.mjs';
 import { TOKENIZER_METHOD, exactContextPreflight } from './one-call-context-budget.mjs';
 import { readVerifiedCapture } from './prepare-grounded-occurrence.mjs';
@@ -26,9 +27,14 @@ const generator = (session, domain, content) => wire => {
 };
 const step = (s, domain, content) => s.attempt({ preflight: receipt, generate: generator(s, domain, content) });
 
-test('first request equals untouched frozen prototype; original and returned state cannot be mutated through session', async () => {
+test('first request has no invented repeat entries; frames/schema/settings and input state remain untouched', async () => {
   const c = fixture(), before = fingerprint(c), session = createSequentialFrameSession(c, { nowMs });
-  assert.deepEqual(session.prepareNext().prepared, prepareFrameSelector(c, { nowMs }));
+  const prepared = session.prepareNext().prepared, original = prepareFrameSelector(c, { nowMs });
+  assert.deepEqual(prepared, prepareGuidedFrameSelector(c, { nowMs }));
+  assert.deepEqual(prepared.bound, original.bound); assert.deepEqual(prepared.request.format, original.request.format);
+  assert.ok(prepared.request.prompt.startsWith(original.request.prompt));
+  assert.ok(prepared.request.prompt.includes(`${GUIDANCE_HEADING}\nnone\n`));
+  assert.deepEqual(prepared.repetitionGuidance.entries, []);
   session.snapshot().currentLocation = 'landing';
   const ticket = session.prepareNext(); ticket.prepared.request.prompt = 'tampered';
   const r = await step(session, 'CY_IN_PLACE', { operationId: 'TAP_FINGERS' });
@@ -74,15 +80,18 @@ test('accepted tap/cough feeds exact and near-duplicate checks before the next a
   assert.deepEqual(next.prepared.bound.frames.map(f => f.operationDomain), ['CY_IN_PLACE', 'ADJACENT_NONVERBAL', 'ADJACENT_SPEECH']);
   assert.notEqual(next.prepared.bound.stateFingerprint, first.prepared.bound.stateFingerprint);
   assert.ok(next.prepared.bound.frames.every(f => !first.prepared.bound.frames.some(old => f.frameId === old.frameId)));
-  assert.deepEqual(next.feedback.modelVisible.historyMaterial, []);
+  assert.deepEqual(next.feedback.modelVisible.historyMaterial, [{ domain: 'CY_IN_PLACE', operationId: 'TAP_FINGERS' }]);
+  assert.ok(next.feedback.modelVisible.duplicateGuidance[0].includes('"operationId":"TAP_FINGERS"'));
   assert.ok(!next.prepared.request.prompt.includes(first.result.evaluation.reconstructed.occurrence));
   assert.ok(next.feedback.oldProductionNegativeGuidanceNotSent.includes('AMBIENT_OCCURRENCE'));
   assert.ok(next.requestChanges.reason.includes('ACCEPTED_HISTORY_CHANGED'));
+  assert.ok(next.requestChanges.reason.includes('READABLE_REPEAT_GUIDANCE_CHANGED'));
   const repeat = await step(s, 'CY_IN_PLACE', { operationId: 'TAP_FINGERS' });
   assert.equal(repeat.wouldAccept, false);
   assert.ok(repeat.duplicateDecision.errors.includes('DUPLICATE_EVENT'));
   assert.ok(repeat.duplicateDecision.errors.includes('RECENT_NEAR_DUPLICATE'));
   assert.deepEqual(repeat.shadowAfter.recentWorldHistory, first.shadowAfter.recentWorldHistory);
+  assert.deepEqual(s.prepareNext().prepared.repetitionGuidance.entries, next.prepared.repetitionGuidance.entries);
   const varied = await step(s, 'CY_IN_PLACE', { operationId: 'TAP_FINGERS', modifier: 'BRIEFLY' });
   assert.equal(varied.wouldAccept, false); assert.ok(varied.duplicateDecision.errors.includes('RECENT_NEAR_DUPLICATE'));
   assert.equal(varied.shadowAfter.worldSimulation.recentRuns.length, 3);
@@ -195,18 +204,19 @@ test('offline preparer has no inference mode or network transport', () => {
 });
 
 const capturePath = process.env.CY_AWG_CAPTURE || 'C:/cy-rehearsal/leno-awg-capture-20261013';
-test('real frozen first request stays 748 tokens; repeated offline selections change ID budget, not history instructions',
+test('guided frozen/updated requests pass exact tokenizer preflight with healthy output headroom',
   { skip: !fs.existsSync(`${capturePath}/SHA256SUMS.txt`) }, async () => {
     const { capture, nowMs: capturedNow } = readVerifiedCapture(capturePath);
     const before = fingerprint(capture), s = createSequentialFrameSession(capture, { nowMs: capturedNow });
     const initial = exactContextPreflight(s.prepareNext().prepared.request);
-    assert.equal(initial.inputTokens, 748); assert.equal(initial.spareAfterFullOutput, 1903);
+    assert.ok(initial.inputTokens > 748 && initial.inputTokens < 950);
+    assert.ok(initial.spareAfterFullOutput > 1700);
     for (let i = 0; i < 3; i++) {
       const row = await s.attempt({ preflight: exactContextPreflight,
         generate: generator(s, 'ADJACENT_NONVERBAL', { operationId: 'COUGHING' }) });
       assert.equal(row.wouldAccept, i === 0);
       assert.equal(row.result.contextPreflight.initialTruncation, false);
-      assert.ok(row.result.contextPreflight.spareAfterFullOutput > 1800);
+      assert.ok(row.result.contextPreflight.spareAfterFullOutput > 1600);
       assert.equal(row.prepared.wire.truncate, false);
     }
     assert.equal(fingerprint(capture), before);

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createSequentialFrameSession, runTenSequentialAttempts, SEQUENTIAL_POLICY } from './sequential-frame-selector.mjs';
 import { readVerifiedCapture } from './prepare-grounded-occurrence.mjs';
 import { exactContextPreflight } from './one-call-context-budget.mjs';
+import { prepareFrameSelector } from './grounded-frame-selector.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -77,7 +78,7 @@ export async function offlineSequenceEvidence(capture, nowMs, { modelStore = 'C:
     assert.equal(index, 10);
   }
   const receipts = Object.values(traces).flatMap(rows => rows.map(r => r.result.contextPreflight));
-  assert.ok(receipts.every(r => r.fits && !r.initialTruncation && r.spareAfterFullOutput >= 1800));
+  assert.ok(receipts.every(r => r.fits && !r.initialTruncation && r.spareAfterFullOutput >= 1600));
   return { source: 'DETERMINISTIC_OFFLINE_FIXTURES_NOT_MODEL_GENERATIONS', modelRequests: 0,
     actualInferenceExecuted: false, traces,
     budget: { measuredFixtureRequests: receipts.length,
@@ -85,7 +86,8 @@ export async function offlineSequenceEvidence(capture, nowMs, { modelStore = 'C:
       spareMin: Math.min(...receipts.map(r => r.spareAfterFullOutput)), spareMax: Math.max(...receipts.map(r => r.spareAfterFullOutput)),
       context: 3072, outputAllowance: 420, terminalReserve: 1,
       firstInput: receipts[0].inputTokens, perActualAttemptExactGuardRequired: true,
-      observedRangeIsNotExhaustiveBound: true, semanticHistoryGrowthInPrompt: false } };
+      observedRangeIsNotExhaustiveBound: true, semanticHistoryGrowthInPrompt: true,
+      historyRepresentation: 'BOUNDED_NEGATIVE_DOMAIN_OPERATION_OR_UTTERANCE', sourceWindowHours: 24, sourceLimit: 32 } };
 }
 
 async function main() {
@@ -107,16 +109,17 @@ async function main() {
     'scripts/rehearsal/cy-context-preflight.py'), '', 'PINNED_PRODUCTION_OR_PROTOTYPE_CHANGED');
   const { capture, nowMs, proof } = readVerifiedCapture(options['--capture']);
   const session = createSequentialFrameSession(capture, { nowMs }), initial = session.prepareNext();
-  assert.equal(sha(JSON.stringify(initial.prepared.wire)),
-    '72727c4ce42c41c742e2d80a4d97ce42d279d1f73ac3c612bd93bac6e15f15d5', 'INITIAL_WIRE_MUST_MATCH_VERIFIED_FROZEN_BATCH');
+  assert.equal(sha(JSON.stringify(prepareFrameSelector(capture, { nowMs }).wire)),
+    '72727c4ce42c41c742e2d80a4d97ce42d279d1f73ac3c612bd93bac6e15f15d5', 'UNGUIDED_BASE_MUST_MATCH_VERIFIED_FROZEN_BATCH');
+  assert.deepEqual(initial.prepared.repetitionGuidance.entries, [], 'NO_INVENTED_INITIAL_GUIDANCE');
   const evidence = await offlineSequenceEvidence(capture, nowMs, { modelStore: options['--model-store'] });
-  assert.equal(evidence.budget.firstInput, 748);
   const sources = closure(['scripts/rehearsal/sequential-frame-selector.mjs', 'scripts/rehearsal/sequential-frame-selector.test.mjs',
+    'scripts/rehearsal/frame-repetition-guidance.test.mjs',
     'scripts/rehearsal/prepare-sequential-frame-selector.mjs', 'scripts/rehearsal/prepare-grounded-occurrence.mjs',
     'scripts/rehearsal/one-call-context-budget.mjs', 'scripts/rehearsal/cy-context-preflight.py',
     'docs/rehearsal/sequential-frame-selector.md']);
   const files = {
-    'verification.json': { ...proof, sourceRevision: revision, baseRevision: '626133bb71741048235cb74d2d4109555310e32c',
+    'verification.json': { ...proof, sourceRevision: revision, baseRevision: '3b930d59c70d46f4778b43629629490b27fb5f1b',
       sourceClean: true, preparationNetworkDisabled: true, modelRequests: 0, productionChanged: false,
       initialWireSha256: sha(JSON.stringify(initial.prepared.wire)) },
     'initial-step.json': initial, 'initial-wire.json': Buffer.from(JSON.stringify(initial.prepared.wire)),
@@ -125,7 +128,8 @@ async function main() {
     'plan.json': { policy: SEQUENTIAL_POLICY, attempts: 10, maximumModelCallsPerAttempt: 1,
       repair: false, replacement: false, stage2: false, productionApplied: false,
       timePolicy: 'ADVANCE_TO_NEXT_PINNED_PRODUCTION_ELIGIBILITY', externalWorldAndRegime: 'FROZEN_CONTROLLED_ENVELOPE',
-      readableHistoryAddedToModel: false, droughtDiagnosticOnly: true, truncate: false },
+      readableHistoryAddedToModel: true, historyIsAdvisoryOnly: true, frameFilterApplied: false,
+      droughtDiagnosticOnly: true, truncate: false },
     'HANDOFF.md': fs.readFileSync(path.join(root, 'docs/rehearsal/sequential-frame-selector.md')),
     'prototype-source.json': Object.fromEntries(sources.map(name => [name, sha(fs.readFileSync(child(root, name)))])),
   };

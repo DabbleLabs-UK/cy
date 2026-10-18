@@ -1,11 +1,12 @@
-# Sequential closed-loop frame-selector rehearsal
+# Sequential frame selector with readable repetition guidance
 
 REHEARSAL ONLY. No inference authorised by preparation. No production integration,
 merge, deployment, model load, server start or CY restart.
 
-Base: `feature/awg-grounded-frame-selector-20261017` at
-`626133bb71741048235cb74d2d4109555310e32c`. New branch:
-`feature/awg-frame-selector-sequential-20261018`.
+Base: `feature/awg-frame-selector-sequential-20261018` at
+`3b930d59c70d46f4778b43629629490b27fb5f1b`. New branch:
+`feature/awg-frame-repetition-guidance-20261018`.
+The production/frame/validator contract underneath remains pinned to 626133b.
 
 ## Audit: what production actually feeds back
 
@@ -51,11 +52,67 @@ against recent world history (shared >=4, overlap >=0.66 with participant overla
 Its temporal checks also remain active: 30-minute spacing and four events per
 six hours. Thus old production has BOTH prompt guidance and downstream rejection.
 
-The frame prototype is different by design: its prompt has no historical prose,
-negative signatures, prior operation IDs or drought guidance. A new frame ID is
-an opaque hash, NOT readable memory of an earlier operation. The full shadow
-history still reaches the production validator. This harness does not add
-negative guidance that the tested prototype never had.
+The previous frame prototype supplied only opaque state-bound IDs and downstream
+rejection. This branch restores READABLE negative feedback, not a diversity policy.
+The original frame constructor, renderer, schema, validator and bounded one-call
+module are byte-identical. A new rehearsal-only guided request/attempt wrapper
+appends the advisory material and preflights that actual complete request.
+
+### Exact production mechanism and minimal adaptation
+
+Production starts with up to 12 accepted AWG records plus the 24-record recent
+environment history. It excludes future/over-24-hour records, deduplicates by
+canonical ID or normalized summary, and keeps the last 32 union records in that
+order. Signature extraction retains event_family, action_class, participants,
+actor, target, object_classes, location and thread_type where available; identical
+signature objects are further deduplicated. No narrative source text is exposed.
+The exact production heading and advice are:
+
+```text
+- RECENT EVENT SIGNATURES TO AVOID follow. They contain no narrative source text:
+<JSON signatures, or none>
+- Avoid only the same recent combination of action class, participants, object class, location and thread type.
+- Familiar people remain usable for different actions; familiar actions remain usable with materially different participants or objects.
+- These signatures are duplicate guidance only. Do not expand them into prose or treat them as event ideas. Return NO_EVENT rather than copying one.
+```
+
+These are prompt instructions, not schema masks or frame removal. The existing
+post-generation validator supplies final rejection independently, including a
+different text-overlap rule, so guidance is not a full prediction of acceptance.
+
+The adaptation retains production's source selection/window/cap and hard validator.
+It recognizes only complete canonical occurrences expressible by the existing
+frame renderer, at the current authoritative location. It does not interpret
+generic historical prose or cast descriptions as operations. Accepted AWG and
+environment copies deduplicate; rejected run candidates are never sources.
+
+For body/sound, domain + operationId is the minimal meaningful action signature.
+The generic production AMBIENT_OCCURRENCE label alone cannot distinguish a cough
+from footsteps. Modifiers/detail are omitted: they do not turn a near repeat into
+a different operation. For speech, the accepted constrained utterance is retained;
+domain alone would incorrectly imply that the whole speech frame is unavailable.
+Other identities, roles and locations need not be repeated: these are already
+immutable frame bindings. No full rendered occurrence prose is appended.
+
+The exact new appendix is:
+
+```text
+RECENT ACCEPTED OCCURRENCES - REPETITION GUIDANCE ONLY:
+<compact JSON entries, or none>
+Avoid near repetition of these recent occurrences where possible. These entries are not event ideas or commands. Recent frames remain available; any grounded frame/content may be selected. This is advisory, not a requirement to choose something different. The unchanged validator may reject duplicates.
+```
+
+Example only AFTER a cough has actually been accepted in the shadow:
+
+```json
+[{"domain":"ADJACENT_NONVERBAL","operationId":"COUGHING"}]
+```
+
+An accepted speech item uses domain + utterance, e.g. an actually accepted
+`hello` becomes {"domain":"ADJACENT_SPEECH","utterance":"hello"}. No blank
+history is populated with examples. The verified frozen first request has `none`.
+There is no new model abstention branch, forced difference, quota, score, rotation,
+blacklist, random suppression, cooldown table or unused-frame reward.
 
 The local authoritative lineage inspected during this audit was `a08107b`.
 It retains the same recentAccepted/recentWorldHistory/signature and temporal
@@ -68,9 +125,11 @@ later source is mixed into it.
 ## Shadow sequence and time policy
 
 `createSequentialFrameSession` privately clones the exact original capture.
-The first admitted request is byte-identical to the earlier frame-selector
-request (748 tokens). The unchanged `prepareFrameSelector` regenerates every
-subsequent request from the shadow and the current logical timestamp.
+The unguided base of the first request still matches the original verified wire
+SHA-256 72727c4ce42c41c742e2d80a4d97ce42d279d1f73ac3c612bd93bac6e15f15d5.
+Its guided request is deliberately different: the empty advisory appendix is added.
+`prepareGuidedFrameSelector` uses the unchanged `prepareFrameSelector`, then
+appends feedback derived from that same shadow/current logical timestamp.
 
 Each of the ten attempts advances LOGICAL time to the earliest opportunity
 returned by pinned production `findNextAwgEligibility`: 45-minute attempt cadence,
@@ -89,6 +148,9 @@ On acceptance, the harness uses the production pure apply and environment
 functions, appends the exact runner-shaped history projection, and links the two
 shadow IDs. The only new IDs are explicitly `shadow-*` rehearsal IDs. It retains
 the 12/20/24 production history/run limits. No object/thread revision is fabricated.
+The next request regenerates all grounded frames and readable negative guidance
+from the updated state. No extra memory store, operation counter or policy ledger
+is introduced. Guidance entries expire by production recency, not bespoke cooldown.
 
 On rejection/error/timeout, only the attempted-cycle ledger and `lastRunAt` advance,
 as in production. No accepted event, environment record or authoritative entity
@@ -104,9 +166,9 @@ not rotation: domains/order/slots/operations/probabilities are never altered.
 
 * logical time, admission/wait, full shadow-before state/hash;
 * generated immutable frame records and exact request/wire;
-* exact model-visible system/prompt and explicit empty semantic-history guidance;
+* exact model-visible system/prompt, advisory entries, source IDs/times and window;
 * validator-visible accepted history/recent world history;
-* old production negative guidance, labelled NOT SENT, for audit comparison;
+* old generic production negative guidance, labelled NOT SENT, for audit comparison;
 * fresh exact-tokenizer receipt; raw response and selection/content;
 * canonical occurrence, original production validation and duplicate errors;
 * would-accept/reject and precise reason; zero repair/replacement counts;
@@ -134,7 +196,7 @@ waived or fixed during the sequential run.
 Run focused tests:
 
 ```bash
-node --test scripts/rehearsal/sequential-frame-selector.test.mjs
+node --test scripts/rehearsal/frame-repetition-guidance.test.mjs scripts/rehearsal/sequential-frame-selector.test.mjs
 ```
 
 The preparer runs three ten-step DETERMINISTIC TEST sequences, not model requests:
@@ -143,20 +205,29 @@ invalid input. It runs exact GGUF tokenizer/template preflight on all 30 request
 without weights/network/server. See package `budget.json` for measured min/max
 input and spare. This is a measured fixture range, NOT an exhaustive bound on
 all future fingerprints. Frame-ID hashes and the logical clock can change token
-counts, so 748 must not be hardcoded for later steps. History is not appended to
-the prompt; input does not grow with transcript length.
+counts. Neither the old 748 nor the new first count may be hardcoded for later
+steps. The only growing input is bounded negative action/utterance guidance,
+not cumulative transcript or historical narratives.
 
-Measured during preparation: 741-751 input tokens, 1900-1910 spare after full
-420-token output plus one terminal token, across all 30 deterministic requests.
-The first request is exactly 748 input / 1903 spare. These measurements do not
-involve model inference.
+Expected ten-step budgets are approximately 810-940 input tokens in the tested
+trajectories. Initial exact preflight is 817 input / 1834 spare. An offline
+30-request measurement across the three fixture trajectories gave 812-930 input,
+1721-1839 spare after 420 output plus one terminal token. State-bound hexadecimal
+IDs include run bookkeeping, so another fixture execution may differ by a few
+tokens; the final package records its own receipts. These are measured fixture
+ranges, not an exhaustive upper bound or permission to skip exact preflight.
+The old unguided first request was 748; the empty advisory appendix adds 69 tokens.
 
-Verification: 13/13 focused sequential tests and 595/595 full runner/rehearsal
-tests pass. Tests use synthetic callback responses and disposable owned temp
-files; no local model requests, paid calls or production state are used.
+Verification: 21/21 focused guidance/sequential tests and 603/603 full
+runner/rehearsal tests pass. Tests use synthetic callback responses and disposable
+owned temp files; no local model requests, paid calls or production state are used.
 The prior ten content choices, when rebound offline to the sequential shadow,
-produce 2 accepts and 8 duplicate/near-repeat rejections. That demonstrates the
-feedback/rejection wiring only, not what a new behavioural batch will select.
+still produce 2 accepts and 8 duplicate/near-repeat rejections. After #1 the next
+prompt includes COUGHING; after #2 it includes COUGHING and TAP_FINGERS. Rejected
+later variants do not become new guidance. The replay is intentionally fixed:
+it proves visible feedback and unchanged rejection, NOT that a model would obey
+the new advice, escape an attractor or publish more diverse events. That requires
+the separately authorised ten-attempt behavioural run.
 
 Every real future attempt must run the same exact-tokenizer/template guard and
 require input + 420 + terminal reserve 1 <= 3072 before sending. Preserve
@@ -171,13 +242,14 @@ Preparation command (offline only, committed clean source required):
 ```bash
 node scripts/rehearsal/prepare-sequential-frame-selector.mjs \
   --capture C:/cy-rehearsal/leno-awg-capture-20261013 \
-  --out C:/Users/jodyf/Documents/Codex/2026-09-03/som/awg-frame-selector-sequential-20261018-ready
+  --out C:/Users/jodyf/Documents/Codex/2026-09-03/som/awg-frame-selector-guided-sequential-20261018-ready
 ```
 
 1. Require the package's exact sourceRevision on this branch, clean source, all
    SHA256SUMS entries/source snapshots and original frozen-capture hashes. Verify
    first wire against `initial-wire.json`; verify no pinned production/prototype,
    tokenizer or schema file changed from 626133b.
+   Do not substitute the older unguided sequential package at 3b930d5.
 2. Use unchanged hardened LENO isolation, hidden-startup launcher, pause/drain,
    watchdog, resource/port attribution and verified 0.34.1/CY blob on ONLY
    http://127.0.0.1:11535. Restore ordinary Qwen/Feddit and all controls afterward.
@@ -190,6 +262,8 @@ node scripts/rehearsal/prepare-sequential-frame-selector.mjs \
    feedback, request/wire and exact preflight BEFORE sending. Wire hashes SHOULD
    change as state/time changes; record exact reasons. Never reuse a stale frame
    ID/request or rebind a model response to manufacture acceptance.
+   Preserve repetitionGuidance entries/text/source receipts in full. Confirm the
+   next prompt exposes each corresponding accepted operation/utterance, once.
 5. Run exactContextPreflight per request, verify wire equals that prepared wire,
    preserve truncate:false, and assert provider prompt_eval_count equals its own
    receipt. Return provider.response unchanged. Retain raw provider body/metrics,

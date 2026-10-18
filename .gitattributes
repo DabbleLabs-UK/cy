@@ -17,3 +17,5 @@ scripts/rehearsal/sequential-frame-selector.mjs text eol=lf
 scripts/rehearsal/sequential-frame-selector.test.mjs text eol=lf
 scripts/rehearsal/prepare-sequential-frame-selector.mjs text eol=lf
 docs/rehearsal/sequential-frame-selector.md text eol=lf
+scripts/rehearsal/frame-repetition-guidance.mjs text eol=lf
+scripts/rehearsal/frame-repetition-guidance.test.mjs text eol=lf
