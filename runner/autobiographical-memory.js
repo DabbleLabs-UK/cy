@@ -661,6 +661,14 @@ export function environmentFormationAdmission(record) {
       ? { admit: true, reason: 'EPISODE_REPRESENTATIVE' }
       : { admit: false, reason: 'EPISODE_NON_TERMINAL' };
   }
+  // The two-step yard encounter remains one canonical lived episode. Its
+  // explicit start is not a second formation job alongside its completion.
+  if (detail.current_scene_source?.producer === 'exercise-yard-encounter-v1') {
+    return { admit: false, reason: 'EPISODE_NON_TERMINAL' };
+  }
+  if (detail.current_scene_end?.scene_id) {
+    return { admit: true, reason: 'EPISODE_REPRESENTATIVE' };
+  }
   if (ENVIRONMENT_LOW_INFORMATION_FAMILIES.includes(String(world.event_family || ''))
       || ENVIRONMENT_LOW_INFORMATION_EVENT_TYPES.includes(type)) {
     return { admit: false, reason: 'LOW_INFORMATION' };

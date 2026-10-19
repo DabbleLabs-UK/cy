@@ -186,6 +186,7 @@ import {
 } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseRoutineOutcome, materialiseScheduledEvent } from './environment.js';
+import { advanceCurrentYardScene, openCurrentYardScene, prepareYardEncounter } from './current-scene.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import {
   EXERCISE_REGIME,
@@ -197,7 +198,6 @@ import {
   awgLocationEligible,
   availableExpressiveActions,
   canStartScheduledRoutine,
-  createYardObservation,
   eventAllowedAtLocation,
   locationContextId,
   markSearchPropertyAction,
@@ -674,6 +674,14 @@ async function main() {
     minutes: locationClock.mins,
     asleep: effectiveAsleep(locationClock.mins),
   });
+  // A restored routine is not proof that its companion remained observable
+  // across downtime. No history/cast/retrieval path can reopen this scene.
+  const sceneRecovery = advanceCurrentYardScene(vitals.currentScene, vitals.locationRegime, {
+    nowMs: locationNow, restart: true,
+  });
+  vitals.currentScene = sceneRecovery.state;
+  let pendingSceneRecoveryEvent = sceneRecovery.event;
+  if (sceneRecovery.changed) urgentVitalsDirty = true;
   let autobiographicalMemory = null;
   let pendingMemoryQuery = null;
   let memoryFormationTurns = 0;
@@ -1202,6 +1210,20 @@ async function main() {
       nowMs: now, date, minutes: mins, asleep,
     });
     vitals.locationRegime = reconciled.state;
+    if (pendingSceneRecoveryEvent) {
+      captureEpisodeEvent(pendingSceneRecoveryEvent);
+      pendingSceneRecoveryEvent = null;
+    }
+    // Complete the previous brief encounter before sampling any new one. This
+    // source owns presence for one existing world tick, not the sampling gap.
+    const sceneEnd = advanceCurrentYardScene(vitals.currentScene, vitals.locationRegime, { nowMs: now, asleep });
+    vitals.currentScene = sceneEnd.state;
+    if (sceneEnd.event) {
+      const ended = captureEpisodeEvent(sceneEnd.event);
+      // Loss of observation still closes the factual contact detector; it must
+      // not be interpreted as new Cy knowledge or update other Soma consumers.
+      if (!sceneEnd.event.cyObserved) soma.observeSocialContactRecord(ended);
+    }
     // The chosen result is durable in the routine episode, but cannot become
     // observed world evidence until the visit actually ends.
     if (reconciled.completedRoutineEpisode) {
@@ -1222,22 +1244,15 @@ async function main() {
     const cast = available[Math.floor(Math.random() * available.length)] || null;
     const variant = roll < 0.35 ? 'quiet' : roll < 0.60 ? 'company'
       : roll < 0.85 ? 'conversation' : 'avoided';
-    const yard = createYardObservation({ nowMs: now, cast, variant, makeId: (prefix) => `${prefix}-${randomUUID()}` });
-    const record = captureEpisodeEvent({
-      ...yard,
-      cyObserved: true,
-      world: {
-        participants: { actor: yard.social && yard.social.actor_id, target: 'cy', relationship_ref: yard.social && yard.social.actor_id },
-        context: {
-          location: 'exercise_yard', description: yard.summary,
-          associated_entities: yard.social ? [yard.social.actor_id, 'cy:7734'] : ['cy:7734'],
-        },
-        temporal: { onset: 'event', persistence: 'completed', recurrence: 'routine' },
-        situation: { resolution_status: 'resolved' },
-        ...(yard.social ? { social: yard.social } : {}),
-      },
-      observation: { modality: 'direct', certainty: 'certain', observed_facts: { location: 'exercise_yard' } },
+    const yard = prepareYardEncounter(vitals.locationRegime, {
+      nowMs: now, tickMs: config.tickMs, cast, variant, makeId: (prefix) => `${prefix}-${randomUUID()}`,
     });
+    const record = captureEpisodeEvent(yard);
+    const sceneStart = openCurrentYardScene(vitals.currentScene, vitals.locationRegime, record, { nowMs: now });
+    vitals.currentScene = sceneStart.state;
+    if (yard.world.current_scene_source && !sceneStart.opened) {
+      throw new Error('authoritative yard encounter failed current-scene binding');
+    }
     vitals.locationRegime.activeExerciseEpisode.last_observation_at = yard.occurredAt;
     vitals.locationRegime.activeRegimeEpisode.last_observation_at = yard.occurredAt;
     if (yard.social) {

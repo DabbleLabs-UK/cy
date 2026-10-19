@@ -361,6 +361,12 @@ Soma circuits.
 
 ## Pieces
 
+- `current-scene.js` - producer-owned brief yard encounters, bound to the
+  active exercise, canonical start event and direct observation. Company and
+  conversation end on the next existing world tick; historical contact and
+  cast eligibility never establish current presence. Private checkpoint state
+  is invalidated across restart and is not supplied to AWG. See
+  [episode-bound current scene](../docs/current-scene.md).
 - `vitals.js` - state engine: drift, derived states, amplification, event deltas.
 - `soma.js` - provisional appraisal, prediction, memory, attention and legacy
   drive/action diagnostics, plus adapters to the separate grounded substrates.
