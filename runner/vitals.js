@@ -401,6 +401,7 @@ const ZONE_OF = new Map([
   ['derived', 'signals'],
   // bookkeeping - render/prompt scaffolding, persisted separately
   ['recentOpeners', 'bookkeeping'],
+  ['journalSubjectKeys', 'bookkeeping'],
   ['introspectPrev', 'bookkeeping'],
   ['readEpochMs', 'bookkeeping'],
   ['readCharsSinceEpoch', 'bookkeeping'],

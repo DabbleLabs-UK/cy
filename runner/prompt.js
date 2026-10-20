@@ -365,9 +365,9 @@ export function turnDirective({ freshLine = '', nothingNew = false } = {}) {
       + 'if the thing you keep going back to has nothing new in it, let this be the one thing instead.';
   }
   if (nothingNew) {
-    return 'nothing new since you last wrote. do not set the same feeling or the same lack down again - '
-      + 'it is already on the page. let it rest, or take ONE real thing in the cell right now - '
-      + 'the cold, the light, a mark on the wall - and stay on only that.';
+    return 'no materially new external development since you last wrote. '
+      + 'you may develop an existing thought, but earlier writing and an unchanged observation '
+      + 'are not evidence of a new event. stay with ONE thing; do not invent a development.';
   }
   return '';
 }
