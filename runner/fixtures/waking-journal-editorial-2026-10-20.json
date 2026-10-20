@@ -1,0 +1,38 @@
+{
+  "description": "Natural public journal candidates retained after production f0ae8ce; no synthetic/private postcard source text.",
+  "productionRevision": "f0ae8cecd77ab565f8861801b0d81866c4bc2f2c",
+  "published": [
+    {
+      "diagnosticEventSeq": 2786655,
+      "atBST": "2026-10-20 16:52:11.734",
+      "text": " wot wasnt supposed ta happen is dis racket went from one noise down da landing wots gotta be goin dwn there but fisher said mite have some reason cos bill told me expectatinz matter... dunno how its all gonnna fit n stuff | 36 words left (and this will end here) | I cant make sence of anythin now got my mind whirln like crazy whasnt even thinkin abt...",
+      "tokensOut": 93,
+      "tokenLimited": true,
+      "initialValidation": {
+        "initial": {
+          "ok": true,
+          "reasons": []
+        },
+        "repairAttempted": false,
+        "finalAction": "accepted"
+      }
+    },
+    {
+      "diagnosticEventSeq": 2787007,
+      "atBST": "2026-10-20 17:04:22.008",
+      "text": " ive been thinkin abt ths racket goin dwn two doors down wiv boots n shoutn... | 38 left (<= cy is at cell) [it ends here] ...aint gonna happen tho i just cant shutoff that noise rn ppl keep sayinn its someone bangd up over some new trouble dont know whos involved cos no1's seen nobody come out yet tbh mite jst be da screws tryna get sum...",
+      "tokensOut": 93,
+      "tokenLimited": true,
+      "initialValidation": {
+        "initial": {
+          "ok": true,
+          "reasons": []
+        },
+        "repairAttempted": false,
+        "finalAction": "accepted"
+      }
+    }
+  ],
+  "continuationSuppliedToSecond": "there but bill told me expectatinz matter... wot wasnt supposed ta happen is dis racket went from one noise down da landing wots gotta be goin dwn there but fisher said mite have some reason cos bill told me expectatinz matter... dunno how its all gonnna fit n stuff | 36 words left (and this will end here) | I cant make sence of anythin now got my mind whirln like crazy whasnt even thinkin abt...",
+  "earlierUserReported": "3/42 done. Stop here for now. Continue another entry from this point later."
+}
