@@ -205,8 +205,8 @@ test('receipt consumption is publication-bound; voice, continuation, model optio
   assert.equal((source.match(/vitals\.journalSubjectKeys = burstJournalTurn\.seenKeys/g) || []).length, 1);
   const prior = 'earlier subjective writing '.repeat(70);
   const prompt = buildPrompt(prior, 'journal', null, turnDirective(select([])));
-  assert.match(prompt, /subjective, may be mistaken or outdated; not evidence/);
-  assert.equal((prompt.match(/Earlier private writing by Cy/g) || []).length, 1);
+  assert.match(prompt, /Prior subjective thought is not corroboration/);
+  assert.equal((prompt.match(/"source":"prior_subjective_thought"/g) || []).length, 1);
   assert.match(prompt, /rough lower-case prison voice/);
   assert.equal(completionBudget(62), 93);
   assert.equal(options({}, 4, 'journal').num_ctx, 3072);

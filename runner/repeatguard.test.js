@@ -71,7 +71,7 @@ assert.equal(stripScaffold('agit .70 stress .85 despair .80').trim(), '');
 ok('a pure state-notation chunk collapses to empty and is dropped');
 
 // ---- 5. LIVE PROMPT: legacy state notation is not injected at all, and the
-// last thing before the cue remains his own prose ----
+// prior prose stays a single subjective source and the last record is the cue ----
 const v = {
   mental: { anxiety: 0.82, agitation: 0.7, stress: 0.4, despair: 0.4, hope: 0.3, lucidity: 0.65, dissociation: 0.35, anger: 0.2, longing: 0.35 },
   physical: { pain: 0.15, hunger: 0.25, fatigue: 0.3 },
@@ -84,14 +84,14 @@ assert.ok(!directives.includes(note), 'legacy notation is excluded from the live
 const ctx = 'same ceiling again. tray came cold, bill on the twos kicking off';
 const prompt = buildPrompt(ctx, 'journal', null, directives);
 const cue = 'Continue the next private thought in the same rough lower-case prison voice. Make it understandable on a first or second read; do not omit words needed to tell who or what you mean. No polished standard English, semicolons, analysis, explanation, or commentary about the material. Begin with the thought itself.';
-assert.ok(prompt.endsWith(cue), 'the prompt ends with the continuation cue');
+assert.equal(JSON.parse(prompt.split('\n').at(-1)).instruction, cue, 'the prompt ends with the continuation instruction');
 const iCue = prompt.lastIndexOf(cue);
 assert.equal(prompt.indexOf('STATE:'), -1, 'the live prompt contains no state notation');
 // The subjective continuation occurs once, before grounded directives. The cue
 // follows those directives without repeating his prose as a second source.
 const beforeCue = prompt.slice(0, iCue).trimEnd();
 assert.equal(prompt.split(ctx).length - 1, 1, 'prior journal prose appears once');
-assert.match(prompt, /Earlier private writing by Cy \(subjective/);
+assert.match(prompt, /"source":"prior_subjective_thought"/);
 assert.ok(!/agit \.70|STATE:/.test(beforeCue.slice(-60)), 'the notation is NOT adjacent to the cue');
 ok('state notation is absent; subjective prose occurs once before grounded directives and cue');
 
@@ -104,7 +104,7 @@ assert.match(ZONE_A, /Rough lower-case prison shorthand is the default/);
 assert.match(ZONE_A, /Do not use semicolons or/);
 const polishedTail = 'I have to be ready for anything; prepared for a fight. Whatever it is must be moving closer.';
 const driftPrompt = buildPrompt(polishedTail, 'journal', null, directives);
-assert.ok(driftPrompt.endsWith(cue), 'the journal voice lock follows a polished fed-back tail');
+assert.equal(JSON.parse(driftPrompt.split('\n').at(-1)).instruction, cue, 'the journal voice lock follows a polished fed-back tail');
 assert.ok(driftPrompt.lastIndexOf('rough lower-case prison voice') > driftPrompt.lastIndexOf(polishedTail),
   'the rough-register instruction is later than the formal context it must override');
 const postcardPrompt = buildPrompt(polishedTail, 'postcard', { from_name: 'j', body: 'you alright?' }, directives);

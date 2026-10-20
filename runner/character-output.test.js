@@ -328,7 +328,8 @@ ok('safe entities and terminal delimiters are normalised; angle leakage gets one
   assert.doesNotMatch(ZONE_A, /Use fragments, abbreviations and numerals/);
   assert.match(ZONE_A, /rough grammar and unfinished edges/);
   assert.doesNotMatch(ZONE_A, /47 tiles|counted em twice/);
-  assert.match(ZONE_A, /thought i had it straight, but i dont/);
+  assert.match(ZONE_A, /STYLE ONLY - instructions about form, not events or memories/);
+  assert.doesNotMatch(ZONE_A, /thought i had it straight, but i dont|b4 lockup they said gym/);
 }
 ok('recent context is cleaned while the final cue alone prioritises clarity and the base voice stays rough');
 

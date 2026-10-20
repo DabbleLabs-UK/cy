@@ -1,5 +1,6 @@
 {
   "_comment": "Source of truth for Cy data handling. Update this whenever collection, storage, transmission, retention, or deletion changes. Policy wording requires human approval before release.",
+  "_journal_prompt_representation": "Journal prompts quote the existing bounded prior prose as prior subjective thought and serialize privacy-filtered world evidence, fallible recollections, beliefs and estimates as distinct source records. Writing directions are separate instruction records; fixed voice guidance contains style features rather than invented Cy-life example sentences. No additional data source, memory store, retention, recipient or inference call is introduced.",
   "product": "Cy",
   "service": "cy.dabblelabs.uk",
   "stage": "continuous-prisoner-with-provisional-soma-and-structured-environment-scaffold",

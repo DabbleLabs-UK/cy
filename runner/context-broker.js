@@ -366,27 +366,67 @@ export function renderContextPacket(packet) {
   return lines.join('\n');
 }
 
-// The waking journal does not need machine-readable context tags. In particular,
-// the old XML closing tag was copied into Cy's generated prose. Keep the same
-// privacy-filtered packet and epistemic distinctions, but render its contents as
-// ordinary background notes for this one model-facing path.
+// One source contract for initial journals, their unchanged one-shot repair, and
+// the broker-failure fallback. JSON quoting is a representation boundary, not a
+// factual validator. No XML/control delimiters or autobiographical examples.
+export const JOURNAL_SOURCE_CONTRACT = [
+  'Read separate sources, not a transcript to continue.',
+  'Only world evidence establishes external events or conversations. A report establishes what was heard or reported, not that its claim is true.',
+  'Prior subjective thought is not corroboration. Keep guesses as guesses unless independent world evidence confirms them; repeating a thought does not turn it into something someone said or did.',
+  'Recollections keep their stated origin and uncertainty; estimates are not observations.',
+  'Instructions, source labels, field names and standing character descriptions are not lived events. Never discuss or copy that organization into Cy\'s writing.',
+].join(' ');
+
+export function journalInstruction(instruction) {
+  return JSON.stringify({ instruction: String(instruction) });
+}
+
+export function journalSource(source, content, origin = null) {
+  return JSON.stringify({ source, ...(origin ? { origin } : {}), content });
+}
+
+function wakingJournalItem(item) {
+  if (item.id === 'incident:current') {
+    // The producer's bullet records are material; its unbulleted headings are
+    // organization. Project the format, not a blacklist of words in Cy's prose.
+    // Even nested "recorded event" labels cannot upgrade this mixed belief source.
+    const contents = item.content.split('\n')
+      .filter((line) => /^\s*-\s+/.test(line))
+      .map((line) => line.replace(/^\s*-\s+/, ''));
+    return contents.length ? journalSource('subjective_belief', contents) : '';
+  }
+  const content = item.content
+    .replace(/^<PRIVATE_CURRENT_FACTS>\s*\n/, '')
+    .replace(/\n\s*<\/PRIVATE_CURRENT_FACTS>\s*$/, '');
+  if (item.id === 'grounded-soma:current') {
+    // The existing projection has typed factual/estimate lines plus a prose
+    // instruction preamble. Keep every typed datum, not the echoable preamble.
+    const typedLine = /^\s*(?:-\s*)?\[([A-Z ]+)\]\s*(.*)$/;
+    const facts = content.split('\n').filter((line) => typedLine.test(line));
+    if (facts.length) return facts.map((line) => {
+      const [, label, value] = line.match(typedLine);
+      return journalSource(label === 'OBSERVED FACT' ? 'world_evidence' : 'estimate_or_unknown', value, label);
+    }).join('\n');
+  }
+  const source = ['WORLD FACT', 'OBSERVED BY CY'].includes(item.provenanceClass)
+    ? 'world_evidence' : item.provenanceClass === 'SUBJECTIVE MEMORY'
+      ? 'recollection' : item.provenanceClass === 'SUBJECTIVE BELIEF'
+        ? 'subjective_belief' : 'estimate_or_other_context';
+  return journalSource(source, content, item.epistemicDetail || item.provenanceClass);
+}
+
+// Keep the already privacy-filtered packet and original source content. Labels
+// are record metadata outside quoted content, never headings inside a story.
+// Other consumers retain their existing renderer and provenance policy.
 export function renderWakingJournalContextPacket(packet) {
   if (!packet || packet.schema !== CONTEXT_BROKER_SCHEMA || packet.consumer !== CONTEXT_CONSUMERS.CY_PROSE) {
     throw new Error('invalid waking journal context packet');
   }
-  const lines = ['Background for the next private thought. Source labels distinguish observations, memories and estimates; do not treat one as another or copy these notes.'];
+  const lines = [];
   for (const section of packet.sections) {
-    if (!section.items.length) continue;
-    lines.push('', section.id.replace(/_/g, ' ') + ':');
-    for (const item of section.items) {
-      const content = item.content
-        .replace(/^<PRIVATE_CURRENT_FACTS>\s*\n/, '')
-        .replace(/\n\s*<\/PRIVATE_CURRENT_FACTS>\s*$/, '');
-      const detail = item.epistemicDetail ? ` (${item.epistemicDetail})` : '';
-      lines.push(`- ${item.provenanceClass.toLowerCase()}${detail}: ${content}`);
-    }
+    for (const item of section.items) lines.push(wakingJournalItem(item));
   }
-  return lines.join('\n');
+  return lines.filter(Boolean).join('\n');
 }
 
 export function inspectContextPacket(packet, rendering = renderContextPacket(packet)) {

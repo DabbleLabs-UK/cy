@@ -10,6 +10,10 @@
 
 import { BY_KEY, CAST, OFFICERS } from './cast.js';
 import { ENGINEERING_DEFAULT_SAMPLING, somaSampling } from './soma.js';
+import {
+  CONTEXT_BROKER_SCHEMA, CONTEXT_CONSUMERS, JOURNAL_SOURCE_CONTRACT,
+  journalInstruction, journalSource, renderWakingJournalContextPacket,
+} from './context-broker.js';
 
 export const NUM_CTX = 3072;
 
@@ -136,15 +140,14 @@ const SYSTEM_BASE = [
   'two entries with the same word.',
 ].join('\n');
 
-// FEW-SHOT VOICE ANCHOR. On an 8B, 2-3 short examples of the target register hold a
-// voice far more reliably than any amount of prose instruction. These live in the
-// cached Zone A (paid once). They are EXAMPLES OF HOW HE WRITES ONLY - numerals,
-// slang, fragments, lowercase, no salutation, no reader - never material to reuse.
-const EXAMPLES = [
-  'HOW HE WRITES - examples of the register only, never reuse the words:',
-  '- 3rd day no VO. screw clocked me at slop, said nowt, just looked. tray cold again. cba.',
-  '- nah. thought i had it straight, but i dont. still tryin to put it right.',
-  '- b4 lockup they said gym. no gym. course not. rain on the mesh, cant see it, hear it tho.',
+// Describe form without giving the model invented Cy-life sentences to remember.
+// Shared by the existing expression paths so an example cannot leak into journal
+// continuity through drawing intent or another consumer of the same fixed voice.
+const VOICE_FEATURES = [
+  'STYLE ONLY - instructions about form, not events or memories:',
+  'Lower-case, British prison slang, contractions, rough grammar and readable shorthand.',
+  'Fragments may carry a thought; keep the words needed to identify who and what it concerns.',
+  'No salutation, audience, polished essay structure or neat conclusion.',
 ].join('\n');
 
 // The fixed roster: who is in here, characterisations that never change. Built
@@ -163,8 +166,8 @@ const ROSTER = (() => {
 })();
 
 // Zone A: assembled once at module load, identical on every request. Voice rules,
-// then the few-shot voice anchor, then the fixed roster.
-export const ZONE_A = [SYSTEM_BASE, EXAMPLES, ROSTER].join('\n\n');
+// then content-neutral voice features, then the fixed roster.
+export const ZONE_A = [SYSTEM_BASE, VOICE_FEATURES, ROSTER].join('\n\n');
 
 // [strength(v), directive] pairs. strength returns 0 when the axis is not over
 // threshold, else a 0..1 measure of HOW FAR past it - used to rank rules so only
@@ -535,6 +538,35 @@ export function buildDirectives(v, mode, ctx = {}) {
     if (ctx.wingnoise) parts.push(ctx.wingnoise); // one-shot noise, freshest last
     return parts.join('\n\n');
   }
+  if (mode === 'journal' && ctx.wakingJournalContext) {
+    const parts = [journalInstruction(ONE_SUBJECT)];
+    if (ctx.sharedContext) parts.push(ctx.sharedContext);
+    else {
+      // Broker failure must not silently turn a mixed ledger or a recollection
+      // back into world evidence. Reuse the journal renderer's source projection.
+      const items = [
+        ctx.incidents && { id: 'incident:current', provenanceClass: 'SUBJECTIVE BELIEF', content: ctx.incidents },
+        ctx.autobiographicalMemory && { id: 'memory:fallback', provenanceClass: 'SUBJECTIVE MEMORY', content: ctx.autobiographicalMemory },
+        ctx.groundedSoma && { id: 'grounded-soma:current', provenanceClass: 'MODEL ESTIMATE', content: ctx.groundedSoma },
+      ].filter(Boolean);
+      parts.push(renderWakingJournalContextPacket({
+        schema: CONTEXT_BROKER_SCHEMA, consumer: CONTEXT_CONSUMERS.CY_PROSE, sections: [{ items }],
+      }));
+    }
+    if (ctx.journalSubject?.sourceEventId && ctx.journalSubject.freshLine) {
+      // The existing selector's canonical source may not fit in the broker's
+      // recent-event budget. Keep that evidence separate from the turn instruction.
+      parts.push(journalSource('world_evidence', ctx.journalSubject.freshLine,
+        'selected canonical event; retain any stated uncertainty'));
+    }
+    // Legacy one-shot cues mix observations and writing directions. They remain
+    // directions, not independent corroboration; canonical observations above
+    // retain event authority. Do not promote prose or static cast blurbs to facts.
+    for (const key of ['regime', 'cast', 'grudge', 'cost', 'amplified', 'officer', 'overheard', 'visitor', 'warden', 'wingnoise', 'bans', 'turn', 'length', 'form']) {
+      if (ctx[key]) parts.push(journalInstruction(ctx[key]));
+    }
+    return parts.filter(Boolean).join('\n\n');
+  }
   // TIER 1 - STABLE: byte-identical between consecutive event-free bursts, so the
   // cached prefix extends right through them. Most-stable first (a constant), then
   // the phase/relation blocks that only move on an event. Held ahead of the one-
@@ -803,11 +835,16 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
     ? '[half under. a fragment surfaces:]'
     : 'Continue the next private thought in the same rough lower-case prison voice. Make it understandable on a first or second read; do not omit words needed to tell who or what you mean. No polished standard English, semicolons, analysis, explanation, or commentary about the material. Begin with the thought itself.';
   if (!ctxBlock) {
+    if (mode === 'journal') {
+      // No previous writing is not evidence of a new day or a ceiling sighting.
+      return [journalInstruction(JOURNAL_SOURCE_CONTRACT), zoneC, journalInstruction(cue)]
+        .filter(Boolean).join('\n\n');
+    }
     // nothing written yet: directives, then the opening seed continues the stream.
     return (zoneC ? zoneC + '\n\n' : '') + 'day begins. the ceiling. same ceiling. ';
   }
   const parts = mode === 'journal'
-    ? ['Earlier private writing by Cy (subjective, may be mistaken or outdated; not evidence that its claims are true):', ctxBlock]
+    ? [journalInstruction(JOURNAL_SOURCE_CONTRACT), journalSource('prior_subjective_thought', ctxBlock)]
     : [ctxBlock];
   if (zoneC) parts.push('', zoneC);
   // Sleep keeps its short reprise. Repeating journal prose here would turn one
@@ -816,6 +853,6 @@ export function buildPrompt(contextText, mode, payload, directives = '') {
     const reprise = tailReprise(ctxBlock);
     if (reprise) parts.push('', reprise);
   }
-  parts.push(cue);
+  parts.push(mode === 'journal' ? journalInstruction(cue) : cue);
   return parts.join('\n');
 }
