@@ -3281,6 +3281,7 @@ async function main() {
       brokerOptions.currentSenderId || null,
     );
     const ctx = {
+      wakingJournalContext: brokerOptions.wakingJournalContext === true,
       groundedSoma: grounded.directive,
       groundedSomaContext: grounded.context,
       autobiographicalMemory: stripMalformedProseControls(memory.directive),
@@ -5607,6 +5608,7 @@ async function main() {
           seenKeys: vitals.journalSubjectKeys,
         });
         ctx.turn = turnDirective(burstJournalTurn);
+        ctx.journalSubject = burstJournalTurn;
         ctx.length = completionDirective(targetOpts.num_predict);
         if (!ctx.sharedContext) ctx.regime = regimeDirective(mins);
         burstForm = selectedAction;

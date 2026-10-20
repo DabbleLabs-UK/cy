@@ -38,13 +38,13 @@ test('waking journal uses prior prose once as subjective continuation, never obs
   const rendering = renderWakingJournalContextPacket(packet);
   const prompt = buildPrompt(priorWriting, 'journal', null, rendering);
   assert.equal(prompt.split(priorWriting).length - 1, 1);
-  assert.match(prompt, /Earlier private writing by Cy \(subjective, may be mistaken or outdated/);
+  assert.match(prompt, /"source":"prior_subjective_thought"/);
   assert.doesNotMatch(prompt, /recent expression:/);
   assert.doesNotMatch(prompt, /observed by cy: reg remembers everything/i);
-  assert.match(prompt, /world fact: Cy is in CELL/);
-  assert.match(prompt, /observed by cy: Two voices stopped talking on the wing/);
-  assert.match(prompt, /subjective memory: Cy remembers an earlier search/);
-  assert.match(rendering, /Source labels distinguish observations, memories and estimates/);
+  assert.match(prompt, /"source":"world_evidence","origin":"WORLD FACT","content":"Cy is in CELL/);
+  assert.match(prompt, /"origin":"OBSERVED BY CY","content":"Two voices stopped talking on the wing/);
+  assert.match(prompt, /"source":"recollection","origin":"SUBJECTIVE MEMORY","content":"Cy remembers an earlier search/);
+  assert.match(prompt, /Prior subjective thought is not corroboration/);
 });
 
 test('journal prompt selects only the newest bounded subjective writing', () => {
@@ -67,7 +67,7 @@ test('journal prompt selects only the newest bounded subjective writing', () => 
   assert.doesNotMatch(selected, /mark says fisher/);
   assert.equal(prompt.split(selected).length - 1, 1);
   assert.doesNotMatch(prompt, /mark says fisher/);
-  assert.match(prompt, /Earlier private writing by Cy \(subjective, may be mistaken or outdated/);
+  assert.match(prompt, /"source":"prior_subjective_thought"/);
   assert.match(prompt, /observed by cy: The wing count finished/);
   assert.match(prompt, /subjective memory: Cy recalls an older search/);
   assert.doesNotMatch(prompt, /recent expression:/);

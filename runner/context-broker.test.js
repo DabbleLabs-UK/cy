@@ -141,7 +141,9 @@ test('epistemicDetail refines a memory origin without relabelling the policy cla
   // The detail sits OUTSIDE the brackets: the class itself is not relabelled.
   assert.doesNotMatch(rendering, /\[SUBJECTIVE MEMORY \(/);
   const journal = renderWakingJournalContextPacket(packet);
-  assert.match(journal, /subjective memory \(a dream you had\): Mr Sweep's clipboard waits/);
+  assert.deepEqual(JSON.parse(journal), {
+    source: 'recollection', origin: 'a dream you had', content: "Mr Sweep's clipboard waits.",
+  });
 });
 
 test('waking journal preserves grounded facts and memory without echoable XML controls', () => {
@@ -159,7 +161,7 @@ test('waking journal preserves grounded facts and memory without echoable XML co
   const journal = renderWakingJournalContextPacket(packet);
   assert.match(journal, /Cy is in CELL after the search/);
   assert.match(journal, /Sleep-pressure estimate 0\.87/);
-  assert.match(journal, /subjective memory: Cy remembers Reg at the door/);
+  assert.match(journal, /"source":"recollection","origin":"SUBJECTIVE MEMORY","content":"Cy remembers Reg at the door/);
   assert.doesNotMatch(journal, /<\/?[A-Z_]+|\[C\d+\]|SECTION |<\|im_/);
   assert.match(renderContextPacket(packet), /<SHARED_CONTEXT/);
 });
