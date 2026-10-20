@@ -294,15 +294,15 @@ const WRITING_ARTIFACT = '(?:(?:journal\\s+)?entry|response|output|generation|co
 const EDITORIAL_EDGE = '(?:^|[\\n|\\[(]|(?<=[.!?;])[ \\t]+)\\s*';
 const EDITORIAL_END = '(?:(?:and\\s+)?(?:this|it)\\s+(?:(?:will|should)\\s+)?(?:ends?|stops?|continues?|resumes?)\\s+(?:here|now|later))';
 const GENERATION_EDITORIAL = [
-  // A stand-alone/annotated remaining output budget, not "36 words left on
-  // the wall" or "i had 36 words left in his letter". Abbreviated counts need
-  // the additional completion annotation (below); "38 left" alone is valid.
-  new RegExp(`${EDITORIAL_EDGE}\\d+\\s+(?:words?|tokens?|characters?)\\s+(?:left|remaining|to\\s+go)\\b`
+  // A stand-alone/annotated word budget, not "36 words left on the wall".
+  // Tokens can be canteen money and characters can be people: those units
+  // require an explicit output qualifier or the completion cue below.
+  new RegExp(`${EDITORIAL_EDGE}\\d+\\s+(?:words?|(?:output|generated|completion)\\s+(?:tokens?|characters?))\\s+(?:left|remaining|to\\s+go)\\b`
     + `(?=[ \\t]*(?:$|[\\])|.!?;\\n]|[\\[(]\\s*${EDITORIAL_END}\\b))`, 'i'),
-  // Unit-less counts and fraction/progress counters are ambiguous in prison
+  // Unit-less balances and fraction/progress counters are ambiguous in prison
   // life. Only treat them as generation progress when the same bounded span
   // explicitly closes the writing or directs its next entry.
-  new RegExp(`\\b\\d+(?:\\s*\\/\\s*\\d+)?\\s+(?:left|remaining|done|complete)\\b`
+  new RegExp(`\\b\\d+(?:\\s*\\/\\s*\\d+)?\\s+(?:(?:words?|tokens?|characters?)\\s+)?(?:left|remaining|done|complete)\\b`
     + `[^.!?]{0,100}?[\\[(]\\s*${EDITORIAL_END}\\b`, 'i'),
   new RegExp(`\\b\\d+\\s*\\/\\s*\\d+\\s+(?:done|complete)\\b[\\s\\S]{0,160}?`
     + `\\b(?:continue|resume|finish|end|stop)\\s+(?:(?:this|the(?:\\s+next)?|another|next)\\s+)?${WRITING_ARTIFACT}\\b`, 'i'),
@@ -312,10 +312,13 @@ const GENERATION_EDITORIAL = [
     + `\\s+(?:(?:this|the(?:\\s+next)?|another|next)\\s+)?${WRITING_ARTIFACT}\\b`, 'i'),
   new RegExp(`\\b(?:i(?:'|\\u2019)ll|i\\s+will|let\\s+me)\\s+(?:stop|end|finish|continue|resume|construct|generate)`
     + `\\s+(?:this|the(?:\\s+next)?|another|next)\\s+${WRITING_ARTIFACT}\\b`, 'i'),
+  new RegExp(`\\bi(?:'m|\\s+am)\\s+(?:constructing|generating|continuing|ending|finishing|completing)`
+    + `\\s+(?:this|the(?:\\s+next)?|another|next)\\s+${WRITING_ARTIFACT}\\b`, 'i'),
   // Labelled progress/status and explicit entry completion annotations.
   new RegExp(`${EDITORIAL_EDGE}(?:word|token|character)\\s+(?:count|budget|limit)\\s*[:=]\\s*\\d+`, 'i'),
   new RegExp(`${EDITORIAL_EDGE}remaining\\s+(?:words?|tokens?|characters?)\\s*[:=]\\s*\\d+`, 'i'),
   new RegExp(`${EDITORIAL_EDGE}(?:generation|output|completion)\\s+(?:status|progress)\\s*[:=]`, 'i'),
+  new RegExp(`${EDITORIAL_EDGE}(?:the\\s+|this\\s+)?${WRITING_ARTIFACT}\\s+(?:is\\s+)?\\d+\\s*%\\s+(?:done|complete)\\b`, 'i'),
   new RegExp(`${EDITORIAL_EDGE}(?:the\\s+|this\\s+)?${WRITING_ARTIFACT}\\s+`
     + '(?:(?:is|has\\s+been)\\s+)?(?:now\\s+)?(?:done|complete|completed|finished|(?:will\\s+)?(?:ends?|stops?)\\s+here)\\b', 'i'),
   new RegExp(`${EDITORIAL_EDGE}(?:this\\s+is\\s+)?(?:the\\s+)?end\\s+of\\s+(?:this|the)\\s+${WRITING_ARTIFACT}\\b`, 'i'),

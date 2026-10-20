@@ -33,7 +33,8 @@ test('real public candidates and the earlier progress fixture fail whole-candida
 
 test('editorial meaning generalises across counts, units, delimiters and procedural wording', () => {
   for (const annotation of [
-    '(147 tokens remaining)', '[8 characters to go]', '| 217 words left |',
+    '(147 output tokens remaining)', '[8 output characters to go]', '| 217 words left |',
+    '(147 tokens remaining) [this ends here]',
     '17 words remaining (this will end here)',
     '71 left [it stops here]',
     '38 left (<= cy is at cell)\n[it ends here]',
@@ -49,6 +50,8 @@ test('editorial meaning generalises across counts, units, delimiters and procedu
     'Please finish the response here.',
     "I'll end this entry here.", 'I will construct the next entry.',
     'let me resume this output.',
+    'I am constructing this journal entry.', "I'm continuing the response.",
+    '[this entry is 75% complete]',
   ]) {
     for (const text of [annotation, `cold tea again. ${annotation}`, `cold tea | ${annotation}`]) {
       assert.equal(validateCharacterCandidate(text).ok, false, text);
@@ -72,6 +75,8 @@ test('ordinary in-world vocabulary, quantities, annotations and dialogue remain 
     'his words left me cold. no end to it.',
     'the form says word limit: 50. those are their rules.',
     'two canteen tokens left | and no tea...',
+    '3 tokens left. enough for tea.', '(3 tokens left) enough for tea.',
+    '3 characters left. they were still standing by the door.',
     'he left 36 on the table (and this will end badly).',
     '[it ends here] i told myself about the arguing.',
     'i copied |...| off the wall. [two marks] then > three...',

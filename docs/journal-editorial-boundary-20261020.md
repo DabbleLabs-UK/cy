@@ -31,10 +31,11 @@ That did not imply protection against budget/completion commentary.
 Only `runner/warden.js` changes at runtime. New compositional patterns participate
 in `assistantFrameMatches`, used by both publication and feedback:
 
-- Standalone/annotated remaining word, token or character budgets.
+- Standalone/annotated word budgets; token/character balances require an
+  explicit output qualifier or a paired completion cue (tokens can be canteen money).
 - Bare remaining counts paired with a bounded completion/continuation annotation.
 - Fractional progress paired with a bounded instruction about the next entry.
-- Procedural imperatives or future instructions explicitly constructing,
+- Procedural imperatives or explicit process commentary about constructing,
   continuing or ending a writing artifact.
 - Labelled generation progress and explicit entry-completion annotations.
 
@@ -73,8 +74,8 @@ preserving the source-boundary framing and the 520-character policy.
 - Regression controls include a physical passage ending, prison work counts,
   appeal-form word limits, ordinary dialogue, brackets, pipes and ellipses.
 - Focused suite: 130/130. Full runner suite: 522/522.
-- Independent review identified a wrapped-annotation bypass and an ambiguous
-  physical `passage` false positive. Both have regression tests and fixes.
+- Independent review identified a wrapped-annotation bypass and ambiguous
+  physical `passage`/canteen-token false positives. All have tests and fixes.
 
 Prompt/source organisation, material freshness, ONE_SUBJECT, subjective-tail
 budget, model/sampler, 93-token allowance, Tempo/cadence, topic selection and
