@@ -123,6 +123,8 @@ import {
   incidentsDirective,
   incidentLine,
   selectJournalTurn,
+  journalSubjectFromWorldRecord,
+  journalSubjectReceipts,
   reconcileObjectIncidentThreads,
   resolveThreads,
 } from './incidents.js';
@@ -580,6 +582,7 @@ async function main() {
   // new entry orients on what has happened since, not on re-announcing an
   // unchanged state. Postcards, dreams and drawings do not update it.
   if (typeof vitals.lastJournalAtMs !== 'number') vitals.lastJournalAtMs = 0;
+  vitals.journalSubjectKeys = journalSubjectReceipts(vitals.journalSubjectKeys);
   if (typeof vitals.lastWingNoiseMs !== 'number') vitals.lastWingNoiseMs = 0;
   // drawing state (rides on the vitals object so it persists with everything else)
   if (typeof vitals.lastDrawMs !== 'number') vitals.lastDrawMs = 0;
@@ -1117,6 +1120,7 @@ async function main() {
       targetId: event.world.participants.target || null,
       cyObserved,
       dreamEligible,
+      journalSubject: journalSubjectFromWorldRecord(record, { cyObserved }),
     });
     while (recentWorldHistory.length > 24) recentWorldHistory.shift();
     if (cyObserved && autobiographicalMemory) {
@@ -5583,6 +5587,7 @@ async function main() {
       let burstGroundedContext = null;
       let burstGroundedDirective = '';
       let burstMemoryQuery = null;
+      let burstJournalTurn = null;
       {
         const ctx = buildCtx(cognition, {
           generationRef: `journal-prose:${nowMs}`,
@@ -5596,10 +5601,12 @@ async function main() {
         // Development steer: orient this entry on what has actually happened since
         // the last one, or steer off re-announcing an unchanged state. Structural
         // (real world timing), not a phrase ban. Computed once per burst.
-        ctx.turn = turnDirective(selectJournalTurn(vitals.ledger, {
+        burstJournalTurn = selectJournalTurn(vitals.ledger, {
           lastJournalAtMs: vitals.lastJournalAtMs,
-          lastIncidentMs: vitals.lastIncidentMs,
-        }));
+          worldEvents: recentWorldHistory,
+          seenKeys: vitals.journalSubjectKeys,
+        });
+        ctx.turn = turnDirective(burstJournalTurn);
         ctx.length = completionDirective(targetOpts.num_predict);
         if (!ctx.sharedContext) ctx.regime = regimeDirective(mins);
         burstForm = selectedAction;
@@ -5714,6 +5721,7 @@ async function main() {
         // Mark when he last actually wrote, so the next entry's development steer
         // measures "since you last wrote" from a real published entry.
         vitals.lastJournalAtMs = lastPublishedWakingExpressionMs;
+        vitals.journalSubjectKeys = burstJournalTurn.seenKeys;
         vitals.expressiveCadence = recordExpressiveJournal(vitals.expressiveCadence, {
           nowMs: lastPublishedWakingExpressionMs,
         });

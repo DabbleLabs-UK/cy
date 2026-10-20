@@ -11,6 +11,7 @@ import {
   pushIncident,
   isAuthoritativeOpenThread,
   incidentLine,
+  journalSubjectFromWorldRecord,
 } from './incidents.js';
 import { buildPrompt, buildDirectives, turnDirective, JOURNAL_CONTINUATION_CHARS } from './prompt.js';
 
@@ -235,14 +236,20 @@ test('current world object overrides and resolves a stale custody thread', () =>
 // Structural anti-recurrence: orient the next entry on what has happened SINCE the
 // last one, from real world timing - not a phrase ban.
 
-test('selectJournalTurn surfaces a fresh incident filed since the last entry', () => {
+test('selectJournalTurn follows the canonical source instead of its incident paraphrase', () => {
   const now = Date.now();
   const lastJournalAtMs = now - 120000; // wrote 2 min ago
   const ledger = [
     { ...makeIncident('trivial', { sub: 'no_eggs', rnd: () => 0 }), ts: localTs(now - 300000) }, // stale (before last entry)
     { ...makeIncident('officer', { actorKey: 'keyes', slight: 'pulled you out', rnd: () => 0 }), ts: localTs(now - 10000) }, // fresh
   ];
-  const turn = selectJournalTurn(ledger, { lastJournalAtMs, lastIncidentMs: now - 10000 });
+  const record = { world_event: { id: 'event-keyes', event_type: 'officer_instruction',
+    timestamp: localTs(now - 10000), world: { participants: { actor: 'keyes' },
+      context: { description: 'Mr Keyes pulled you out' } } },
+    observation: { summary: 'Mr Keyes pulled you out', modality: 'direct' } };
+  const worldEvents = [{ id: 'event-keyes', cyObserved: true,
+    journalSubject: journalSubjectFromWorldRecord(record, { cyObserved: true }) }];
+  const turn = selectJournalTurn(ledger, { lastJournalAtMs, worldEvents });
   assert.equal(turn.nothingNew, false);
   assert.ok(turn.freshLine && /keyes/i.test(turn.freshLine), 'fresh officer incident is surfaced, not the stale eggs one');
   assert.doesNotMatch(turn.freshLine, /no eggs/i);
@@ -259,14 +266,14 @@ test('selectJournalTurn reports nothing-new when no incident has occurred since 
   assert.equal(turn.nothingNew, true);
 });
 
-test('selectJournalTurn gives no steer when something happened but is not in the ledger window (ordinary continuity)', () => {
+test('selectJournalTurn does not call a moved incident clock a material development', () => {
   const now = Date.now();
   const lastJournalAtMs = now - 60000;
   // lastIncidentMs is newer than the last entry, but no ledger row is newer (rotated out):
   const ledger = [{ ...makeIncident('texture', { rnd: () => 0 }), ts: localTs(now - 300000) }];
   const turn = selectJournalTurn(ledger, { lastJournalAtMs, lastIncidentMs: now - 5000 });
   assert.equal(turn.freshLine, '');
-  assert.equal(turn.nothingNew, false, 'no false "nothing new" when the incident clock moved');
+  assert.equal(turn.nothingNew, true, 'a clock is not evidence of material novelty');
 });
 
 test('selectJournalTurn prefers an open unresolved thread over a newer non-open incident', () => {
@@ -292,8 +299,8 @@ test('selectJournalTurn prefers an open unresolved thread over a newer non-open 
 test('turnDirective wording: fresh offers a new one-thing; nothing-new steers off restatement; otherwise empty', () => {
   assert.match(turnDirective({ freshLine: 'Keyes pulled you out' }),
     /NEW SINCE YOU LAST WROTE: Keyes pulled you out.*let this be the one thing/s);
-  assert.match(turnDirective({ nothingNew: true }), /nothing new since you last wrote/);
-  assert.match(turnDirective({ nothingNew: true }), /ONE real thing in the cell/);
+  assert.match(turnDirective({ nothingNew: true }), /no materially new external development/);
+  assert.match(turnDirective({ nothingNew: true }), /may develop an existing thought/);
   assert.equal(turnDirective({}), '');
 });
 

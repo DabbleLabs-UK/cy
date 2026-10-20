@@ -17,6 +17,7 @@
 
 import { BY_KEY, CAST, OFFICERS, topGrudge } from './cast.js';
 import { worldEntityRevision } from './world-mirror.js';
+import { createHash } from 'node:crypto';
 
 const LEDGER_MAX = 12;
 
@@ -429,36 +430,133 @@ export function incidentsDirective(ledger, opts = {}) {
   return lines.join('\n');
 }
 
-// Orient the NEXT waking entry relative to the LAST one, from real world timing
-// rather than wording. The waking journal is a continuation of Cy's own prose and
-// is told to stay on "the one thing you cannot stop chewing on"; with nothing to
-// pull against, the same concern wins every burst even when nothing about it has
-// changed. This returns the structural facts the prompt needs to let the day
-// develop: the single most salient concrete thing that has happened SINCE he last
-// wrote (so there is a fresh real subject to settle on), and whether in fact
-// NOTHING has happened since (so he is steered off re-announcing an unchanged
-// state). It bans no words and penalises no tokens; a concern recurs naturally the
-// moment a new incident about it is filed. Open unresolved threads always count as
-// live material. `lastIncidentMs` is the authoritative "something happened" clock
-// the silence engine already maintains.
-export function selectJournalTurn(ledger, { lastJournalAtMs = 0, lastIncidentMs = 0 } = {}) {
-  const list = Array.isArray(ledger) ? ledger : [];
-  const since = Number(lastJournalAtMs) || 0;
-  const parse = (t) => { const n = Date.parse(t); return Number.isFinite(n) ? n : 0; };
-  // Salience: an open unresolved thread outranks a verified transition, which
-  // outranks a recorded event, which outranks ambient texture.
-  const rank = (i) => (i.open && !i.resolved ? 3 : 0)
-    + (i.evidenceClass === 'WORLD_TRANSITION' ? 2
-      : i.evidenceClass === 'OBSERVED_EVENT' ? 1 : 0);
-  let pick = null;
-  for (const inc of list) {
-    if (!inc || inc.resolved) continue;
-    if (parse(inc.ts) <= since) continue; // only things filed since the last entry
-    // Iterating chronologically and taking >= keeps the newest among the most
-    // salient fresh incidents.
-    if (!pick || rank(inc) >= rank(pick)) pick = inc;
+// Journal freshness is a projection of world evidence, never of generated prose.
+// Receipts live in the existing checkpoint, contain hashes only, and are committed
+// only after writing publishes. They are not topic cooldowns: a material change
+// is eligible immediately, including a new real encounter/search/meal episode.
+export const JOURNAL_SUBJECT_RECEIPTS = 128;
+const VOLATILE_FACT_KEYS = new Set([
+  'timestamp', 'occurred_at', 'occurredAt', 'created_at', 'updated_at',
+  'start_at', 'end_at', 'onset_at', 'resolved_at', 'duration_ms', 'durationMs',
+  'elapsedMs', 'elapsed_ms', 'minutesAgo', 'minutes_since', 'observation_count',
+  'observationGapCount', 'repeat_count', 'occurrence_count', 'linked_event_ids',
+  'previous_event_ids', 'schema', 'version', 'misheard',
+  'sourceEventId', 'source_event_id', 'environment_event_id', 'event_id',
+  'elapsedMinutes', 'elapsed_minutes', 'lastObservedAtMs',
+]);
+function materialFacts(value) {
+  if (Array.isArray(value)) return value.map(materialFacts).filter((v) => v != null);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      if (VOLATILE_FACT_KEYS.has(key)) continue;
+      const v = materialFacts(value[key]);
+      if (v != null && (typeof v !== 'object' || Object.keys(v).length)) out[key] = v;
+    }
+    return Object.keys(out).length ? out : null;
   }
-  const freshLine = pick ? incidentLine(pick) : '';
-  const nothingNew = !freshLine && (Number(lastIncidentMs) || 0) <= since;
-  return { freshLine, nothingNew };
+  if (value == null || value === '' || /^unknown$/i.test(String(value))) return null;
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').toLowerCase() : value;
+}
+function subjectKey(facts) {
+  return createHash('sha256').update(JSON.stringify(materialFacts(facts))).digest('hex');
+}
+export function journalSubjectReceipts(values) {
+  const keys = new Set();
+  for (const key of Array.isArray(values) ? values : []) {
+    if (typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) continue;
+    keys.delete(key);
+    keys.add(key);
+  }
+  return [...keys].slice(-JOURNAL_SUBJECT_RECEIPTS);
+}
+
+// Called at the existing canonical-event capture boundary, not on context prose.
+// Compare what the source event says happened, not its random incident paraphrase.
+// An ambiguous hearing remains qualified; its hidden objective wording is used
+// only for an equality fingerprint, never substituted for what Cy heard.
+export function journalSubjectFromWorldRecord(record, { cyObserved = false } = {}) {
+  const event = record && record.world_event;
+  const world = event && event.world;
+  const observation = record && record.observation;
+  if (!cyObserved || !event?.id || !event.event_type || !world || !observation) return null;
+  if (/^(?:CY_EXPRESSION|DREAM_EXPRESSION|journal|recent_expression)$/i.test(event.event_type)) return null;
+  if (['postcard', 'postcard_with_image', 'postcard_reply'].includes(event.event_type)) {
+    // Mail text is sender-scoped. This selector must not bypass the existing
+    // retrieval/privacy interface by copying a private canonical source body.
+    return { sourceEventId: event.id, ts: event.timestamp,
+      materialKey: subjectKey({ correspondence: event.event_type,
+        episode: world.social?.episode_id || event.id }),
+      line: event.event_type === 'postcard_reply' ? 'Cy sent a reply to a postcard' : 'a postcard arrived',
+      rank: 1 };
+  }
+  const description = world.context?.description || observation.summary;
+  const summary = observation.summary || description;
+  if (!summary || !Number.isFinite(Date.parse(event.timestamp))) return null;
+  // For typed meals, the actual meal identity and offering/receipt/intake facts
+  // carry the development. A changing elapsed-time caption adds no new fact.
+  const typedMeal = ['meal', 'meal_expected'].includes(event.archetype_id)
+    && !!world.physical?.food?.meal_id;
+  const facts = {
+    type: event.event_type,
+    directConfirmation: ['direct', 'seen', 'read'].includes(observation.modality)
+      && observation.certainty === 'certain',
+    participants: world.participants,
+    location: world.context?.location,
+    associatedEntities: [...(world.context?.associated_entities || [])].sort(),
+    description: typedMeal ? null : description,
+    observed: observation.observed_facts,
+    physical: world.physical,
+    social: world.social,
+    movement: world.movement,
+    search: world.search_episode,
+    instrumental: world.instrumental,
+    opportunity: world.action_opportunity,
+    situation: { resolution: world.situation?.resolution_status,
+      deprivation: world.situation?.deprivation_outcome },
+  };
+  const uncertain = observation.certainty === 'uncertain';
+  return {
+    sourceEventId: event.id, ts: event.timestamp,
+    materialKey: subjectKey(facts),
+    line: uncertain ? `half-heard, uncertain: ${summary}` : summary,
+    rank: world.search_episode?.property_result
+      || world.instrumental?.consequence_id ? 2 : uncertain ? 0 : 1,
+  };
+}
+
+export function selectJournalTurn(ledger, {
+  lastJournalAtMs = 0, worldEvents = [], seenKeys = [], nowMs = Date.now(),
+} = {}) {
+  const since = Number(lastJournalAtMs) || 0;
+  const subjects = (Array.isArray(worldEvents) ? worldEvents : [])
+    .filter((event) => event?.cyObserved === true && event.journalSubject?.sourceEventId === event.id)
+    .map((event) => event.journalSubject);
+  // A revisioned custody transition is also authoritative even if its parent
+  // event has fallen out of the short recent-world ring. No other ledger prose
+  // can certify its own freshness, including AMBIENT_TEXTURE or prior writing.
+  for (const inc of Array.isArray(ledger) ? ledger : []) {
+    if (inc?.evidenceClass !== 'WORLD_TRANSITION' || !inc.sourceEventId
+        || !inc.objectEvidence?.transitionId || !Number.isSafeInteger(inc.objectEvidence.revision)) continue;
+    subjects.push({ sourceEventId: inc.sourceEventId, ts: inc.ts,
+      materialKey: subjectKey({ custody: inc.objectEvidence }), line: incidentLine(inc), rank: 3 });
+  }
+  const valid = subjects.filter((s) => s.line && /^[a-f0-9]{64}$/.test(s.materialKey)
+    && Number.isFinite(Date.parse(s.ts)) && Date.parse(s.ts) <= nowMs);
+  // Seed from facts already available before the last published entry, so an
+  // upgrade does not declare the entire retained history fresh.
+  const known = new Set(journalSubjectReceipts(seenKeys));
+  for (const s of valid) if (Date.parse(s.ts) <= since) known.add(s.materialKey);
+  let pick = null;
+  for (const s of valid) {
+    if (Date.parse(s.ts) <= since || known.has(s.materialKey)) continue;
+    if (!pick || s.rank > pick.rank
+        || (s.rank === pick.rank && Date.parse(s.ts) >= Date.parse(pick.ts))) pick = s;
+  }
+  return {
+    freshLine: pick?.line || '', nothingNew: !pick,
+    sourceEventId: pick?.sourceEventId || null,
+    reason: pick ? 'MATERIAL_WORLD_DEVELOPMENT' : 'NO_MATERIAL_WORLD_DEVELOPMENT',
+    seenKeys: journalSubjectReceipts([...known, ...valid.map((s) => s.materialKey)]),
+  };
 }
