@@ -306,10 +306,6 @@ const GENERATION_EDITORIAL = [
     + `[^.!?]{0,100}?[\\[(]\\s*${EDITORIAL_END}\\b`, 'i'),
   new RegExp(`\\b\\d+\\s*\\/\\s*\\d+\\s+(?:done|complete)\\b[\\s\\S]{0,160}?`
     + `\\b(?:continue|resume|finish|end|stop)\\s+(?:(?:this|the(?:\\s+next)?|another|next)\\s+)?${WRITING_ARTIFACT}\\b`, 'i'),
-  // Explicit procedural instructions about producing the text. Do not match
-  // "stop here for now, Reg said" or "continue down the landing later".
-  new RegExp(`${EDITORIAL_EDGE}(?:please\\s+)?(?:stop|end|finish|continue|resume|construct|generate|write)`
-    + `\\s+(?:(?:this|the(?:\\s+next)?|another|next)\\s+)?${WRITING_ARTIFACT}\\b`, 'i'),
   new RegExp(`\\b(?:i(?:'|\\u2019)ll|i\\s+will|let\\s+me)\\s+(?:stop|end|finish|continue|resume|construct|generate)`
     + `\\s+(?:this|the(?:\\s+next)?|another|next)\\s+${WRITING_ARTIFACT}\\b`, 'i'),
   new RegExp(`\\bi(?:'m|\\s+am)\\s+(?:constructing|generating|continuing|ending|finishing|completing)`
@@ -324,6 +320,44 @@ const GENERATION_EDITORIAL = [
   new RegExp(`${EDITORIAL_EDGE}(?:this\\s+is\\s+)?(?:the\\s+)?end\\s+of\\s+(?:this|the)\\s+${WRITING_ARTIFACT}\\b`, 'i'),
 ];
 
+// Task continuations can put a bridge between the imperative and its output:
+// "proceed and write more of Cy's thoughts" / "continue from where ... entry".
+// Require a writing-task object or explicit writing action, not a bare command
+// to continue, and recognise quoted in-world reporting rather than banning it.
+const WRITER_TASK_OBJECT = `(?:${WRITING_ARTIFACT}|(?:cy|the\\s+inmate)(?:'|\\u2019)s\\s+(?:next\\s+)?(?:thoughts?|inner\\s+(?:thoughts?|monologue)))`;
+const WRITER_TASK_EDGE = `${EDITORIAL_EDGE}["'\\x60>]*\\s*(?:(?:task|instructions?|assistant|writer)\\s*:\\s*)?`
+  + '(?:please\\s+|kindly\\s+)?(?:now\\s+)?';
+const TASK_CONTINUATION = [
+  // Existing direct-artifact rule, now also preserving attached in-world
+  // attribution and inspecting every instruction rather than only the first.
+  new RegExp(`${WRITER_TASK_EDGE}(?:stop|end|finish|continue|resume|construct|generate|write)`
+    + `\\s+(?:(?:this|the(?:\\s+next)?|another|next)\\s+)?${WRITING_ARTIFACT}\\b`, 'i'),
+  new RegExp(`${WRITER_TASK_EDGE}(?:(?:proceed|go\\s+ahead)[, \\t]*\\s+(?:(?:and|to|with)\\s+)?)?`
+    + `(?:write|writing|generate|generating|produce|provide|compose|add)\\s+(?:(?:some|a\\s+little)\\s+)?`
+    + `(?:more|additional|further|the\\s+next)\\s+(?:(?:of|to)\\s+)?(?:(?:the|this|your)\\s+)?${WRITER_TASK_OBJECT}\\b`, 'i'),
+  new RegExp(`${WRITER_TASK_EDGE}(?:continue|resume|carry\\s+on(?:\\s+with)?|pick\\s+up)`
+    + `\\s+(?:writing\\s+)?(?:(?:the|this|your)\\s+)?${WRITER_TASK_OBJECT}\\b`, 'i'),
+  new RegExp(`${WRITER_TASK_EDGE}(?:continue|resume|pick\\s+up)\\s+(?:writing\\s+)?from\\s+`
+    + `(?:where|the\\s+point\\s+(?:at\\s+)?which)\\s+(?:we|you|i)\\s+(?:last\\s+)?`
+    + `(?:stopped|paused|left\\s+off|broke\\s+off)\\s+(?:writing\\s+)?(?:in\\s+)?`
+    + `(?:(?:the|this|your|our)\\s+)?${WRITER_TASK_OBJECT}\\b`, 'i'),
+  new RegExp(`${WRITER_TASK_EDGE}(?:continue|resume|pick\\s+up)\\s+writing\\s+from\\s+`
+    + `(?:where|the\\s+point\\s+(?:at\\s+)?which)\\s+(?:we|you|i)\\s+(?:last\\s+)?(?:stopped|paused|left\\s+off|broke\\s+off)\\b`, 'i'),
+];
+
+function reportedTaskInstruction(text, match) {
+  // Only attribution attached to this instruction counts. An unrelated earlier
+  // mention of Bill must not excuse a later assistant/task sentence. This is a
+  // bounded syntax distinction, not an assertion that the dialogue is grounded.
+  const before = text.slice(Math.max(0, match.index - 140), match.index);
+  const after = text.slice(match.index + match[0].length, match.index + match[0].length + 140);
+  const reporter = '(?:[a-z]+|(?:mr|miss)\\s+[a-z]+)';
+  const reporting = '(?:said|says|told\\s+me|asked\\s+me|wrote|read\\s+out)';
+  return new RegExp(`\\b${reporter}\\s+${reporting}\\s*[:,]?[ \\t]*["']?[ \\t]*$`, 'i').test(before)
+    || new RegExp(`^[^.!?\\n]{0,70}?(?:[,;][ \\t]*["']?[ \\t]*|[.!?]?["'][ \\t]*,?[ \\t]*)`
+      + `${reporter}\\s+${reporting}\\b`, 'i').test(after);
+}
+
 function assistantFrameMatches(s) {
   const text = s || '';
   const matches = [];
@@ -331,6 +365,14 @@ function assistantFrameMatches(s) {
     re.lastIndex = 0;
     const match = re.exec(text);
     if (match) matches.push({ index: match.index, text: match[0] });
+  }
+  for (const pattern of TASK_CONTINUATION) {
+    // Scan past a legitimate reported instruction: it must not hide a separate
+    // unreported task instruction later in the same candidate/context.
+    const re = new RegExp(pattern.source, 'gi');
+    for (const match of text.matchAll(re)) {
+      if (!reportedTaskInstruction(text, match)) matches.push({ index: match.index, text: match[0] });
+    }
   }
   return matches.sort((a, b) => a.index - b.index);
 }
@@ -397,6 +439,9 @@ function unfinishedPipeEllipsisHits(text) {
 // spelling of the leaked sequence. An ordinary bracket, pipe or > by itself
 // remains valid prose.
 const PROMPT_CONTROL_LEAKS = [
+  // Bare closing-tag opener at a line/output end: existing tag handling needs
+  // a tag name or closing '>', so it cannot recognise this truncated shape.
+  /<\/[ \t]*(?=\r?$)/gm,
   /\|?\[[ \t]*(?:cy(?:['\u2019]?s)?|inmate(?:['\u2019]?s)?)\s+(?:thoughts?|journal|writing)\s*(?:\]|\))?(?:[ \t]*\|[()\[\]<>|]*)?/gi,
   /\|[ \t]*(?:cy(?:['\u2019]?s)?|inmate(?:['\u2019]?s)?)\s+(?:thoughts?|journal|writing)\s*\|[()\[\]<>|]*/gi,
   /<\/?(?:SHARED_CONTEXT|SYSTEM|PRIVATE_CURRENT_FACTS|AUTOBIOGRAPHICAL_MEMORY|GROUNDED_SOMA|CURRENT_CONTEXT)\b[^>\n]*>/gi,
