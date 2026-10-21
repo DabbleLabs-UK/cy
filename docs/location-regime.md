@@ -28,6 +28,11 @@ events are unavailable. Structured yard contact may update the existing factual
 social-contact ledger. Quiet exercise is also a valid outcome and does not create
 social contact.
 
+The unreleased episode-bound delayed exercise admission feature is documented
+in [exercise-admission.md](exercise-admission.md). Its daily decision precedes
+movement and persists on the existing exercise record; it does not add NPC
+presence or expose anything to AWG.
+
 ## Cell-search episodes
 
 A search is one persistent episode with factual stages:

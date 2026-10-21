@@ -5,6 +5,7 @@
 
 import { EXERCISE_REGIME } from './environment.js';
 import { isCurrentMessageObject } from './message-object-lifecycle.js';
+import { exerciseAdmissionAllows } from './exercise-admission.js';
 
 export const LOCATION_REGIME_SCHEMA = 'cy.location-regime';
 export const LOCATION_REGIME_VERSION = 1;
@@ -116,7 +117,9 @@ export function nextRegimeTransition(minutes) {
 }
 
 function initialLocation(nowMs, date, minutes, asleep) {
-  const yard = !asleep && isExerciseMinutes(minutes);
+  // A clock window alone cannot establish attendance. The first world tick
+  // decides admission before movement, including fresh/recovered checkpoints.
+  const yard = false;
   const state = {
     schema: LOCATION_REGIME_SCHEMA,
     version: LOCATION_REGIME_VERSION,
@@ -254,6 +257,21 @@ function setLocation(state, to, event, provenance) {
   state.lastTransitionAt = event.occurredAt;
 }
 
+function beginExerciseAttendance(state, date, at) {
+  const episodeId = `exercise:${date}`;
+  const prior = state.exerciseEpisodes.find((item) => item.id === episodeId);
+  const episode = {
+    id: episodeId, type: 'DAILY_EXERCISE', date, status: 'ACTIVE',
+    started_at: prior?.started_at || at, ended_at: null,
+    event_ids: prior?.event_ids || [], interaction_count: prior?.interaction_count || 0,
+    last_observation_at: at,
+  };
+  state.activeRegimeEpisode = clone(episode);
+  state.activeExerciseEpisode = clone(episode);
+  if (prior) Object.assign(prior, clone(episode));
+  else state.exerciseEpisodes = [...state.exerciseEpisodes, clone(episode)].slice(-14);
+}
+
 export function reconcileRegimeLocation(stateValue, {
   nowMs = Date.now(),
   date = new Date(nowMs).toISOString().slice(0, 10),
@@ -300,7 +318,9 @@ export function reconcileRegimeLocation(stateValue, {
     events.push(recovered);
     setLocation(state, LOCATIONS.CELL, recovered, 'DETERMINISTIC_RESTART_RECOVERY');
   }
-  const shouldBeYard = !asleep && !lockdownActive && isExerciseMinutes(minutes);
+  const shouldBeYard = !asleep && !lockdownActive
+    && (state.searchEpisode?.status !== 'ACTIVE' || state.current.id === LOCATIONS.EXERCISE_YARD)
+    && exerciseAdmissionAllows(state, date, nowMs) && isExerciseMinutes(minutes);
   const isYard = state.current.id === LOCATIONS.EXERCISE_YARD;
   const isTransit = state.current.id === LOCATIONS.WING_OR_LANDING;
   if (isTransit) {
@@ -316,36 +336,30 @@ export function reconcileRegimeLocation(stateValue, {
       from: LOCATIONS.WING_OR_LANDING,
       to: shouldBeYard ? LOCATIONS.EXERCISE_YARD : LOCATIONS.CELL,
       summary: shouldBeYard
-        ? 'The recorded escort resumed with Cy on the exercise yard'
-        : 'The recorded escort resumed with Cy back in his cell',
+        ? 'Cy reached the exercise yard after the observation gap'
+        : 'Cy was back in his cell after the observation gap',
       provenance: 'DETERMINISTIC_RESTART_RECOVERY',
       occurredAt: at,
     });
     events.push(recovered);
     setLocation(state, shouldBeYard ? LOCATIONS.EXERCISE_YARD : LOCATIONS.CELL,
       recovered, 'DETERMINISTIC_RESTART_RECOVERY');
+    if (shouldBeYard) beginExerciseAttendance(state, date, at);
   }
   if (shouldBeYard && !isYard && !isTransit) {
     const episodeId = `exercise:${date}`;
     const first = movementEvent({
       episodeId, from: state.current.id, to: LOCATIONS.WING_OR_LANDING,
-      summary: 'Cy was unlocked and escorted along the landing for exercise', provenance, occurredAt: at,
+      summary: 'Cy left the cell for exercise', provenance, occurredAt: at,
     });
     events.push(first);
     const second = movementEvent({
       episodeId, from: LOCATIONS.WING_OR_LANDING, to: LOCATIONS.EXERCISE_YARD,
-      summary: 'Cy was taken onto the exercise yard', provenance, occurredAt: at,
+      summary: 'Cy entered the exercise yard', provenance, occurredAt: at,
     });
     events.push(second);
     setLocation(state, LOCATIONS.EXERCISE_YARD, second, provenance);
-    const episode = {
-      id: episodeId, type: 'DAILY_EXERCISE', date, status: 'ACTIVE',
-      started_at: at, ended_at: null, event_ids: [], interaction_count: 0,
-      last_observation_at: at,
-    };
-    state.activeRegimeEpisode = clone(episode);
-    state.activeExerciseEpisode = clone(episode);
-    state.exerciseEpisodes = [...state.exerciseEpisodes, clone(episode)].slice(-14);
+    beginExerciseAttendance(state, date, at);
   } else if (!shouldBeYard && isYard && !isTransit) {
     const episodeId = state.activeExerciseEpisode && state.activeExerciseEpisode.id || `exercise:${date}`;
     const first = movementEvent({
@@ -373,6 +387,11 @@ export function reconcileRegimeLocation(stateValue, {
     state.activeRegimeEpisode = null;
   } else {
     state.current.regime_activity = lockdownActive ? 'LOCKDOWN' : currentRegimeActivity(minutes, { asleep });
+  }
+  if (!exerciseAdmissionAllows(state, date, nowMs) && isExerciseMinutes(minutes)
+    && state.current.id === LOCATIONS.CELL && !lockdownActive
+    && state.searchEpisode?.status !== 'ACTIVE') {
+    state.current.regime_activity = 'EXERCISE_ADMISSION_HELD';
   }
   if (lockdownActive) state.current.regime_activity = 'LOCKDOWN';
   return { state, events, completedRoutineEpisode, nextTransition: nextRegimeTransition(minutes) };
@@ -727,13 +746,15 @@ export function advanceLockdownEpisode(stateValue, { nowMs = Date.now() } = {}) 
 }
 
 export function registerEpisodeEvent(stateValue, eventId, {
-  locationSource = false, routineEpisodeId = null,
+  locationSource = false, routineEpisodeId = null, exerciseEpisodeId = null,
 } = {}) {
   const state = clone(stateValue);
   const id = clean(eventId);
   if (!id) return state;
-  if (state.activeExerciseEpisode) state.activeExerciseEpisode.event_ids.push(id);
-  if (state.activeRegimeEpisode) state.activeRegimeEpisode.event_ids.push(id);
+  if (state.activeExerciseEpisode && (!exerciseEpisodeId || state.activeExerciseEpisode.id === exerciseEpisodeId)
+    && !state.activeExerciseEpisode.event_ids.includes(id)) state.activeExerciseEpisode.event_ids.push(id);
+  if (state.activeRegimeEpisode && (!exerciseEpisodeId || state.activeRegimeEpisode.id === exerciseEpisodeId)
+    && !state.activeRegimeEpisode.event_ids.includes(id)) state.activeRegimeEpisode.event_ids.push(id);
   if (state.activeRoutineEpisode && !state.activeRoutineEpisode.event_ids.includes(id)) {
     state.activeRoutineEpisode.event_ids.push(id);
   }
@@ -742,6 +763,9 @@ export function registerEpisodeEvent(stateValue, eventId, {
   const stored = state.activeExerciseEpisode
     && state.exerciseEpisodes.find((item) => item.id === state.activeExerciseEpisode.id);
   if (stored) Object.assign(stored, clone(state.activeExerciseEpisode));
+  const admissionEpisode = exerciseEpisodeId
+    && state.exerciseEpisodes.find((item) => item.id === exerciseEpisodeId);
+  if (admissionEpisode && !admissionEpisode.event_ids.includes(id)) admissionEpisode.event_ids.push(id);
   const storedRoutine = state.routineEpisodes?.find((item) =>
     item.id === (routineEpisodeId || state.activeRoutineEpisode?.id));
   if (storedRoutine && state.activeRoutineEpisode?.id === storedRoutine.id) {

@@ -188,6 +188,7 @@ import {
 } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseRoutineOutcome, materialiseScheduledEvent } from './environment.js';
+import { acknowledgeExerciseDeliveries, persistExerciseDeliveries, prepareExerciseAdmission, reconcileExerciseAfterCheckpoint, stageExerciseDelivery } from './exercise-admission.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import {
   EXERCISE_REGIME,
@@ -487,7 +488,8 @@ function regimeDirective(mins) {
 // when the day crosses that boundary.
 const DEVIATIONS = {
   unlock_slop: { chance: 0.22, sub: 'late_unlock', event: 'delayed_unlock' },
-  exercise_yard: { chance: 0.22, sub: 'late_unlock', event: 'delayed_unlock' },
+  // Exercise deviation is now decided in the persisted admission episode,
+  // before location reconciliation. No independently invented delay incident.
   work_assoc: { chance: 0.15, sub: 'assoc_cancelled', event: 'assoc_cancelled' },
 };
 
@@ -643,8 +645,13 @@ async function main() {
   // use the immediate atomic path, preserving the pre-existing worst-case event
   // exposure while avoiding full-state writes for every telemetry tick.
   let urgentVitalsDirty = false;
+  let exerciseCheckpointPending = false;
+  let firstExerciseTick = true;
+  const exerciseEnqueued = new Set();
   client.onDelivered = (events) => {
     if (acknowledgeDayRollovers(vitals, events)) urgentVitalsDirty = true;
+    if (acknowledgeExerciseDeliveries(vitals.locationRegime, events)) urgentVitalsDirty = true;
+    for (const event of events) exerciseEnqueued.delete(event.delivery_id);
     if (worldMirrorReady && compactAcknowledgedRetiredObjects(vitals.worldSimulation, events)) {
       urgentVitalsDirty = true;
     }
@@ -677,6 +684,12 @@ async function main() {
     minutes: locationClock.mins,
     asleep: effectiveAsleep(locationClock.mins),
   });
+  // A prior committed outbox may have lost its HTTP acknowledgement. Reuse
+  // the same delivery IDs; existing server receipts prevent duplicate history.
+  for (const event of vitals.locationRegime.pendingExerciseEvents || []) {
+    client.enqueueExerciseEpisodeEvent(event);
+    exerciseEnqueued.add(event.delivery_id);
+  }
   let autobiographicalMemory = null;
   let pendingMemoryQuery = null;
   let memoryFormationTurns = 0;
@@ -1014,9 +1027,11 @@ async function main() {
     provisionalConsumer = true,
     cyObserved = true,
     dreamEligible = true,
+    exerciseEpisodeId = null,
+    occurredAt = null,
   } = {}) {
     const eventId = `env-${randomUUID()}`;
-    const eventTimestamp = tsNow();
+    const eventTimestamp = occurredAt ? tsNow(new Date(occurredAt)) : tsNow();
     const suppliedOpportunity = world.action_opportunity && typeof world.action_opportunity === 'object'
       ? world.action_opportunity : null;
     const suppliedSocial = world.social && typeof world.social === 'object' ? world.social : null;
@@ -1106,7 +1121,8 @@ async function main() {
     if (cyObserved) {
       Object.assign(record, observeEnvironmentRecord(soma, record));
     }
-    emit({ kind: 'world_event_record', payload: record });
+    if (exerciseEpisodeId) queueExerciseEvent({ kind: 'world_event_record', ts: eventTimestamp, payload: record });
+    else emit({ kind: 'world_event_record', payload: record });
     recentWorldHistory.push({
       id: event.id,
       timestamp: event.timestamp,
@@ -1160,6 +1176,8 @@ async function main() {
     archetypeId = 'ambient_world_event', locationSource = false,
   } = {}) {
     if (!event) return null;
+    const exerciseEpisodeId = event.world?.exercise_admission?.episode_id
+      || (event.world?.movement?.episode_id?.startsWith('exercise:') ? event.world.movement.episode_id : null);
     const record = captureEnvironmentEvent(archetypeId, {
       eventType: event.eventType,
       summary: event.summary,
@@ -1168,10 +1186,13 @@ async function main() {
       provisionalConsumer: false,
       cyObserved: event.cyObserved !== false,
       dreamEligible: event.cyObserved !== false,
+      exerciseEpisodeId,
+      occurredAt: event.occurredAt,
     });
     vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, record.world_event.id, {
       locationSource,
       routineEpisodeId: event.world?.movement?.episode_id || null,
+      exerciseEpisodeId,
     });
     // A world episode transition must survive a runner restart at its actual
     // stage, not wait for the ordinary checkpoint interval.
@@ -1191,14 +1212,35 @@ async function main() {
 
   function publishEpisodeEvent(event, record) {
     if (!event || event.cyObserved === false) return;
-    emit({
+    const exerciseEpisodeId = event.world?.exercise_admission?.episode_id
+      || (event.world?.movement?.episode_id?.startsWith('exercise:') ? event.world.movement.episode_id : null);
+    const publication = {
       kind: 'event',
+      ts: event.occurredAt ? tsNow(new Date(event.occurredAt)) : tsNow(),
       payload: {
         name: event.eventType,
         text: event.summary,
         environment_event_id: record && record.world_event.id,
+        ...(exerciseEpisodeId ? { exercise_episode_id: exerciseEpisodeId } : {}),
       },
-    });
+    };
+    if (exerciseEpisodeId) queueExerciseEvent(publication);
+    else emit(publication);
+  }
+
+  function queueExerciseEvent(event) {
+    stageExerciseDelivery(vitals.locationRegime, { ...event, delivery_id: randomUUID() });
+    exerciseCheckpointPending = true;
+  }
+
+  async function checkpointExerciseEvents() {
+    if (!exerciseCheckpointPending) return;
+    // Failure stops this scheduler pass. No movement/publication can overtake
+    // an uncommitted admission decision; the next pass retries the same state.
+    await persistExerciseDeliveries(vitals.locationRegime,
+      () => saveVitals(vitalsPath, vitals),
+      (event) => client.enqueueExerciseEpisodeEvent(event), exerciseEnqueued);
+    exerciseCheckpointPending = false;
   }
 
   function processLocationRegime(now, date, mins, asleep) {
@@ -4388,7 +4430,13 @@ async function main() {
   }
 
   // ---- deterministic environment scheduler (runs each vitals tick) ----
+  let worldSchedulerInFlight = false;
   async function scheduler(now) {
+    // A checkpoint barrier may outlast a tick. Do not let another scheduler
+    // pass advance the same admission while its decision/history is committing.
+    if (worldSchedulerInFlight) return;
+    worldSchedulerInFlight = true;
+    try {
     const { date, mins } = londonParts(new Date(now));
 
     // An opportunity opened during the previous world tick resolves before any
@@ -4414,7 +4462,40 @@ async function main() {
     }
 
     const asleep = effectiveAsleep(mins);
-    processLocationRegime(now, date, mins, asleep);
+    await checkpointExerciseEvents();
+    // An older pending delivery/day checkpoint may itself have consumed the
+    // exercise boundary. Never create a new admission from the old tick clock.
+    const admissionNow = Date.now();
+    const admissionClock = londonParts(new Date(admissionNow));
+    const admissionAsleep = effectiveAsleep(admissionClock.mins);
+    const admission = prepareExerciseAdmission(vitals.locationRegime, {
+      nowMs: admissionNow, date: admissionClock.date, minutes: admissionClock.mins,
+      asleep: admissionAsleep, restart: firstExerciseTick,
+    });
+    vitals.locationRegime = admission.state;
+    if (admission.changed) exerciseCheckpointPending = true;
+    for (const event of admission.events) {
+      const record = captureEpisodeEvent(event);
+      publishEpisodeEvent(event, record);
+    }
+    const exerciseRelevant = Boolean(vitals.locationRegime.activeExerciseEpisode)
+      || (admissionClock.mins >= EXERCISE_REGIME.startMinutes && admissionClock.mins < EXERCISE_REGIME.endMinutes)
+      || (mins >= EXERCISE_REGIME.startMinutes && mins < EXERCISE_REGIME.endMinutes);
+    const movementClock = exerciseRelevant ? admissionClock : { date, mins };
+    const movementAsleep = exerciseRelevant ? admissionAsleep : asleep;
+    const movement = await reconcileExerciseAfterCheckpoint({
+      preparedAtMs: exerciseRelevant ? admissionNow : now, preparedAsleep: movementAsleep,
+      checkpoint: checkpointExerciseEvents,
+      exerciseRelevant,
+      readAsleep: (time) => effectiveAsleep(londonParts(new Date(time)).mins),
+      reconcile: (movementNow) => processLocationRegime(movementNow, movementClock.date, movementClock.mins, movementAsleep),
+    });
+    firstExerciseTick = false;
+    if (movement.deferred) {
+      console.warn(`[cy] exercise movement deferred: ${movement.reason}`);
+      return;
+    }
+    await checkpointExerciseEvents();
     advanceCellSearch(now);
     // Checked every tick regardless of location, like advanceCellSearch above,
     // so an already-scheduled release fires on time even while Cy is at yard.
@@ -4480,6 +4561,9 @@ async function main() {
     if (now - (vitals.lastMailMs || now) > 24 * 3600 * 1000 && now - (vitals.noMailFiredMs || 0) > 24 * 3600 * 1000) {
       fireEvent('no_mail_24h');
       vitals.noMailFiredMs = now;
+    }
+    } finally {
+      worldSchedulerInFlight = false;
     }
   }
 

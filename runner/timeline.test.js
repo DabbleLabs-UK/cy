@@ -55,6 +55,9 @@ assert.equal(ambientEventLabel({ name: 'cell_search' }), 'the cell is searched')
 assert.equal(ambientEventLabel({ name: 'location_transition', text: 'Cy was taken onto the exercise yard' }), 'Cy was taken onto the exercise yard');
 assert.equal(ambientEventLabel({ name: 'yard_quiet' }), 'a quiet turn around the exercise yard');
 assert.equal(ambientEventLabel({ name: 'cell_search_property_result' }), 'the cell search produced a result');
+assert.equal(ambientEventLabel({ name: 'exercise_admission_withheld' }), 'exercise admission was withheld');
+assert.equal(ambientEventLabel({ name: 'exercise_admission_missed' }), 'the exercise window ended without a recorded yard visit');
+assert.equal(ambientEventLabel({ name: 'exercise_admission_withheld', text: 'Admission was withheld now' }), 'Admission was withheld now');
 assert.equal(ambientEventLabel({ name: 'provider', to: 'deepseek' }), '');
 assert.equal(scheduledRoutineLabel({ name: 'breakfast_eaten', meal: 'breakfast', outcome: 'eaten' }),
   'breakfast came and Cy ate it');
