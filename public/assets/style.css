@@ -665,7 +665,11 @@ body.cy-paused::after {
 .cy-chronology-step-detail { display: block; margin-top: 3px; color: #8fa1ad; white-space: pre-wrap; }
 @media (max-width: 520px) {
   .cy-flow > .cy-chronology-group { margin-inline: 12px; }
-  .cy-chronology-group-head { flex-wrap: wrap; gap: 4px 8px; }
+  /* Give the range its own row: non-shrinking ages must not squeeze the
+     description into a letter-wide column on phones. Wider flex layout stays. */
+  .cy-chronology-group-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 8px; }
+  .cy-chronology-group-head::before { grid-row: 1 / span 2; }
+  .cy-chronology-group-time { grid-column: 2 / -1; min-width: 0; overflow-wrap: anywhere; }
   .cy-chronology-group-cue { margin-left: auto; }
   .cy-chronology-step { gap: 6px; }
 }
