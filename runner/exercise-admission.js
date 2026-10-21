@@ -144,6 +144,27 @@ export async function persistExerciseDeliveries(state, checkpoint, enqueue, enqu
   }
 }
 
+// A persisted decision is necessary, but its tick-start clock can become stale
+// while disk IO is awaited. Defer to the next ordinary tick if its minute/day
+// or effective sleep regime changed. Do not backdate movement or recompute a
+// release target merely to make an old scheduler pass fit the new clock.
+export async function reconcileExerciseAfterCheckpoint({
+  preparedAtMs, preparedAsleep, checkpoint, readNow = Date.now, readAsleep, reconcile,
+  exerciseRelevant = true,
+}) {
+  await checkpoint();
+  if (!exerciseRelevant) return { deferred: false, result: reconcile(preparedAtMs) };
+  const nowMs = readNow();
+  if (!Number.isFinite(nowMs) || nowMs < preparedAtMs
+    || Math.floor(nowMs / 60_000) !== Math.floor(preparedAtMs / 60_000)) {
+    return { deferred: true, reason: 'EXERCISE_CLOCK_CHANGED' };
+  }
+  if (readAsleep(nowMs) !== preparedAsleep) {
+    return { deferred: true, reason: 'EXERCISE_SLEEP_REGIME_CHANGED' };
+  }
+  return { deferred: false, result: reconcile(nowMs) };
+}
+
 export function acknowledgeExerciseDeliveries(state, events) {
   const delivered = new Set(events.map((event) => event.delivery_id));
   const pending = state?.pendingExerciseEvents || [];

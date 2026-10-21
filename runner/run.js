@@ -188,7 +188,7 @@ import {
 } from './tempo.js';
 import { recordCompletedSilence } from './silence.js';
 import { PRISON_SCHEDULE, mealExpectation, materialiseRoutineOutcome, materialiseScheduledEvent } from './environment.js';
-import { acknowledgeExerciseDeliveries, persistExerciseDeliveries, prepareExerciseAdmission, stageExerciseDelivery } from './exercise-admission.js';
+import { acknowledgeExerciseDeliveries, persistExerciseDeliveries, prepareExerciseAdmission, reconcileExerciseAfterCheckpoint, stageExerciseDelivery } from './exercise-admission.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import {
   EXERCISE_REGIME,
@@ -4463,8 +4463,14 @@ async function main() {
 
     const asleep = effectiveAsleep(mins);
     await checkpointExerciseEvents();
+    // An older pending delivery/day checkpoint may itself have consumed the
+    // exercise boundary. Never create a new admission from the old tick clock.
+    const admissionNow = Date.now();
+    const admissionClock = londonParts(new Date(admissionNow));
+    const admissionAsleep = effectiveAsleep(admissionClock.mins);
     const admission = prepareExerciseAdmission(vitals.locationRegime, {
-      nowMs: now, date, minutes: mins, asleep, restart: firstExerciseTick,
+      nowMs: admissionNow, date: admissionClock.date, minutes: admissionClock.mins,
+      asleep: admissionAsleep, restart: firstExerciseTick,
     });
     vitals.locationRegime = admission.state;
     if (admission.changed) exerciseCheckpointPending = true;
@@ -4472,9 +4478,23 @@ async function main() {
       const record = captureEpisodeEvent(event);
       publishEpisodeEvent(event, record);
     }
-    await checkpointExerciseEvents();
+    const exerciseRelevant = Boolean(vitals.locationRegime.activeExerciseEpisode)
+      || (admissionClock.mins >= EXERCISE_REGIME.startMinutes && admissionClock.mins < EXERCISE_REGIME.endMinutes)
+      || (mins >= EXERCISE_REGIME.startMinutes && mins < EXERCISE_REGIME.endMinutes);
+    const movementClock = exerciseRelevant ? admissionClock : { date, mins };
+    const movementAsleep = exerciseRelevant ? admissionAsleep : asleep;
+    const movement = await reconcileExerciseAfterCheckpoint({
+      preparedAtMs: exerciseRelevant ? admissionNow : now, preparedAsleep: movementAsleep,
+      checkpoint: checkpointExerciseEvents,
+      exerciseRelevant,
+      readAsleep: (time) => effectiveAsleep(londonParts(new Date(time)).mins),
+      reconcile: (movementNow) => processLocationRegime(movementNow, movementClock.date, movementClock.mins, movementAsleep),
+    });
     firstExerciseTick = false;
-    processLocationRegime(now, date, mins, asleep);
+    if (movement.deferred) {
+      console.warn(`[cy] exercise movement deferred: ${movement.reason}`);
+      return;
+    }
     await checkpointExerciseEvents();
     advanceCellSearch(now);
     // Checked every tick regardless of location, like advanceCellSearch above,

@@ -87,6 +87,17 @@ Delivery acknowledgement removes pending entries and requests an urgent save.
 Events remain pending while the server is unreachable rather than being dropped.
 Scheduler passes are single-flight across checkpoint waits.
 
+Location reconciliation for exercise also rechecks the wall clock and effective
+sleep regime AFTER the decision checkpoint. A changed minute/day, backward or
+invalid clock, or changed sleep regime defers movement to the next ordinary tick
+without rerolling or extending the target. Otherwise movement uses the fresh
+post-checkpoint time. This prevents a pass begun before 15:15 from admitting Cy
+after closing while backdating attendance to the tick-start time. Non-exercise
+routine reconciliation keeps its original path. Deferral reasons are content-free
+operational diagnostics, not inference requests or new admission decisions.
+Admission preparation also samples a fresh clock after flushing an older pending
+checkpoint, so that save cannot cause a backdated hold to be created after close.
+
 Restart preserves decisions and targets. If the target expired during downtime,
 permission is recorded only at resumption; movement starts only then, if possible.
 If the window has ended, no yard visit is synthesized. A completely unobserved
@@ -108,6 +119,24 @@ temporary-directory atomic renames failed in both the new and pre-existing
 persistence test; rerunning with TEMP/TMP inside the writable workspace passed.
 Syntax checks, manifest JSON parsing and `git diff --check` passed. No live
 runner, browser, inference or production-state test was performed.
+
+## Adversarial review gate
+
+The review of candidate a9c52d6 found a material stale-clock defect. A synthetic
+pass prepared at 15:14:59 BST, whose checkpoint completed at 15:15:02, still used
+15:14:59 for location reconciliation and recorded an invalid late yard entry.
+An effective sleep override changing during the save could likewise be missed.
+The post-checkpoint guard above closes that asynchronous boundary. Eight new
+deterministic regressions cover closing-time crossing, fresh attendance time,
+sleep override, current restriction checking, invalid/backward clock, failed
+checkpoint, unchanged non-exercise reconciliation and fresh decision time after
+an older pending save. Focused checks: 63/63.
+The corrected final tree also passed 563/563 full runner tests with no failures,
+skips or cancellations, plus syntax, manifest JSON and whitespace checks.
+No real clock, world state, exercise event or inference was manipulated.
+
+Review disposition: correction required; remain on the feature branch. No merge,
+deployment, runner restart or natural-evidence cutoff is authorized by this review.
 
 Remaining limits: this does not model locks, staff or actual escort routes;
 permission is not a promise that another restriction will clear. A downtime gap

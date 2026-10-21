@@ -1,5 +1,6 @@
 {
   "_comment": "Source of truth for Cy data handling. Update this whenever collection, storage, transmission, retention, or deletion changes. Policy wording requires human approval before release.",
+  "_exercise_admission_checkpoint_guard": "The exercise movement boundary records only a content-free clock-change or sleep-regime-change deferral reason in existing runner operational logs. No prompt, visitor data, new store or provider call is added; decisions and delivery identities remain on the existing exercise checkpoint path.",
   "_journal_prompt_representation": "Journal prompts quote the existing bounded prior prose as prior subjective thought and serialize privacy-filtered world evidence, fallible recollections, beliefs and estimates as distinct source records. Writing directions are separate instruction records; fixed voice guidance contains style features rather than invented Cy-life example sentences. No additional data source, memory store, retention, recipient or inference call is introduced.",
   "product": "Cy",
   "service": "cy.dabblelabs.uk",

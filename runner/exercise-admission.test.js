@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   EXERCISE_DELAY_MINUTES, acknowledgeExerciseDeliveries, exerciseAdmissionAllows,
-  persistExerciseDeliveries, prepareExerciseAdmission, stageExerciseDelivery,
+  persistExerciseDeliveries, prepareExerciseAdmission, reconcileExerciseAfterCheckpoint, stageExerciseDelivery,
 } from './exercise-admission.js';
 import {
   LOCATIONS, reconcileLocationRegimeState, reconcileRegimeLocation, registerEpisodeEvent,
@@ -299,8 +299,15 @@ test('runner wiring commits admission before movement and exercise history befor
   const runner = await readFile(new URL('./run.js', import.meta.url), 'utf8');
   const scheduler = runner.slice(runner.indexOf('async function scheduler(now)'), runner.indexOf('// ---- vitals tick every tickMs'));
   const select = scheduler.indexOf('prepareExerciseAdmission(');
-  const commit = scheduler.indexOf('await checkpointExerciseEvents();', select);
-  assert.ok(select >= 0 && commit > select && commit < scheduler.indexOf('processLocationRegime(now'));
+  const barrierCall = scheduler.indexOf('await reconcileExerciseAfterCheckpoint(', select);
+  assert.ok(select >= 0 && barrierCall > select && barrierCall < scheduler.indexOf('processLocationRegime(movementNow'));
+  const refreshed = scheduler.indexOf('const admissionNow = Date.now()');
+  assert.ok(refreshed > scheduler.indexOf('await checkpointExerciseEvents();') && refreshed < select);
+  assert.match(scheduler, /nowMs: admissionNow, date: admissionClock.date, minutes: admissionClock.mins/);
+  assert.match(scheduler, /checkpoint: checkpointExerciseEvents/);
+  assert.match(scheduler, /readAsleep: \(time\) => effectiveAsleep\(londonParts\(new Date\(time\)\).mins\)/);
+  assert.match(scheduler, /reconcile: \(movementNow\) => processLocationRegime\(movementNow, movementClock.date, movementClock.mins, movementAsleep\)/);
+  assert.ok(scheduler.indexOf('if (movement.deferred)') < scheduler.indexOf('advanceCellSearch(now)'));
   const barrier = runner.slice(runner.indexOf('async function checkpointExerciseEvents()'), runner.indexOf('function processLocationRegime('));
   assert.match(barrier, /await persistExerciseDeliveries\(vitals.locationRegime,[\s\S]*saveVitals\(vitalsPath, vitals\)/);
   const deviations = runner.slice(runner.indexOf('const DEVIATIONS ='), runner.indexOf('// did we cross'));
@@ -332,4 +339,118 @@ test('failed checkpoint sends nothing; recovery and lost acknowledgements reuse 
   assert.equal(sent.length, 2);
   assert.equal(new Set(sent.map((entry) => entry.delivery_id)).size, 1,
     'the existing transactional ingest receipt sees one logical publication');
+});
+
+test('a checkpoint crossing 15:15 cannot admit or backdate an exercise visit', async () => {
+  let state = tick(cell(), 0, { rnd: randomDelay(15) }).state;
+  const preparedAtMs = END - 1000; // 15:14:59 BST
+  state = prepareExerciseAdmission(state, at(59 + 59 / 60, { rnd: neverRoll })).state;
+  let nowMs = preparedAtMs;
+  let reconciliations = 0;
+  const target = episode(state).admission.release_target_at;
+  const result = await reconcileExerciseAfterCheckpoint({
+    preparedAtMs, preparedAsleep: false,
+    checkpoint: async () => { nowMs = END + 2000; },
+    readNow: () => nowMs, readAsleep: () => false,
+    reconcile: (time) => {
+      reconciliations++;
+      state = reconcileRegimeLocation(state, { nowMs: time, date: DATE, minutes: 914 }).state;
+    },
+  });
+  assert.deepEqual(result, { deferred: true, reason: 'EXERCISE_CLOCK_CHANGED' });
+  assert.equal(reconciliations, 0);
+  assert.equal(state.current.id, LOCATIONS.CELL);
+  assert.equal(episode(state).started_at, null);
+  assert.equal(episode(state).admission.release_target_at, target);
+  const expired = tick(state, 60 + 5 / 60, { rnd: neverRoll });
+  assert.equal(episode(expired.state).status, 'MISSED');
+  assert.equal(episode(expired.state).started_at, null);
+  assert.deepEqual(expired.events.map((event) => event.eventType), ['exercise_admission_missed']);
+  assert.equal(tick(expired.state, 61, { rnd: neverRoll }).events.length, 0);
+});
+
+test('same-minute checkpoint completion timestamps attendance at actual movement, not tick start', async () => {
+  const preparedAtMs = START + 15 * 60_000;
+  let state = tick(cell(), 0, { rnd: randomDelay(15) }).state;
+  state = prepareExerciseAdmission(state, at(15, { rnd: neverRoll })).state;
+  const result = await reconcileExerciseAfterCheckpoint({
+    preparedAtMs, preparedAsleep: false, checkpoint: async () => {},
+    readNow: () => preparedAtMs + 3000, readAsleep: () => false,
+    reconcile: (time) => reconcileRegimeLocation(state, { nowMs: time, date: DATE, minutes: 870 }),
+  });
+  assert.equal(result.deferred, false);
+  assert.equal(result.result.state.current.id, LOCATIONS.EXERCISE_YARD);
+  assert.equal(episode(result.result.state).started_at, new Date(preparedAtMs + 3000).toISOString());
+  assert.ok(result.result.events.every((event) => event.occurredAt === new Date(preparedAtMs + 3000).toISOString()));
+});
+
+test('a wake-to-sleep override during the save prevents exercise movement', async () => {
+  let asleep = false;
+  let called = false;
+  const result = await reconcileExerciseAfterCheckpoint({
+    preparedAtMs: START, preparedAsleep: asleep,
+    checkpoint: async () => { asleep = true; },
+    readNow: () => START + 1000, readAsleep: () => asleep,
+    reconcile: () => { called = true; },
+  });
+  assert.equal(result.reason, 'EXERCISE_SLEEP_REGIME_CHANGED');
+  assert.equal(called, false);
+});
+
+test('restrictions introduced during a checkpoint are still checked by location reconciliation', async () => {
+  let state = tick(cell(), 0, { rnd: randomDelay(15) }).state;
+  state = prepareExerciseAdmission(state, at(15, { rnd: neverRoll })).state;
+  const result = await reconcileExerciseAfterCheckpoint({
+    preparedAtMs: START + 15 * 60_000, preparedAsleep: false,
+    checkpoint: async () => { state = startLockdownEpisode(state, { nowMs: START + 15 * 60_000 }).state; },
+    readNow: () => START + 15 * 60_000 + 1000, readAsleep: () => false,
+    reconcile: (time) => reconcileRegimeLocation(state, { nowMs: time, date: DATE, minutes: 870 }),
+  });
+  assert.equal(result.deferred, false);
+  assert.equal(result.result.state.current.id, LOCATIONS.CELL);
+  assert.equal(episode(result.result.state).started_at, null);
+});
+
+test('clock reversal or invalid wall time fails closed without moving or rerolling', async () => {
+  for (const nowMs of [START - 1000, NaN]) {
+    const result = await reconcileExerciseAfterCheckpoint({
+      preparedAtMs: START, preparedAsleep: false, checkpoint: async () => {},
+      readNow: () => nowMs,
+      readAsleep: () => { throw new Error('must fail before checking sleep'); },
+      reconcile: () => { throw new Error('must not move'); },
+    });
+    assert.equal(result.reason, 'EXERCISE_CLOCK_CHANGED');
+  }
+});
+
+test('failed exercise checkpoint cannot reach clock checking or movement', async () => {
+  await assert.rejects(reconcileExerciseAfterCheckpoint({
+    preparedAtMs: START, preparedAsleep: false,
+    checkpoint: async () => { throw new Error('checkpoint unavailable'); },
+    readNow: () => { throw new Error('must not read'); },
+    reconcile: () => { throw new Error('must not move'); },
+  }), /checkpoint unavailable/);
+});
+
+test('the correction does not change non-exercise routine reconciliation', async () => {
+  const result = await reconcileExerciseAfterCheckpoint({
+    exerciseRelevant: false, preparedAtMs: START - 3600_000, preparedAsleep: false,
+    checkpoint: async () => {}, readNow: () => { throw new Error('unrelated path'); },
+    readAsleep: () => { throw new Error('unrelated path'); },
+    reconcile: (time) => time,
+  });
+  assert.equal(result.deferred, false);
+  assert.equal(result.result, START - 3600_000);
+});
+
+test('an older checkpoint crossing closing cannot create a new backdated hold', async () => {
+  const state = cell();
+  let nowMs = END - 1000;
+  await persistExerciseDeliveries(state, async () => { nowMs = END + 2000; }, () => {});
+  const selected = prepareExerciseAdmission(state, {
+    nowMs, date: DATE, minutes: 915, rnd: neverRoll,
+  });
+  assert.equal(selected.events.length, 0);
+  assert.equal(selected.state.exerciseEpisodes.length, 0);
+  assert.equal(selected.state.current.id, LOCATIONS.CELL);
 });
