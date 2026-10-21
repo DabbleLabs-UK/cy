@@ -5,6 +5,7 @@ require __DIR__ . '/../../lib/db.php';
 require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/visitor.php';
 require __DIR__ . '/../../lib/autobiographical_memory.php';
+require __DIR__ . '/../../lib/postcard_associative_memory.php';
 
 try {
     $db = captive_db();
@@ -300,6 +301,13 @@ try {
                 'duration_ms' => round((microtime(true) - $started) * 1000, 3),
             ],
         ]);
+    }
+
+    if ($action === 'postcard_associations') {
+        $sender = $parseVisitorId($input['visitor_id'] ?? null);
+        $query = is_array($input['query'] ?? null) ? $input['query'] : [];
+        $exclude = array_slice(array_filter($input['exclude_ids'] ?? [], 'is_string'), 0, 4);
+        captive_json_response(['ok' => true] + captive_postcard_associations($db, $query, $sender, $exclude));
     }
 
     if ($action === 'query') {

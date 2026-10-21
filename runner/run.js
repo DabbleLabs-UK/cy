@@ -77,8 +77,9 @@ import { prepareSomaGeneration } from './soma-cycle.js';
 import { PostcardInference, postcardFailureClass, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
 import { MemoryFormationInference } from './memory-formation-inference.js';
 import { canonicalPostcardContext } from './postcard-context.js';
-import { loadPostcardSenderContinuity, loadPostcardEnrichment, postcardSenderMemoryItems,
+import { loadPostcardSenderContinuity, postcardSenderMemoryItems,
   postcardMemoryDirective, postcardMemoryReadiness } from './postcard-memory.js';
+import { loadPostcardAssociativeRecall, associativePromptInspection, postcardAssociativeItem } from './postcard-associative-memory.js';
 import {
   buildExpressiveChoiceRequest,
   selectAvailableExpressiveAction,
@@ -3182,6 +3183,10 @@ async function main() {
     const memories = postcardMemory ? postcardMemory.enrichment.selected : memoryCandidates.length ? memoryCandidates
       : (autobiographicalMemory && autobiographicalMemory.working.selected || []);
     for (const memory of memories) {
+      if (postcardMemory?.enrichment.mechanism === 'INDEXED_ASSOCIATIVE') {
+        add(postcardAssociativeItem(memory));
+        continue;
+      }
       add({
         id: `memory:${memory.id}`, sourceId: `memory:${memory.id}`, section: 'autobiographical_memory',
         provenanceClass: 'SUBJECTIVE MEMORY', knowledgeScope: 'CY_BELIEVES',
@@ -3309,7 +3314,7 @@ async function main() {
   // Legacy relationship, monotony-amplification, attention and heuristic memory
   // state do not enter. The autobiography block has already passed the server
   // privacy filter. Postcards reserve deterministic sender continuity separately
-  // from optional model-mediated surfacing.
+  // from the postcard-only optional indexed associative lane.
   function buildCtx(cognition = null, brokerOptions = {}) {
     genCount++;
     const grounded = cognition && cognition.groundedDirective != null
@@ -3339,6 +3344,9 @@ async function main() {
       fallback: '',
     });
     if (brokered.ok) ctx.sharedContext = brokered.rendering;
+    if (brokerOptions.postcardMemory?.enrichment.mechanism === 'INDEXED_ASSOCIATIVE') {
+      ctx.postcardAssociativePacket = brokered.ok ? brokered.packet : null;
+    }
     if (officerCue && Date.now() < officerCue.until) {
       ctx.officer = officerDirective(officerCue.key, officerCue.ev);
       officerCue = null; // fire once
@@ -3508,20 +3516,10 @@ async function main() {
         console.warn(`[cy] postcard memory enqueue deferred: ${error.message}`);
       });
     }
-    const enrichment = await loadPostcardEnrichment(autobiographicalMemory, {
-      text: postcardText,
-      tags: postcardMemorySource ? postcardMemorySource.tags : ['postcard'],
-      location: 'cell',
-      currentVisitorId: pc.visitor_id || null,
-      senderLabel: pc.from_name || 'the sender',
-      publicSituation: `A postcard has arrived: ${postcardText.slice(0, 600)}`,
-      groundedContext: cognition.groundedDirective,
-      generationRef: `postcard:${pc.id}`,
-      // Retrieval-cue provenance only - see the matching comment at the
-      // ENVIRONMENT_EVENT pendingMemoryQuery assembly above.
-      querySourceType: 'POSTCARD',
-      recentExpressionText: contextText().slice(-640),
-    }, senderContinuity);
+    const enrichment = await loadPostcardAssociativeRecall({
+      client, visitorId: pc.visitor_id || null,
+      text: [pc.body, pc.caption].filter(Boolean).join(' '), sender: senderContinuity,
+    });
     recordReadiness(enrichment);
     const postcardMemory = { sender: senderContinuity, enrichment };
 
@@ -3547,6 +3545,20 @@ async function main() {
     const letterTail = postcardContext.subjective;
     const { system, prompt } = postcardContext;
     const opts = options(vitals, config.threads, 'letter', { num_predict: completionBudget(targetPredict) });
+    const associationUse = associativePromptInspection(enrichment, ctx.postcardAssociativePacket);
+    associationUse.senderKnown = !!pc.visitor_id;
+    // Private content-free source/access evidence. Do not emit this identity
+    // metadata publicly or count a prepared/offered result as an insertion.
+    recordInferenceDiagnostic({ event: 'postcard_associative_recall', timestamp: tsNow(),
+      generation_ref: `postcard-assoc:${pc.id}`, status: enrichment.status,
+      considered_count: enrichment.consideredIds.length, offered_count: associationUse.offeredIds.length,
+      inserted_count: associationUse.insertedIds.length, wait_ms: enrichment.elapsedMs,
+      offered_ids: associationUse.offeredIds, inserted_ids: associationUse.insertedIds,
+      sources: associationUse.candidateProvenance,
+    });
+    void client.recordMemoryQuery({ generationRef: `postcard-assoc:${pc.id}`, inspection: associationUse })
+      .catch(() => recordInferenceDiagnostic({ event: 'postcard_associative_access_log_failed',
+        generation_ref: `postcard-assoc:${pc.id}`, timestamp: tsNow() }));
     await logPrompt('postcard', system + '\n\n---PROMPT---\n' + prompt);
     let r;
     try {
