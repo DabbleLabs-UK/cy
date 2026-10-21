@@ -899,10 +899,10 @@ function handleAmbient(p, ts, bootstrap = false) {
     return;
   }
   if (name === 'location_transition' || name === 'yard_interaction' || name === 'yard_quiet'
-    || name.startsWith('cell_search_')) {
+    || name.startsWith('cell_search_') || name.startsWith('exercise_admission_')) {
     const label = ambientEventLabel(p);
     const eventKind = name === 'location_transition' ? 'movement'
-      : name.startsWith('yard_') ? 'yard' : 'search';
+      : name.startsWith('yard_') ? 'yard' : name.startsWith('exercise_admission_') ? 'prison' : 'search';
     postcards.finishAnimations();
     if (pen.event && label) pen.event(label, p.text || '', ts, eventKind, '', p);
     if (!bootstrap && label) pushTicker(label);

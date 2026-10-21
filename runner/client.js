@@ -126,6 +126,20 @@ export class Client {
     this.batch.push({ ...event });
   }
 
+  // Exercise transitions, like day rollover, are checkpointed before sending.
+  // Replays must retain the ingest identity instead of minting another delivery.
+  enqueueExerciseEpisodeEvent(event) {
+    const episode = event.kind === 'world_event_record'
+      ? event.payload?.world_event?.world?.exercise_admission?.episode_id
+        || event.payload?.world_event?.world?.movement?.episode_id
+      : event.kind === 'event' ? event.payload?.exercise_episode_id : null;
+    if (!/^exercise:\d{4}-\d{2}-\d{2}$/.test(episode || '')
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(event.delivery_id || '')) {
+      throw new Error('identified checkpointed exercise event required');
+    }
+    this.batch.push({ ...event });
+  }
+
   // Priority flush for latency-sensitive events (the public inference LED). Sends
   // the pending batch NOW instead of waiting up to FLUSH_MS, so a state the viewer
   // is watching for lands within a poll rather than a batch window. If a flush is
