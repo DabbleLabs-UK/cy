@@ -229,5 +229,14 @@ assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.cy-chronology-step/, 'mo
 assert.match(css, /\.cy-chronology-step \{[^}]*grid-template-columns: max-content minmax\(0, 1fr\)/,
   'expanded event ages receive their full timestamp width');
 assert.match(css, /\.cy-chronology-group-label[^}]*overflow-wrap: anywhere/, 'long wording cannot force horizontal overflow');
+const mobileGroups = css.match(/@media \(max-width: 520px\) \{([\s\S]*?)\n\}/)[1];
+assert.match(mobileGroups, /\.cy-chronology-group-head \{[^}]*display: grid;[^}]*grid-template-columns: auto minmax\(0, 1fr\) auto/,
+  'only phone summaries split metadata and readable wording into separate rows');
+assert.match(mobileGroups, /\.cy-chronology-group-head::before \{[^}]*grid-row: 1 \/ span 2/,
+  'native expansion marker spans the metadata and wording rows');
+assert.match(mobileGroups, /\.cy-chronology-group-time \{[^}]*grid-column: 2 \/ -1;[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/,
+  'long timestamp ranges wrap independently rather than starving the label');
+assert.match(css.slice(0, css.indexOf('@media (max-width: 520px)')), /\.cy-chronology-group-head \{[^}]*display: flex;/,
+  'desktop/tablet summary retains the original horizontal flex layout');
 
 console.log('chronology-hierarchy.test.js: all checks passed');
