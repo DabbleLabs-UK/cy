@@ -1354,8 +1354,11 @@ they cannot affect Cy's behaviour.
   34 and contains 4 lines; and 3 centre dots each drift by -1..1 before
   clamping. These are fixed fictional rendering ranges and none reads
   psychological state.
-- Cost context is injected every configured `costInjectEvery` generations,
-  default 40.
+- The legacy cost-context hook is called every configured `costInjectEvery`
+  generations (default 40), but now returns no character prose: application
+  power/cost accounting is not an independently established Cy observation.
+  Power measurement/estimation, accounting, public telemetry and graph cadence
+  are unchanged.
 
 #### Fictional world mechanics
 
