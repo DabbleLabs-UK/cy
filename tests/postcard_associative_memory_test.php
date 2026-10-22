@@ -23,6 +23,10 @@ $checks['public source/anonymous wording cannot grant permission'] = !$rank([arr
 $checks['private words and tags cannot make an unrelated summary relevant'] = !$rank([$row], ['text'=>'secret original']);
 $checks['no topic match'] = !$rank([$row], ['text'=>'exercise missed']);
 $checks['social greeting yields no candidates'] = !$rank([$row], ['text'=>'hello how are you']);
+$generic = array_replace($row, ['public_summary'=>'Someone considered an apology and their own words.']);
+$checks['indefinite pronoun overlap is not a subject match'] = !$rank([$generic], ['text'=>'Caring for someone has taken over my day.']);
+$checks['reflexive and possessive glue are not a subject match'] = !$rank([$generic], ['text'=>'I forget my own food and rest myself.']);
+$checks['meaningful experience words are not removed to fix pronoun matching'] = in_array('alone', captive_associative_terms('someone feels alone'), true);
 $checks['long summary is omitted, not cut before its qualification'] = !$rank([array_replace($row,['public_summary'=>str_repeat('garden ',40)])]);
 $checks['same sender not repeated in the separate lane'] = !$rank([array_replace($row,['subject_visitor_id'=>$sender])]);
 $checks['archived excluded'] = !$rank([array_replace($row,['status'=>'ARCHIVED'])]);

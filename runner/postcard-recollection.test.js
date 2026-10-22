@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { buildFormationRequest, parseFormationResponse, sourceFromReply } from './autobiographical-memory.js';
+import { buildFormationRequest, parseFormationResponse, sourceFromReply, memoryEpistemicNature } from './autobiographical-memory.js';
 import { AutobiographicalMemoryRuntime } from './memory-runtime.js';
 
 const source = sourceFromReply('i said waiting for seedlings takes patience', { id: 41, visitor_id: 'a'.repeat(32) }, 'env-reply');
@@ -21,6 +21,13 @@ test('only eligible reply formation adds the independent compact summary slot', 
   assert.match(request.system, /null is normal/);
   assert.match(request.system, /not reuse of either raw message/);
   assert.match(request.system, /Never merge these voices/);
+  assert.match(request.system, /private sender decision may use both and offered memories/);
+  assert.match(request.system, /CY attaches both canonical sources/);
+  assert.match(request.system, /never offered private memories as public-summary material/);
+  assert.match(request.system, /NOTHING does not require publicRecollection=null/);
+  assert.match(regular.system, /Use only the current source and offered memories/);
+  assert.doesNotMatch(regular.system, /associative cue|publishedExchange/);
+  assert.match(memoryEpistemicNature({ originKind: 'CORRESPONDENCE_EXCHANGE' }), /sender told you.*you replied.*not independently observed/);
   assert.doesNotMatch(request.prompt, /permissionVersion|postcardId|replySeq|subjectVisitorId/);
 });
 

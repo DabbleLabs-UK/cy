@@ -327,8 +327,13 @@ function captive_memory_claim_source_in_transaction(PDO $db, array $filter, mixe
     $stmt->execute([$token, (int)$row['id']]);
     $row['source'] = json_decode((string)$row['source_payload'], true) ?: [];
     // Never trust public eligibility supplied by a runner or stored job payload.
-    unset($row['source']['publicExchange']);
+    unset($row['source']['publicExchange'], $row['source']['pairedExchangeReplySeq']);
     $exchange = captive_postcard_recollection_exchange($db, $row['source']);
+    if ($exchange) $row['source']['pairedExchangeReplySeq'] = $exchange['replySeq'];
+    // Persist only the authoritative pairing receipt, not another transcript.
+    // Every claim overwrites it before inference; enqueue callers cannot set it.
+    $db->prepare('UPDATE autobiographical_memory_formation_queue SET source_payload = ? WHERE id = ?')
+        ->execute([json_encode($row['source'], JSON_UNESCAPED_SLASHES), (int)$row['id']]);
     if ($exchange) $row['source']['publicExchange'] = $exchange;
     $row['attempts'] = (int)$row['attempts'] + 1;
     $row['claim_token'] = $token;
@@ -497,6 +502,13 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
             captive_memory_inference_completion_lock($db, $job, $token, $inferenceRequest, $category);
         }
         $source = captive_memory_validate_source(json_decode($job['source_payload'], true, 32, JSON_THROW_ON_ERROR));
+        $paired = null;
+        if (!empty($source['pairedExchangeReplySeq'])) {
+            $paired = captive_postcard_recollection_exchange($db, $source, false);
+            if (!$paired || $paired['replySeq'] !== $source['pairedExchangeReplySeq']) {
+                throw new InvalidArgumentException('formation exchange provenance mismatch');
+            }
+        }
         $senderSource = in_array($job['source_type'], ['POSTCARD','CY_REPLY'], true);
         $results = [];
         foreach ($operations as $operation) {
@@ -534,7 +546,15 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
                 }
             }
             $op['source'] = $source;
+            if ($paired && in_array($op['decision'], ['CREATE', 'UPDATE'], true)) {
+                $op['originKind'] = 'CORRESPONDENCE_EXCHANGE';
+            }
             $results[] = captive_memory_apply($db, $op);
+            if ($paired) captive_memory_add_source($db, $op['memoryId'], [
+                'sourceType' => 'POSTCARD', 'sourceId' => 'postcard:' . $paired['postcardId'],
+                'subjectVisitorId' => $source['subjectVisitorId'], 'sourceVisibility' => 'SENDER_RECALLABLE',
+                'occurredAt' => $paired['postcardAt'], 'text' => $paired['correspondentText'],
+            ]);
             // Same transaction and claim receipt as the mutation, including the
             // private activity row; a lost acknowledgement cannot duplicate it.
             $current = $db->prepare('SELECT privacy_scope, public_summary FROM autobiographical_memories WHERE id = ?');

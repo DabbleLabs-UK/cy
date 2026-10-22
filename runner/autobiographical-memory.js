@@ -51,6 +51,7 @@ const MEMORY_EPISTEMIC_NATURES = Object.freeze({
   CY_EXPRESSION: 'a thought you had before',
   CY_REPLY: 'something you said to a correspondent',
   POSTCARD: 'something a correspondent told you',
+  CORRESPONDENCE_EXCHANGE: 'a correspondence exchange: what the sender told you and what you replied, not independently observed world facts',
   USER_APPROVED_SPEC: 'a long-held part of your past',
   AMBIENT_EVENT: 'something you noticed around you',
 });
@@ -196,7 +197,9 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
     return {
       system: [
         'Select one durable autobiographical memory decision from this correspondence. Return only the constrained JSON object.',
-        'Use only the current source and offered memories, not facts in these instruction examples. No transcript or invented facts.',
+        publicExchange
+          ? 'The current CY_REPLY source and publishedExchange.correspondentSaid are two sides of the same published exchange. The private sender decision may use both and offered memories; CY attaches both canonical sources. Keep the sender testimony and your reply distinct. The independent publicRecollection may use only this current exchange, never offered private memories as public-summary material. Instruction examples are not evidence. No transcript or invented facts.'
+          : 'Use only the current source and offered memories, not facts in these instruction examples. No transcript or invented facts.',
         'PERSON: durable facts about this sender: identity, family, pets, interests, ongoing circumstances, preferences or meaningful personal history.',
         'UNRESOLVED_THREAD: a genuinely persistent open issue worth returning to, not every question or social greeting.',
         'EPISODIC: a meaningful experienced event, not a fallback for personal facts. MOTIF: a supported recurring pattern. SEMANTIC: durable general knowledge.',
@@ -211,7 +214,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
         'Contrast: offered FM1 awaits an application decision; "it was approved, that is settled" -> RESOLVE FM1, not UPDATE. "the decision is delayed until next week; I am still waiting" -> UPDATE FM1 because it remains open. With no offered candidates, never UPDATE or RESOLVE.',
         'Content: one concise third-person recollection, at most 480 characters. Do not invent technical IDs, candidate refs or privacy fields; CY attaches provenance and sender-only scope.',
         ...(publicExchange ? [
-          'Independent optional publicRecollection: null is normal. Only a meaningful experience with durable future value merits a compact public-safe abstraction, never every exchange. Keep the sender decision independent.',
+          'Independent optional publicRecollection: null is normal. A distinct useful experience or reflection in this published exchange can be an associative cue for a later similar conversation; it need not be a new PERSON fact or independently observed prison event. A private sender decision of NOTHING does not require publicRecollection=null, and CREATE does not require a public summary. Greetings, generic reassurance, repetition or no safe useful abstraction merit null, never a compulsory recollection.',
           'Permission covers a compact summary only, not reuse of either raw message. No quotations, names (including pets/third parties), handles, identifying details, contacts, addresses, private/sensitive information or unique biographical details. If the value depends on those details, choose null.',
           'Return basis POSTCARD only for what the correspondent explicitly told Cy; basis CY_REPLY only for what Cy himself said or thought. Never merge these voices, invent facts, or turn testimony, advice, dreams or speculation into observed prison/world facts. Keep uncertainty. Summarize one side only in at most 200 characters, preferably under 140; CY adds the attribution.',
         ] : []),

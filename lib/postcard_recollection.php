@@ -14,18 +14,18 @@ function captive_postcard_recall_permission(array $input): ?string
 
 // Authoritative publication and exchange permission, never a runner assertion
 // or public-archive visibility. Only reply formation can offer this extra slot.
-function captive_postcard_recollection_exchange(PDO $db, array $source): ?array
+function captive_postcard_recollection_exchange(PDO $db, array $source, bool $requirePermission = true): ?array
 {
     if (($source['sourceType'] ?? '') !== 'CY_REPLY'
         || !preg_match('/^postcard-reply:([1-9][0-9]*)$/', (string)($source['sourceId'] ?? ''), $m)) return null;
+    $eligibility = $requirePermission ? ' AND p.blocked = 0 AND p.recall_permission_version = ? AND p.recall_permitted_at IS NOT NULL' : '';
     $read = $db->prepare("SELECT p.*, a.payload AS arrival_payload, r.seq AS reply_seq, r.ts AS reply_ts, r.payload AS reply_payload
         FROM postcards p JOIN events a ON a.seq = p.arrival_event_id AND a.kind = 'postcard_in'
         JOIN events r ON r.kind = 'postcard_out'
           AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.reply_to')), JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.id'))) = CAST(p.id AS CHAR)
-        WHERE p.id = ? AND p.visitor_id = ? AND p.blocked = 0 AND p.replied_at IS NOT NULL
-          AND p.recall_permission_version = ? AND p.recall_permitted_at IS NOT NULL
+        WHERE p.id = ? AND p.visitor_id = ? AND p.replied_at IS NOT NULL $eligibility
         ORDER BY r.seq ASC LIMIT 1");
-    $read->execute([(int)$m[1], $source['subjectVisitorId'] ?? null, CY_POSTCARD_RECALL_PERMISSION]);
+    $read->execute(array_merge([(int)$m[1], $source['subjectVisitorId'] ?? null], $requirePermission ? [CY_POSTCARD_RECALL_PERMISSION] : []));
     $row = $read->fetch(PDO::FETCH_ASSOC);
     if (!$row) return null;
     $arrival = json_decode($row['arrival_payload'], true, 32, JSON_THROW_ON_ERROR);

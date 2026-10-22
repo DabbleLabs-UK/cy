@@ -77,6 +77,17 @@ choose WORLD. No second call, new source job or transcript store exists.
 Existing model/options, including the 260-token formation output allowance,
 are unchanged. This is not the journal's separate 93-token limit.
 
+The bounded real-model rehearsal exposed a conflict in the original wording
+(current reply only versus a postcard-basis public slot). The opt-in prompt now
+explicitly admits the published pair, without making the public slot compulsory
+or allowing private candidate memories to supply public text. Because one model
+context cannot honestly isolate two free-prose evidence decisions, private
+CREATE/UPDATE content that receives this pair is marked CORRESPONDENCE_EXCHANGE
+and binds both canonical POSTCARD and CY_REPLY sources, still sender-only. A
+claim-specific server pairing receipt, not a client flag, controls this binding.
+RESOLVE adds the source while preserving the archived content's earlier origin.
+The existing Cy-authored PERSON guard and ordinary opted-out path are unchanged.
+
 After rechecking publication and permission, completion prefixes the <=200-char
 abstraction with `A correspondent told Cy: ` or `Cy replied to a correspondent: `.
 For example, synthetic `Patience helped with growing seedlings.` becomes
@@ -204,3 +215,16 @@ and a natural opted-in exchange is either explicitly omitted/rejected or recorde
 once with attributed source-linked public text. Inspect natural summary quality
 and privacy before claiming automatic abstraction is reliable; deterministic
 fixtures do not demonstrate real-model semantics.
+
+## Real-model rehearsal: release remains blocked
+
+See `rehearsal/postcard-associative-20261022/README.md` and its hash-indexed raw
+synthetic evidence. Three fixed batches of sixteen calls used the actual
+DeepSeek formation adapter, configured deepseek-v4-flash (returned deepseek-flash),
+schema/parser, canonical accounting/application and indexed retrieval in isolated
+databases. No production writes, historical data, deployment or backfill occurred.
+The final batch accepted six public recollections, rejected three, and omitted
+seven. This is not six clean privacy passes: the accepted job-loss/distress
+recollection demonstrates an unresolved personal-detail boundary. Recommendation
+is REVISE, not deploy. Copy protection was not weakened and no further calls or
+fixture tuning were used to manufacture a higher acceptance rate.

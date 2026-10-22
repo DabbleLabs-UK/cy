@@ -11,7 +11,7 @@ const CY_ASSOCIATIVE_CHARS = 260;
 
 function captive_associative_terms(string $text): array
 {
-    $stop = explode(' ', 'the and that this with from have has had was were are you your yours they their them she her his him for but not can could would should what which when where how why who been being did does don its our out just really hello thanks thank please okay again about some any more very still');
+    $stop = explode(' ', 'the and that this with from have has had was were are you your yours they their them she her his him for but not can could would should what which when where how why who been being did does don its our out just really hello thanks thank please okay again about some any more very still someone anyone everyone somebody anybody everybody something anything everything nothing myself yourself himself herself itself ourselves yourselves themselves own each every either neither both other another such those these there here then than because into onto through among between while also only even much');
     return array_values(array_diff(captive_memory_tokens($text), $stop));
 }
 

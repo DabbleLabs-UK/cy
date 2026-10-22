@@ -1,0 +1,4 @@
+# Preserve hashed synthetic rehearsal evidence byte-for-byte across checkouts.
+/docs/rehearsal/postcard-associative-20261022/** -text
+# Raw diff captures intentionally preserve their original context whitespace.
+/docs/rehearsal/postcard-associative-20261022/**/implementation.diff -whitespace

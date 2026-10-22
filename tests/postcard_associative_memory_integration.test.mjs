@@ -139,6 +139,8 @@ test('indexed associative API, scope, episode groups, source logging and unchang
     const publicId = formed.body.public_recollection.memory_id;
     assert.ok(publicId);
     assert.equal(sql(`SELECT privacy_scope FROM autobiographical_memories WHERE id='${senderId}'`), 'SENDER_RECALLABLE');
+    assert.equal(sql(`SELECT origin_kind FROM autobiographical_memories WHERE id='${senderId}'`), 'CORRESPONDENCE_EXCHANGE');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_sources WHERE memory_id='${senderId}' AND source_visibility='SENDER_RECALLABLE'`), '2');
     assert.equal(sql(`SELECT CONCAT(origin_kind,':',consistency_status,':',public_summary) FROM autobiographical_memories WHERE id='${publicId}'`),
       'POSTCARD:UNCERTAIN:A correspondent told Cy: Patience helped with growing seedlings.');
     assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_sources WHERE memory_id='${publicId}' AND source_visibility='SENDER_RECALLABLE'`), '2');
@@ -169,11 +171,13 @@ test('indexed associative API, scope, episode groups, source logging and unchang
         VALUES (${id},'${other}','FixtureSender','a disposable greeting',NOW(),NOW(),${permission ? "'compact-public-recall-v1',NOW(3)" : 'NULL,NULL'})`);
       if (published) await publish(id);
       const s = { sourceType: 'CY_REPLY', sourceId: `postcard-reply:${id}`, subjectVisitorId: other,
-        sourceVisibility: 'SENDER_RECALLABLE', text: 'a short reply', publicExchange: { permissionVersion: 'forged' } };
+        sourceVisibility: 'SENDER_RECALLABLE', text: 'a short reply', publicExchange: { permissionVersion: 'forged' },
+        pairedExchangeReplySeq: 999999 };
       await api('enqueue_source', { source: s });
       const job = (await api('claim_source', { sender_only: true, visitor_id: other })).body.job;
       assert.ok(job);
       assert.equal(!!job.source.publicExchange, permission && published);
+      assert.equal(!!job.source.pairedExchangeReplySeq, permission && published, 'enqueue cannot forge the pairing receipt');
       if (invalidate) sql(`UPDATE postcards SET blocked=1 WHERE id=${id}`);
       const retainedId = randomUUID();
       const result = (await api('finish_source', { job_id: Number(job.id), claim_token: job.claim_token,
@@ -189,6 +193,32 @@ test('indexed associative API, scope, episode groups, source logging and unchang
     assert.equal((await fixture(1002, true, false, proposal)).public_recollection.status, 'REJECTED', 'unpublished opt-in fails closed');
     assert.equal((await fixture(1003, true, true, null)).public_recollection, null, 'trivial opted-in exchange need not form any memory');
     assert.equal((await fixture(1004, true, true, proposal, true)).public_recollection.status, 'REJECTED', 'publication eligibility is rechecked after inference, not just at claim');
+    // Model saw the pair before it was blocked. Private provenance must retain
+    // both sources even though optional public permission no longer suffices.
+    assert.equal(sql("SELECT COUNT(*) FROM autobiographical_memory_sources WHERE source_type='POSTCARD' AND source_id='postcard:1004'"), '1');
+    assert.equal(sql("SELECT COUNT(*) FROM autobiographical_memories WHERE privacy_scope='SENDER_RECALLABLE' AND origin_kind='CORRESPONDENCE_EXCHANGE'"), '2');
+    // A normal incoming POSTCARD job can find the already-formed private
+    // exchange topic and UPDATE it, rather than losing it behind public rows.
+    sql(`INSERT INTO postcards(id,visitor_id,from_name,posted_at,deliver_at,recall_permission_version,recall_permitted_at)
+      VALUES (1005,'${other}','FixtureSender',NOW(),NOW(),'compact-public-recall-v1',NOW(3))`);
+    await publish(1005);
+    const pairedJob = (await api('claim_source', { sender_only: true, visitor_id: other })).body.job;
+    const topicId = randomUUID();
+    await api('finish_source', { job_id: Number(pairedJob.id), claim_token: pairedJob.claim_token, result_category: 'CREATE',
+      operations: [{ decision: 'CREATE', memoryId: topicId, type: 'UNRESOLVED_THREAD', privacyScope: 'SENDER_RECALLABLE',
+        content: 'The sender will report more about garden seedlings.', source: pairedJob.source }], public_recollection: null });
+    const incoming = { sourceType: 'POSTCARD', sourceId: 'postcard:1005', subjectVisitorId: other,
+      sourceVisibility: 'SENDER_RECALLABLE', text: 'more garden seedlings news' };
+    await api('enqueue_source', { source: incoming });
+    const incomingJob = (await api('claim_source', { sender_only: true, visitor_id: other })).body.job;
+    assert.ok((await api('query', { visitor_id: other, query: { text: incoming.text, sender_formation_only: true }, limit: 5 })).body.candidates.some(m => m.id === topicId));
+    const update = { job_id: Number(incomingJob.id), claim_token: incomingJob.claim_token, result_category: 'UPDATE',
+      operations: [{ decision: 'UPDATE', memoryId: topicId, expectedVersion: 1,
+        content: 'The sender plans to report the next garden seedlings result.', source: incomingJob.source }] };
+    assert.equal((await api('finish_source', update)).status, 200);
+    assert.equal((await api('finish_source', update)).body.duplicate, true);
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memories WHERE id='${topicId}'`), '1');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_sources WHERE memory_id='${topicId}'`), '2');
     assert.equal(sql("SELECT COUNT(*) FROM autobiographical_memories WHERE privacy_scope='PUBLIC_RECALLABLE' AND classification='opted-in correspondence recollection'"), '1');
     assert.equal(sql('SELECT COUNT(*) FROM memory_formation_inference_attempts'), '0', 'no provider inference');
   } finally {
