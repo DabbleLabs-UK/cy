@@ -1,0 +1,102 @@
+{
+  "base": "770f6bdd24dfddd4804d7b3baa88e5c7c395d647",
+  "merge": "7cdb58d96902134ef35a24f23dffff4478f849d8",
+  "entries": [
+    {
+      "path": "runner/autobiographical-memory.js",
+      "target": "DELL",
+      "sha256": "42caf9f5b9532c7377f529a339baac240a9ed69223a2f35d9625586f569c210e",
+      "previousLfSha256": "01fad5669247733838e5b3ebbc472d109e32f7a1cf8589de7b590081283a753a"
+    },
+    {
+      "path": "runner/client.js",
+      "target": "DELL",
+      "sha256": "52f242e07b82282f4a22415a65d96fce1a7aa4d399d65374847e9a260bbbf7e1",
+      "previousLfSha256": "8d316ffde21019d6a7c08bd4758cab3b0addba25cead0de1929f51cedad225e9"
+    },
+    {
+      "path": "runner/memory-runtime.js",
+      "target": "DELL",
+      "sha256": "f82490030d459fcdf9a3c13053b09ca453c4462dfe9dfe9bb93a73db401fbea6",
+      "previousLfSha256": "09715aced8632a31883107556d570791e120c87e54cb16598b2c95145b60b13d"
+    },
+    {
+      "path": "runner/postcard-associative-memory.js",
+      "target": "DELL",
+      "sha256": "f2f7fb0772347c848c79ab3e9caafe2a3afc459875de51a0c504d8985d51452b",
+      "previousLfSha256": null
+    },
+    {
+      "path": "runner/postcard-memory.js",
+      "target": "DELL",
+      "sha256": "86289d2fed8df99ace56b864095c818cb456be188753d8f5bb25c1c04d7f0dc7",
+      "previousLfSha256": "a6ef5f55dbb21898bd0dde55ce9fe51fa3ffcdae0b5dc864f00f19021ba2b73c"
+    },
+    {
+      "path": "runner/run.js",
+      "target": "DELL",
+      "sha256": "3682887668401a706d48cc581f7a94924059dbb0e6af91dea7fd28cc24fc65b2",
+      "previousLfSha256": "b3764591f3a422fad1f0ed4a1ee331f54dc21027bd1255f3964d53907539d61a"
+    },
+    {
+      "path": "lib/autobiographical_memory.php",
+      "target": "VPS3",
+      "sha256": "83c44eaf2505f7830d015fde7f7eafe959e0e03402b921627ced8c491d0e682f",
+      "previousLfSha256": "fe9ce91aa0875cb1ab5388fc1a39167f1df2ccf89782588000ee58008a0298f6"
+    },
+    {
+      "path": "lib/postcard_associative_memory.php",
+      "target": "VPS3",
+      "sha256": "87a543fb360947756b568f7cdefc721944f91bb9a72b592e85ec78a2b0b3e9ae",
+      "previousLfSha256": null
+    },
+    {
+      "path": "lib/postcard_recollection.php",
+      "target": "VPS3",
+      "sha256": "61d31277beca64009a89d12d9f3cffe1aaac67d31630866a29104d6c49a49611",
+      "previousLfSha256": null
+    },
+    {
+      "path": "public/api/inbox.php",
+      "target": "VPS3",
+      "sha256": "9fdd79d0cc9df86a51fe985a0ade6822aa3ce37d890b7aa9d4b513242c95fd31",
+      "previousLfSha256": "58b3468dc453428eeaa824d476901e599c5dab3d9f5c0c94dc87fada037950b4"
+    },
+    {
+      "path": "public/api/ingest.php",
+      "target": "VPS3",
+      "sha256": "45460ed65b7411ee594868d44d593623ce3a95eb1c362d5fe77816ecc528a1ab",
+      "previousLfSha256": "feb0883bd82cefa945338ec199dfa8fb805531b45a79d8f71bdda71d8117a689"
+    },
+    {
+      "path": "public/api/memory.php",
+      "target": "VPS3",
+      "sha256": "3e02fc939cacb495ce7cfa15d43b727a2b0ae1b6b16ecfd91e3b274c06d1b48e",
+      "previousLfSha256": "35975c94316c60829772202f21b110a98f8cec0f15b0810b8cfdfc97c5e6a698"
+    },
+    {
+      "path": "public/api/post-postcard.php",
+      "target": "VPS3",
+      "sha256": "e96b58e970e31e8833e28f5395546ab0404851ff44ce674698310f2892b59b3f",
+      "previousLfSha256": "67897b56ce5067fcdc7cf23c918a31e0ff817d64da3f7b4b7411d0ecb8a4ac4e"
+    },
+    {
+      "path": "public/assets/app.js",
+      "target": "VPS3",
+      "sha256": "f2d9e0c22b6fb42accf4f29f928f120ad0396e760ec18fc372a26cc738eef25c",
+      "previousLfSha256": "50bce92b607bad93390ca5bae1cbbfcbbae969389ec64aa69446a2c61f30052e"
+    },
+    {
+      "path": "public/index.php",
+      "target": "VPS3",
+      "sha256": "c36d819b7f79ec47a7d3ffe841011926a3554dcb7372c4b4e4c3848c44565341",
+      "previousLfSha256": "2c81f8e28e5179c92108051b6c1bba0fac3b5d9d3865f5c4207099eddc75cea1"
+    },
+    {
+      "path": "sql/032_postcard_public_recollection_permission.sql",
+      "target": "VPS3",
+      "sha256": "9b4b3143aa262a87c4522c486cd3d61fb4043ed6b9bc2dbc68fbf4bda200951c",
+      "previousLfSha256": null
+    }
+  ]
+}
