@@ -25,8 +25,9 @@ test('voice uses style features without concrete autobiographical examples', () 
   assert.match(ZONE_A, /rough lower-case prison shorthand|British prison slang/);
   assert.match(ZONE_A, /Fr[a-z]+, slang and shorthand|Fragments, slang and shorthand/);
   assert.match(ZONE_A, /screw, bird, banged up/);
-  assert.ok(ZONE_A.startsWith(fixture.beforeSystem.split('\n\nHOW HE WRITES')[0]),
-    'base voice is unchanged');
+  const voice = (system) => system.slice(system.indexOf('VOICE.'), system.indexOf('HARD RULES.'));
+  assert.equal(voice(ZONE_A), voice(fixture.beforeSystem),
+    'base voice is unchanged by the character knowledge boundary');
   const cast = 'THE WING - standing descriptions';
   assert.equal(ZONE_A.slice(ZONE_A.indexOf(cast)), fixture.beforeSystem.slice(fixture.beforeSystem.indexOf(cast)),
     'cast/personality is not redesigned');

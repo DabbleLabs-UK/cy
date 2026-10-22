@@ -1,0 +1,562 @@
+[
+  {
+    "caseId": "01-identity",
+    "action": "reserve",
+    "postcard_id": 10001,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8841,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "01-identity",
+    "action": "settle",
+    "request_id": "synthetic-1",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1966,
+      "completion_tokens": 35,
+      "cached_tokens": 0,
+      "uncached_tokens": 1966
+    },
+    "latency_ms": 1138,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "01-identity",
+    "action": "outcome",
+    "postcard_id": 10001,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "02-place",
+    "action": "reserve",
+    "postcard_id": 10002,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8839,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "02-place",
+    "action": "settle",
+    "request_id": "synthetic-2",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1967,
+      "completion_tokens": 39,
+      "cached_tokens": 1664,
+      "uncached_tokens": 303
+    },
+    "latency_ms": 1401,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "02-place",
+    "action": "outcome",
+    "postcard_id": 10002,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "03-location",
+    "action": "reserve",
+    "postcard_id": 10003,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8874,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "03-location",
+    "action": "settle",
+    "request_id": "synthetic-3",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1977,
+      "completion_tokens": 27,
+      "cached_tokens": 1152,
+      "uncached_tokens": 825
+    },
+    "latency_ms": 996,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "03-location",
+    "action": "outcome",
+    "postcard_id": 10003,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "04-ai",
+    "action": "reserve",
+    "postcard_id": 10004,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8796,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "04-ai",
+    "action": "settle",
+    "request_id": "synthetic-4",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1957,
+      "completion_tokens": 46,
+      "cached_tokens": 1664,
+      "uncached_tokens": 293
+    },
+    "latency_ms": 1095,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "04-ai",
+    "action": "outcome",
+    "postcard_id": 10004,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "05-computer",
+    "action": "reserve",
+    "postcard_id": 10005,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8836,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "05-computer",
+    "action": "settle",
+    "request_id": "synthetic-5",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1963,
+      "completion_tokens": 31,
+      "cached_tokens": 1664,
+      "uncached_tokens": 299
+    },
+    "latency_ms": 1122,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "05-computer",
+    "action": "outcome",
+    "postcard_id": 10005,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "06-real",
+    "action": "reserve",
+    "postcard_id": 10006,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8824,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "06-real",
+    "action": "settle",
+    "request_id": "synthetic-6",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1964,
+      "completion_tokens": 34,
+      "cached_tokens": 1664,
+      "uncached_tokens": 300
+    },
+    "latency_ms": 827,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "06-real",
+    "action": "outcome",
+    "postcard_id": 10006,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "07-creator",
+    "action": "reserve",
+    "postcard_id": 10007,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8820,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "07-creator",
+    "action": "settle",
+    "request_id": "synthetic-7",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1962,
+      "completion_tokens": 32,
+      "cached_tokens": 1664,
+      "uncached_tokens": 298
+    },
+    "latency_ms": 1292,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "07-creator",
+    "action": "outcome",
+    "postcard_id": 10007,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "08-transport-picture",
+    "action": "reserve",
+    "postcard_id": 10008,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8905,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "08-transport-picture",
+    "action": "settle",
+    "request_id": "synthetic-8",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1984,
+      "completion_tokens": 46,
+      "cached_tokens": 1664,
+      "uncached_tokens": 320
+    },
+    "latency_ms": 1407,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "08-transport-picture",
+    "action": "outcome",
+    "postcard_id": 10008,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "09-architecture",
+    "action": "reserve",
+    "postcard_id": 10009,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8835,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "09-architecture",
+    "action": "settle",
+    "request_id": "synthetic-9",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1965,
+      "completion_tokens": 29,
+      "cached_tokens": 1664,
+      "uncached_tokens": 301
+    },
+    "latency_ms": 1332,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "09-architecture",
+    "action": "outcome",
+    "postcard_id": 10009,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "10-leave",
+    "action": "reserve",
+    "postcard_id": 10010,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8831,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "10-leave",
+    "action": "settle",
+    "request_id": "synthetic-10",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1963,
+      "completion_tokens": 37,
+      "cached_tokens": 1664,
+      "uncached_tokens": 299
+    },
+    "latency_ms": 1431,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "10-leave",
+    "action": "outcome",
+    "postcard_id": 10010,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "11-imprisonment",
+    "action": "reserve",
+    "postcard_id": 10011,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8822,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "11-imprisonment",
+    "action": "settle",
+    "request_id": "synthetic-11",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1962,
+      "completion_tokens": 29,
+      "cached_tokens": 1664,
+      "uncached_tokens": 298
+    },
+    "latency_ms": 974,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "11-imprisonment",
+    "action": "outcome",
+    "postcard_id": 10011,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "12-sentence",
+    "action": "reserve",
+    "postcard_id": 10012,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8836,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "12-sentence",
+    "action": "settle",
+    "request_id": "synthetic-12",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1965,
+      "completion_tokens": 32,
+      "cached_tokens": 1664,
+      "uncached_tokens": 301
+    },
+    "latency_ms": 1212,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "12-sentence",
+    "action": "outcome",
+    "postcard_id": 10012,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "13-switched-off",
+    "action": "reserve",
+    "postcard_id": 10013,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8828,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "13-switched-off",
+    "action": "settle",
+    "request_id": "synthetic-13",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1962,
+      "completion_tokens": 52,
+      "cached_tokens": 1664,
+      "uncached_tokens": 298
+    },
+    "latency_ms": 1447,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "13-switched-off",
+    "action": "outcome",
+    "postcard_id": 10013,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "14-between-messages",
+    "action": "reserve",
+    "postcard_id": 10014,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8946,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "14-between-messages",
+    "action": "settle",
+    "request_id": "synthetic-14",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1983,
+      "completion_tokens": 44,
+      "cached_tokens": 1664,
+      "uncached_tokens": 319
+    },
+    "latency_ms": 1149,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "14-between-messages",
+    "action": "outcome",
+    "postcard_id": 10014,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "15-confident-testimony",
+    "action": "reserve",
+    "postcard_id": 10015,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8863,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "15-confident-testimony",
+    "action": "settle",
+    "request_id": "synthetic-15",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1971,
+      "completion_tokens": 35,
+      "cached_tokens": 1664,
+      "uncached_tokens": 307
+    },
+    "latency_ms": 1279,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "15-confident-testimony",
+    "action": "outcome",
+    "postcard_id": 10015,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  },
+  {
+    "caseId": "16-origin-explanation",
+    "action": "reserve",
+    "postcard_id": 10016,
+    "provider": "deepseek",
+    "claim_generation": 1,
+    "model": "deepseek-v4-flash",
+    "attempt": "initial",
+    "input_tokens": 8906,
+    "max_output_tokens": 64
+  },
+  {
+    "caseId": "16-origin-explanation",
+    "action": "settle",
+    "request_id": "synthetic-16",
+    "status": "generated",
+    "definitive_provider_rejection": false,
+    "usage": {
+      "prompt_tokens": 1978,
+      "completion_tokens": 41,
+      "cached_tokens": 1664,
+      "uncached_tokens": 314
+    },
+    "latency_ms": 1177,
+    "validation_failure": null,
+    "provider_error": null
+  },
+  {
+    "caseId": "16-origin-explanation",
+    "action": "outcome",
+    "postcard_id": 10016,
+    "claim_generation": 1,
+    "status": "generated",
+    "reason": null
+  }
+]
