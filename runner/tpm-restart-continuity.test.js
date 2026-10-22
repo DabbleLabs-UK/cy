@@ -100,17 +100,19 @@ assert.deepEqual(soma.sleepHomeostasis, processSBefore,
   'Process S state must not be altered by the TPM continuity-unknown fix');
 
 // 9. No new prompt path is introduced: a TPM state that was just reset to
-// CALIBRATING by the restart-gap fix produces no "Predicted KSS" prompt line,
+// CALIBRATING by the restart-gap fix produces no sleepiness indication,
 // exactly like a state that has never observed a sleep transition at all -
-// the fix only routes back into the pre-existing CALIBRATING framing.
+// the fix only routes back into the pre-existing unavailable state. Diagnostic
+// calibration and pressure information remain outside character prose.
 const freshSoma = reconcileSoma(null, { now: restartAtMs });
 const freshDirective = groundedSomaDirective(freshSoma, { now: restartAtMs }).directive;
 const resetDirective = groundedSomaDirective(soma, { now: restartAtMs }).directive;
-assert.doesNotMatch(freshDirective, /Predicted KSS/i);
-assert.doesNotMatch(resetDirective, /Predicted KSS/i);
-const sleepPressureLine = resetDirective.split('\n').find((line) => /sleep-pressure estimate/i.test(line));
-assert.ok(sleepPressureLine, 'the directive must still carry a Process S sleep-pressure line');
-assert.doesNotMatch(sleepPressureLine, /observed/i);
+assert.doesNotMatch(freshDirective, /Possible sleepiness|KSS|calibrat/i);
+assert.doesNotMatch(resetDirective, /Possible sleepiness|KSS|calibrat/i);
+const resetProjection = groundedSomaDirective(soma, { now: restartAtMs });
+assert.ok(resetProjection.context.sections.find((section) => section.id === 'sleep')
+  .entries.some((entry) => entry.fact === 'process_s'), 'Process S remains inspectable');
+assert.doesNotMatch(resetDirective, /sleep-pressure estimate/i);
 
 // 8. TPM coefficients/equations are unchanged by this fix (see also the
 // literal parameter assertions in three-process-sleepiness.test.js, section A).
