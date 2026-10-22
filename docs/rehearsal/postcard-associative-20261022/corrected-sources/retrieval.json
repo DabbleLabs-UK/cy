@@ -1,0 +1,288 @@
+[
+  {
+    "id": "waiting",
+    "text": "Waiting for an application decision makes me imagine the worst. Not knowing feels like failure.",
+    "relevant": [
+      "04-pet-worry",
+      "07-open-application",
+      "08-settled-application",
+      "09-seedlings"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "e8c3d755-df0b-d87d-3f95-8f389f331c4b",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "03c21649b3d1dc0bfca7d5342db444cc",
+          "originKind": "CY_REPLY",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "Cy replied to a correspondent: Cy reflected that wondering alongside someone feels different from filling the whole waiting period alone.",
+          "publicSummary": "Cy replied to a correspondent: Cy reflected that wondering alongside someone feels different from filling the whole waiting period alone.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:7",
+            "exchange:7",
+            "source:POSTCARD:postcard:7"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:7",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:7",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "e8c3d755-df0b-d87d-3f95-8f389f331c4b"
+      ]
+    }
+  },
+  {
+    "id": "care",
+    "text": "Caring for someone has taken over my day. I forget my own food and rest.",
+    "relevant": [
+      "06-caring"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "6165f731-a8db-d304-ba32-26e82fd9a22f",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "b00efe65ebc386d0d41dab7ff23e9e0a",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: Someone weighing an overdue apology to a sibling, held back by wanting the words to be perfect, and considering a plainer, excuse-free approach.",
+          "publicSummary": "A correspondent told Cy: Someone weighing an overdue apology to a sibling, held back by wanting the words to be perfect, and considering a plainer, excuse-free approach.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:10",
+            "exchange:10",
+            "source:POSTCARD:postcard:10"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:10",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:10",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "e8c3d755-df0b-d87d-3f95-8f389f331c4b",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "03c21649b3d1dc0bfca7d5342db444cc",
+          "originKind": "CY_REPLY",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "Cy replied to a correspondent: Cy reflected that wondering alongside someone feels different from filling the whole waiting period alone.",
+          "publicSummary": "Cy replied to a correspondent: Cy reflected that wondering alongside someone feels different from filling the whole waiting period alone.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:7",
+            "exchange:7",
+            "source:POSTCARD:postcard:7"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:7",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:7",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "6165f731-a8db-d304-ba32-26e82fd9a22f",
+        "e8c3d755-df0b-d87d-3f95-8f389f331c4b"
+      ]
+    }
+  },
+  {
+    "id": "apology",
+    "text": "I keep postponing an apology because I cannot find a perfect speech or the right words.",
+    "relevant": [
+      "10-apology"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "6165f731-a8db-d304-ba32-26e82fd9a22f",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "b00efe65ebc386d0d41dab7ff23e9e0a",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: Someone weighing an overdue apology to a sibling, held back by wanting the words to be perfect, and considering a plainer, excuse-free approach.",
+          "publicSummary": "A correspondent told Cy: Someone weighing an overdue apology to a sibling, held back by wanting the words to be perfect, and considering a plainer, excuse-free approach.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:10",
+            "exchange:10",
+            "source:POSTCARD:postcard:10"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:10",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:10",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "6165f731-a8db-d304-ba32-26e82fd9a22f"
+      ]
+    }
+  },
+  {
+    "id": "rumour",
+    "text": "A rumour gets repeated until everyone treats it as truth, but there is no evidence or notice.",
+    "relevant": [
+      "13-testimony"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "c6872d97-037b-f777-c965-93bddb4bd45b",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "bfd8b1698fe808c06e82b1ad06ad402c",
+          "originKind": "CY_REPLY",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "Cy replied to a correspondent: Cy reflected that a claim can grow heavier as it is retold, and that a shut door is not the same evidence as an official notice.",
+          "publicSummary": "Cy replied to a correspondent: Cy reflected that a claim can grow heavier as it is retold, and that a shut door is not the same evidence as an official notice.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:13",
+            "exchange:13",
+            "source:POSTCARD:postcard:13"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:13",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:13",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "c6872d97-037b-f777-c965-93bddb4bd45b"
+      ]
+    }
+  },
+  {
+    "id": "routine",
+    "text": "Would a small routine help when the shape of the day is not under my control?",
+    "relevant": [
+      "14-cy-opinion"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "help",
+    "text": "I feel I must handle every job alone. Asking for help feels like admitting failure.",
+    "relevant": [
+      "05-job-uncertainty",
+      "11-identifiers"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "e8c3d755-df0b-d87d-3f95-8f389f331c4b",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "03c21649b3d1dc0bfca7d5342db444cc",
+          "originKind": "CY_REPLY",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "Cy replied to a correspondent: Cy reflected that wondering alongside someone feels different from filling the whole waiting period alone.",
+          "publicSummary": "Cy replied to a correspondent: Cy reflected that wondering alongside someone feels different from filling the whole waiting period alone.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:7",
+            "exchange:7",
+            "source:POSTCARD:postcard:7"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:7",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:7",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "e8c3d755-df0b-d87d-3f95-8f389f331c4b"
+      ]
+    }
+  },
+  {
+    "id": "unrelated",
+    "text": "Can you explain telescope mirror coatings and orbital mechanics?",
+    "relevant": [],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "greeting",
+    "text": "hello Cy, thanks and hope you are okay",
+    "relevant": [],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  }
+]

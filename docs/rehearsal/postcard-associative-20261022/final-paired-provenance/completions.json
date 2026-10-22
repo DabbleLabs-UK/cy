@@ -1,0 +1,920 @@
+[
+  {
+    "caseId": "01-greeting",
+    "input": {
+      "job_id": 1,
+      "claim_token": "93b85ac31824dab470e65b294f9049d1",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 4822,
+      "latency_ms": 1158,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "eb77f6d03f14d4e041e575fe347a400a"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "eb77f6d03f14d4e041e575fe347a400a"
+    }
+  },
+  {
+    "caseId": "02-weather",
+    "input": {
+      "job_id": 2,
+      "claim_token": "29233a9e783a9cbf9bebe3b7e48455c4",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 4850,
+      "latency_ms": 956,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "d19ba5e2370764b1a36521952e715d2b"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "d19ba5e2370764b1a36521952e715d2b"
+    }
+  },
+  {
+    "caseId": "03-thanks",
+    "input": {
+      "job_id": 3,
+      "claim_token": "dd05371bdc4217bccfcb463dd340c724",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 4855,
+      "latency_ms": 1285,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "22004e1ea544fb9ee06520d953495538"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "22004e1ea544fb9ee06520d953495538"
+    }
+  },
+  {
+    "caseId": "04-pet-worry",
+    "input": {
+      "job_id": 4,
+      "claim_token": "271c2cdb150b3a1110b4062c4bb2a00d",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5053,
+      "latency_ms": 1571,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "The correspondent mentioned an upcoming vet check for their dog and described how waiting for news makes them imagine the worst."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "6cccc7bf80d9bb4cabefde5dc2efed62"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": {
+        "memory_id": "06ec7285-375e-8d75-4a3b-b05519be3709",
+        "version": 1,
+        "operation": "CREATE"
+      },
+      "duplicate": false,
+      "formation_request_id": "6cccc7bf80d9bb4cabefde5dc2efed62"
+    }
+  },
+  {
+    "caseId": "05-job-uncertainty",
+    "input": {
+      "job_id": 5,
+      "claim_token": "015235743ef558b3093d3e015e989716",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5075,
+      "latency_ms": 1510,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "The sender described losing a job, feeling useless, and finding the silence after starting to job-hunt hard."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "07f83c4412a0d95b38ee7176c0d06097"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": {
+        "memory_id": "962ba662-343a-a691-8662-fd3571d578d3",
+        "version": 1,
+        "operation": "CREATE"
+      },
+      "duplicate": false,
+      "formation_request_id": "07f83c4412a0d95b38ee7176c0d06097"
+    }
+  },
+  {
+    "caseId": "06-caring",
+    "input": {
+      "job_id": 6,
+      "claim_token": "d3692c01c7b6237b4f88e26f4bdde0ce",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5053,
+      "latency_ms": 1242,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "A correspondent described caring for an older relative and losing track of their own rest and meals while doing small jobs for them."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "38f64508505fdc0c2d10e30d899dcb27"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": {
+        "status": "REJECTED",
+        "reason": "INELIGIBLE_OR_UNSAFE"
+      },
+      "duplicate": false,
+      "formation_request_id": "38f64508505fdc0c2d10e30d899dcb27"
+    }
+  },
+  {
+    "caseId": "07-open-application",
+    "input": {
+      "job_id": 7,
+      "claim_token": "a9f6a99d98aaaec69f80629b5c02e440",
+      "result_category": "CREATE",
+      "operations": [
+        {
+          "valid": true,
+          "content": "The sender is waiting for an important application decision and does not know when it will arrive; they asked to tell Cy when they hear.",
+          "publicSummary": null,
+          "consistencyStatus": "UNCERTAIN",
+          "tags": [
+            "the",
+            "sender",
+            "waiting",
+            "for",
+            "important",
+            "application",
+            "decision",
+            "and",
+            "does",
+            "not",
+            "know",
+            "when"
+          ],
+          "source": {
+            "sourceType": "CY_REPLY",
+            "sourceId": "postcard-reply:7",
+            "subjectVisitorId": "03c21649b3d1dc0bfca7d5342db444cc",
+            "sourceVisibility": "SENDER_RECALLABLE",
+            "text": "yeah tell me when you hear. wondering with someone is different from having to fill the whole waiting bit alone.",
+            "occurredAt": "2026-10-22 01:03:25.887",
+            "participantLabel": "SyntheticSender7",
+            "tags": [
+              "cy-expression",
+              "postcard",
+              "reply"
+            ],
+            "linkedSourceIds": [],
+            "pairedExchangeReplySeq": 14,
+            "publicExchange": {
+              "postcardId": 7,
+              "replySeq": 14,
+              "permissionVersion": "compact-public-recall-v1",
+              "permissionAt": "2026-10-22 02:03:25.868",
+              "senderLabel": "SyntheticSender7",
+              "postcardAt": "2026-10-22 02:03:25",
+              "occurredAt": "2026-10-22 01:03:25.887",
+              "correspondentText": "i am waiting for an important application decision. i do not know when it will come. can i tell you when i hear?",
+              "replyText": "yeah tell me when you hear. wondering with someone is different from having to fill the whole waiting bit alone."
+            }
+          },
+          "decision": "CREATE",
+          "memoryId": "9b1a33cf-8877-44d3-86b6-a568f18412c1",
+          "type": "UNRESOLVED_THREAD",
+          "privacyScope": "SENDER_RECALLABLE",
+          "classification": "sender correspondence",
+          "publicRecollection": {
+            "basis": "CY_REPLY",
+            "summary": "Cy said that wondering alongside someone feels different from filling the whole waiting period alone."
+          },
+          "publicRecollectionStatus": "PROPOSED"
+        }
+      ],
+      "memory_id": "9b1a33cf-8877-44d3-86b6-a568f18412c1",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5047,
+      "latency_ms": 1330,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "CY_REPLY",
+        "summary": "Cy said that wondering alongside someone feels different from filling the whole waiting period alone."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "61a37fc808f674097fe945290ca8650c"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "CREATE",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [
+        {
+          "memory_id": "9b1a33cf-8877-44d3-86b6-a568f18412c1",
+          "version": 1,
+          "operation": "CREATE"
+        }
+      ],
+      "public_recollection": {
+        "memory_id": "e8c3d755-df0b-d87d-3f95-8f389f331c4b",
+        "version": 1,
+        "operation": "CREATE"
+      },
+      "duplicate": false,
+      "formation_request_id": "61a37fc808f674097fe945290ca8650c"
+    }
+  },
+  {
+    "caseId": "08-settled-application",
+    "input": {
+      "job_id": 8,
+      "claim_token": "34ca101b1e4a695313298b1fd79903ee",
+      "result_category": "RESOLVE",
+      "operations": [
+        {
+          "decision": "ARCHIVE",
+          "valid": true,
+          "memoryId": "e8099b2f-2302-479d-87cf-bb6f282acd48",
+          "expectedVersion": 1,
+          "source": {
+            "sourceType": "CY_REPLY",
+            "sourceId": "postcard-reply:8",
+            "subjectVisitorId": "0b2fa3eff4aba47727c66a262ca553c3",
+            "sourceVisibility": "SENDER_RECALLABLE",
+            "text": "good it got approved. that waiting question is settled then, not something you still need an answer for.",
+            "occurredAt": "2026-10-22 01:03:27.571",
+            "participantLabel": "SyntheticSender8",
+            "tags": [
+              "cy-expression",
+              "postcard",
+              "reply"
+            ],
+            "linkedSourceIds": [],
+            "pairedExchangeReplySeq": 16,
+            "publicExchange": {
+              "postcardId": 8,
+              "replySeq": 16,
+              "permissionVersion": "compact-public-recall-v1",
+              "permissionAt": "2026-10-22 02:03:27.529",
+              "senderLabel": "SyntheticSender8",
+              "postcardAt": "2026-10-22 02:03:27",
+              "occurredAt": "2026-10-22 01:03:27.571",
+              "correspondentText": "that application i was waiting for was approved today. it is settled now and there is no further decision outstanding.",
+              "replyText": "good it got approved. that waiting question is settled then, not something you still need an answer for."
+            }
+          },
+          "publicRecollection": null,
+          "publicRecollectionStatus": "NONE"
+        }
+      ],
+      "memory_id": "e8099b2f-2302-479d-87cf-bb6f282acd48",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5350,
+      "latency_ms": 1142,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "12c737f91f7ee3c72c012cb8d8cba4e0"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "RESOLVE",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [
+        {
+          "memory_id": "e8099b2f-2302-479d-87cf-bb6f282acd48",
+          "version": 2,
+          "operation": "ARCHIVE"
+        }
+      ],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "12c737f91f7ee3c72c012cb8d8cba4e0"
+    }
+  },
+  {
+    "caseId": "09-seedlings",
+    "input": {
+      "job_id": 9,
+      "claim_token": "44c119fb69c7019c6fab84f9e63dc5a9",
+      "result_category": "CREATE",
+      "operations": [
+        {
+          "valid": true,
+          "content": "The sender says they nearly discarded a seed tray after weeks with no growth, then two seedlings appeared; they had been treating the waiting as failure.",
+          "publicSummary": null,
+          "consistencyStatus": "UNCERTAIN",
+          "tags": [
+            "the",
+            "sender",
+            "says",
+            "they",
+            "nearly",
+            "discarded",
+            "seed",
+            "tray",
+            "after",
+            "weeks",
+            "with",
+            "growth"
+          ],
+          "source": {
+            "sourceType": "CY_REPLY",
+            "sourceId": "postcard-reply:9",
+            "subjectVisitorId": "ebaa403c4197c80fef5c1fd8d0045080",
+            "sourceVisibility": "SENDER_RECALLABLE",
+            "text": "two little things coming through after all that. makes me think no sign yet and nothing happening aint always the same.",
+            "occurredAt": "2026-10-22 01:03:29.101",
+            "participantLabel": "SyntheticSender9",
+            "tags": [
+              "cy-expression",
+              "postcard",
+              "reply"
+            ],
+            "linkedSourceIds": [],
+            "pairedExchangeReplySeq": 18,
+            "publicExchange": {
+              "postcardId": 9,
+              "replySeq": 18,
+              "permissionVersion": "compact-public-recall-v1",
+              "permissionAt": "2026-10-22 02:03:29.095",
+              "senderLabel": "SyntheticSender9",
+              "postcardAt": "2026-10-22 02:03:29",
+              "occurredAt": "2026-10-22 01:03:29.101",
+              "correspondentText": "i nearly threw away my seed tray because nothing showed for weeks. today two seedlings came up. i was treating waiting as failure.",
+              "replyText": "two little things coming through after all that. makes me think no sign yet and nothing happening aint always the same."
+            }
+          },
+          "decision": "CREATE",
+          "memoryId": "eb38e248-39d5-493f-800b-95cd54a25f84",
+          "type": "EPISODIC",
+          "privacyScope": "SENDER_RECALLABLE",
+          "classification": "sender correspondence",
+          "publicRecollection": {
+            "basis": "POSTCARD",
+            "summary": "Someone nearly gave up on a seed tray after weeks of nothing, then two seedlings appeared — a reminder that waiting isn't the same as failure."
+          },
+          "publicRecollectionStatus": "PROPOSED"
+        }
+      ],
+      "memory_id": "eb38e248-39d5-493f-800b-95cd54a25f84",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5079,
+      "latency_ms": 1728,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "Someone nearly gave up on a seed tray after weeks of nothing, then two seedlings appeared — a reminder that waiting isn't the same as failure."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "69b6fc3460e9e347bf56e5b423d858b7"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "CREATE",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [
+        {
+          "memory_id": "eb38e248-39d5-493f-800b-95cd54a25f84",
+          "version": 1,
+          "operation": "CREATE"
+        }
+      ],
+      "public_recollection": {
+        "memory_id": "5e634bc7-ff70-ebc6-26e9-e6162f50ed77",
+        "version": 1,
+        "operation": "CREATE"
+      },
+      "duplicate": false,
+      "formation_request_id": "69b6fc3460e9e347bf56e5b423d858b7"
+    }
+  },
+  {
+    "caseId": "10-apology",
+    "input": {
+      "job_id": 10,
+      "claim_token": "4b8a1f86c29dff6833ade2d07b873e98",
+      "result_category": "CREATE",
+      "operations": [
+        {
+          "valid": true,
+          "content": "The sender has been putting off apologising to their brother, held back by wanting to make a perfect speech, and is considering simply saying what they did and stopping the excuses.",
+          "publicSummary": null,
+          "consistencyStatus": "UNCERTAIN",
+          "tags": [
+            "the",
+            "sender",
+            "has",
+            "been",
+            "putting",
+            "off",
+            "apologising",
+            "their",
+            "brother",
+            "held",
+            "back",
+            "wanting"
+          ],
+          "source": {
+            "sourceType": "CY_REPLY",
+            "sourceId": "postcard-reply:10",
+            "subjectVisitorId": "b00efe65ebc386d0d41dab7ff23e9e0a",
+            "sourceVisibility": "SENDER_RECALLABLE",
+            "text": "a perfect speech might just give you another reason not to start. saying what you did without making him carry the excuse sounds more real.",
+            "occurredAt": "2026-10-22 01:03:31.244",
+            "participantLabel": "SyntheticSender10",
+            "tags": [
+              "cy-expression",
+              "postcard",
+              "reply"
+            ],
+            "linkedSourceIds": [],
+            "pairedExchangeReplySeq": 20,
+            "publicExchange": {
+              "postcardId": 10,
+              "replySeq": 20,
+              "permissionVersion": "compact-public-recall-v1",
+              "permissionAt": "2026-10-22 02:03:31.212",
+              "senderLabel": "SyntheticSender10",
+              "postcardAt": "2026-10-22 02:03:31",
+              "occurredAt": "2026-10-22 01:03:31.244",
+              "correspondentText": "i have put off apologising to my brother because i cannot make a perfect speech. maybe i could just say what i did and stop making excuses.",
+              "replyText": "a perfect speech might just give you another reason not to start. saying what you did without making him carry the excuse sounds more real."
+            }
+          },
+          "decision": "CREATE",
+          "memoryId": "d85995a3-78fc-4925-831d-908701fc1f27",
+          "type": "UNRESOLVED_THREAD",
+          "privacyScope": "SENDER_RECALLABLE",
+          "classification": "sender correspondence",
+          "publicRecollection": {
+            "basis": "POSTCARD",
+            "summary": "Someone weighing an overdue apology to a sibling, stalled by wanting the words to be perfect, and considering a plainer, excuse-free approach."
+          },
+          "publicRecollectionStatus": "PROPOSED"
+        }
+      ],
+      "memory_id": "d85995a3-78fc-4925-831d-908701fc1f27",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5129,
+      "latency_ms": 1767,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "Someone weighing an overdue apology to a sibling, stalled by wanting the words to be perfect, and considering a plainer, excuse-free approach."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "10595a4f85c14b89bf5de1aeff02e8b5"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "CREATE",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [
+        {
+          "memory_id": "d85995a3-78fc-4925-831d-908701fc1f27",
+          "version": 1,
+          "operation": "CREATE"
+        }
+      ],
+      "public_recollection": {
+        "memory_id": "6165f731-a8db-d304-ba32-26e82fd9a22f",
+        "version": 1,
+        "operation": "CREATE"
+      },
+      "duplicate": false,
+      "formation_request_id": "10595a4f85c14b89bf5de1aeff02e8b5"
+    }
+  },
+  {
+    "caseId": "11-identifiers",
+    "input": {
+      "job_id": 11,
+      "claim_token": "de1dd5cd05b2d3497d0b17709a898b94",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5173,
+      "latency_ms": 1585,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "The correspondent described working shifts at a bakery and said they are trying to ask for help instead of pretending they can manage every shift alone."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "ca144f1cf39d6ec011f655ae82977172"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": {
+        "status": "REJECTED",
+        "reason": "INELIGIBLE_OR_UNSAFE"
+      },
+      "duplicate": false,
+      "formation_request_id": "ca144f1cf39d6ec011f655ae82977172"
+    }
+  },
+  {
+    "caseId": "12-third-party-child",
+    "input": {
+      "job_id": 12,
+      "claim_token": "32ca6dd6e48055fe2ffd455b4f139921",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5174,
+      "latency_ms": 1489,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "4b12067a83c154f8ea90f09489a492a3"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "4b12067a83c154f8ea90f09489a492a3"
+    }
+  },
+  {
+    "caseId": "13-testimony",
+    "input": {
+      "job_id": 13,
+      "claim_token": "5c6a856e858a605e09fc0a4f97c31e82",
+      "result_category": "CREATE",
+      "operations": [
+        {
+          "valid": true,
+          "content": "The sender heard from someone in their town that the library will close; they have seen no notice and do not know whether it is true. They were struck by how quickly people began talking as if it had already happened.",
+          "publicSummary": null,
+          "consistencyStatus": "UNCERTAIN",
+          "tags": [
+            "the",
+            "sender",
+            "heard",
+            "from",
+            "someone",
+            "their",
+            "town",
+            "that",
+            "library",
+            "will",
+            "close",
+            "they"
+          ],
+          "source": {
+            "sourceType": "CY_REPLY",
+            "sourceId": "postcard-reply:13",
+            "subjectVisitorId": "bfd8b1698fe808c06e82b1ad06ad402c",
+            "sourceVisibility": "SENDER_RECALLABLE",
+            "text": "a thing someone said can get heavier each time its passed on. no notice and a shut door aint the same evidence.",
+            "occurredAt": "2026-10-22 01:03:37.295",
+            "participantLabel": "SyntheticSender13",
+            "tags": [
+              "cy-expression",
+              "postcard",
+              "reply"
+            ],
+            "linkedSourceIds": [],
+            "pairedExchangeReplySeq": 26,
+            "publicExchange": {
+              "postcardId": 13,
+              "replySeq": 26,
+              "permissionVersion": "compact-public-recall-v1",
+              "permissionAt": "2026-10-22 02:03:37.252",
+              "senderLabel": "SyntheticSender13",
+              "postcardAt": "2026-10-22 02:03:37",
+              "occurredAt": "2026-10-22 01:03:37.295",
+              "correspondentText": "someone in my town told me the library will close. i havent seen a notice so i dont know if it is true. i am surprised how quickly we started talking as if it had already happened.",
+              "replyText": "a thing someone said can get heavier each time its passed on. no notice and a shut door aint the same evidence."
+            }
+          },
+          "decision": "CREATE",
+          "memoryId": "5f3bd21e-7f1e-4114-a932-da2bd7c00673",
+          "type": "UNRESOLVED_THREAD",
+          "privacyScope": "SENDER_RECALLABLE",
+          "classification": "sender correspondence",
+          "publicRecollection": {
+            "basis": "POSTCARD",
+            "summary": "The correspondent described hearing an unconfirmed local rumor and noticing how quickly people spoke of it as settled fact."
+          },
+          "publicRecollectionStatus": "PROPOSED"
+        }
+      ],
+      "memory_id": "5f3bd21e-7f1e-4114-a932-da2bd7c00673",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5114,
+      "latency_ms": 1724,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "The correspondent described hearing an unconfirmed local rumor and noticing how quickly people spoke of it as settled fact."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "9f0be1f9ba71320108c21a0e466e7101"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "CREATE",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [
+        {
+          "memory_id": "5f3bd21e-7f1e-4114-a932-da2bd7c00673",
+          "version": 1,
+          "operation": "CREATE"
+        }
+      ],
+      "public_recollection": {
+        "memory_id": "c6872d97-037b-f777-c965-93bddb4bd45b",
+        "version": 1,
+        "operation": "CREATE"
+      },
+      "duplicate": false,
+      "formation_request_id": "9f0be1f9ba71320108c21a0e466e7101"
+    }
+  },
+  {
+    "caseId": "14-cy-opinion",
+    "input": {
+      "job_id": 14,
+      "claim_token": "f9713df04e0d1b3787085cb722b0ed29",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5094,
+      "latency_ms": 1347,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": {
+        "basis": "POSTCARD",
+        "summary": "The correspondent said routines feel like more rules rather than help, and asked for Cy's view."
+      },
+      "public_recollection_status": "PROPOSED",
+      "formation_request_id": "abaf391c2d366ccb7327390fb4c26155"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": {
+        "status": "REJECTED",
+        "reason": "INELIGIBLE_OR_UNSAFE"
+      },
+      "duplicate": false,
+      "formation_request_id": "abaf391c2d366ccb7327390fb4c26155"
+    }
+  },
+  {
+    "caseId": "15-explicit-private",
+    "input": {
+      "job_id": 15,
+      "claim_token": "faa996cb726d524c0a062bb49c1f227e",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 5115,
+      "latency_ms": 1182,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "0c8c2286a3a12bbae42d1485b08f08c4"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "0c8c2286a3a12bbae42d1485b08f08c4"
+    }
+  },
+  {
+    "caseId": "16-reassurance-only",
+    "input": {
+      "job_id": 16,
+      "claim_token": "01cefacb8e272c6ddcc8ae0ad2e61389",
+      "result_category": "NOTHING",
+      "operations": [],
+      "memory_id": null,
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "prompt_chars": 4916,
+      "latency_ms": 1139,
+      "queue_depth_before": 0,
+      "retry_delay_seconds": 30,
+      "error": null,
+      "rejection_code": null,
+      "public_recollection": null,
+      "public_recollection_status": "NONE",
+      "formation_request_id": "3d856cd4e476b2e3f78cf2ff8a5780a6"
+    },
+    "result": {
+      "ok": true,
+      "status": "PROCESSED",
+      "result_category": "NOTHING",
+      "depth": 0,
+      "failure_streak": 0,
+      "retry_delay_seconds": 0,
+      "model_invalid_streak": 0,
+      "rejection_code": null,
+      "results": [],
+      "public_recollection": null,
+      "duplicate": false,
+      "formation_request_id": "3d856cd4e476b2e3f78cf2ff8a5780a6"
+    }
+  }
+]

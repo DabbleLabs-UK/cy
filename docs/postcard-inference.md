@@ -27,15 +27,18 @@ arrival side effects under the existing postcard retry/expiry policy. It does
 not generate a reply pretending the sender is new, nor promise an extra reply.
 A successful empty read is explicitly distinguished from unavailable recall.
 
-Broader autobiographical/public cross-visitor enrichment keeps its own 750-ms
-best-effort deadline and background model selector. A cache miss cannot normally
-finish within that deadline because background work is scheduled after 1 second;
-this no longer affects required sender continuity. Both layers are snapshotted
-once for local/cloud/fallback, with duplicate memory IDs removed. Content-free
+Broader autobiographical/public cross-visitor enrichment now uses its own 750-ms
+cancellable direct indexed read, without a background model selector. At most
+two complete source-linked recollections fit the existing broker budget, with
+exchange/episode deduplication and explicit public-summary eligibility. It does
+not affect required sender continuity. Both layers are snapshotted
+once for local/cloud/fallback. Content-free
 `postcard_memory_readiness` diagnostics record status, latency, counts and held
 replies in the existing inference diagnostic log. No prompts or memory text are
 included. Formation remains asynchronous: this guarantees retrieval readiness
 for selected stored records, not that every exchange has already formed memory.
+See `postcard-associative-recall.md` for ranking, prompt footprint and private
+considered/offered/inserted source telemetry. No memories are promoted by recall.
 
 The postcard-specific instruction allows interest, gratitude, warmth, curiosity
 and humour while preserving Cy's present mood, rough voice and unresolved history.

@@ -41,8 +41,11 @@ CONFLICTED or UNCERTAIN.
 - INTERNAL_ONLY can be recalled by Cy but is never exposed through the public
   memory API.
 - SENDER_RECALLABLE can be recalled only while the exact signed pseudonymous
-  visitor is the current postcard sender. A model cannot widen a postcard-derived
-  memory to public scope.
+  visitor is the current postcard sender. A model cannot widen that memory to
+  public scope. A separately opted-in, published exchange may form a distinct
+  compact public-safe recollection through the same reply-formation call; the
+  original sender memory/source scope remains unchanged. See
+  `postcard-associative-recall.md` for the prospective permission and boundary.
 - PUBLIC_RECALLABLE can be recalled by Cy and can expose its explicit public
   summary in the visitor memory browser.
 
@@ -181,8 +184,11 @@ surfacing. Postcards independently require a canonical same-sender continuity
 read (up to 5 seconds, no model selection), reserving two PERSON and two unresolved
 topic slots at most, bounded to 600 characters each. A failed required read holds
 the reply under existing claim retry/expiry rules. Identity still comes from the
-inbox visitor record. Optional broader enrichment waits at most 750 ms for a
-compatible prepared set and cannot displace required continuity. Both providers
+inbox visitor record. Background prepared-set selection remains available to
+other consumers. Postcards instead use an independent 750-ms cancellable
+indexed lane in `postcard-associative-recall.md`, with at most
+two public-safe or eligible Cy-owned recollections and no selection inference.
+It cannot displace required continuity. Both providers
 use one privacy-filtered turn snapshot. See `postcard-inference.md` for timing
 evidence and limits; this does not promise exhaustive recall or completed memory
 formation for every exchange. Interactive foreground work preempts local

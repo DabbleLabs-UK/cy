@@ -47,6 +47,7 @@ try {
             'SELECT p.id, p.visitor_id, p.from_name, p.body, p.image_path, p.image_source,
                     p.image_attrib, p.caption, p.posted_at, p.mail_class,
                     p.claim_generation, p.processing_attempts, p.temporary_failures, p.quality_failures,
+                    p.recall_permission_version,
                     (p.promoted_at IS NOT NULL) AS promoted,
                     (SELECT MAX(pp.posted_at) FROM postcards pp
                        WHERE pp.visitor_id = p.visitor_id AND pp.id < p.id) AS prev_posted_at,
@@ -135,6 +136,7 @@ try {
             'processing_attempts' => (int)$p['processing_attempts'],
             'temporary_failures' => (int)$p['temporary_failures'],
             'quality_failures' => (int)$p['quality_failures'],
+            'recall_permission_version' => $p['recall_permission_version'],
             'visitor_id' => $p['visitor_id'],
             'from_name' => $p['from_name'],
             'body' => $p['body'],

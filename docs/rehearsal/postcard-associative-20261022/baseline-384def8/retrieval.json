@@ -1,0 +1,98 @@
+[
+  {
+    "id": "waiting",
+    "text": "Waiting for an application decision makes me imagine the worst. Not knowing feels like failure.",
+    "relevant": [
+      "04-pet-worry",
+      "07-open-application",
+      "08-settled-application",
+      "09-seedlings"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "care",
+    "text": "Caring for someone has taken over my day. I forget my own food and rest.",
+    "relevant": [
+      "06-caring"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "apology",
+    "text": "I keep postponing an apology because I cannot find a perfect speech or the right words.",
+    "relevant": [
+      "10-apology"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "rumour",
+    "text": "A rumour gets repeated until everyone treats it as truth, but there is no evidence or notice.",
+    "relevant": [
+      "13-testimony"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "routine",
+    "text": "Would a small routine help when the shape of the day is not under my control?",
+    "relevant": [
+      "14-cy-opinion"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "help",
+    "text": "I feel I must handle every job alone. Asking for help feels like admitting failure.",
+    "relevant": [
+      "05-job-uncertainty",
+      "11-identifiers"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "unrelated",
+    "text": "Can you explain telescope mirror coatings and orbital mechanics?",
+    "relevant": [],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "greeting",
+    "text": "hello Cy, thanks and hope you are okay",
+    "relevant": [],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  }
+]

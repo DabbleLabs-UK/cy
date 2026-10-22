@@ -80,7 +80,10 @@ export function postcardMemoryDirective({ sender, enrichment }) {
   // The generic formatter caps a set at three. Format required records separately
   // so both reserved PERSON and unresolved-topic slots survive broker fallback.
   return [...sender.selected.map(m => formatAutobiographicalMemory([m])),
-    formatAutobiographicalMemory(enrichment.selected)].filter(Boolean).join('\n');
+    // Direct associative recall is admitted ONLY by the existing broker budget.
+    // On broker failure retain required sender continuity, not an unbudgeted
+    // optional fallback copy. Legacy prepared enrichment keeps its old semantics.
+    formatAutobiographicalMemory(enrichment.mechanism === 'INDEXED_ASSOCIATIVE' ? [] : enrichment.selected)].filter(Boolean).join('\n');
 }
 
 export function postcardMemoryReadiness(sender, enrichment = null) {

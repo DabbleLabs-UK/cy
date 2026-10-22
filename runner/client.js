@@ -592,7 +592,7 @@ export class Client {
 
   async _trackedMemoryRequest(action, payload = {}, signal = null) {
     if (this.config.dryRun) {
-      if (action === 'query' || action === 'sender_continuity') {
+      if (action === 'query' || action === 'sender_continuity' || action === 'postcard_associations') {
         return { ok: true, candidates: [], mechanisms: [], privacy_filter: { applied: true, dry_run: true } };
       }
       return { ok: true, dry_run: true, applied: 0 };
@@ -624,6 +624,12 @@ export class Client {
 
   async getSenderContinuity({ visitorId, query = {}, signal = null }) {
     return this._memoryRequest('sender_continuity', { visitor_id: visitorId, query }, signal);
+  }
+
+  async getPostcardAssociations({ visitorId = null, query = {}, excludeIds = [], signal = null } = {}) {
+    return this._memoryRequest('postcard_associations', {
+      visitor_id: visitorId, query, exclude_ids: excludeIds,
+    }, signal);
   }
 
   async applyMemoryOperations(operations) {

@@ -1,0 +1,7 @@
+{
+  "verifiedAt": "2026-10-22T01:55:01+01:00",
+  "phpProcessesRemaining": 0,
+  "ownedDatabasePid": 5240,
+  "ownedDatabasePidStillRunning": false,
+  "note": "The original cleanup.json stoppedPhp=false is a harness reporting bug: it checked exitCode but not signalCode after awaiting the child exit. Get-Process independently confirmed no remaining php process and the owned database stopped. Original evidence preserved."
+}

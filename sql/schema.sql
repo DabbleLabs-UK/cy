@@ -125,6 +125,8 @@ CREATE TABLE postcards (
     quality_failures INT UNSIGNED NOT NULL DEFAULT 0,
     retry_hold VARCHAR(64) NULL,
     arrival_event_id BIGINT UNSIGNED NULL,
+    recall_permission_version VARCHAR(32) NULL,
+    recall_permitted_at DATETIME(3) NULL,
     blocked       TINYINT DEFAULT 0,
     block_reason  VARCHAR(80) NULL,
     INDEX idx_delivered_deliver (delivered_at, deliver_at),

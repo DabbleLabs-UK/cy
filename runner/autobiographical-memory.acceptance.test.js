@@ -288,7 +288,11 @@ test('T public UI and API enforce public scope and omit IDs', async () => {
 
 test('U live memory calls use compact model-facing grounded text', async () => {
   const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
-  assert.match(run, /groundedContext:\s*cognition\.groundedDirective/);
+  // Postcards now query indexed associations without a surfacing model call.
+  // Journal/background formation still use compact grounded text unchanged.
+  assert.match(run, /loadPostcardAssociativeRecall\(\{/);
+  const postcard = run.slice(run.indexOf('async function doPostcard(pc)'), run.indexOf('// ---- warden notice:'));
+  assert.doesNotMatch(postcard, /loadPostcardEnrichment|requestWorkingContext/);
   assert.match(run, /refreshPendingMemory\(`journal:\$\{nowMs\}`, cognition\.groundedDirective\)/);
   assert.match(run, /formMemoryAfterVisibleOutput\(cognition\.groundedDirective, true\)/);
   assert.match(run, /formMemoryAfterVisibleOutput\(burstGroundedDirective\)/);

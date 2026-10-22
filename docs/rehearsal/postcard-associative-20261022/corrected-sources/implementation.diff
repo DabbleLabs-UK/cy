@@ -1,0 +1,41 @@
+diff --git a/runner/autobiographical-memory.js b/runner/autobiographical-memory.js
+index 5fa4814..872c9e3 100644
+--- a/runner/autobiographical-memory.js
++++ b/runner/autobiographical-memory.js
+@@ -196,7 +196,9 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
+     return {
+       system: [
+         'Select one durable autobiographical memory decision from this correspondence. Return only the constrained JSON object.',
+-        'Use only the current source and offered memories, not facts in these instruction examples. No transcript or invented facts.',
++        publicExchange
++          ? 'For the private sender decision use only the current CY_REPLY source and offered memories. For the independent publicRecollection only, you may also use publishedExchange.correspondentSaid. Never use offered private memories as public-summary material. Instruction examples are not evidence. No transcript or invented facts.'
++          : 'Use only the current source and offered memories, not facts in these instruction examples. No transcript or invented facts.',
+         'PERSON: durable facts about this sender: identity, family, pets, interests, ongoing circumstances, preferences or meaningful personal history.',
+         'UNRESOLVED_THREAD: a genuinely persistent open issue worth returning to, not every question or social greeting.',
+         'EPISODIC: a meaningful experienced event, not a fallback for personal facts. MOTIF: a supported recurring pattern. SEMANTIC: durable general knowledge.',
+@@ -211,7 +213,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
+         'Contrast: offered FM1 awaits an application decision; "it was approved, that is settled" -> RESOLVE FM1, not UPDATE. "the decision is delayed until next week; I am still waiting" -> UPDATE FM1 because it remains open. With no offered candidates, never UPDATE or RESOLVE.',
+         'Content: one concise third-person recollection, at most 480 characters. Do not invent technical IDs, candidate refs or privacy fields; CY attaches provenance and sender-only scope.',
+         ...(publicExchange ? [
+-          'Independent optional publicRecollection: null is normal. Only a meaningful experience with durable future value merits a compact public-safe abstraction, never every exchange. Keep the sender decision independent.',
++          'Independent optional publicRecollection: null is normal. A distinct useful experience or reflection in this published exchange can be an associative cue for a later similar conversation; it need not be a new PERSON fact or independently observed prison event. A private sender decision of NOTHING does not require publicRecollection=null, and CREATE does not require a public summary. Greetings, generic reassurance, repetition or no safe useful abstraction merit null, never a compulsory recollection.',
+           'Permission covers a compact summary only, not reuse of either raw message. No quotations, names (including pets/third parties), handles, identifying details, contacts, addresses, private/sensitive information or unique biographical details. If the value depends on those details, choose null.',
+           'Return basis POSTCARD only for what the correspondent explicitly told Cy; basis CY_REPLY only for what Cy himself said or thought. Never merge these voices, invent facts, or turn testimony, advice, dreams or speculation into observed prison/world facts. Keep uncertainty. Summarize one side only in at most 200 characters, preferably under 140; CY adds the attribution.',
+         ] : []),
+diff --git a/runner/postcard-recollection.test.js b/runner/postcard-recollection.test.js
+index 07598bf..c925015 100644
+--- a/runner/postcard-recollection.test.js
++++ b/runner/postcard-recollection.test.js
+@@ -21,6 +21,12 @@ test('only eligible reply formation adds the independent compact summary slot',
+   assert.match(request.system, /null is normal/);
+   assert.match(request.system, /not reuse of either raw message/);
+   assert.match(request.system, /Never merge these voices/);
++  assert.match(request.system, /private sender decision use only the current CY_REPLY source/);
++  assert.match(request.system, /publicRecollection only, you may also use publishedExchange.correspondentSaid/);
++  assert.match(request.system, /Never use offered private memories as public-summary material/);
++  assert.match(request.system, /NOTHING does not require publicRecollection=null/);
++  assert.match(regular.system, /Use only the current source and offered memories/);
++  assert.doesNotMatch(regular.system, /associative cue|publishedExchange/);
+   assert.doesNotMatch(request.prompt, /permissionVersion|postcardId|replySeq|subjectVisitorId/);
+ });
+ 

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/postcard_recollection.php';
 
 const CY_MEMORY_TYPES = ['EPISODIC', 'PERSON', 'MOTIF', 'UNRESOLVED_THREAD', 'SEMANTIC'];
 const CY_MEMORY_SCOPES = ['INTERNAL_ONLY', 'SENDER_RECALLABLE', 'PUBLIC_RECALLABLE'];
@@ -325,6 +326,15 @@ function captive_memory_claim_source_in_transaction(PDO $db, array $filter, mixe
     $token = bin2hex(random_bytes(16));
     $stmt->execute([$token, (int)$row['id']]);
     $row['source'] = json_decode((string)$row['source_payload'], true) ?: [];
+    // Never trust public eligibility supplied by a runner or stored job payload.
+    unset($row['source']['publicExchange'], $row['source']['pairedExchangeReplySeq']);
+    $exchange = captive_postcard_recollection_exchange($db, $row['source']);
+    if ($exchange) $row['source']['pairedExchangeReplySeq'] = $exchange['replySeq'];
+    // Persist only the authoritative pairing receipt, not another transcript.
+    // Every claim overwrites it before inference; enqueue callers cannot set it.
+    $db->prepare('UPDATE autobiographical_memory_formation_queue SET source_payload = ? WHERE id = ?')
+        ->execute([json_encode($row['source'], JSON_UNESCAPED_SLASHES), (int)$row['id']]);
+    if ($exchange) $row['source']['publicExchange'] = $exchange;
     $row['attempts'] = (int)$row['attempts'] + 1;
     $row['claim_token'] = $token;
     return $row;
@@ -492,6 +502,13 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
             captive_memory_inference_completion_lock($db, $job, $token, $inferenceRequest, $category);
         }
         $source = captive_memory_validate_source(json_decode($job['source_payload'], true, 32, JSON_THROW_ON_ERROR));
+        $paired = null;
+        if (!empty($source['pairedExchangeReplySeq'])) {
+            $paired = captive_postcard_recollection_exchange($db, $source, false);
+            if (!$paired || $paired['replySeq'] !== $source['pairedExchangeReplySeq']) {
+                throw new InvalidArgumentException('formation exchange provenance mismatch');
+            }
+        }
         $senderSource = in_array($job['source_type'], ['POSTCARD','CY_REPLY'], true);
         $results = [];
         foreach ($operations as $operation) {
@@ -529,7 +546,15 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
                 }
             }
             $op['source'] = $source;
+            if ($paired && in_array($op['decision'], ['CREATE', 'UPDATE'], true)) {
+                $op['originKind'] = 'CORRESPONDENCE_EXCHANGE';
+            }
             $results[] = captive_memory_apply($db, $op);
+            if ($paired) captive_memory_add_source($db, $op['memoryId'], [
+                'sourceType' => 'POSTCARD', 'sourceId' => 'postcard:' . $paired['postcardId'],
+                'subjectVisitorId' => $source['subjectVisitorId'], 'sourceVisibility' => 'SENDER_RECALLABLE',
+                'occurredAt' => $paired['postcardAt'], 'text' => $paired['correspondentText'],
+            ]);
             // Same transaction and claim receipt as the mutation, including the
             // private activity row; a lost acknowledgement cannot duplicate it.
             $current = $db->prepare('SELECT privacy_scope, public_summary FROM autobiographical_memories WHERE id = ?');
@@ -542,6 +567,16 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
                     $memory['privacy_scope'] === 'PUBLIC_RECALLABLE' ? $memory['public_summary'] : null,
                     '[]', $memory['privacy_scope'],
                 ]);
+        }
+        $publicResult = null;
+        if ($finished && array_key_exists('public_recollection', $input)) {
+            try { $publicResult = captive_postcard_apply_recollection($db, $source, $input['public_recollection']); }
+            catch (InvalidArgumentException $e) { $publicResult = ['status' => 'REJECTED', 'reason' => 'INELIGIBLE_OR_UNSAFE']; }
+            if ($publicResult === null && ($input['public_recollection_status'] ?? '') === 'REJECTED') {
+                $publicResult = ['status' => 'REJECTED', 'reason' => 'INVALID_OPTIONAL_OUTPUT'];
+            }
+        } elseif (!empty($input['public_recollection'])) {
+            throw new InvalidArgumentException('public recollection requires valid formation completion');
         }
         $retry = $finished ? ['status' => 'PROCESSED', 'failure_streak' => 0, 'model_invalid_streak' => 0, 'delay_seconds' => 0]
             : captive_memory_formation_retry((int)$job['failure_streak'], $category, (int)$job['model_invalid_streak']);
@@ -557,7 +592,7 @@ function captive_memory_finish_source(PDO $db, array $input, bool $atomic = true
         $result = ['ok' => true, 'status' => $retry['status'], 'result_category' => $category, 'depth' => $depth,
             'failure_streak' => $retry['failure_streak'], 'retry_delay_seconds' => $retry['delay_seconds'],
             'model_invalid_streak' => $retry['model_invalid_streak'], 'rejection_code' => $rejectionCode,
-            'results' => $results, 'duplicate' => false];
+            'results' => $results, 'public_recollection' => $publicResult, 'duplicate' => false];
         if ($inferenceRequest !== null) {
             captive_memory_inference_complete($db, $inferenceRequest, $category, $rejectionCode, $retry['status']);
             $result['formation_request_id'] = $inferenceRequest;
@@ -658,6 +693,9 @@ function captive_memory_rank_candidates(
     }
     $ranked = [];
     foreach ($rows as $row) {
+        if (($query['sender_formation_only'] ?? false) === true
+            && ($visitorId === null || ($row['privacy_scope'] ?? '') !== 'SENDER_RECALLABLE'
+                || ($row['subject_visitor_id'] ?? null) !== $visitorId)) continue;
         if (!captive_memory_visible_to_prompt($row, $visitorId)) {
             continue;
         }
@@ -837,6 +875,11 @@ function captive_memory_validate_operation(array $operation): array
 
 function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): array
 {
+    $senderOnly = ($query['sender_formation_only'] ?? false) === true;
+    if ($senderOnly && $visitorId === null) return [];
+    // Filter every indexed pool BEFORE its limit. Public recollections must
+    // never crowd protected sender facts/topics out of formation candidates.
+    $sourceScope = $senderOnly ? " AND privacy_scope = 'SENDER_RECALLABLE' AND subject_visitor_id = " . $db->quote($visitorId) : '';
     // Indexed engineering pre-filter. Each path contributes IDs from the whole
     // active store, so age alone never makes a retained memory unreachable.
     $candidateIds = [];
@@ -852,7 +895,7 @@ function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): a
     if ($visitorId !== null) {
         $stmt = $db->prepare(
             "SELECT id FROM autobiographical_memories
-             WHERE status = 'ACTIVE' AND subject_visitor_id = ?
+             WHERE status = 'ACTIVE' AND subject_visitor_id = ? $sourceScope
              ORDER BY updated_at DESC LIMIT 100"
         );
         $stmt->execute([$visitorId]);
@@ -870,7 +913,7 @@ function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): a
             "SELECT m.id
              FROM autobiographical_memories m
              JOIN autobiographical_memory_tags t ON t.memory_id = m.id
-             WHERE m.status = 'ACTIVE' AND t.tag IN ($placeholders)
+             WHERE m.status = 'ACTIVE' AND t.tag IN ($placeholders) $sourceScope
              GROUP BY m.id
              ORDER BY COUNT(DISTINCT t.tag) DESC, m.updated_at DESC
              LIMIT 200"
@@ -889,7 +932,7 @@ function captive_memory_fetch_rows(PDO $db, array $query, ?string $visitorId): a
             "SELECT id,
                     MATCH(content, public_summary) AGAINST (? IN BOOLEAN MODE) AS fts_rank
              FROM autobiographical_memories
-             WHERE status = 'ACTIVE'
+             WHERE status = 'ACTIVE' $sourceScope
              HAVING fts_rank > 0
              ORDER BY fts_rank DESC, updated_at DESC
              LIMIT 200"
