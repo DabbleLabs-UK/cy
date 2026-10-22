@@ -93,6 +93,7 @@ Existing helper reason: `deploy:character-power-context-339b62e`.
   is not the current-state authority; `live_vitals_latest` is.
 - CY and Feddit returned HTTP 200 at 21:47:46/47Z. Feddit worker PID 8616
   and arbiter PID 15004 remained unchanged through post-restart checks.
+  Both public HTTP checks passed again after recovery at 21:51:16Z.
 - Expected listeners only: loopback 11434 and 11435; no rehearsal listener.
   Ollama reports 0.34.1. Arbiter healthy, 3072 context/four threads, zero lease
   expiries; after normal work it was idle with no queued requests at 21:49:26Z.
