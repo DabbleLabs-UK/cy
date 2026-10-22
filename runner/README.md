@@ -54,7 +54,7 @@ the runner will be terminated when that transient session ends.
 | `dryRun`    | `true` = no network; write events to `state/events.jsonl`      |
 | `tickMs`    | vitals tick interval (ms); the design assumes 5000             |
 | `threads`   | ollama `num_thread` (benchmarked at 2)                         |
-| `costInjectEvery` | inject the electricity cost into the prompt every Nth generation (default 40; a whole-pound crossing also forces it) |
+| `costInjectEvery` | legacy character-cost hook cadence (default 40; whole-pound crossings also call it); the hook now returns no prose and does not control power sampling/accounting |
 | `logPrompts`| `true` = mirror each built prompt (Zone A + `---PROMPT---` + the Zone B/C tail) to `state/prompts.log` (debug) |
 | `power`     | `{ idleWatts, loadWatts, tariff }` for the meter (defaults 25 / 55 / 0.245 GBP per kWh) |
 

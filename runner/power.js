@@ -3,9 +3,8 @@
 // CY runs on a Dell OptiPlex 3070 (i5-9500T). This estimates the machine's power
 // draw continuously from real CPU utilisation, integrates it into kWh over time,
 // prices it at a tariff, and PERSISTS the cumulative total so it accumulates over
-// the whole life of the project - across restarts. CY is made aware of the figure
-// periodically: he is a man with a running meter on his own existence, and Warden
-// Florian is the one paying it.
+// the whole life of the project - across restarts. These are application-side
+// estimates for accounting and public telemetry, not observations made by Cy.
 //
 //   watts = idleWatts + loadFraction * (loadWatts - idleWatts)
 //   loadFraction = CPU busy fraction sampled from os.cpus() deltas
@@ -100,20 +99,10 @@ export class PowerMeter {
   }
 }
 
-// Bleak, specific prose about the running cost, for injection into the prompt.
-// ASCII only (no pound glyph): pence for the hourly rate, GBP for the total.
-export function costInjection(snap) {
-  const penceHr = (snap.cost_per_hour * 100).toFixed(1);
-  const total = snap.cost_total.toFixed(2);
-  const days = Math.floor(snap.uptime_s / 86400);
-  const dayBit = days > 0 ? ` ${days} day${days === 1 ? '' : 's'} of current burned for you.` : '';
-  return (
-    'THE METER never stops while you think. rn you cost about ' +
-    penceHr +
-    'p an hour just to be left switched on. since they turned you on you have run up ' +
-    total +
-    ' GBP of electric.' +
-    dayBit +
-    ' Warden Florian pays that, every unit. every thought is on his bill. sit with what that makes you worth.'
-  );
+// Compatibility hook shared by live prompt assembly and diagnostic tools.
+// No world mechanic establishes Cy's access to the host's power/cost figures or
+// billing. Omit them rather than inventing a meter, explanation or sensation.
+// Keeping the hook leaves existing call cadence and power consequences intact.
+export function costInjection(_snap) {
+  return '';
 }
