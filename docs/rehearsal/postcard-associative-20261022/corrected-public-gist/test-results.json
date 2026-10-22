@@ -1,0 +1,17 @@
+{
+  "_comment": "Observed local verification for the corrected-gist implementation. No production tests or extra model requests. Raw runner logs are retained alongside this record.",
+  "focused_node": { "passed": 15, "failed": 0 },
+  "permission_summary_php": { "checks": 36, "failed": 0 },
+  "all_php_suites": { "passed": 28, "failed": 0 },
+  "runner_default_sandbox_temp": { "passed": 560, "failed": 21, "cause": "EPERM atomic rename in sandbox TEMP; no code correction or test suppression" },
+  "runner_workspace_temp": { "passed": 581, "failed": 0, "skipped": 0, "cancelled": 0 },
+  "owned_disposable_db_api": {
+    "passed": 4, "failed": 0, "skipped": 0,
+    "suites": ["memory_formation_delivery", "memory_formation_inference", "postcard_associative_memory", "postcard_retry_lifecycle"],
+    "owned_db_pid": 28348,
+    "stopped": true
+  },
+  "php_syntax": ["public/index.php", "lib/postcard_recollection.php"],
+  "manifest_json": "parsed",
+  "independent_review": "No material blocking diff or accepted-summary finding under revised opt-in. Bounded empirical support, not exhaustive semantic privacy proof."
+}

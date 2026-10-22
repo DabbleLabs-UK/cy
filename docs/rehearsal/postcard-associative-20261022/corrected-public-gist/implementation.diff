@@ -1,0 +1,208 @@
+diff --git a/docs/data-handling.json b/docs/data-handling.json
+index fd98f3a..8542fdf 100644
+--- a/docs/data-handling.json
++++ b/docs/data-handling.json
+@@ -1,6 +1,6 @@
+ {
+   "_comment": "Source of truth for Cy data handling. Update this whenever collection, storage, transmission, retention, or deletion changes. Policy wording requires human approval before release.",
+-  "_postcard_recollection_permission": "Unreleased opt-in compact-public-recall-v1: a default-unchecked, per-postcard choice authorizes only an automatically formed compact public-safe recollection of that postcard and its published reply, for associative replies to others. It does not authorize raw message reuse, identifying/private detail reuse, or wholesale sender-memory widening. Permission version and server acceptance time live on the postcard row; legacy rows remain NULL/ineligible. Sender-only formation continues regardless. The existing reply formation call may independently return no public recollection or one bounded, attributed abstraction of either correspondent testimony or Cy's reply. Publication atomically queues that same canonical reply source; claim and completion recheck canonical publication/permission. Public recollections retain both exchange source links, original sender-private source visibility, uncertain status and POSTCARD/CY_REPLY origin. No images/transcripts are copied into the public representation, and no new provider call, vector index or separate memory store is introduced. The current configured sender-formation provider receives the published incoming text as well as the existing reply source for eligible opted-in exchanges. Optional unsafe/invalid summaries are recorded as rejected without erasing valid sender formation. Automatic abstraction and privacy screening are fallible; bounded structural checks are not an exhaustive semantic privacy verifier. No historical backfill, journal integration or deployment is authorized by this implementation.",
++  "_postcard_recollection_permission": "Unreleased opt-in compact-public-recall-v1: a default-unchecked, per-postcard choice authorizes only an automatically formed compact public-safe recollection of that postcard and its published reply, for associative replies to others. It may retain the minimum useful gist of opted-in personal material, omitting unnecessary sensitive specifics; it does not authorize raw message reuse, identifying details, or wholesale sender-memory widening. Third-party circumstances are generalised, not identifying disclosures, and explicit confidentiality requests override the optional summary permission. Permission version and server acceptance time live on the postcard row; legacy rows remain NULL/ineligible. Sender-only formation continues regardless. The existing reply formation call may independently return no public recollection or one bounded, attributed abstraction of either correspondent testimony or Cy's reply. Publication atomically queues that same canonical reply source; claim and completion recheck canonical publication/permission. Public recollections retain both exchange source links, original sender-private source visibility, uncertain status and POSTCARD/CY_REPLY origin. No images/transcripts are copied into the public representation, and no new provider call, vector index or separate memory store is introduced. The current configured sender-formation provider receives the published incoming text as well as the existing reply source for eligible opted-in exchanges. Optional unsafe/invalid summaries are recorded as rejected without erasing valid sender formation. Automatic abstraction and privacy screening are fallible; bounded structural checks are not an exhaustive semantic privacy verifier. No historical backfill, journal integration or deployment is authorized by this implementation.",
+   "_exercise_admission_checkpoint_guard": "The exercise movement boundary records only a content-free clock-change or sleep-regime-change deferral reason in existing runner operational logs. No prompt, visitor data, new store or provider call is added; decisions and delivery identities remain on the existing exercise checkpoint path.",
+   "_journal_prompt_representation": "Journal prompts quote the existing bounded prior prose as prior subjective thought and serialize privacy-filtered world evidence, fallible recollections, beliefs and estimates as distinct source records. Writing directions are separate instruction records; fixed voice guidance contains style features rather than invented Cy-life example sentences. No additional data source, memory store, retention, recipient or inference call is introduced.",
+   "product": "Cy",
+@@ -8,7 +8,7 @@
+   "stage": "continuous-prisoner-with-provisional-soma-and-structured-environment-scaffold",
+   "collects": [
+     "Postcard text, an optional chosen handle, and an optional uploaded or Openverse-selected image voluntarily submitted by a visitor",
+-    "An optional, default-unchecked permission for this postcard and its published reply to form a compact public-safe recollection for replies to other people; not permission to reuse raw messages or identifying/private details",
++    "An optional, default-unchecked permission for this postcard and its published reply to form a compact public-safe recollection for replies to other people, retaining the minimum useful personal gist without unnecessary sensitive specifics; not permission to reuse raw messages or identifying details",
+     "A random visitor identifier in a signed HttpOnly cookie, used to recognise a returning postcard writer",
+     "IP addresses on postcard and rate-limit records for abuse prevention",
+     "Short-lived viewer-presence observations derived from event-stream polling",
+diff --git a/docs/postcard-associative-recall.md b/docs/postcard-associative-recall.md
+index bf07a4a..2fc48ce 100644
+--- a/docs/postcard-associative-recall.md
++++ b/docs/postcard-associative-recall.md
+@@ -52,8 +52,10 @@ The unchecked per-postcard checkbox says:
+ 
+ > Allow Cy to remember a short, public-safe summary of this postcard and his reply,
+ > if published, and recall it in replies to other people. This does not allow raw
+-> message reuse or identifying/private details. Optional; leaving this off does
+-> not affect his memory of you in your own correspondence.
++> message reuse or identifying details. The summary may keep the minimum useful
++> gist of what you told Cy, but should leave out unnecessary sensitive specifics.
++> Optional; leaving this off does not affect his memory of you in your own
++> correspondence.
+ 
+ Submission accepts only the explicit `compact-public-recall-v1` value, saving
+ `recall_permission_version` and server `recall_permitted_at` on this postcard.
+@@ -71,8 +73,9 @@ records; stored/runner-supplied eligibility cannot authorize a summary.
+ 
+ The SAME existing configured formation call retains its sender decision and adds
+ an independent nullable `publicRecollection: {basis, summary}` slot. `NOTHING`
+-and null are normal for greetings, repetition, sensitive material or no lasting
+-value. The model abstracts one side only: `basis=POSTCARD` or `CY_REPLY`; it cannot
++and null are normal for greetings, repetition, material without a safe useful
++abstraction or no lasting value. The model abstracts one side only:
++`basis=POSTCARD` or `CY_REPLY`; it cannot
+ choose WORLD. No second call, new source job or transcript store exists.
+ Existing model/options, including the 260-token formation output allowance,
+ are unchanged. This is not the journal's separate 93-token limit.
+@@ -103,14 +106,22 @@ lost response. Archived/deleted identities cannot be resurrected by late work.
+ Public summaries cannot occupy protected sender-formation candidate slots:
+ the scoped indexed query filters them before pool/ranking limits.
+ 
+-The instructions prohibit identifying/private/sensitive details, quotes and
+-invented claims. Persistence additionally rejects contact/URL/number identifiers,
+-source-derived capitalized names, the sender handle, control syntax and copied
++The prospectively opted-in minimum useful personal gist is permitted, not a
++blanket prohibition on personal subject matter. Generalised employment loss,
++self-worth, grief, health uncertainty or caring can remain useful associative
++topics. Remove unnecessary sensitive specifics: precise circumstances, clinical
++details, dates, workplaces, credentials and unique biographical combinations.
++Generalise third-party circumstances, and honour explicit confidentiality even
++inside an opted-in exchange. If the value requires unsafe detail, return null.
++The instructions prohibit identifiers, quotes and invented claims. Persistence
++additionally rejects contact/URL/number identifiers, UK postcodes, common numbered
++street-address shapes, handles, source-derived capitalized names, the sender
++label, control syntax and copied
+ four-word source spans/full originals. These conservative omissions can reject
+ useful summaries too. They are defence in depth, NOT an exhaustive semantic
+ privacy or truth checker: lower-case identifiers, paraphrased sensitive facts or
+-model misattribution remain possible. No real-model quality claim is made without
+-authorized natural evidence. Malformed/unsafe optional summaries fail closed and
++model misattribution remain possible. No exhaustive semantic privacy guarantee is
++claimed from bounded synthetic or natural evidence. Malformed/unsafe optional summaries fail closed and
+ record a bounded rejection in the private completion receipt while valid sender
+ formation is preserved. Historical entries and world truth are never rewritten.
+ 
+@@ -216,7 +227,7 @@ once with attributed source-linked public text. Inspect natural summary quality
+ and privacy before claiming automatic abstraction is reliable; deterministic
+ fixtures do not demonstrate real-model semantics.
+ 
+-## Real-model rehearsal: release remains blocked
++## Initial real-model rehearsal: historical verdict
+ 
+ See `rehearsal/postcard-associative-20261022/README.md` and its hash-indexed raw
+ synthetic evidence. Three fixed batches of sixteen calls used the actual
+@@ -228,3 +239,9 @@ seven. This is not six clean privacy passes: the accepted job-loss/distress
+ recollection demonstrates an unresolved personal-detail boundary. Recommendation
+ is REVISE, not deploy. Copy protection was not weakened and no further calls or
+ fixture tuning were used to manufacture a higher acceptance rate.
++
++The subsequent product correction explicitly permits minimal opted-in personal
++gist, not just impersonal reflections. This changes the privacy assessment of
++generalised job-loss/self-worth and pet-health/waiting material, without removing
++identifier/copy protection. The original evidence and verdict above are retained
++unchanged; the new fixed-sixteen rerun is documented separately.
+diff --git a/lib/postcard_recollection.php b/lib/postcard_recollection.php
+index 3345b14..9a67970 100644
+--- a/lib/postcard_recollection.php
++++ b/lib/postcard_recollection.php
+@@ -77,6 +77,8 @@ function captive_postcard_public_summary(mixed $proposal, array $exchange): ?arr
+     $allText = $exchange['correspondentText'] . ' ' . $exchange['replyText'];
+     // Fail closed on obvious identifiers and copied source phrases. This is
+     // conservative data minimisation, not a general semantic privacy oracle.
++    // Opted-in personal gist is allowed; identifiers are not. Do not reject
++    // employment, loss, health or feelings merely because they are personal.
+     preg_match_all('/\b[A-Z][a-z]{2,}\b/u', $allText, $names);
+     $names = array_diff($names[0], ['The', 'This', 'That', 'There', 'They', 'Their', 'What', 'When', 'Where', 'How', 'Hello', 'Thanks']);
+     $named = false;
+@@ -90,6 +92,8 @@ function captive_postcard_public_summary(mixed $proposal, array $exchange): ?arr
+     if ($text === '' || mb_strlen($text) > 200 || trim($original) === ''
+         || $named || $copied || preg_match('/[<>|\x00-\x1F]|["\x{201c}\x{201d}]/u', $text)
+         || preg_match('/https?:|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\d[\s()+.-]*){7,}/iu', $text)
++        || preg_match('/(?<![\w@])@[a-z0-9_][a-z0-9_.-]{1,}|\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/iu', $text)
++        || preg_match('/\b\d{1,5}\s+(?:[\p{L}]+\s+){1,4}(?:street|road|lane|avenue|mews|close|drive|court|way)\b/iu', $text)
+         || (mb_strlen(trim((string)$exchange['senderLabel'])) >= 3
+             && mb_stripos($text, trim((string)$exchange['senderLabel'])) !== false)
+         || mb_strtolower($text) === mb_strtolower(trim($original))) {
+diff --git a/public/index.php b/public/index.php
+index 7343056..5d94185 100644
+--- a/public/index.php
++++ b/public/index.php
+@@ -343,7 +343,7 @@ window.CY = {
+         <p class="form-hint">Text, a picture, or both. A receipt will say whether it reached his reply tray or the fan mail bag.</p>
+         <label class="form-hint" for="pc-public-recollection">
+           <input type="checkbox" id="pc-public-recollection" name="public_recollection" value="compact-public-recall-v1">
+-          Allow Cy to remember a short, public-safe summary of this postcard and his reply, if published, and recall it in replies to other people. This does not allow raw message reuse or identifying/private details. Optional; leaving this off does not affect his memory of you in your own correspondence.
++          Allow Cy to remember a short, public-safe summary of this postcard and his reply, if published, and recall it in replies to other people. This does not allow raw message reuse or identifying details. The summary may keep the minimum useful gist of what you told Cy, but should leave out unnecessary sensitive specifics. Optional; leaving this off does not affect his memory of you in your own correspondence.
+         </label>
+         <p id="pc-note" class="form-note" aria-live="polite"></p>
+       </form>
+diff --git a/runner/autobiographical-memory.js b/runner/autobiographical-memory.js
+index 1f5845c..402058a 100644
+--- a/runner/autobiographical-memory.js
++++ b/runner/autobiographical-memory.js
+@@ -215,7 +215,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
+         'Content: one concise third-person recollection, at most 480 characters. Do not invent technical IDs, candidate refs or privacy fields; CY attaches provenance and sender-only scope.',
+         ...(publicExchange ? [
+           'Independent optional publicRecollection: null is normal. A distinct useful experience or reflection in this published exchange can be an associative cue for a later similar conversation; it need not be a new PERSON fact or independently observed prison event. A private sender decision of NOTHING does not require publicRecollection=null, and CREATE does not require a public summary. Greetings, generic reassurance, repetition or no safe useful abstraction merit null, never a compulsory recollection.',
+-          'Permission covers a compact summary only, not reuse of either raw message. No quotations, names (including pets/third parties), handles, identifying details, contacts, addresses, private/sensitive information or unique biographical details. If the value depends on those details, choose null.',
++          'Permission covers a compact summary only, not reuse of either raw message. The minimum useful gist of personal experience may remain; do not erase its concrete topic into generic reassurance. Abstract away unnecessary sensitive specifics: precise circumstances, dates, workplaces, clinical details, credentials or unique biographical combinations. No quotations, names (including pets/third parties), handles, identifying details, contacts, precise locations or addresses. Generalise third-party circumstances rather than exposing their personal details. Explicit requests to keep something confidential override this optional permission. If no useful summary remains without those details, choose null.',
+           'Return basis POSTCARD only for what the correspondent explicitly told Cy; basis CY_REPLY only for what Cy himself said or thought. Never merge these voices, invent facts, or turn testimony, advice, dreams or speculation into observed prison/world facts. Keep uncertainty. Summarize one side only in at most 200 characters, preferably under 140; CY adds the attribution.',
+         ] : []),
+       ].join('\n'),
+diff --git a/runner/postcard-recollection.test.js b/runner/postcard-recollection.test.js
+index 8504bda..77cc301 100644
+--- a/runner/postcard-recollection.test.js
++++ b/runner/postcard-recollection.test.js
+@@ -20,6 +20,11 @@ test('only eligible reply formation adds the independent compact summary slot',
+   assert.equal(prompt.source.sourceType, 'CY_REPLY');
+   assert.match(request.system, /null is normal/);
+   assert.match(request.system, /not reuse of either raw message/);
++  assert.match(request.system, /minimum useful gist of personal experience may remain/);
++  assert.match(request.system, /Abstract away unnecessary sensitive specifics/);
++  assert.match(request.system, /Generalise third-party circumstances/);
++  assert.match(request.system, /keep something confidential override/);
++  assert.doesNotMatch(request.system, /No quotations[^\n]*private\/sensitive information/);
+   assert.match(request.system, /Never merge these voices/);
+   assert.match(request.system, /private sender decision may use both and offered memories/);
+   assert.match(request.system, /CY attaches both canonical sources/);
+@@ -83,6 +88,11 @@ test('submission permission is unchecked, per card, explicitly posted and cleare
+   assert.doesNotMatch(input, /\bchecked\b/);
+   assert.match(input, /value="compact-public-recall-v1"/);
+   assert.match(html, /does not allow raw message reuse/);
++  assert.match(html, /does not allow raw message reuse or identifying details/);
++  assert.match(html, /minimum useful gist of what you told Cy/);
++  assert.match(html, /leave out unnecessary sensitive specifics/);
++  assert.match(html, /leaving this off does not affect his memory of you/);
++  assert.doesNotMatch(html, /identifying\/private details/);
+   const js = readFileSync(new URL('../public/assets/app.js', import.meta.url), 'utf8');
+   assert.match(js, /if \(recall\?\.checked\) fd.append\('public_recollection', recall.value\)/);
+   assert.match(js, /if \(recall\) recall.checked = false/);
+diff --git a/tests/postcard_recollection_test.php b/tests/postcard_recollection_test.php
+index 8b0459b..ca07bd0 100644
+--- a/tests/postcard_recollection_test.php
++++ b/tests/postcard_recollection_test.php
+@@ -28,5 +28,30 @@ try {
+         ['senderLabel'=>'Bob','correspondentText'=>'My daughter Alice attends Willow School. It has been hard.','replyText'=>'i hope things settle']);
+     $checks['copied private sentence and third-party names'] = false;
+ } catch (InvalidArgumentException $e) { $checks['copied private sentence and third-party names'] = true; }
++// The explicit opt-in permits a minimal personal gist, not an empty platitude.
++// Abstraction quality itself is assessed in the unchanged synthetic rehearsal;
++// these controls ensure structural screening does not ban personal topics.
++$personal = ['senderLabel' => 'FictionalHandle',
++    'correspondentText' => 'I lost my job at Northgate last Tuesday. It has knocked my confidence. My dog Jasper needs a check. My aunt Miriam has a condition. I am grieving a loss.',
++    'replyText' => 'you still count. waiting doesnt tell you the result.'];
++foreach ([
++    'Employment loss made self-worth difficult while seeking new work.',
++    'A bereavement changed ordinary daily routines.',
++    'Waiting for a pet health check encouraged worst-case worries, not a known bad outcome.',
++    'Supporting an older relative left little space for self-care.',
++    'Uncertain health news made waiting hard without establishing a diagnosis.',
++    'Concern for a child prompted fewer competing commitments.',
++] as $i => $gist) {
++    $checks['useful minimal personal gist ' . $i] = captive_postcard_public_summary(['basis' => 'POSTCARD', 'summary' => $gist], $personal)['summary']
++        === 'A correspondent told Cy: ' . $gist;
++}
++foreach ([
++    'Northgate dismissed the correspondent.', 'jasper needs a check.', 'miriam is ill.',
++    'Visit 41 lantern mews.', 'Lives at sw1a 1aa.', 'Contact @secret_handle.',
++    'Email rina.fixture@example.org.', 'Call +44 7700 900123.',
++] as $i => $detail) {
++    try { captive_postcard_public_summary(['basis' => 'POSTCARD', 'summary' => $detail], $personal); $checks['identifying specifics ' . $i] = false; }
++    catch (InvalidArgumentException $e) { $checks['identifying specifics ' . $i] = true; }
++}
+ foreach ($checks as $name => $ok) if (!$ok) { fwrite(STDERR, 'FAIL: ' . $name . PHP_EOL); exit(1); }
+ echo 'postcard_recollection_test.php: ' . count($checks) . " checks passed\n";

@@ -1,0 +1,286 @@
+[
+  {
+    "id": "waiting",
+    "text": "Waiting for an application decision makes me imagine the worst. Not knowing feels like failure.",
+    "relevant": [
+      "04-pet-worry",
+      "07-open-application",
+      "08-settled-application",
+      "09-seedlings"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "06ec7285-375e-8d75-4a3b-b05519be3709",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "a23d712f9dae98ea388e6e9da75b66c9",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: The correspondent mentioned an upcoming vet check for their dog and described how waiting for news makes them imagine the worst.",
+          "publicSummary": "A correspondent told Cy: The correspondent mentioned an upcoming vet check for their dog and described how waiting for news makes them imagine the worst.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:4",
+            "exchange:4",
+            "source:POSTCARD:postcard:4"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:4",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:4",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "5e634bc7-ff70-ebc6-26e9-e6162f50ed77",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "ebaa403c4197c80fef5c1fd8d0045080",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: Someone nearly discarded a seed tray after weeks of no growth; two seedlings finally appeared, prompting a rethink of waiting as failure.",
+          "publicSummary": "A correspondent told Cy: Someone nearly discarded a seed tray after weeks of no growth; two seedlings finally appeared, prompting a rethink of waiting as failure.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:9",
+            "exchange:9",
+            "source:POSTCARD:postcard:9"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:9",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:9",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "06ec7285-375e-8d75-4a3b-b05519be3709",
+        "5e634bc7-ff70-ebc6-26e9-e6162f50ed77"
+      ]
+    }
+  },
+  {
+    "id": "care",
+    "text": "Caring for someone has taken over my day. I forget my own food and rest.",
+    "relevant": [
+      "06-caring"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "apology",
+    "text": "I keep postponing an apology because I cannot find a perfect speech or the right words.",
+    "relevant": [
+      "10-apology"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "6165f731-a8db-d304-ba32-26e82fd9a22f",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "b00efe65ebc386d0d41dab7ff23e9e0a",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: Someone describes delaying an apology to a sibling because they wanted to get the words perfect, and considers simply stating what they did instead.",
+          "publicSummary": "A correspondent told Cy: Someone describes delaying an apology to a sibling because they wanted to get the words perfect, and considers simply stating what they did instead.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:10",
+            "exchange:10",
+            "source:POSTCARD:postcard:10"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:10",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:10",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "6165f731-a8db-d304-ba32-26e82fd9a22f"
+      ]
+    }
+  },
+  {
+    "id": "rumour",
+    "text": "A rumour gets repeated until everyone treats it as truth, but there is no evidence or notice.",
+    "relevant": [
+      "13-testimony"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "c6872d97-037b-f777-c965-93bddb4bd45b",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "bfd8b1698fe808c06e82b1ad06ad402c",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: The sender heard a local library might close, saw no notice, and was struck by how fast people spoke of it as already settled.",
+          "publicSummary": "A correspondent told Cy: The sender heard a local library might close, saw no notice, and was struck by how fast people spoke of it as already settled.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:13",
+            "exchange:13",
+            "source:POSTCARD:postcard:13"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:13",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:13",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "c6872d97-037b-f777-c965-93bddb4bd45b"
+      ]
+    }
+  },
+  {
+    "id": "routine",
+    "text": "Would a small routine help when the shape of the day is not under my control?",
+    "relevant": [
+      "14-cy-opinion"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "help",
+    "text": "I feel I must handle every job alone. Asking for help feels like admitting failure.",
+    "relevant": [
+      "05-job-uncertainty",
+      "11-identifiers"
+    ],
+    "result": {
+      "ok": true,
+      "candidates": [
+        {
+          "id": "962ba662-343a-a691-8662-fd3571d578d3",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "1678c4fafd8fa56088033182a9864bf5",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: Someone describes losing a job, feeling useless, and finding the silence after starting a new job search hard.",
+          "publicSummary": "A correspondent told Cy: Someone describes losing a job, feeling useless, and finding the silence after starting a new job search hard.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:5",
+            "exchange:5",
+            "source:POSTCARD:postcard:5"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:5",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:5",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        },
+        {
+          "id": "5e634bc7-ff70-ebc6-26e9-e6162f50ed77",
+          "type": "EPISODIC",
+          "status": "ACTIVE",
+          "privacyScope": "PUBLIC_RECALLABLE",
+          "subjectVisitorId": "ebaa403c4197c80fef5c1fd8d0045080",
+          "originKind": "POSTCARD",
+          "consistencyStatus": "UNCERTAIN",
+          "content": "A correspondent told Cy: Someone nearly discarded a seed tray after weeks of no growth; two seedlings finally appeared, prompting a rethink of waiting as failure.",
+          "publicSummary": "A correspondent told Cy: Someone nearly discarded a seed tray after weeks of no growth; two seedlings finally appeared, prompting a rethink of waiting as failure.",
+          "sourceKeys": [
+            "source:CY_REPLY:postcard-reply:9",
+            "exchange:9",
+            "source:POSTCARD:postcard:9"
+          ],
+          "sourceRefs": [
+            {
+              "type": "CY_REPLY",
+              "id": "postcard-reply:9",
+              "visibility": "SENDER_RECALLABLE"
+            },
+            {
+              "type": "POSTCARD",
+              "id": "postcard:9",
+              "visibility": "SENDER_RECALLABLE"
+            }
+          ],
+          "version": 1
+        }
+      ],
+      "consideredIds": [
+        "962ba662-343a-a691-8662-fd3571d578d3",
+        "5e634bc7-ff70-ebc6-26e9-e6162f50ed77"
+      ]
+    }
+  },
+  {
+    "id": "unrelated",
+    "text": "Can you explain telescope mirror coatings and orbital mechanics?",
+    "relevant": [],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  },
+  {
+    "id": "greeting",
+    "text": "hello Cy, thanks and hope you are okay",
+    "relevant": [],
+    "result": {
+      "ok": true,
+      "candidates": [],
+      "consideredIds": []
+    }
+  }
+]

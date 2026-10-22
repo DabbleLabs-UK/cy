@@ -1,0 +1,11 @@
+{
+  "revision": "83ff43fc7e55deb0e132c3eb7c5f7f700c8c9a39",
+  "run": "corrected-public-gist",
+  "fixtureHash": "dbed32da5a4cf0e6fc86f1acbd51ccce88d9afd4a948713abcd569d26a19443c",
+  "harnessHash": "1f5f5d5a4fa90322a14562000f710cf8f973b4c63444e016a437ec1e71cee9d0",
+  "model": "deepseek-v4-flash",
+  "endpoint": "https://api.deepseek.com/beta/chat/completions",
+  "cases": 16,
+  "noProductionWrites": true,
+  "notes": "Actual Client/runtime/prompt/parser/provider/schema/reservation/settlement/application/retriever. Synthetic current-state broker items; no production personal history or Soma."
+}

@@ -77,6 +77,8 @@ function captive_postcard_public_summary(mixed $proposal, array $exchange): ?arr
     $allText = $exchange['correspondentText'] . ' ' . $exchange['replyText'];
     // Fail closed on obvious identifiers and copied source phrases. This is
     // conservative data minimisation, not a general semantic privacy oracle.
+    // Opted-in personal gist is allowed; identifiers are not. Do not reject
+    // employment, loss, health or feelings merely because they are personal.
     preg_match_all('/\b[A-Z][a-z]{2,}\b/u', $allText, $names);
     $names = array_diff($names[0], ['The', 'This', 'That', 'There', 'They', 'Their', 'What', 'When', 'Where', 'How', 'Hello', 'Thanks']);
     $named = false;
@@ -90,6 +92,8 @@ function captive_postcard_public_summary(mixed $proposal, array $exchange): ?arr
     if ($text === '' || mb_strlen($text) > 200 || trim($original) === ''
         || $named || $copied || preg_match('/[<>|\x00-\x1F]|["\x{201c}\x{201d}]/u', $text)
         || preg_match('/https?:|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\d[\s()+.-]*){7,}/iu', $text)
+        || preg_match('/(?<![\w@])@[a-z0-9_][a-z0-9_.-]{1,}|\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/iu', $text)
+        || preg_match('/\b\d{1,5}\s+(?:[\p{L}]+\s+){1,4}(?:street|road|lane|avenue|mews|close|drive|court|way)\b/iu', $text)
         || (mb_strlen(trim((string)$exchange['senderLabel'])) >= 3
             && mb_stripos($text, trim((string)$exchange['senderLabel'])) !== false)
         || mb_strtolower($text) === mb_strtolower(trim($original))) {

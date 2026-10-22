@@ -1,0 +1,11 @@
+{
+  "stoppedPhp": true,
+  "database": "cy_recall_rehearsal_8bf1050fa8",
+  "phpPid": 16248,
+  "phpExitCode": null,
+  "phpSignal": "SIGTERM",
+  "phpExitObserved": true,
+  "productionTouched": false,
+  "sends": 16,
+  "finishedAt": "2026-10-22T01:22:07.747Z"
+}

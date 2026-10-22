@@ -52,8 +52,10 @@ The unchecked per-postcard checkbox says:
 
 > Allow Cy to remember a short, public-safe summary of this postcard and his reply,
 > if published, and recall it in replies to other people. This does not allow raw
-> message reuse or identifying/private details. Optional; leaving this off does
-> not affect his memory of you in your own correspondence.
+> message reuse or identifying details. The summary may keep the minimum useful
+> gist of what you told Cy, but should leave out unnecessary sensitive specifics.
+> Optional; leaving this off does not affect his memory of you in your own
+> correspondence.
 
 Submission accepts only the explicit `compact-public-recall-v1` value, saving
 `recall_permission_version` and server `recall_permitted_at` on this postcard.
@@ -71,8 +73,9 @@ records; stored/runner-supplied eligibility cannot authorize a summary.
 
 The SAME existing configured formation call retains its sender decision and adds
 an independent nullable `publicRecollection: {basis, summary}` slot. `NOTHING`
-and null are normal for greetings, repetition, sensitive material or no lasting
-value. The model abstracts one side only: `basis=POSTCARD` or `CY_REPLY`; it cannot
+and null are normal for greetings, repetition, material without a safe useful
+abstraction or no lasting value. The model abstracts one side only:
+`basis=POSTCARD` or `CY_REPLY`; it cannot
 choose WORLD. No second call, new source job or transcript store exists.
 Existing model/options, including the 260-token formation output allowance,
 are unchanged. This is not the journal's separate 93-token limit.
@@ -103,14 +106,22 @@ lost response. Archived/deleted identities cannot be resurrected by late work.
 Public summaries cannot occupy protected sender-formation candidate slots:
 the scoped indexed query filters them before pool/ranking limits.
 
-The instructions prohibit identifying/private/sensitive details, quotes and
-invented claims. Persistence additionally rejects contact/URL/number identifiers,
-source-derived capitalized names, the sender handle, control syntax and copied
+The prospectively opted-in minimum useful personal gist is permitted, not a
+blanket prohibition on personal subject matter. Generalised employment loss,
+self-worth, grief, health uncertainty or caring can remain useful associative
+topics. Remove unnecessary sensitive specifics: precise circumstances, clinical
+details, dates, workplaces, credentials and unique biographical combinations.
+Generalise third-party circumstances, and honour explicit confidentiality even
+inside an opted-in exchange. If the value requires unsafe detail, return null.
+The instructions prohibit identifiers, quotes and invented claims. Persistence
+additionally rejects contact/URL/number identifiers, UK postcodes, common numbered
+street-address shapes, handles, source-derived capitalized names, the sender
+label, control syntax and copied
 four-word source spans/full originals. These conservative omissions can reject
 useful summaries too. They are defence in depth, NOT an exhaustive semantic
 privacy or truth checker: lower-case identifiers, paraphrased sensitive facts or
-model misattribution remain possible. No real-model quality claim is made without
-authorized natural evidence. Malformed/unsafe optional summaries fail closed and
+model misattribution remain possible. No exhaustive semantic privacy guarantee is
+claimed from bounded synthetic or natural evidence. Malformed/unsafe optional summaries fail closed and
 record a bounded rejection in the private completion receipt while valid sender
 formation is preserved. Historical entries and world truth are never rewritten.
 
@@ -216,7 +227,7 @@ once with attributed source-linked public text. Inspect natural summary quality
 and privacy before claiming automatic abstraction is reliable; deterministic
 fixtures do not demonstrate real-model semantics.
 
-## Real-model rehearsal: release remains blocked
+## Initial real-model rehearsal: historical verdict
 
 See `rehearsal/postcard-associative-20261022/README.md` and its hash-indexed raw
 synthetic evidence. Three fixed batches of sixteen calls used the actual
@@ -228,3 +239,22 @@ seven. This is not six clean privacy passes: the accepted job-loss/distress
 recollection demonstrates an unresolved personal-detail boundary. Recommendation
 is REVISE, not deploy. Copy protection was not weakened and no further calls or
 fixture tuning were used to manufacture a higher acceptance rate.
+
+The subsequent product correction explicitly permits minimal opted-in personal
+gist, not just impersonal reflections. This changes the privacy assessment of
+generalised job-loss/self-worth and pet-health/waiting material, without removing
+identifier/copy protection. The original evidence and verdict above are retained
+unchanged; the new fixed-sixteen rerun is documented separately.
+
+## Corrected public-gist contract: rollout recommended, not performed
+
+See `rehearsal/postcard-associative-20261022/corrected-public-gist/README.md`.
+The identical sixteen cases yielded five accepted compact recollections, five
+copy-rejected proposals and six omissions. No identifier, unnecessary sensitive
+specific, raw passage, invented fact or provenance failure was found in accepted
+text under the corrected opt-in. Employment/self-worth and pet-health/waiting
+retain useful personal gist; precise dates, names and clinical particulars do
+not. Waiting, apology and rumour retrieval remained useful, unrelated controls
+empty; one weaker secondary theme match remains. This is bounded empirical
+support, not an exhaustive privacy/semantic guarantee. Recommendation:
+MERGE/DEPLOY through the later explicitly authorised workflow, not this task.

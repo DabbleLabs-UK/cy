@@ -343,7 +343,7 @@ window.CY = {
         <p class="form-hint">Text, a picture, or both. A receipt will say whether it reached his reply tray or the fan mail bag.</p>
         <label class="form-hint" for="pc-public-recollection">
           <input type="checkbox" id="pc-public-recollection" name="public_recollection" value="compact-public-recall-v1">
-          Allow Cy to remember a short, public-safe summary of this postcard and his reply, if published, and recall it in replies to other people. This does not allow raw message reuse or identifying/private details. Optional; leaving this off does not affect his memory of you in your own correspondence.
+          Allow Cy to remember a short, public-safe summary of this postcard and his reply, if published, and recall it in replies to other people. This does not allow raw message reuse or identifying details. The summary may keep the minimum useful gist of what you told Cy, but should leave out unnecessary sensitive specifics. Optional; leaving this off does not affect his memory of you in your own correspondence.
         </label>
         <p id="pc-note" class="form-note" aria-live="polite"></p>
       </form>

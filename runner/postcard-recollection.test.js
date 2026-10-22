@@ -20,6 +20,11 @@ test('only eligible reply formation adds the independent compact summary slot', 
   assert.equal(prompt.source.sourceType, 'CY_REPLY');
   assert.match(request.system, /null is normal/);
   assert.match(request.system, /not reuse of either raw message/);
+  assert.match(request.system, /minimum useful gist of personal experience may remain/);
+  assert.match(request.system, /Abstract away unnecessary sensitive specifics/);
+  assert.match(request.system, /Generalise third-party circumstances/);
+  assert.match(request.system, /keep something confidential override/);
+  assert.doesNotMatch(request.system, /No quotations[^\n]*private\/sensitive information/);
   assert.match(request.system, /Never merge these voices/);
   assert.match(request.system, /private sender decision may use both and offered memories/);
   assert.match(request.system, /CY attaches both canonical sources/);
@@ -83,6 +88,11 @@ test('submission permission is unchecked, per card, explicitly posted and cleare
   assert.doesNotMatch(input, /\bchecked\b/);
   assert.match(input, /value="compact-public-recall-v1"/);
   assert.match(html, /does not allow raw message reuse/);
+  assert.match(html, /does not allow raw message reuse or identifying details/);
+  assert.match(html, /minimum useful gist of what you told Cy/);
+  assert.match(html, /leave out unnecessary sensitive specifics/);
+  assert.match(html, /leaving this off does not affect his memory of you/);
+  assert.doesNotMatch(html, /identifying\/private details/);
   const js = readFileSync(new URL('../public/assets/app.js', import.meta.url), 'utf8');
   assert.match(js, /if \(recall\?\.checked\) fd.append\('public_recollection', recall.value\)/);
   assert.match(js, /if \(recall\) recall.checked = false/);
