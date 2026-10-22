@@ -189,7 +189,10 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
     if (!source.subjectVisitorId || source.sourceVisibility !== 'SENDER_RECALLABLE') {
       throw new Error('sender formation requires canonical sender provenance');
     }
-    const format = senderFormationSchema(candidates);
+    const publicExchange = expression.sourceType === 'CY_REPLY'
+      && expression.publicExchange?.permissionVersion === 'compact-public-recall-v1'
+      ? expression.publicExchange : null;
+    const format = senderFormationSchema(candidates, !!publicExchange);
     return {
       system: [
         'Select one durable autobiographical memory decision from this correspondence. Return only the constrained JSON object.',
@@ -207,8 +210,15 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
         '"I am waiting for an important result and will tell you next time" -> CREATE UNRESOLVED_THREAD; "Hi, hope you are okay" -> NOTHING;',
         'Contrast: offered FM1 awaits an application decision; "it was approved, that is settled" -> RESOLVE FM1, not UPDATE. "the decision is delayed until next week; I am still waiting" -> UPDATE FM1 because it remains open. With no offered candidates, never UPDATE or RESOLVE.',
         'Content: one concise third-person recollection, at most 480 characters. Do not invent technical IDs, candidate refs or privacy fields; CY attaches provenance and sender-only scope.',
+        ...(publicExchange ? [
+          'Independent optional publicRecollection: null is normal. Only a meaningful experience with durable future value merits a compact public-safe abstraction, never every exchange. Keep the sender decision independent.',
+          'Permission covers a compact summary only, not reuse of either raw message. No quotations, names (including pets/third parties), handles, identifying details, contacts, addresses, private/sensitive information or unique biographical details. If the value depends on those details, choose null.',
+          'Return basis POSTCARD only for what the correspondent explicitly told Cy; basis CY_REPLY only for what Cy himself said or thought. Never merge these voices, invent facts, or turn testimony, advice, dreams or speculation into observed prison/world facts. Keep uncertainty. Summarize one side only in at most 200 characters, preferably under 140; CY adds the attribution.',
+        ] : []),
       ].join('\n'),
       prompt: JSON.stringify({ source: safeSource, groundedContext: groundedContext || null,
+        ...(publicExchange ? { publishedExchange: { correspondentSaid: publicExchange.correspondentText,
+          cyReplied: 'The current CY_REPLY source above.' } } : {}),
         existingMemoryCandidates: candidates.map(({ id, ...candidate }) => candidate) }),
       format,
       options: { temperature: 0.1, num_predict: 260 },
@@ -254,7 +264,7 @@ export function buildFormationRequest(source, existing = [], groundedContext = n
 
 // Small action-specific grammar. Only this sender path opts into constrained
 // output; other memory sources retain their established formation contract.
-export function senderFormationSchema(candidates = []) {
+export function senderFormationSchema(candidates = [], publicRecall = false) {
   const content = { type: 'string', minLength: 1, maxLength: 480 };
   const branch = (decision, fields = {}) => ({ type: 'object',
     properties: { decision: { const: decision }, ...fields },
@@ -269,10 +279,44 @@ export function senderFormationSchema(candidates = []) {
   if (unresolved.length) choices.push(branch('RESOLVE', {
     memoryRef: { enum: unresolved.map(memory => memory.memoryRef) },
   }));
+  if (publicRecall) for (const choice of choices) {
+    choice.properties.publicRecollection = { anyOf: [{ type: 'null' }, {
+      type: 'object', properties: { basis: { enum: ['POSTCARD', 'CY_REPLY'] },
+        summary: { type: 'string', minLength: 1, maxLength: 200 } },
+      required: ['basis', 'summary'], additionalProperties: false,
+    }] };
+    choice.required.push('publicRecollection');
+  }
   return { oneOf: choices };
 }
 
 function parseSenderFormationResponse(raw, { source, existing, makeId }) {
+  if (source.sourceType !== 'CY_REPLY' || source.publicExchange?.permissionVersion !== 'compact-public-recall-v1') {
+    return parseSenderDecision(raw, { source, existing, makeId });
+  }
+  let parsed;
+  try { parsed = JSON.parse(String(raw || '').trim()); } catch {
+    return { decision: 'NOTHING', valid: false, rejectionCode: 'JSON_FORMAT' };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { decision: 'NOTHING', valid: false, rejectionCode: 'SCHEMA' };
+  }
+  const { publicRecollection = null, ...senderDecision } = parsed;
+  const decision = parseSenderDecision(JSON.stringify(senderDecision), { source, existing, makeId });
+  if (!decision.valid) return decision;
+  // Optional public failure must not erase the protected sender decision.
+  let safe = publicRecollection === null;
+  if (publicRecollection && typeof publicRecollection === 'object' && !Array.isArray(publicRecollection)) {
+    const { basis, summary } = publicRecollection;
+    safe = Object.keys(publicRecollection).length === 2 && ['POSTCARD', 'CY_REPLY'].includes(basis)
+      && typeof summary === 'string' && summary.trim().length > 0 && [...summary].length <= 200;
+    if (safe) try { assertPromptSafe(summary); } catch { safe = false; }
+  }
+  return { ...decision, publicRecollection: safe ? publicRecollection : null,
+    publicRecollectionStatus: safe ? (publicRecollection ? 'PROPOSED' : 'NONE') : 'REJECTED' };
+}
+
+function parseSenderDecision(raw, { source, existing, makeId }) {
   const invalid = (rejectionCode) => ({ decision: 'NOTHING', valid: false, rejectionCode });
   if (!source.subjectVisitorId || source.sourceVisibility !== 'SENDER_RECALLABLE') {
     return invalid('PRIVACY_PROVENANCE');

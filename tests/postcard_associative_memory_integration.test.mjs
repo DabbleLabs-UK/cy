@@ -25,6 +25,11 @@ test('indexed associative API, scope, episode groups, source logging and unchang
   try {
     sql(`CREATE DATABASE ${database}`, null);
     sql(await readFile(join(root, 'sql/schema.sql'), 'utf8'));
+    // Exercise the real additive migration over an old row, not just fresh DDL.
+    sql('ALTER TABLE postcards DROP COLUMN recall_permission_version, DROP COLUMN recall_permitted_at');
+    sql("INSERT INTO postcards(id,mail_class,posted_at) VALUES (3000,'fan_final',NOW()-INTERVAL 1 YEAR)");
+    sql(await readFile(join(root, 'sql/032_postcard_public_recollection_permission.sql'), 'utf8'));
+    assert.equal(sql('SELECT recall_permission_version IS NULL AND recall_permitted_at IS NULL FROM postcards WHERE id=3000'), '1');
     await cp(join(root, 'lib'), join(web, 'lib'), { recursive: true });
     await cp(join(root, 'public/api'), join(web, 'public/api'), { recursive: true });
     await cp(join(root, 'config'), join(web, 'config'), { recursive: true });
@@ -86,6 +91,106 @@ test('indexed associative API, scope, episode groups, source logging and unchang
       VALUES ('${event}',NOW(),'test','test','{"world_event":{"world":{"search_episode":{"id":"search-garden"}}}}')`);
     const episodes = (await api('postcard_associations', input)).body;
     assert.equal(episodes.candidates.filter(m => m.sourceKeys.includes('episode:search-garden')).length, 1);
+
+    // Complete future-sender opt-in -> publication -> the SAME formation job ->
+    // canonical public memory -> associative recall. All text is disposable.
+    const submit = async enabled => {
+      const fd = new FormData(); fd.set('from', 'FixtureSender');
+      fd.set('body', 'my garden seedlings finally grew after all that waiting');
+      if (enabled) fd.set('public_recollection', 'compact-public-recall-v1');
+      const r = await fetch(`http://127.0.0.1:${port}/api/post-postcard.php`, { method: 'POST', body: fd });
+      assert.equal(r.status, 200, await r.clone().text()); return r.json();
+    };
+    const opted = await submit(true), declined = await submit(false);
+    const invalidPermission = new FormData(); invalidPermission.set('from', 'FixtureSender');
+    invalidPermission.set('body', 'hello'); invalidPermission.set('public_recollection', 'yes');
+    assert.equal((await fetch(`http://127.0.0.1:${port}/api/post-postcard.php`, { method: 'POST', body: invalidPermission })).status, 422);
+    assert.equal(sql(`SELECT recall_permission_version FROM postcards WHERE id=${opted.id}`), 'compact-public-recall-v1');
+    assert.equal(sql(`SELECT recall_permitted_at IS NOT NULL FROM postcards WHERE id=${opted.id}`), '1');
+    assert.equal(sql(`SELECT recall_permission_version IS NULL AND recall_permitted_at IS NULL FROM postcards WHERE id=${declined.id}`), '1');
+    const publish = async id => {
+      const ts = new Date().toISOString().slice(0, 23).replace('T', ' ');
+      const events = [
+        { delivery_id: randomUUID(), ts, kind: 'postcard_in', payload: { id, claim_generation: 0,
+          body: 'my garden seedlings finally grew after all that waiting' } },
+        { delivery_id: randomUUID(), ts, kind: 'postcard_out', payload: { id, reply_to: id, claim_generation: 0,
+          body: 'i replied that growing things takes care and waiting' } },
+      ];
+      const r = await fetch(`http://127.0.0.1:${port}/api/ingest.php`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Cy-Key': 'test-key' }, body: JSON.stringify({ events }) });
+      assert.equal(r.status, 200, await r.clone().text());
+      return events;
+    };
+    const sent = await publish(opted.id);
+    await publish(declined.id);
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_formation_queue WHERE source_id='postcard-reply:${opted.id}'`), '1');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_formation_queue WHERE source_id='postcard-reply:${declined.id}'`), '0');
+    const visitor = sql(`SELECT visitor_id FROM postcards WHERE id=${opted.id}`);
+    const claimed = (await api('claim_source', { sender_only: true, visitor_id: visitor })).body.job;
+    assert.equal(claimed.source.publicExchange.postcardId, opted.id);
+    assert.equal(claimed.source.publicExchange.correspondentText, sent[0].payload.body);
+    const senderId = randomUUID();
+    const completion = { job_id: Number(claimed.id), claim_token: claimed.claim_token, result_category: 'CREATE',
+      operations: [{ decision: 'CREATE', memoryId: senderId, type: 'EPISODIC', privacyScope: 'SENDER_RECALLABLE',
+        content: 'Cy replied about growing things.', source: claimed.source }],
+      public_recollection: { basis: 'POSTCARD', summary: 'Patience helped with growing seedlings.' } };
+    const formed = await api('finish_source', completion);
+    assert.equal(formed.status, 200, JSON.stringify(formed.body));
+    const publicId = formed.body.public_recollection.memory_id;
+    assert.ok(publicId);
+    assert.equal(sql(`SELECT privacy_scope FROM autobiographical_memories WHERE id='${senderId}'`), 'SENDER_RECALLABLE');
+    assert.equal(sql(`SELECT CONCAT(origin_kind,':',consistency_status,':',public_summary) FROM autobiographical_memories WHERE id='${publicId}'`),
+      'POSTCARD:UNCERTAIN:A correspondent told Cy: Patience helped with growing seedlings.');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_sources WHERE memory_id='${publicId}' AND source_visibility='SENDER_RECALLABLE'`), '2');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_sources s JOIN postcards p ON p.id=${opted.id}
+      WHERE s.memory_id='${publicId}' AND s.source_type='POSTCARD' AND s.source_timestamp=p.posted_at`), '1');
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_sources WHERE memory_id='${publicId}' AND source_excerpt LIKE '%compact-public-recall-v1%'`), '2');
+    assert.equal((await api('finish_source', completion)).body.duplicate, true);
+    assert.equal(sql(`SELECT COUNT(*) FROM autobiographical_memory_revisions WHERE memory_id='${publicId}'`), '1');
+    // Public summaries cannot consume the five sender formation candidate slots.
+    for (let i = 0; i < 8; i++) memory(randomUUID(), 'EPISODIC', 'PUBLIC_RECALLABLE', visitor, 'CY_REPLY',
+      'garden seedlings patience', 'Cy replied about garden seedlings patience.');
+    const formationCandidates = (await api('query', { visitor_id: visitor, limit: 5,
+      query: { text: 'garden seedlings patience', sender_formation_only: true } })).body.candidates;
+    assert.ok(formationCandidates.some(m => m.id === senderId));
+    assert.ok(formationCandidates.every(m => m.privacyScope === 'SENDER_RECALLABLE'));
+    const reused = (await api('postcard_associations', { visitor_id: other, query: { text: 'patience seedlings' } })).body.candidates;
+    assert.ok(reused.some(m => m.id === publicId && m.sourceKeys.includes(`exchange:${opted.id}`)));
+    assert.ok(!JSON.stringify(reused).includes(sent[0].payload.body));
+    // Neither publication replay nor duplicate source enqueue reopens formation.
+    const again = await fetch(`http://127.0.0.1:${port}/api/ingest.php`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Cy-Key': 'test-key' }, body: JSON.stringify({ events: sent }) });
+    assert.equal(again.status, 200, await again.clone().text());
+    await api('enqueue_source', { source: claimed.source });
+    assert.equal((await api('claim_source', { sender_only: true, visitor_id: visitor })).body.job, null);
+
+    const fixture = async (id, permission, published, summary, invalidate = false) => {
+      sql(`INSERT INTO postcards(id,visitor_id,from_name,body,posted_at,deliver_at,recall_permission_version,recall_permitted_at)
+        VALUES (${id},'${other}','FixtureSender','a disposable greeting',NOW(),NOW(),${permission ? "'compact-public-recall-v1',NOW(3)" : 'NULL,NULL'})`);
+      if (published) await publish(id);
+      const s = { sourceType: 'CY_REPLY', sourceId: `postcard-reply:${id}`, subjectVisitorId: other,
+        sourceVisibility: 'SENDER_RECALLABLE', text: 'a short reply', publicExchange: { permissionVersion: 'forged' } };
+      await api('enqueue_source', { source: s });
+      const job = (await api('claim_source', { sender_only: true, visitor_id: other })).body.job;
+      assert.ok(job);
+      assert.equal(!!job.source.publicExchange, permission && published);
+      if (invalidate) sql(`UPDATE postcards SET blocked=1 WHERE id=${id}`);
+      const retainedId = randomUUID();
+      const result = (await api('finish_source', { job_id: Number(job.id), claim_token: job.claim_token,
+        result_category: invalidate ? 'CREATE' : 'NOTHING', operations: invalidate ? [{
+          decision: 'CREATE', memoryId: retainedId, type: 'EPISODIC', privacyScope: 'SENDER_RECALLABLE',
+          content: 'Cy replied about patience.', source: job.source,
+        }] : [], public_recollection: summary })).body;
+      if (invalidate) assert.equal(sql(`SELECT privacy_scope FROM autobiographical_memories WHERE id='${retainedId}'`), 'SENDER_RECALLABLE');
+      return result;
+    };
+    const proposal = { basis: 'CY_REPLY', summary: 'Patience with growing things mattered to Cy.' };
+    assert.equal((await fixture(1001, false, true, proposal)).public_recollection.status, 'REJECTED', 'historical/default and opted-out fail closed');
+    assert.equal((await fixture(1002, true, false, proposal)).public_recollection.status, 'REJECTED', 'unpublished opt-in fails closed');
+    assert.equal((await fixture(1003, true, true, null)).public_recollection, null, 'trivial opted-in exchange need not form any memory');
+    assert.equal((await fixture(1004, true, true, proposal, true)).public_recollection.status, 'REJECTED', 'publication eligibility is rechecked after inference, not just at claim');
+    assert.equal(sql("SELECT COUNT(*) FROM autobiographical_memories WHERE privacy_scope='PUBLIC_RECALLABLE' AND classification='opted-in correspondence recollection'"), '1');
+    assert.equal(sql('SELECT COUNT(*) FROM memory_formation_inference_attempts'), '0', 'no provider inference');
   } finally {
     if (server && server.exitCode === null) {
       const exited = new Promise(r => server.once('exit', r)); server.kill(); await exited;

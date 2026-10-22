@@ -3622,7 +3622,9 @@ async function main() {
         to: pc.from_name || null, body: reply,
         environment_event_id: replyRecord.world_event.id,
       } });
-      void autobiographicalMemory.queueSource(sourceFromReply(
+      // Opted-in replies are queued by server publication in the same commit;
+      // formation cannot outrun the published exchange/permission check.
+      if (pc.recall_permission_version !== 'compact-public-recall-v1') void autobiographicalMemory.queueSource(sourceFromReply(
         reply, pc, replyRecord.world_event.id, replyAt,
       )).catch((error) => console.warn(`[cy] reply memory enqueue deferred: ${error.message}`));
     } else {

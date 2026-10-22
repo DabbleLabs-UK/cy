@@ -2174,6 +2174,8 @@ function wireForms() {
 
     const fd = new FormData();
     fd.append('from', f);
+    const recall = form.querySelector('#pc-public-recollection');
+    if (recall?.checked) fd.append('public_recollection', recall.value);
     if (b.length) fd.append('body', b);
     if (chosenFile) {
       fd.append('image', chosenFile);
@@ -2190,6 +2192,7 @@ function wireForms() {
         showNote(note, data.error || 'could not send (' + res.status + ')', true);
       } else {
         body.value = '';
+        if (recall) recall.checked = false;
         updateCount();
         clearPicture();
         if (data.disposition === 'fan_mail') {

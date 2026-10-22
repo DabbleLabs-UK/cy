@@ -41,8 +41,11 @@ CONFLICTED or UNCERTAIN.
 - INTERNAL_ONLY can be recalled by Cy but is never exposed through the public
   memory API.
 - SENDER_RECALLABLE can be recalled only while the exact signed pseudonymous
-  visitor is the current postcard sender. A model cannot widen a postcard-derived
-  memory to public scope.
+  visitor is the current postcard sender. A model cannot widen that memory to
+  public scope. A separately opted-in, published exchange may form a distinct
+  compact public-safe recollection through the same reply-formation call; the
+  original sender memory/source scope remains unchanged. See
+  `postcard-associative-recall.md` for the prospective permission and boundary.
 - PUBLIC_RECALLABLE can be recalled by Cy and can expose its explicit public
   summary in the visitor memory browser.
 

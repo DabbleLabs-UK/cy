@@ -646,9 +646,12 @@ export class AutobiographicalMemoryRuntime {
     let error = null;
     let operations = [];
     let rejectionCode = null;
+    let publicRecollection = null;
+    let publicRecollectionStatus = null;
     try {
       const response = await this.client.queryMemories({
-        query: { text: source.text || '', tags: source.tags || [], location: source.location || null },
+        query: { text: source.text || '', tags: source.tags || [], location: source.location || null,
+          sender_formation_only: ['POSTCARD', 'CY_REPLY'].includes(source.sourceType) },
         visitorId: source.subjectVisitorId || null,
         limit: 5,
       });
@@ -703,6 +706,8 @@ export class AutobiographicalMemoryRuntime {
         existing: request.candidates.map((candidate) => candidates.find((memory) => memory.id === candidate.id)).filter(Boolean),
         makeId: this.makeId,
       });
+      publicRecollection = operation.publicRecollection ?? null;
+      publicRecollectionStatus = operation.publicRecollectionStatus ?? null;
       if (!operation.valid) {
         category = 'INVALID';
         rejectionCode = operation.rejectionCode || 'SCHEMA';
@@ -731,6 +736,8 @@ export class AutobiographicalMemoryRuntime {
       queue_depth_before: Number(queueDepthBefore) || 0,
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
       rejection_code: rejectionCode,
+      public_recollection: publicRecollection,
+      public_recollection_status: publicRecollectionStatus,
       ...(formationRequestId ? { formation_request_id: formationRequestId } : {}),
     };
     let completed;
@@ -745,6 +752,7 @@ export class AutobiographicalMemoryRuntime {
         : /422/i.test(failure) ? 'INVALID' : 'ERROR';
       completed = await this.client.finishMemorySource({
         ...completion, result_category: category, operations: [], memory_id: null, error: failure,
+        public_recollection: null,
         rejection_code: category === 'CONFLICT' ? 'APPLICATION_CONFLICT'
           : category === 'INVALID' ? 'PRIVACY_PROVENANCE' : null,
       });

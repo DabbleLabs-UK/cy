@@ -11,6 +11,7 @@ require __DIR__ . '/../../lib/environment_event.php';
 require __DIR__ . '/../../lib/world_simulation.php';
 require __DIR__ . '/../../lib/live_vitals.php';
 require __DIR__ . '/../../lib/vitals_history.php';
+require_once __DIR__ . '/../../lib/autobiographical_memory.php';
 
 const VITALS_HISTORY_INTERVAL_MS = 60000;
 
@@ -544,7 +545,9 @@ try {
             $db->prepare('UPDATE postcards SET arrival_event_id = ? WHERE id = ?')->execute([(int)$db->lastInsertId(), $postcardId]);
         }
         if ($kind === 'postcard_out') {
-            captive_postcard_inference_publication($db, $postcardId, 'published', (int)$db->lastInsertId());
+            $replySeq = (int)$db->lastInsertId();
+            captive_postcard_inference_publication($db, $postcardId, 'published', $replySeq);
+            captive_postcard_enqueue_recollection($db, $postcardId, $replySeq);
         }
         $inserted++;
     }

@@ -19,6 +19,7 @@ require __DIR__ . '/../../lib/http.php';
 require __DIR__ . '/../../lib/image.php';
 require __DIR__ . '/../../lib/visitor.php';
 require __DIR__ . '/../../lib/postcard_queue.php';
+require __DIR__ . '/../../lib/postcard_recollection.php';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -28,6 +29,8 @@ try {
     $from = trim((string)($_POST['from'] ?? ''));
     $body = trim((string)($_POST['body'] ?? ''));
     $openverseUrl = trim((string)($_POST['openverse_url'] ?? ''));
+    try { $recallPermission = captive_postcard_recall_permission($_POST); }
+    catch (InvalidArgumentException $e) { captive_error_response($e->getMessage(), 422); }
 
     if (mb_strlen($from) < 1 || mb_strlen($from) > 40) {
         captive_error_response('from must be 1-40 characters', 422);
@@ -109,9 +112,11 @@ try {
 
     $insert = $db->prepare(
         'INSERT INTO postcards
-            (visitor_id, from_name, body, image_path, image_source, image_attrib, ip, posted_at, deliver_at, mail_class)
+            (visitor_id, from_name, body, image_path, image_source, image_attrib, ip, posted_at, deliver_at, mail_class,
+             recall_permission_version, recall_permitted_at)
          VALUES
-            (:visitor_id, :from_name, :body, :image_path, :image_source, :image_attrib, :ip, NOW(), :deliver_at, :mail_class)'
+            (:visitor_id, :from_name, :body, :image_path, :image_source, :image_attrib, :ip, NOW(), :deliver_at, :mail_class,
+             :recall_permission, IF(:recall_given = 1, NOW(3), NULL))'
     );
     $insert->bindValue(':visitor_id', $visitor['visitor_id'], PDO::PARAM_STR);
     $insert->bindValue(':from_name', $from, PDO::PARAM_STR);
@@ -122,6 +127,8 @@ try {
     $insert->bindValue(':ip', $ipBin, PDO::PARAM_LOB);
     $insert->bindValue(':deliver_at', $deliverAt, PDO::PARAM_STR);
     $insert->bindValue(':mail_class', $mailClass, PDO::PARAM_STR);
+    $insert->bindValue(':recall_permission', $recallPermission, $recallPermission === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+    $insert->bindValue(':recall_given', $recallPermission === null ? 0 : 1, PDO::PARAM_INT);
     $insert->execute();
     $postcardId = (int)$db->lastInsertId();
 
