@@ -591,9 +591,10 @@ unresolved product-vs-additive ambiguity), parameter provenance and
 uncertainty.
 
 Soma can read the factual `feeding` snapshot and the separate gastric-fullness
-range. Once LIVE, the latter enters the grounded prose projection as a MODEL
-ESTIMATE with its mL/band (plus the secondary display percent) and input
-uncertainty. The assembler does not say that Cy is hungry. Fullness does not
+range. The structured inspection keeps its mL, band, display percent and
+uncertainty. Character prose receives only an available LIVE band as a possible
+stomach-fullness indication; technical values and unavailable-reading reasons
+are not character knowledge. The assembler does not say that Cy is hungry. Fullness does not
 create an appraisal, select attention or action, activate a brain analogy, or
 alter the legacy Hunger number.
 
@@ -1149,8 +1150,12 @@ filled with invented defaults.
 `runner/grounded-prose-context.js` projects selected current facts from the LIVE
 grounded substrates into a compact, versioned prompt block. It does not combine
 them into an emotion, need, salience, action probability or behavioural score.
-Every entry is labelled OBSERVED FACT, MODEL ESTIMATE, LEARNED STATISTICAL
-EXPECTATION, SCHEDULE ESTIMATE, UNKNOWN or NOT MODELLED. Inactive sections are
+Every structured entry is labelled OBSERVED FACT, MODEL ESTIMATE, LEARNED
+STATISTICAL EXPECTATION, SCHEDULE ESTIMATE, UNKNOWN or NOT MODELLED. The separate
+character-facing formatter keeps supported facts and existing plain-language
+bodily indications, not scientific scales/calibration/display internals. Raw
+pressure/phase indices and unavailable feelings have no invented experiential
+replacement; see `character-soma-context.md`. Inactive sections are
 omitted by categorical state, and each omission is recorded for the owner
 inspector. Heuristic attention and prediction mismatch are diagnostics only. An
 optional heuristic retriever may place exact material from one identified
@@ -1299,10 +1304,12 @@ they cannot affect Cy's behaviour.
 #### Literature / grounded model
 
 - Process S: normalized bounds 0..1; wake time constant 18.18 hours; sleep time
-  constant 4.2 hours. These change factual grounded prompt values only.
+  constant 4.2 hours. These retain their internal/public meaning; raw values no
+  longer enter character prose or get converted to a feeling.
 - Process C: period 24 hours; harmonic coefficients 0.97, 0.22, 0.07, 0.03 and
   0.001 for harmonics 1..5; schedule-estimated CBT minimum is habitual wake
-  minus 3 to 2 hours. These change a schedule-estimated prompt value only.
+  minus 3 to 2 hours. The schedule estimate remains internal/public, without a
+  character-facing raw phase value or invented felt equivalent.
 - Probabilistic threat learning: Beta(1,1) prior and unit Bernoulli updates.
   Matching learned evidence is included only when there is at least one resolved
   observation in an active matching external context.

@@ -293,7 +293,11 @@ Soma circuits.
   context, matching learned cue/outcome and action/outcome evidence, feeding,
   active somatic records and social-contact records. Every item names its
   epistemic status. Inactive defensive/somatic/social sections are omitted with
-  an inspectable categorical reason. No threshold or psychological mapping is
+  an inspectable categorical reason. The character-facing formatter keeps
+  observed facts and existing sleepiness-anchor/fullness-band indications,
+  without scientific scales, calibration, uncertainty internals or display
+  transforms. Unsupported experiential conversions are omitted, not invented.
+  See `docs/character-soma-context.md`. No new psychological mapping is
   used. Sampling uses the static existing provider/project baseline, labelled
   `ENGINEERING DEFAULT`.
 - **Model-mediated expressive choice** (`expressive-choice.js`) - at an existing

@@ -120,12 +120,14 @@ assert.match(uiSource, /value\.toFixed\(1\).*\/ 9/);
 assert.match(uiSource, /outside nominal KSS range/i);
 assert.doesNotMatch(uiSource, /\{ key: 'fatigue', label: 'FATIGUE' \}/);
 
-// N. A live estimate reaches prose as labelled model output, without a feeling claim.
+// N. The existing anchor reaches prose as an uncertain bodily indication.
+// Scientific units/calibration remain inspectable rather than character knowledge.
 const soma = reconcileSoma(null, { now: base });
 replaySomaObservedSleepRecords(soma, records, { now: base + 25 * HOUR });
 const prompt = groundedSomaDirective(soma, { now: base + 25 * HOUR }).directive;
-assert.match(prompt, /predicted KSS/i);
-assert.match(prompt, /MODEL ESTIMATE/);
+assert.ok(prompt.includes(`Possible sleepiness: ${threeProcessSleepinessSnapshot(soma.predictedSleepiness, base + 25 * HOUR).kssAnchor.description}.`));
+assert.match(prompt, /BODILY INDICATION/);
+assert.doesNotMatch(prompt, /KSS|calibrat|residual/i);
 assert.doesNotMatch(prompt, /Cy (?:is|feels) (?:tired|exhausted|sleepy)/i);
 
 // G/H. Legacy fatigue and the separate Borbely Process S/C displays cannot alter TPM KSS.

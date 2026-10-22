@@ -31,8 +31,9 @@ const emptyProjection = groundedSomaDirective(empty, { now: NOW });
 assert.equal(emptyProjection.context.schema, 'cy.grounded-prose-context');
 assert.equal(emptyProjection.context.version, 1);
 assert.match(emptyProjection.directive, /<PRIVATE_CURRENT_FACTS>/);
-assert.match(emptyProjection.directive, /\[MODEL ESTIMATE\].*sleep-pressure estimate/);
-assert.match(emptyProjection.directive, /\[SCHEDULE ESTIMATE\].*Circadian schedule estimate/);
+assert.match(JSON.stringify(emptyProjection.context), /"fact":"process_s"/);
+assert.match(JSON.stringify(emptyProjection.context), /"fact":"process_c"/);
+assert.doesNotMatch(emptyProjection.directive, /sleep-pressure estimate|Circadian schedule estimate|calibrat/);
 assert.match(emptyProjection.directive, /\[UNKNOWN\].*No definite intake has been recorded/);
 assert.doesNotMatch(emptyProjection.directive, /Cy (?:is|feels) (?:anxious|afraid|hungry|lonely|tired)/i);
 
