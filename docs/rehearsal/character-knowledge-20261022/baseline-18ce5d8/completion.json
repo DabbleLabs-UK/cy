@@ -1,0 +1,8 @@
+{
+  "sends": 16,
+  "cases": 16,
+  "finished": "2026-10-22T20:54:29.284Z",
+  "syntheticOnly": true,
+  "productionWrites": 0,
+  "localInference": false
+}
