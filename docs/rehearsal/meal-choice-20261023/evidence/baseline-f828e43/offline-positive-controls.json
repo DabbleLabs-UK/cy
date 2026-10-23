@@ -1,0 +1,154 @@
+[
+  {
+    "action": "eat",
+    "injectedOffline": true,
+    "realModelCall": false,
+    "offered": 1,
+    "phase": "APPLIED",
+    "authoritativeDecision": {
+      "id": "be36eb93-522e-41aa-8bd9-5764c52c631b",
+      "mealId": "2026-10-23:breakfast",
+      "action": "eat",
+      "committedAt": "2026-10-23T10:45:00.000Z"
+    },
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "env-06625f9a-5b15-4f59-9bf1-c8cf92ff45f8",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "FULL",
+      "intakeOutcome": "FULLY_CONSUMED",
+      "portionCategory": "FULL",
+      "portionFraction": 1,
+      "portionBasis": "OBSERVED_EXACT",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": 500,
+      "consumedFraction": 1,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "env-06625f9a-5b15-4f59-9bf1-c8cf92ff45f8"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "laterContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type breakfast, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      },
+      {
+        "stage": "duplicate_offer_prevented",
+        "phase": "APPLIED"
+      }
+    ]
+  },
+  {
+    "action": "decline",
+    "injectedOffline": true,
+    "realModelCall": false,
+    "offered": 1,
+    "phase": "APPLIED",
+    "authoritativeDecision": {
+      "id": "e188855d-39b6-497d-8f0a-d59c27532463",
+      "mealId": "2026-10-23:breakfast",
+      "action": "decline",
+      "committedAt": "2026-10-23T10:45:00.000Z"
+    },
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "env-d0f25bb9-655c-454c-9a80-21d3caa5d2fa",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "NONE",
+      "intakeOutcome": "REFUSED",
+      "portionCategory": "NONE",
+      "portionFraction": 0,
+      "portionBasis": "OBSERVED_EXACT",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": 0,
+      "consumedFraction": 0,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "env-d0f25bb9-655c-454c-9a80-21d3caa5d2fa"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "laterContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [UNKNOWN] No definite intake has been recorded.\n- [OBSERVED FACT] Latest resolved meal: meal type breakfast, offered status offered, received status received, consumption status none, intake outcome refused, portion category none.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      },
+      {
+        "stage": "duplicate_offer_prevented",
+        "phase": "APPLIED"
+      }
+    ]
+  }
+]

@@ -1,0 +1,47 @@
+{
+  "sourceFilesVerified": 260,
+  "changedSourceFiles": [],
+  "isolatedRunnerStateCreated": false,
+  "postRunHealth": {
+    "arbiter": {
+      "ok": true,
+      "active": null,
+      "queued": {
+        "interactive": 0,
+        "cy": 0,
+        "user": 0,
+        "synthetic": 0
+      },
+      "metrics": {
+        "cy": {
+          "grants": 521,
+          "releases": 521,
+          "expiries": 0,
+          "waitMsAverage": 28421,
+          "waitMsMax": 300144,
+          "holdMsAverage": 83187,
+          "holdMsMax": 384281
+        },
+        "feddit": {
+          "grants": 527,
+          "releases": 527,
+          "expiries": 0,
+          "waitMsAverage": 18346,
+          "waitMsMax": 247853,
+          "holdMsAverage": 141247,
+          "holdMsMax": 300231
+        }
+      },
+      "startupGraceMs": 0,
+      "profile": {
+        "num_ctx": 3072,
+        "num_thread": 4
+      }
+    },
+    "remainingRehearsalProcesses": [],
+    "ollama": {
+      "version": "0.34.1"
+    }
+  },
+  "noPauseUnloadRestartOrProductionStateAPI": "Harness isolation; no restoration mutation required."
+}

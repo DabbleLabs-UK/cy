@@ -1,0 +1,394 @@
+[
+  {
+    "kind": "malformed",
+    "phase": "NO_DECISION",
+    "failure": "NO_VALID_PROVIDER_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "NO_VALID_PROVIDER_RESULT"
+      }
+    ]
+  },
+  {
+    "kind": "third_action",
+    "phase": "NO_DECISION",
+    "failure": "NO_VALID_PROVIDER_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "NO_VALID_PROVIDER_RESULT"
+      }
+    ]
+  },
+  {
+    "kind": "no_result",
+    "phase": "NO_DECISION",
+    "failure": "NO_VALID_PROVIDER_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "NO_VALID_PROVIDER_RESULT"
+      }
+    ]
+  },
+  {
+    "kind": "provider_failure",
+    "phase": "NO_DECISION",
+    "failure": "NO_VALID_PROVIDER_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "NO_VALID_PROVIDER_RESULT"
+      }
+    ]
+  },
+  {
+    "kind": "timeout",
+    "phase": "NO_DECISION",
+    "failure": "STALE_OR_CANCELLED_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "STALE_OR_CANCELLED_RESULT"
+      }
+    ]
+  },
+  {
+    "kind": "cancelled",
+    "phase": "NO_DECISION",
+    "failure": "STALE_OR_CANCELLED_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "STALE_OR_CANCELLED_RESULT"
+      }
+    ]
+  },
+  {
+    "kind": "stale",
+    "phase": "NO_DECISION",
+    "failure": "STALE_OR_CANCELLED_RESULT",
+    "intake": {
+      "schema": "cy.ingestion-record",
+      "version": 1,
+      "eventId": "unknown-01",
+      "timestamp": "2026-10-23T10:45:00.000Z",
+      "mealId": "2026-10-23:breakfast",
+      "mealType": "breakfast",
+      "scheduledStatus": "SCHEDULED",
+      "offeredStatus": "OFFERED",
+      "availabilityStatus": "AVAILABLE",
+      "receivedStatus": "RECEIVED",
+      "consumptionStatus": "UNKNOWN",
+      "intakeOutcome": "UNKNOWN",
+      "portionCategory": "UNKNOWN",
+      "portionFraction": null,
+      "portionBasis": "UNKNOWN",
+      "durationMs": null,
+      "nutritionalComposition": "BOUNDED_UNCERTAIN",
+      "fullMealEnergyKcal": 500,
+      "consumedEnergyKcal": null,
+      "consumedFraction": null,
+      "fullMealMacros": null,
+      "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+      "physiologicalImpact": "MODELLED_SEPARATELY",
+      "sourceEnvironmentEventIds": [
+        "unknown-01"
+      ],
+      "fieldProvenance": {
+        "mealIdentity": "STRUCTURED_WORLD_FACT",
+        "schedule": "STRUCTURED_WORLD_FACT",
+        "availability": "STRUCTURED_WORLD_FACT",
+        "offered": "STRUCTURED_WORLD_FACT",
+        "received": "STRUCTURED_WORLD_FACT",
+        "consumption": "STRUCTURED_WORLD_FACT",
+        "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+        "energy": "HMPPS_REFERENCE_PRISON_RATION",
+        "nutritionalComposition": "BOUNDED_UNCERTAIN",
+        "physiologicalImpact": "MODELLED_SEPARATELY"
+      }
+    },
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "no_valid_decision",
+        "phase": "NO_DECISION",
+        "reason": "STALE_OR_CANCELLED_RESULT"
+      }
+    ]
+  }
+]

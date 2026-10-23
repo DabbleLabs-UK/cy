@@ -36,14 +36,28 @@ Real execution requires the explicit `--execute-20-actual-configured-model` flag
 The destination must not already exist, so an interrupted run cannot be silently
 resumed/replaced. A durable send ledger is appended before each model call.
 Per-opportunity bound is 600 seconds including queue access; release cleanup is
-bounded to five seconds. Overall wall bound is two hours, with no extension or
-replacement opportunity. Results are retained after every case.
+bounded to five seconds. The overall admission deadline is two hours; a final
+case admitted just before that deadline may finish up to 605 seconds later.
+There is no extension or replacement opportunity. Results are retained after
+every case. This wrapper limit does not alter model input or production policy.
 
 `prepared/requests.json` freezes every request, schema, sampler and exact supported
 body context before inference. `prepared/failure-semantics.json` contains seven
 offline failure probes: malformed, third action, no result, provider failure,
 timeout, cancellation and stale response. All must yield unknown consumption.
 
-Real-run outputs, raw model/provider metadata, lifecycle checkpoints, canonical
-intake consequences and final assessment will be recorded separately. No result
-or acceptance claim is implied by this preparation document.
+The completed fixed run and conservative assessment are in `RESULTS.md`.
+`evidence/` preserves raw model/provider metadata, lifecycle checkpoints,
+canonical consequences and the send ledger. There were exactly 20 model calls,
+all valid eat; mechanical validity does not demonstrate context sensitivity.
+
+The source archive SHA-256 is
+`2296b7c3969ea8e104c75626629324ad301ed0613ef29179476cdca048319357`.
+The initial isolated offline check found a missing read-only implementation
+registry dependency, before any inference. Supplementary tracked registry/model
+specifications were transferred separately with SHA-256
+`6666c7cefc206b9976af5d725b10f0fe6416f95d01af2f62b5428b29ecdab722`.
+The complete package then passed all five offline harness checks on DELL. These
+are source-controlled specifications, not production configuration or secrets.
+SFTP/SCP setup attempts transferred no model requests; the working existing SSH
+stdin route performed exclusive artifact creation and exact archive hash checks.
