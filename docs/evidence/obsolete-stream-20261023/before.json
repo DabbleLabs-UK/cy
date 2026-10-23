@@ -1,0 +1,353 @@
+{
+  "phase": "before",
+  "startedAt": "2026-10-23T00:11:42.187Z",
+  "revision": "ac182f17fad0c1c2941fb4b936c2b53d1f4dea09",
+  "node": "v22.14.0",
+  "platform": "win32",
+  "runSourceSha256": "3682887668401a706d48cc581f7a94924059dbb0e6af91dea7fd28cc24fc65b2",
+  "searches": [
+    {
+      "command": [
+        "rg",
+        "-n",
+        "async function (legacyStreamGenerate|streamGenerate)\\b",
+        "runner",
+        "--glob",
+        "*.js",
+        "--glob",
+        "!*.test.js"
+      ],
+      "hits": 2,
+      "output": [
+        "runner\\run.js:2389:  async function legacyStreamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {",
+        "runner\\run.js:2579:  async function streamGenerate({"
+      ]
+    },
+    {
+      "command": [
+        "rg",
+        "-n",
+        "\\b(legacyStreamGenerate|streamGenerate)\\b",
+        "runner/run.js"
+      ],
+      "hits": 12,
+      "output": [
+        "322:// (rawGenerate/streamGenerate) so every foreground call - awake or asleep -",
+        "334:// counters line. Extracted from streamGenerate so the CANCELLATION path is unit-",
+        "384:// inference call site (rawGenerate, streamGenerate's collectCandidate). If",
+        "2249:  // Per-burst emit state, reset at the start of every generation (streamGenerate).",
+        "2264:  // counts chunks that SURVIVED but shorter. Reset at the top of streamGenerate.",
+        "2389:  async function legacyStreamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {",
+        "2579:  async function streamGenerate({",
+        "3565:      const generate = () => streamGenerate({",
+        "3702:    const r = await streamGenerate({",
+        "3752:    const r1 = await streamGenerate({",
+        "3990:  // untouched), then continue - the NEXT streamGenerate reads activeProvider(). If",
+        "5751:        const r = await streamGenerate({"
+      ]
+    },
+    {
+      "command": [
+        "rg",
+        "-n",
+        "\\blegacyStreamGenerate\\b",
+        "runner",
+        "scripts",
+        "config",
+        "public",
+        "lib",
+        "--glob",
+        "!*.test.js"
+      ],
+      "hits": 1,
+      "output": [
+        "runner\\run.js:2389:  async function legacyStreamGenerate({ system, prompt, opts, mode, purpose, contextTail, allowRepeat = false }) {"
+      ]
+    }
+  ],
+  "contextProxy": {
+    "definition": "fixed five-file source set; LF-normalized UTF-8 bytes / 4 rounded up is a heuristic token proxy, NOT measured agent context",
+    "paths": [
+      "runner/run.js",
+      "runner/character-output.js",
+      "runner/provider.js",
+      "runner/warden.js",
+      "runner/inference-coordinator.js"
+    ],
+    "files": 5,
+    "bytes": 367251,
+    "lines": 7633,
+    "byteQuarterTokenProxy": 91813
+  },
+  "generatorBlocksProxy": {
+    "bytes": 23685,
+    "lines": 520,
+    "byteQuarterTokenProxy": 5922
+  },
+  "obsoleteBlock": {
+    "bytes": 9990,
+    "lines": 201
+  },
+  "repository": {
+    "trackedSource": {
+      "files": 379,
+      "bytes": 4524015,
+      "lines": 94070
+    },
+    "runnerTopLevelSource": {
+      "files": 82,
+      "bytes": 1498954,
+      "lines": 32705
+    },
+    "testFilesCollected": 131
+  },
+  "commands": {
+    "syntax": [
+      "node",
+      "--check",
+      "runner/run.js"
+    ],
+    "focused": [
+      "node",
+      "--test",
+      "--test-concurrency=2",
+      "runner/character-output.test.js",
+      "runner/journal-editorial-boundary.test.js",
+      "runner/journal-continuation-instruction-boundary.test.js",
+      "runner/inference-coordinator.test.js",
+      "runner/provider.test.js",
+      "runner/postcard-inference.test.js",
+      "runner/repeatguard.test.js",
+      "runner/boundary.test.js",
+      "runner/dream-world-isolation.test.js",
+      "runner/abort.test.js"
+    ],
+    "full": [
+      "node",
+      "--test",
+      "--test-concurrency=2",
+      "runner/abort.test.js",
+      "runner/action-outcome-contingency.test.js",
+      "runner/ambient-world-generator.test.js",
+      "runner/anger-retirement.test.js",
+      "runner/arousal-retirement.test.js",
+      "runner/autobiographical-memory.acceptance.test.js",
+      "runner/autobiographical-memory.test.js",
+      "runner/awg-capture.test.js",
+      "runner/awg-health.test.js",
+      "runner/awg-subject-of-talk.test.js",
+      "runner/behavioural-leakage.test.js",
+      "runner/boundary.test.js",
+      "runner/brain.test.js",
+      "runner/character-knowledge.test.js",
+      "runner/character-output.test.js",
+      "runner/character-power-context.test.js",
+      "runner/character-soma-context.test.js",
+      "runner/chronology-hierarchy.test.js",
+      "runner/circadian-process-c.test.js",
+      "runner/client-delivery-id.test.js",
+      "runner/client-flush-lifecycle.test.js",
+      "runner/client-memory-spool.test.js",
+      "runner/client-queue-quarantine.test.js",
+      "runner/composed-feed.test.js",
+      "runner/context-awg.integration.test.js",
+      "runner/context-broker.test.js",
+      "runner/current-defensive-context.test.js",
+      "runner/day-rollover.test.js",
+      "runner/daytime-visibility.test.js",
+      "runner/dev-accelerated-world-soak.test.js",
+      "runner/dream-fragments.test.js",
+      "runner/dream-regime.test.js",
+      "runner/dream-viewer.test.js",
+      "runner/dream-world-isolation.test.js",
+      "runner/dream.test.js",
+      "runner/environment-schema.test.js",
+      "runner/environment.test.js",
+      "runner/event-inspector.test.js",
+      "runner/exercise-admission.test.js",
+      "runner/experienced-state.test.js",
+      "runner/experienced-view.test.js",
+      "runner/expressive-choice.test.js",
+      "runner/feeding-duplicate-stale.test.js",
+      "runner/feeding-homeostasis.test.js",
+      "runner/foreground-timeout.test.js",
+      "runner/generic-memory-service.test.js",
+      "runner/grounded-prose-context.test.js",
+      "runner/harm-public-card.test.js",
+      "runner/history-feed.test.js",
+      "runner/hud-view.test.js",
+      "runner/implementation-registry.test.js",
+      "runner/import-map-coverage.test.js",
+      "runner/incidents.test.js",
+      "runner/inference-cancellation.test.js",
+      "runner/inference-coordinator.test.js",
+      "runner/inference-wait.test.js",
+      "runner/injury-producer-removal.test.js",
+      "runner/instrumental-agency.test.js",
+      "runner/instrumental-round-robin-false-agency.test.js",
+      "runner/journal-continuation-instruction-boundary.test.js",
+      "runner/journal-continuation.test.js",
+      "runner/journal-editorial-boundary.test.js",
+      "runner/journal-freshness.test.js",
+      "runner/journal-source-boundaries.test.js",
+      "runner/launcher.test.js",
+      "runner/left-inspector.test.js",
+      "runner/legacy-hunger-isolation.test.js",
+      "runner/live-status.test.js",
+      "runner/location-regime.test.js",
+      "runner/lockdown-lifecycle.integration.test.js",
+      "runner/maintenance-gate.test.js",
+      "runner/meal-action-outcome-inversion.test.js",
+      "runner/memory-formation-inference.test.js",
+      "runner/memory-runtime.test.js",
+      "runner/message-lifecycle-persistence.integration.test.js",
+      "runner/message-object-lifecycle.test.js",
+      "runner/ollama-raw-transport.test.js",
+      "runner/operational-anxiety-state.test.js",
+      "runner/physiological-satiety.test.js",
+      "runner/plain-feed.test.js",
+      "runner/postcard-archive.test.js",
+      "runner/postcard-associative-memory.test.js",
+      "runner/postcard-inference-view.test.js",
+      "runner/postcard-inference.test.js",
+      "runner/postcard-memory.test.js",
+      "runner/postcard-prompt.test.js",
+      "runner/postcard-recollection.test.js",
+      "runner/postcard-viewer.test.js",
+      "runner/power.test.js",
+      "runner/probabilistic-threat-learning.test.js",
+      "runner/provider-journal-control-stop.test.js",
+      "runner/provider.test.js",
+      "runner/raw-view.test.js",
+      "runner/reconcile-fisher-artifacts.test.js",
+      "runner/reconcile-generic-injuries.test.js",
+      "runner/reconcile-tray-irritation-feeding-contamination.test.js",
+      "runner/repeatguard.test.js",
+      "runner/reset-journal-continuation.test.js",
+      "runner/satiety-restart-recovery.test.js",
+      "runner/sender-formation-contract.test.js",
+      "runner/sender-formation-routing.test.js",
+      "runner/shared-ollama-lease.test.js",
+      "runner/shell-layout.test.js",
+      "runner/shout.test.js",
+      "runner/silence.test.js",
+      "runner/sleep-homeostasis.test.js",
+      "runner/sleep-schedule-provenance.test.js",
+      "runner/sleep-startup.test.js",
+      "runner/social-contact-substrate.test.js",
+      "runner/social-officer-contact-grounding.test.js",
+      "runner/soma-column-layout.test.js",
+      "runner/soma-cycle.test.js",
+      "runner/soma-live-snapshot.test.js",
+      "runner/soma-promotion.test.js",
+      "runner/soma-replay.test.js",
+      "runner/soma.integration.test.js",
+      "runner/soma.test.js",
+      "runner/somatic-nociceptive-substrate.test.js",
+      "runner/spend.test.js",
+      "runner/tempo-view.test.js",
+      "runner/tempo.test.js",
+      "runner/threat-defensive-dedup.test.js",
+      "runner/three-process-sleepiness.test.js",
+      "runner/timeline.test.js",
+      "runner/timetravel.test.js",
+      "runner/tpm-restart-continuity.test.js",
+      "runner/tray-irritation-feeding-contamination.test.js",
+      "runner/vitals-persistence.test.js",
+      "runner/world-continuity-persistence.test.js",
+      "runner/world-continuity-wiring.test.js",
+      "runner/world-mirror.test.js"
+    ]
+  },
+  "syntax": [
+    {
+      "wallMs": 233.15689999999995
+    },
+    {
+      "wallMs": 207.08489999999983
+    },
+    {
+      "wallMs": 196.5730999999996
+    },
+    {
+      "wallMs": 215.89120000000003
+    },
+    {
+      "wallMs": 192.2495999999992
+    },
+    {
+      "wallMs": 205.0576999999994
+    },
+    {
+      "wallMs": 223.615600000001
+    },
+    {
+      "wallMs": 196.44970000000103
+    },
+    {
+      "wallMs": 182.6203000000005
+    }
+  ],
+  "focused": [
+    {
+      "wallMs": 3652.296900000001,
+      "tests": 46,
+      "pass": 46,
+      "fail": 0,
+      "reportedDurationMs": 3374.8015
+    },
+    {
+      "wallMs": 3435.368699999999,
+      "tests": 46,
+      "pass": 46,
+      "fail": 0,
+      "reportedDurationMs": 3182.3673
+    },
+    {
+      "wallMs": 3664.1908000000003,
+      "tests": 46,
+      "pass": 46,
+      "fail": 0,
+      "reportedDurationMs": 3379.6045
+    },
+    {
+      "wallMs": 3802.688100000003,
+      "tests": 46,
+      "pass": 46,
+      "fail": 0,
+      "reportedDurationMs": 3528.0966
+    },
+    {
+      "wallMs": 3553.726300000002,
+      "tests": 46,
+      "pass": 46,
+      "fail": 0,
+      "reportedDurationMs": 3299.8594
+    }
+  ],
+  "full": [
+    {
+      "wallMs": 55621.1614,
+      "tests": 613,
+      "pass": 613,
+      "fail": 0,
+      "reportedDurationMs": 55368.1117
+    },
+    {
+      "wallMs": 45586.2095,
+      "tests": 613,
+      "pass": 613,
+      "fail": 0,
+      "reportedDurationMs": 45317.2107
+    },
+    {
+      "wallMs": 28562.88520000002,
+      "tests": 613,
+      "pass": 613,
+      "fail": 0,
+      "reportedDurationMs": 28452.2301
+    }
+  ],
+  "complete": true,
+  "completedAt": "2026-10-23T00:14:21.104Z"
+}

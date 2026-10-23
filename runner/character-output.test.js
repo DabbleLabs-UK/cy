@@ -566,6 +566,11 @@ ok('new marker and editorial candidates use one repair or silence for every waki
 
 {
   const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
+  assert.equal((runSource.match(/async function streamGenerate\s*\(/g) || []).length, 1);
+  assert.doesNotMatch(runSource, /\blegacyStreamGenerate\b/,
+    'the unreachable pre-validation publisher must not look like a supported alternative');
+  assert.match(runSource, /onPhase:\s*setInfer/,
+    'shared inference phase reporting stays live through the coordinator callback');
   assert.match(runSource, /const guarded = await generateWithCharacterRepair\(/);
   assert.match(runSource, /const r1 = await streamGenerate\(\{[\s\S]*?purpose: 'drawing', attempt: 'drawing-intent'/);
   assert.match(runSource, /if \(discards >= MAX_DISCARDS\) \{[\s\S]*?await logCapHit\(mode, discards\);[\s\S]*?break;/);
