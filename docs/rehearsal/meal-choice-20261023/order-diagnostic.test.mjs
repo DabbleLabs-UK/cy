@@ -5,6 +5,7 @@ import { MAIN, EXTRA, packet, transform, decode, needsOpaque } from './order-dia
 import { prepare } from './fixtures.mjs';
 import { makeProviders } from '../../../runner/provider.js';
 import { parseMealChoice } from '../../../runner/meal-choice.js';
+import { CASES as NO_HINT, probePacket } from './no-response-probe.mjs';
 
 test('predeclared main is a balanced 24-call two-by-two matrix with time-interleaved orders', () => {
   assert.equal(MAIN.length, 24);
@@ -71,6 +72,22 @@ test('optional work is admitted only after 24 valid unanimous semantic choices',
   assert.equal(needsOpaque(r.slice(1)), false);
   assert.equal(needsOpaque(r.map((v, i) => i ? v : { ...v, accepted: false })), false);
   assert.equal(needsOpaque(r.map((v, i) => i ? v : { ...v, action: 'decline' })), false);
+});
+
+test('one correction candidate removes only the redundant response hint in eight fixed matched cases', () => {
+  assert.equal(NO_HINT.length, 8);
+  for (const condition of ['A', 'B']) for (const profile of ['EMPTY', 'FULL']) {
+    assert.equal(NO_HINT.filter(c => c.condition === condition && c.profile === profile).length, 2);
+  }
+  for (const c of NO_HINT) {
+    const p = probePacket(c), original = packet(c), body = JSON.parse(p.call.prompt);
+    assert.equal(Object.hasOwn(body, 'response'), false);
+    body.response = JSON.parse(original.call.prompt).response;
+    assert.equal(JSON.stringify(body), original.call.prompt);
+    assert.deepEqual(p.call.format, original.call.format);
+    assert.equal(p.call.system, original.call.system);
+    assert.deepEqual(p.options, original.options);
+  }
 });
 
 test('real provider serializes exactly the retained wire request (mock HTTP only, no model)', async () => {
