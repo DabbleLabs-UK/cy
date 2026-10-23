@@ -7,7 +7,8 @@ Base production: `ac182f17fad0c1c2941fb4b936c2b53d1f4dea09`.
 Remove only `legacyStreamGenerate` and its attached documentation from
 `runner/run.js`. Classification: UNREACHABLE and SUPERSEDED, not merely old or
 disabled. No neighbouring function, import, state, configuration or test is
-removed. Five assertions are added to the existing character-output wiring test.
+removed. Three assertions in five source lines are added to the existing
+character-output wiring test.
 
 This was a complete competing publisher immediately above the authoritative
 one. It opened a provider stream, primed an opening, screened refusals/repeats,
