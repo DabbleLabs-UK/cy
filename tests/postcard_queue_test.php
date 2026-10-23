@@ -22,15 +22,10 @@ $checks = [
     'runner can claim when no reply is in flight' => captive_postcard_can_claim_next(0) === true,
     'runner cannot claim a second simultaneous reply' => captive_postcard_can_claim_next(1) === false,
     'runner remains blocked if several claims somehow exist' => captive_postcard_can_claim_next(3) === false,
-    'first completed quality failure is retried rather than archived' => captive_postcard_failed_attempt(0) === [
-        'attempts' => 1, 'retry' => true, 'mail_class' => 'reply', 'retry_after_seconds' => 10,
-    ],
-    'second completed quality failure still gets the final retry' => captive_postcard_failed_attempt(1) === [
-        'attempts' => 2, 'retry' => true, 'mail_class' => 'reply', 'retry_after_seconds' => 10,
-    ],
-    'third completed quality failure becomes terminal fan mail' => captive_postcard_failed_attempt(2) === [
-        'attempts' => 3, 'retry' => false, 'mail_class' => 'fan_final', 'retry_after_seconds' => 0,
-    ],
+    // Real quality/temporary/hold transitions are covered through the actual API
+    // in postcard_retry_lifecycle_integration.test.mjs, not an orphan calculator.
+    'one authoritative fenced retry implementation remains' =>
+        function_exists('captive_postcard_defer') && !function_exists('captive_postcard_failed_attempt'),
     'only the first model attempt publishes the postcard arrival' =>
         captive_postcard_should_publish_arrival(0) && !captive_postcard_should_publish_arrival(1),
     'database provenance marks promoted mail authoritatively' => captive_postcard_event_provenance(

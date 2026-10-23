@@ -1,0 +1,53 @@
+{
+  "format": "cy-maintainability-replication-evidence-v1",
+  "artifacts": {
+    "before.json.gz": {
+      "sha256": "1673b029c672356ab5aa8d7890a2ebf8fa9a5b1dfd67ac42f1ce32353034c4a7",
+      "bytes": 6186,
+      "uncompressedSha256": "61967c9654afeea97bc09223d32f8f3268745e4b10a005f60b8827553f06d259",
+      "uncompressedBytes": 60589
+    },
+    "after.json.gz": {
+      "sha256": "c92e881efd6265da334ed9a97da73804965d74d087516ba19fec27118e1226f9",
+      "bytes": 6101,
+      "uncompressedSha256": "372302c756f55279ad23ce0b6f3d50f290b3aeda4e15ca03518207cd74c83e92",
+      "uncompressedBytes": 59909
+    },
+    "warm-control.json.gz": {
+      "sha256": "03ff46aa69a9035ceb977e579249fa4572491bc9e629902017373ad144aaec2f",
+      "bytes": 6205,
+      "uncompressedSha256": "01b4e78ca5ab217961208f812f927a0db037d239346a06dca4bf433e155c85b2",
+      "uncompressedBytes": 60593
+    }
+  },
+  "timingOrder": [
+    "before",
+    "after",
+    "warm-control"
+  ],
+  "measurementScriptSha256": "88ef53517a969d6e28fc74161e51b908c6d4dc2a777dfc9705a2eb9f606ab20b",
+  "disposableHarnessSha256": "00ab8d2b6688686b861b2ff2dafa09e668cbed9ce32e5e0e1ca52d7700abe197",
+  "actualApiValidation": {
+    "file": "tests/postcard_retry_lifecycle_integration.test.mjs",
+    "sourceSha256": "d41e0cdb747e966252c946e077b8157dbac09334c1f42b61b2a578341f661ca4",
+    "before": {
+      "tests": 1,
+      "passed": 1,
+      "skipped": 0,
+      "reportedDurationMs": 33812.1486,
+      "ownedPid": 36748,
+      "port": 57347,
+      "stopped": true
+    },
+    "after": {
+      "tests": 1,
+      "passed": 1,
+      "skipped": 0,
+      "reportedDurationMs": 33408.8313,
+      "ownedPid": 44812,
+      "port": 55028,
+      "stopped": true
+    },
+    "note": "Synthetic data in separate newly initialized localhost-only owned MariaDB instances; no production data, provider call or inference. Tool execution records retain original stdout."
+  }
+}

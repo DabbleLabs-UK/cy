@@ -32,19 +32,6 @@ function captive_postcard_can_claim_next(int $inFlightReplies): bool
     return $inFlightReplies <= 0;
 }
 
-/** @return array{attempts:int,retry:bool,mail_class:string,retry_after_seconds:int} */
-function captive_postcard_failed_attempt(int $completedAttempts, int $maxAttempts = CY_REPLY_MAX_ATTEMPTS): array
-{
-    $attempts = max(0, $completedAttempts) + 1;
-    $retry = $attempts < max(1, $maxAttempts);
-    return [
-        'attempts' => $attempts,
-        'retry' => $retry,
-        'mail_class' => $retry ? 'reply' : 'fan_final',
-        'retry_after_seconds' => $retry ? CY_REPLY_RETRY_DELAY_SECONDS : 0,
-    ];
-}
-
 // A retry is the same physical postcard returning to the model lane. Its first
 // arrival is already in the public chronology, so later attempts must not create
 // duplicate postcard cards or imply that the visitor posted it again.
