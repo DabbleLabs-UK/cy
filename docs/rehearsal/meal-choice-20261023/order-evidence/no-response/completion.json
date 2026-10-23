@@ -1,0 +1,43 @@
+{
+  "opportunities": 8,
+  "cells": {
+    "order/A/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    },
+    "order/B/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    },
+    "order/A/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    },
+    "order/B/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    }
+  },
+  "sends": 8,
+  "elapsedMs": 143952,
+  "startedAt": "2026-10-23T18:39:50.221Z",
+  "endedAt": "2026-10-23T18:42:14.173Z",
+  "retries": 0,
+  "repairs": 0
+}

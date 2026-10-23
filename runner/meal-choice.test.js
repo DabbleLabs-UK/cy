@@ -135,6 +135,17 @@ test('the bounded model request has exactly eat/decline and no invented ingredie
   assert.equal(prompt.body, 'Possible stomach fullness: full.');
 });
 
+test('meal choice has no answer-looking response hint that duplicates ordered alternatives', () => {
+  const f = fixture();
+  const request = mealModelCall(f.open().episode, { bodily: 'Possible stomach fullness: full.' });
+  const prompt = JSON.parse(request.prompt);
+  assert.equal(Object.hasOwn(prompt, 'response'), false);
+  assert.deepEqual(Object.keys(prompt.choices), ['eat', 'decline']);
+  assert.deepEqual(request.format.properties.action.enum, ['eat', 'decline']);
+  assert.equal(prompt.body, 'Possible stomach fullness: full.');
+  for (const action of MEAL_ACTIONS) assert.equal(parseMealChoice(JSON.stringify({ action })), action);
+});
+
 test('only an exact supported JSON action is accepted', () => {
   assert.equal(parseMealChoice('{"action":"eat"}'), 'eat');
   assert.equal(parseMealChoice(' {"action":"decline"}\n'), 'decline');

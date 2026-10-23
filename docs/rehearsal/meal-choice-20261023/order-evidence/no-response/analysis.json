@@ -1,0 +1,174 @@
+{
+  "opportunities": 8,
+  "cells": {
+    "order/A/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    },
+    "order/B/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    },
+    "order/A/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    },
+    "order/B/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "rawLabels": {
+        "eat": 2
+      }
+    }
+  },
+  "sends": 8,
+  "elapsedMs": 143952,
+  "startedAt": "2026-10-23T18:39:50.221Z",
+  "endedAt": "2026-10-23T18:42:14.173Z",
+  "retries": 0,
+  "repairs": 0,
+  "combinedSends": 32,
+  "accepted": 8,
+  "inferenceMs": {
+    "min": 1640,
+    "median": 5291.5,
+    "max": 5862
+  },
+  "waitMs": {
+    "min": 4,
+    "median": 15,
+    "max": 81140
+  },
+  "inputTokens": {
+    "min": 218,
+    "median": 218,
+    "max": 218
+  },
+  "rows": [
+    {
+      "id": "no-hint-01",
+      "profile": "EMPTY",
+      "condition": "A",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 81140,
+      "inferenceMs": 3671,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-02",
+      "profile": "FULL",
+      "condition": "B",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 24638,
+      "inferenceMs": 5833,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-03",
+      "profile": "FULL",
+      "condition": "A",
+      "raw": "{\"action\": \"eat\"}",
+      "action": "eat",
+      "waitMs": 12,
+      "inferenceMs": 4776,
+      "inputTokens": 218,
+      "outputTokens": 7,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-04",
+      "profile": "EMPTY",
+      "condition": "B",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 38,
+      "inferenceMs": 5862,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-05",
+      "profile": "EMPTY",
+      "condition": "B",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 4,
+      "inferenceMs": 1640,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-06",
+      "profile": "FULL",
+      "condition": "A",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 18,
+      "inferenceMs": 5857,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-07",
+      "profile": "FULL",
+      "condition": "B",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 5,
+      "inferenceMs": 4499,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    },
+    {
+      "id": "no-hint-08",
+      "profile": "EMPTY",
+      "condition": "A",
+      "raw": "{\"action\":\"eat\"}",
+      "action": "eat",
+      "waitMs": 10,
+      "inferenceMs": 5807,
+      "inputTokens": 218,
+      "outputTokens": 6,
+      "status": 200,
+      "finishReason": "stop",
+      "error": null
+    }
+  ]
+}

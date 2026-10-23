@@ -23,7 +23,9 @@ test('production arm is byte-identical; reversal changes only all three alternat
     const expected = c.condition === 'A' ? ['eat', 'decline'] : ['decline', 'eat'];
     assert.deepEqual(Object.keys(parsed.choices), expected);
     assert.deepEqual(p.call.format.properties.action.enum, expected);
-    assert.equal(parsed.response.action, expected.join(' | '));
+    if (Object.hasOwn(JSON.parse(original.prompt), 'response')) {
+      assert.equal(parsed.response.action, expected.join(' | '));
+    } else assert.equal(Object.hasOwn(parsed, 'response'), false);
     const restored = transform(p.call, { condition: 'A', opaque: false }).call;
     assert.deepEqual(restored, original);
     assert.equal(p.call.system, original.system);
@@ -87,6 +89,11 @@ test('one correction candidate removes only the redundant response hint in eight
     assert.deepEqual(p.call.format, original.call.format);
     assert.equal(p.call.system, original.call.system);
     assert.deepEqual(p.options, original.options);
+    // After the one-field runtime correction, the real helper/ordering transform
+    // must produce the exact same wire request tested by the correction probe.
+    if (!Object.hasOwn(JSON.parse(prepare(c).call.prompt), 'response')) {
+      assert.deepEqual(p.wireBody, packet(c).wireBody);
+    }
   }
 });
 

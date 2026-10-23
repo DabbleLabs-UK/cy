@@ -65,8 +65,8 @@ export function mealModelCall(episode, { bodily = '', location = 'cell', regime 
     prompt: JSON.stringify({
       present: `${episode.meal.replaceAll('_', ' ')} is available to you here. No specific ingredients are established.`,
       where: location, current_activity: regime, body: bodily,
+      // The schema supplies the response shape; do not add an ordered answer hint.
       choices: { eat: 'Eat the available meal.', decline: 'Do not eat this meal.' },
-      response: { action: 'eat | decline' },
     }),
     format: MEAL_CHOICE_FORMAT,
   };

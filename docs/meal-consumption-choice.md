@@ -157,3 +157,16 @@ persist after model failure or downtime; that is intentional rather than a
 fabricated meal. Availability lifetime is deliberately conservative and does not
 model leftovers, storage, later snacking, preparation or external reactions.
 No deployment is authorised by this implementation.
+
+## Later real-model diagnostic (23 October)
+
+The original twenty-case rehearsal chose eat 20/20. A fixed counterbalanced
+24-call follow-up exposed strong presentation-order dependence, with first-listed
+action selected 22/24. A single eight-case correction check removed the redundant
+answer-looking `response.action` hint; all eight then chose eat under both orders.
+The feature retains only that hint deletion, with schema/parser/actions and
+physiology unchanged. Current helper output matches the tested request bytes.
+This removes an empirically implicated cue, not proof of context-sensitive agency.
+No merge/deployment is recommended yet. See
+`rehearsal/meal-choice-20261023/ORDER-RESULTS.md` for exact prompts, raw evidence,
+small-sample limitations and AGENCY NOT DEMONSTRATED verdict.

@@ -2,6 +2,10 @@
 
 Runtime candidate: `5087e53`. This directory adds rehearsal tooling/evidence only.
 
+Follow-up: `ORDER-RESULTS.md` records the later 24-call order diagnostic and
+eight-call answer-hint correction check. That work retains one runtime deletion
+of the redundant response hint on the unmerged feature branch; no rollout.
+
 Exactly 20 predeclared synthetic opportunities, no repairs/replacements/retries.
 Four existing meal types cross sparse/empty/partly-full/full context; two cases
 add a supported synthetic forearm abrasion and two repeat earlier inputs exactly.

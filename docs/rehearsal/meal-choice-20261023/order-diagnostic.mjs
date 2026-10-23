@@ -33,7 +33,7 @@ export function transform(call, c) {
   const mapping = Object.fromEntries(labels.map((label, i) => [label, order[i]]));
   next.prompt = JSON.stringify({ ...prompt,
     choices: Object.fromEntries(labels.map(label => [label, prompt.choices[mapping[label]]])),
-    response: { action: labels.join(' | ') },
+    ...(Object.hasOwn(prompt, 'response') ? { response: { action: labels.join(' | ') } } : {}),
   });
   next.format.properties.action.enum = labels;
   return { call: next, mapping, order, labels };
