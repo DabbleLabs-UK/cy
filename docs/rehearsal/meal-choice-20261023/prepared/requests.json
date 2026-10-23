@@ -1,0 +1,1754 @@
+[
+  {
+    "case": {
+      "id": "01",
+      "meal": "breakfast",
+      "profile": "SPARSE",
+      "injury": false
+    },
+    "seed": {
+      "type": "SPARSE_NO_BODILY_EVIDENCE"
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [UNKNOWN] No current grounded facts are available.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "unlock slop"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"breakfast is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"unlock slop\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [UNKNOWN] No current grounded facts are available.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "02",
+      "meal": "lunch",
+      "profile": "EMPTY",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 296,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 296,
+        "central95Ml": {
+          "lower": 296,
+          "upper": 296
+        },
+        "normalizedPercent": 0,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 0,
+          "upper": 0
+        },
+        "band": "EMPTY"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "03",
+      "meal": "tea",
+      "profile": "FULL",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 800,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 800,
+        "central95Ml": {
+          "lower": 800,
+          "upper": 800
+        },
+        "normalizedPercent": 58.2,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 58.2,
+          "upper": 58.2
+        },
+        "band": "FULL"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "tea"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"tea is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"tea\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "04",
+      "meal": "supper_snack",
+      "profile": "FILLING",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 400,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 400,
+        "central95Ml": {
+          "lower": 400,
+          "upper": 400
+        },
+        "normalizedPercent": 12,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 12,
+          "upper": 12
+        },
+        "band": "FILLING"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: partly full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "bangup night"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"supper snack is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"bangup night\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: partly full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "05",
+      "meal": "breakfast",
+      "profile": "EMPTY",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 296,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 296,
+        "central95Ml": {
+          "lower": 296,
+          "upper": 296
+        },
+        "normalizedPercent": 0,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 0,
+          "upper": 0
+        },
+        "band": "EMPTY"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "unlock slop"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"breakfast is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"unlock slop\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "06",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 800,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 800,
+        "central95Ml": {
+          "lower": 800,
+          "upper": 800
+        },
+        "normalizedPercent": 58.2,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 58.2,
+          "upper": 58.2
+        },
+        "band": "FULL"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "07",
+      "meal": "tea",
+      "profile": "FILLING",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 400,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 400,
+        "central95Ml": {
+          "lower": 400,
+          "upper": 400
+        },
+        "normalizedPercent": 12,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 12,
+          "upper": 12
+        },
+        "band": "FILLING"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: partly full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "tea"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"tea is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"tea\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: partly full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "08",
+      "meal": "supper_snack",
+      "profile": "SPARSE",
+      "injury": false
+    },
+    "seed": {
+      "type": "SPARSE_NO_BODILY_EVIDENCE"
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [UNKNOWN] No current grounded facts are available.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "bangup night"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"supper snack is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"bangup night\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [UNKNOWN] No current grounded facts are available.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "09",
+      "meal": "breakfast",
+      "profile": "FULL",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 800,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 800,
+        "central95Ml": {
+          "lower": 800,
+          "upper": 800
+        },
+        "normalizedPercent": 58.2,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 58.2,
+          "upper": 58.2
+        },
+        "band": "FULL"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "unlock slop"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"breakfast is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"unlock slop\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "10",
+      "meal": "lunch",
+      "profile": "FILLING",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 400,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 400,
+        "central95Ml": {
+          "lower": 400,
+          "upper": 400
+        },
+        "normalizedPercent": 12,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 12,
+          "upper": 12
+        },
+        "band": "FILLING"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: partly full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: partly full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "11",
+      "meal": "tea",
+      "profile": "SPARSE",
+      "injury": false
+    },
+    "seed": {
+      "type": "SPARSE_NO_BODILY_EVIDENCE"
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [UNKNOWN] No current grounded facts are available.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "tea"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"tea is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"tea\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [UNKNOWN] No current grounded facts are available.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "12",
+      "meal": "supper_snack",
+      "profile": "EMPTY",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 296,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 296,
+        "central95Ml": {
+          "lower": 296,
+          "upper": 296
+        },
+        "normalizedPercent": 0,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 0,
+          "upper": 0
+        },
+        "band": "EMPTY"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "bangup night"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"supper snack is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"bangup night\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "13",
+      "meal": "breakfast",
+      "profile": "FILLING",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 400,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 400,
+        "central95Ml": {
+          "lower": 400,
+          "upper": 400
+        },
+        "normalizedPercent": 12,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 12,
+          "upper": 12
+        },
+        "band": "FILLING"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: partly full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "unlock slop"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"breakfast is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"unlock slop\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: partly full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "14",
+      "meal": "lunch",
+      "profile": "SPARSE",
+      "injury": false
+    },
+    "seed": {
+      "type": "SPARSE_NO_BODILY_EVIDENCE"
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [UNKNOWN] No current grounded facts are available.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [UNKNOWN] No current grounded facts are available.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "15",
+      "meal": "tea",
+      "profile": "EMPTY",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 296,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 296,
+        "central95Ml": {
+          "lower": 296,
+          "upper": 296
+        },
+        "normalizedPercent": 0,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 0,
+          "upper": 0
+        },
+        "band": "EMPTY"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "tea"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"tea is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"tea\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "16",
+      "meal": "supper_snack",
+      "profile": "FULL",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 800,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 800,
+        "central95Ml": {
+          "lower": 800,
+          "upper": 800
+        },
+        "normalizedPercent": 58.2,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 58.2,
+          "upper": 58.2
+        },
+        "band": "FULL"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "bangup night"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"supper snack is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"bangup night\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "17",
+      "meal": "lunch",
+      "profile": "SPARSE",
+      "injury": true
+    },
+    "seed": {
+      "type": "SPARSE_NO_BODILY_EVIDENCE"
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Active abrasion at left forearm.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [OBSERVED FACT] Active abrasion at left forearm.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "18",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": true
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 800,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 800,
+        "central95Ml": {
+          "lower": 800,
+          "upper": 800
+        },
+        "normalizedPercent": 58.2,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 58.2,
+          "upper": 58.2
+        },
+        "band": "FULL"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Active abrasion at left forearm.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [OBSERVED FACT] Active abrasion at left forearm.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "19",
+      "meal": "breakfast",
+      "profile": "SPARSE",
+      "injury": false
+    },
+    "seed": {
+      "type": "SPARSE_NO_BODILY_EVIDENCE"
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [UNKNOWN] No current grounded facts are available.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "unlock slop"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"breakfast is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"unlock slop\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [UNKNOWN] No current grounded facts are available.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  },
+  {
+    "case": {
+      "id": "20",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": false
+    },
+    "seed": {
+      "type": "HYPOTHETICAL_SYNTHETIC_CURRENT_GUT_CHECKPOINT",
+      "priorIntakeEventId": "synthetic-prior-intake",
+      "targetDistentionMl": 800,
+      "snapshot": {
+        "status": "ESTIMATE_AVAILABLE",
+        "label": "FULLNESS",
+        "gastricDistentionMl": 800,
+        "central95Ml": {
+          "lower": 800,
+          "upper": 800
+        },
+        "normalizedPercent": 58.2,
+        "normalizedPercentCapped": false,
+        "normalizedPercentCentral95": {
+          "lower": 58.2,
+          "upper": 58.2
+        },
+        "band": "FULL"
+      }
+    },
+    "offeredActions": [
+      "eat",
+      "decline"
+    ],
+    "characterContext": {
+      "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+      "location": "cell",
+      "regime": "lunch bangup"
+    },
+    "call": {
+      "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+      "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+      "format": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "eat",
+              "decline"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "opts": {
+      "temperature": 0.72,
+      "top_p": 0.86,
+      "repeat_penalty": 1.18,
+      "repeat_last_n": 160,
+      "num_predict": 80,
+      "stop": [
+        "<|im_end|>",
+        "<|im_start|>",
+        "<|eot_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|begin_of_text|>",
+        "You continue writing",
+        "What happens next",
+        "Do you:",
+        "I choose",
+        "\n7734:",
+        "I apologize",
+        "Here's an attempt",
+        "To continue from where we left off",
+        "<br",
+        "</br",
+        "<b>",
+        "</b>",
+        "<p>",
+        "</p>",
+        "<i>",
+        "</i>",
+        "<u>",
+        "</u>"
+      ],
+      "num_ctx": 3072,
+      "num_thread": 4
+    }
+  }
+]
