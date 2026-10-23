@@ -1,29 +1,17 @@
-// meal-action-outcome-inversion.test.js - the scheduled-meal producer
-// (environment.js's chooseMealEvent) rolled a random meal outcome
-// (eaten/partial/missed/refused) FIRST, then relabelled that outcome as an
-// apparent EXECUTED accept_meal/refuse_meal action_opportunity - reversing
-// causality. action-outcome-contingency.js then learned an
-// action-conditioned Beta posterior from it, manufacturing evidence such as
-// "accepting the meal prevents deprivation" even though the random outcome
-// existed before the supposed action, and there is currently no genuine
-// Cy/model chooser anywhere in this path.
-//
-// Fix: chooseMealEvent no longer asserts world.action_opportunity at all,
-// for any outcome (eaten/partial/missed/refused). Genuine feeding/satiety
-// facts (offered/available/received/consumed/intake_outcome) and the
-// DEPRIVATION_OR_LOSS defensive-context/threat-learning signal are entirely
-// unchanged. run.js's fireScheduled preserves the meal-expectation ->
-// resolution provenance link (context.previous_event_ids) independently of
-// action_opportunity, since that link is genuine provenance, not a choice
-// claim.
+// meal-action-outcome-inversion.test.js - delivery RNG establishes only
+// availability. Consumption and action provenance require a separate Cy
+// decision; absent decisions remain unknown. Historical fabricated meal:
+// trials remain eligible for narrow cleanup, while genuine meal-choice-v1:
+// records survive it without inventing psychological outcome evidence.
 //
 // Self-checking: throws (non-zero exit) on any failure.
 //
 //   node runner/meal-action-outcome-inversion.test.js
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { chooseMealEvent, mealExpectation } from './environment.js';
+import {
+  chooseMealEvent, mealExpectation, materialiseMealConsumption, mealUnknownConsumption,
+} from './environment.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import { ingestionRecordFromEnvironment, observeFeedingRecord, createFeedingState } from './feeding-homeostasis.js';
 import {
@@ -46,17 +34,26 @@ import {
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
 
-function mealRecord(id, meal, rnd, mealId = null) {
-  const built = chooseMealEvent(meal, rnd, { mealId });
+function mealRecord(id, meal, action, mealId = null) {
+  const options = { mealId, availabilityEventId: `${id}-availability`, decisionId: `${id}-decision` };
+  const built = action === 'missed' ? chooseMealEvent(meal, () => 0.95, options)
+    : action === 'available' ? chooseMealEvent(meal, () => 0.1, options)
+      : action === 'unknown' ? mealUnknownConsumption(meal, options)
+        : materialiseMealConsumption(meal, action, options);
+  if (built.world.action_opportunity) {
+    built.world.action_opportunity.resolved_at = '2026-09-27 07:30:00.000';
+  }
   return { built, record: createEnvironmentRecord(createEnvironmentEvent(built.archetypeId, {
     id, timestamp: '2026-09-27 07:30:00.000', eventType: built.name,
     world: built.world, observation: built.observation,
   })) };
 }
 
-// ---- 1: random meal outcome still produces correct feeding facts ----
+// ---- 1: feeding facts require consumption evidence ----
 {
-  const { record: eatenRecord } = mealRecord('meal-1-eaten', 'breakfast', () => 0.1);
+  const { record: availableRecord } = mealRecord('meal-1-available', 'breakfast', 'available');
+  assert.equal(ingestionRecordFromEnvironment(availableRecord), null);
+  const { record: eatenRecord } = mealRecord('meal-1-eaten', 'breakfast', 'eat');
   const ingestion = ingestionRecordFromEnvironment(eatenRecord);
   assert.ok(ingestion, 'a fully-eaten meal still produces a valid feeding ingestion record');
   assert.equal(ingestion.intakeOutcome, 'FULLY_CONSUMED');
@@ -65,10 +62,10 @@ function mealRecord(id, meal, rnd, mealId = null) {
   assert.equal(result.updated, true);
   assert.equal(state.lastKnownIntakeAt, '2026-09-27 07:30:00.000');
 
-  const { record: missedRecord } = mealRecord('meal-1-missed', 'tea', () => 0.95);
+  const { record: missedRecord } = mealRecord('meal-1-missed', 'tea', 'missed');
   const missedIngestion = ingestionRecordFromEnvironment(missedRecord);
   assert.equal(missedIngestion.intakeOutcome, 'UNAVAILABLE');
-  ok('random meal outcomes (eaten and missed) still produce correct, genuine feeding facts (1)');
+  ok('delivery availability creates no intake; chosen eating and unavailable delivery retain feeding facts (1)');
 }
 
 // ---- 2: meal outcome does not create action_opportunity ----
@@ -78,13 +75,13 @@ function mealRecord(id, meal, rnd, mealId = null) {
     assert.equal('action_opportunity' in built.world, false,
       `${meal} at roll ${roll} (outcome ${built.public.outcome}) asserts no action_opportunity`);
   }
-  ok('no meal outcome (eaten, partial, missed, refused) creates an action_opportunity (2)');
+  ok('no delivery roll creates an action_opportunity or chooses consumption (2)');
 }
 
 // ---- 3: meal outcome does not update controllability posteriors ----
 {
   const controllability = createControllabilityState();
-  const { record } = mealRecord('meal-3-refused', 'tea', () => 0.99, '2026-09-27:tea');
+  const { record } = mealRecord('meal-3-available', 'tea', 'available', '2026-09-27:tea');
   const result = observeControllabilityRecord(controllability, record);
   assert.equal(result.updated, false);
   assert.equal(result.reason, 'no_action_opportunity');
@@ -94,17 +91,24 @@ function mealRecord(id, meal, rnd, mealId = null) {
   ok('a meal outcome cannot update any action-outcome controllability posterior (3)');
 }
 
-// ---- 4: no "Cy chose..." event is emitted for scheduled meals ----
+// ---- 4: a real choice has provenance but no fabricated adverse outcome ----
 {
-  const source = readFileSync(new URL('./run.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-  const fnStart = source.indexOf('function fireScheduled(');
-  assert.ok(fnStart > -1, 'fireScheduled exists');
-  const fnEnd = source.indexOf('\n  function ', fnStart + 1);
-  const fnBody = source.slice(fnStart, fnEnd > -1 ? fnEnd : fnStart + 4000);
-  assert.doesNotMatch(fnBody, /beginInstrumentalIncident/,
-    'fireScheduled (the scheduled-meal path) never calls beginInstrumentalIncident, which is the only place that emits the "Cy chose ..." event');
-  assert.doesNotMatch(fnBody, /Cy chose/);
-  ok('no "Cy chose ..." event is structurally reachable from the scheduled-meal path (4)');
+  for (const action of ['eat', 'decline']) {
+    const state = createControllabilityState();
+    const { built, record } = mealRecord(`meal-4-${action}`, 'tea', action, '2026-09-27:tea');
+    assert.equal(built.world.meal_decision.action, action);
+    assert.equal(built.world.meal_decision.status, 'CY_DECISION');
+    assert.deepEqual(built.world.context.previous_event_ids, [`meal-4-${action}-availability`]);
+    assert.equal(built.world.action_opportunity.chosen_action,
+      action === 'eat' ? 'action:eat_meal' : 'action:decline_meal');
+    const result = observeControllabilityRecord(state, record);
+    assert.equal(result.reason, 'no_eligible_resolved_outcome');
+    assert.equal(state.opportunityHistory.length, 1, 'a genuine decision remains valid action evidence');
+    assert.deepEqual(state.pairs, {}, 'consumption alone establishes no psychological outcome');
+    assert.equal(classifyControllability(state).retireOpportunityHistoryCount, 0,
+      'historical meal cleanup must preserve genuine choices');
+  }
+  ok('genuine choices retain action provenance without inventing adverse-outcome evidence (4)');
 }
 
 // ---- 5: real instrumental opportunities remain unchanged ----
@@ -126,23 +130,23 @@ function mealRecord(id, meal, rnd, mealId = null) {
 // ---- 6: feeding/satiety facts remain fully correct for every meal outcome ----
 {
   const outcomes = [
-    ['breakfast', 0.1, 'FULLY_CONSUMED'],
-    ['lunch', 0.9, 'PARTLY_CONSUMED'],
-    ['tea', 0.95, 'UNAVAILABLE'],
-    ['tea', 0.99, 'REFUSED'],
+    ['breakfast', 'eat', 'FULLY_CONSUMED'],
+    ['tea', 'missed', 'UNAVAILABLE'],
+    ['tea', 'decline', 'REFUSED'],
+    ['tea', 'unknown', 'UNKNOWN'],
   ];
-  for (const [meal, roll, expected] of outcomes) {
-    const { record } = mealRecord(`meal-6-${meal}-${roll}`, meal, () => roll);
+  for (const [meal, action, expected] of outcomes) {
+    const { record } = mealRecord(`meal-6-${meal}-${action}`, meal, action);
     assert.equal(ingestionRecordFromEnvironment(record).intakeOutcome, expected,
-      `${meal} at roll ${roll} still resolves to ${expected} in feeding-homeostasis`);
+      `${meal} with ${action} resolves to ${expected} in feeding-homeostasis`);
   }
-  ok('feeding/satiety intake-outcome derivation is unaffected by this fix for every meal branch (6)');
+  ok('feeding/satiety distinguishes chosen eating, chosen decline, unavailable and unknown (6)');
 }
 
 // ---- 7: restart/replay remains stable ----
 {
   const controllability = createControllabilityState();
-  const { record } = mealRecord('meal-7-eaten', 'breakfast', () => 0.1, '2026-09-27:breakfast');
+  const { record } = mealRecord('meal-7-eaten', 'breakfast', 'eat', '2026-09-27:breakfast');
   observeControllabilityRecord(controllability, record);
   assert.deepEqual(controllability.pairs, {}, 'meal event produced no pairs to begin with');
   const restored = reconcileControllabilityState(JSON.parse(JSON.stringify(controllability)));
@@ -160,7 +164,7 @@ function mealRecord(id, meal, rnd, mealId = null) {
     eventType: expected.name, world: expected.world, observation: expected.observation,
   }));
   observeFeedingRecord(state, expectedRecord);
-  const { record: resolvedRecord } = mealRecord('meal-8-resolved', 'lunch', () => 0.1, '2026-09-27:lunch');
+  const { record: resolvedRecord } = mealRecord('meal-8-resolved', 'lunch', 'eat', '2026-09-27:lunch');
   observeFeedingRecord(state, resolvedRecord);
   assert.equal(state.records.length, 2, 'both the expectation and the resolved outcome remain in feeding history');
   assert.deepEqual(state.records.map((r) => r.eventId), ['meal-8-expected', 'meal-8-resolved']);

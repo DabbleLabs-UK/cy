@@ -1,0 +1,37 @@
+{
+  "tag": [
+    {
+      "name": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+      "modified_at": "2026-08-18T00:16:38.9802661+01:00",
+      "size": 5732988740,
+      "digest": "c6ec899cdf5f8e3f55350f7fc28735be2f77556c011f71a5bf6402556aba1cc8",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "llama",
+        "families": [
+          "llama"
+        ],
+        "parameter_size": "8.03B",
+        "quantization_level": "Q5_K_M",
+        "context_length": 131072,
+        "embedding_length": 4096
+      },
+      "capabilities": [
+        "completion"
+      ]
+    }
+  ],
+  "version": {
+    "version": "0.34.1"
+  },
+  "arbiterOk": true,
+  "profile": {
+    "num_ctx": 3072,
+    "num_thread": 4
+  },
+  "system": null,
+  "parameters": "stop                           \"<|im_start|>\"\nstop                           \"<|im_end|>\"",
+  "template": "{{ if .System }}<|im_start|>system\n{{ .System }}<|im_end|>\n{{ end }}{{ if .Prompt }}<|im_start|>user\n{{ .Prompt }}<|im_end|>\n{{ end }}<|im_start|>assistant\n{{ .Response }}<|im_end|>\n"
+}

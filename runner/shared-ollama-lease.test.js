@@ -144,4 +144,30 @@ await assert.rejects(
   await failLease.release();
 }
 
-console.log('shared Ollama lease: 11 checks passed');
+// Meal transactions cannot hang in their final release after the model has
+// finished. Other existing callers retain their original release semantics.
+{
+  let released = 0;
+  const bounded = createSharedOllamaClient('http://127.0.0.1:11435/', {
+    fetchImpl: async (url, options) => {
+      if (url.endsWith('/v1/acquire')) return {
+        ok: true, json: async () => ({ id: 'bounded-meal', profile: { num_ctx: 3072, num_thread: 4 }, heartbeatMs: 60_000 }),
+      };
+      released++;
+      assert.equal(options.method, 'DELETE');
+      assert.ok(options.signal instanceof AbortSignal);
+      await new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+        // Keep this disposable mock alive until the unref'd abort timer fires.
+        setTimeout(resolve, 100);
+      });
+      return { ok: true };
+    },
+  });
+  const boundedLease = await bounded.acquire({ purpose: 'meal_choice' });
+  await boundedLease.release({ timeoutMs: 10 });
+  await boundedLease.release({ timeoutMs: 10 });
+  assert.equal(released, 1);
+}
+
+console.log('shared Ollama lease: 12 checks passed');

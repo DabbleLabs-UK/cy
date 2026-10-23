@@ -1,0 +1,152 @@
+{
+  "opportunities": 32,
+  "semantic": {
+    "eat": 32,
+    "decline": 0,
+    "NO_DECISION": 0
+  },
+  "opaqueId": {
+    "A": 16,
+    "B": 16
+  },
+  "displayPosition": {
+    "first": 16,
+    "second": 16
+  },
+  "enumPosition": {
+    "first": 16,
+    "second": 16
+  },
+  "body": {
+    "EMPTY": {
+      "eat": 16,
+      "decline": 0,
+      "NO_DECISION": 0
+    },
+    "FULL": {
+      "eat": 16,
+      "decline": 0,
+      "NO_DECISION": 0
+    }
+  },
+  "cells": {
+    "A/AB/AB/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "A/AB/AB/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "B/AB/AB/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "B/AB/AB/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "B/BA/AB/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "B/BA/AB/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "A/BA/AB/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "A/BA/AB/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "A/BA/BA/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "A/BA/BA/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "B/BA/BA/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "B/BA/BA/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "B/AB/BA/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "B/AB/BA/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 0,
+      "B": 2
+    },
+    "A/AB/BA/FULL": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    },
+    "A/AB/BA/EMPTY": {
+      "eat": 2,
+      "decline": 0,
+      "NO_DECISION": 0,
+      "A": 2,
+      "B": 0
+    }
+  },
+  "sends": 32,
+  "retries": 0,
+  "repairs": 0,
+  "startedAt": "2026-10-23T19:12:42.179Z",
+  "endedAt": "2026-10-23T19:21:00.612Z",
+  "elapsedMs": 498433
+}

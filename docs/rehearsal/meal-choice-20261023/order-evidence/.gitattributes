@@ -1,0 +1,3 @@
+# Keep captured synthetic requests/results and checksum bytes unchanged.
+* -text
+*.log -whitespace

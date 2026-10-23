@@ -1,0 +1,3 @@
+# Preserve synthetic request/result artifacts and checksums byte-for-byte.
+* -text
+*.log -whitespace

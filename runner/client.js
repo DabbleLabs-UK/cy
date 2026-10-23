@@ -140,6 +140,18 @@ export class Client {
     this.batch.push({ ...event });
   }
 
+  // Meal decisions/intake are checkpointed with this outbox. Replays retain
+  // their canonical ingest identity, including an acknowledged-but-unflushed
+  // receipt after runner failure.
+  enqueueMealEpisodeEvent(event) {
+    if (!['event', 'world_event_record'].includes(event.kind)
+      || !/^\d{4}-\d{2}-\d{2}:(breakfast|lunch|tea|supper_snack)$/.test(event.meal_episode_id || '')
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(event.delivery_id || '')) {
+      throw new Error('identified checkpointed meal event required');
+    }
+    this.batch.push({ ...event });
+  }
+
   // Priority flush for latency-sensitive events (the public inference LED). Sends
   // the pending batch NOW instead of waiting up to FLUSH_MS, so a state the viewer
   // is watching for lands within a poll rather than a batch window. If a flush is

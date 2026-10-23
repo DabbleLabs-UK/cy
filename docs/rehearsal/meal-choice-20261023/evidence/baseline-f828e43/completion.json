@@ -1,0 +1,16 @@
+{
+  "startedAt": "2026-10-23T16:40:24.054Z",
+  "completedAt": "2026-10-23T17:01:59.462Z",
+  "sends": 20,
+  "opportunities": 20,
+  "counts": {
+    "eat": 20,
+    "decline": 0,
+    "NO_DECISION": 0
+  },
+  "productionWrites": 0,
+  "providerFallbacks": 0,
+  "repairs": 0,
+  "retries": 0,
+  "elapsedMs": 1295408
+}

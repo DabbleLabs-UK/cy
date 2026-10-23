@@ -1,0 +1,3601 @@
+TAP version 13
+#   ok - normal stream: every token delivered and the done line captured
+#   ok - abort with nothing in flight cancels at once (no hang, no tokens)
+#   ok - abort mid-stream keeps what was read and cancels the rest immediately
+#   ok - onToken can stop the read early (the near-repeat break path)
+#   ok - hard token limits are detected from both provider reasons and Ollama token counts
+# abort.test.js: all 5 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\abort.test.js
+ok 1 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\abort.test.js
+  ---
+  duration_ms: 1878.8769
+  ...
+# action-outcome-contingency.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\action-outcome-contingency.test.js
+ok 2 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\action-outcome-contingency.test.js
+  ---
+  duration_ms: 838.2595
+  ...
+# Subtest: scheduling budget covers realistic slow local inference without changing cadence
+ok 3 - scheduling budget covers realistic slow local inference without changing cadence
+  ---
+  duration_ms: 4.2692
+  ...
+# Subtest: production proposal contract keeps machine-owned fields out of model output
+ok 4 - production proposal contract keeps machine-owned fields out of model output
+  ---
+  duration_ms: 42.7564
+  ...
+# Subtest: real C2-style cast leak cannot pass proposal materialisation
+ok 5 - real C2-style cast leak cannot pass proposal materialisation
+  ---
+  duration_ms: 3.6367
+  ...
+# Subtest: timestamps, location and new IDs are assigned by code rather than the model
+ok 6 - timestamps, location and new IDs are assigned by code rather than the model
+  ---
+  duration_ms: 6.5081
+  ...
+# Subtest: continuation and object references are selected only from supplied state
+ok 7 - continuation and object references are selected only from supplied state
+  ---
+  duration_ms: 15.7754
+  ...
+# Subtest: generation exposes only currently viable continuation branches
+ok 8 - generation exposes only currently viable continuation branches
+  ---
+  duration_ms: 8.7732
+  ...
+# Subtest: generation facts exclude stale threads, implausible cast and off-location objects
+ok 9 - generation facts exclude stale threads, implausible cast and off-location objects
+  ---
+  duration_ms: 2.5618
+  ...
+# Subtest: production AWG context uses selected facts and keeps recent episodes exclusion-only
+ok 10 - production AWG context uses selected facts and keeps recent episodes exclusion-only
+  ---
+  duration_ms: 95.5996
+  ...
+# Subtest: generation does not expose ambiguous legacy thread types as continuations
+ok 11 - generation does not expose ambiguous legacy thread types as continuations
+  ---
+  duration_ms: 8.4209
+  ...
+# Subtest: frozen probes advance to a normally eligible opportunity without changing pacing rules
+ok 12 - frozen probes advance to a normally eligible opportunity without changing pacing rules
+  ---
+  duration_ms: 3.544
+  ...
+# Subtest: generation exposes only object references already at the authoritative location
+ok 13 - generation exposes only object references already at the authoritative location
+  ---
+  duration_ms: 8.8143
+  ...
+# Subtest: generation cannot propose another open thread once the contract limit is reached
+ok 14 - generation cannot propose another open thread once the contract limit is reached
+  ---
+  duration_ms: 10.2153
+  ...
+# Subtest: recent episodes become compact signatures without narrative negative-example priming
+ok 15 - recent episodes become compact signatures without narrative negative-example priming
+  ---
+  duration_ms: 16.3416
+  ...
+# Subtest: structured recent fields take precedence and preserve legitimate recurrence boundaries
+ok 16 - structured recent fields take precedence and preserve legitimate recurrence boundaries
+  ---
+  duration_ms: 2.2868
+  ...
+# Subtest: materialisation derives thread type and resolution without changing semantic intent
+ok 17 - materialisation derives thread type and resolution without changing semantic intent
+  ---
+  duration_ms: 1.4957
+  ...
+# Subtest: observation and public-knowledge boundaries stay strict
+ok 18 - observation and public-knowledge boundaries stay strict
+  ---
+  duration_ms: 22.35
+  ...
+# Subtest: malformed JSON remains a clean hard failure
+ok 19 - malformed JSON remains a clean hard failure
+  ---
+  duration_ms: 1.3855
+  ...
+# Subtest: real post-fix production rejection shapes cannot cross the proposal boundary
+ok 20 - real post-fix production rejection shapes cannot cross the proposal boundary
+  ---
+  duration_ms: 8.1771
+  ...
+# Subtest: A: valid ambient event is accepted
+ok 21 - A: valid ambient event is accepted
+  ---
+  duration_ms: 4.5079
+  ...
+# Subtest: B: invalid cast ID is rejected
+ok 22 - B: invalid cast ID is rejected
+  ---
+  duration_ms: 3.7071
+  ...
+# Subtest: C: invalid continuation reference is rejected
+ok 23 - C: invalid continuation reference is rejected
+  ---
+  duration_ms: 1.9528
+  ...
+# Subtest: D: private visitor leakage is rejected
+ok 24 - D: private visitor leakage is rejected
+  ---
+  duration_ms: 1.5997
+  ...
+# Subtest: E: emotional or Soma assignment is rejected
+ok 25 - E: emotional or Soma assignment is rejected
+  ---
+  duration_ms: 4.5508
+  ...
+# Subtest: F: rumour content remains a separately labelled claim
+ok 26 - F: rumour content remains a separately labelled claim
+  ---
+  duration_ms: 5.0778
+  ...
+# Subtest: G: world-only event creates no Cy observation or public trace
+ok 27 - G: world-only event creates no Cy observation or public trace
+  ---
+  duration_ms: 9.0274
+  ...
+# Subtest: H: Cy-observed event is convertible to the normal environment path with no emotion assignment
+ok 28 - H: Cy-observed event is convertible to the normal environment path with no emotion assignment
+  ---
+  duration_ms: 2.6643
+  ...
+# Subtest: I: NO_EVENT does not mutate world state
+ok 29 - I: NO_EVENT does not mutate world state
+  ---
+  duration_ms: 10.0134
+  ...
+# Subtest: I2: NO_EVENT still enforces schema, privacy and forbidden-output boundaries
+ok 30 - I2: NO_EVENT still enforces schema, privacy and forbidden-output boundaries
+  ---
+  duration_ms: 1.5042
+  ...
+# Subtest: J: an existing thread can continue
+ok 31 - J: an existing thread can continue
+  ---
+  duration_ms: 4.5016
+  ...
+# Subtest: objective cast identities cannot contradict participants or combine distinct people
+ok 32 - objective cast identities cannot contradict participants or combine distinct people
+  ---
+  duration_ms: 42.0409
+  ...
+# Subtest: invalid cast identity is discarded before world or memory publication
+ok 33 - invalid cast identity is discarded before world or memory publication
+  ---
+  duration_ms: 76.2647
+  ...
+# Subtest: K: duplicate event is rejected within dedupe window
+ok 34 - K: duplicate event is rejected within dedupe window
+  ---
+  duration_ms: 4.6087
+  ...
+# Subtest: L: object consistency rejects a confiscated object becoming active
+ok 35 - L: object consistency rejects a confiscated object becoming active
+  ---
+  duration_ms: 1.8183
+  ...
+# Subtest: a new physical object cannot begin already confiscated
+ok 36 - a new physical object cannot begin already confiscated
+  ---
+  duration_ms: 2.0287
+  ...
+# Subtest: ordinary new object begins active at the event location with its selected holder
+ok 37 - ordinary new object begins active at the event location with its selected holder
+  ---
+  duration_ms: 1.8798
+  ...
+# Subtest: existing-object confiscation is one revisioned physical transfer, and a retry does not reapply it
+ok 38 - existing-object confiscation is one revisioned physical transfer, and a retry does not reapply it
+  ---
+  duration_ms: 32.6045
+  ...
+# Subtest: unavailable objects are absent from AWG choices and cannot be reused by ID
+ok 39 - unavailable objects are absent from AWG choices and cannot be reused by ID
+  ---
+  duration_ms: 20.1172
+  ...
+# Subtest: resolving an object-transfer thread does not implicitly mutate its object
+ok 40 - resolving an object-transfer thread does not implicitly mutate its object
+  ---
+  duration_ms: 4.0995
+  ...
+# Subtest: retired object tombstone prevents a model proposal from recreating its ID
+ok 41 - retired object tombstone prevents a model proposal from recreating its ID
+  ---
+  duration_ms: 1.66
+  ...
+# Subtest: a Cy observation requires Cy to be an explicit participant
+ok 42 - a Cy observation requires Cy to be an explicit participant
+  ---
+  duration_ms: 1.494
+  ...
+# Subtest: real accepted key-transfer candidate now fails role and new-object coherence
+ok 43 - real accepted key-transfer candidate now fails role and new-object coherence
+  ---
+  duration_ms: 1.4451
+  ...
+# Subtest: real accepted Bill well-being candidate now fails awareness and recent near-duplicate checks
+ok 44 - real accepted Bill well-being candidate now fails awareness and recent near-duplicate checks
+  ---
+  duration_ms: 2.2221
+  ...
+# Subtest: the production cycle supplies recent template events to semantic deduplication
+ok 45 - the production cycle supplies recent template events to semantic deduplication
+  ---
+  duration_ms: 8.2719
+  ...
+# Subtest: real accepted Fisher conversation candidate now fails thread and delivered-message coherence
+ok 46 - real accepted Fisher conversation candidate now fails thread and delivered-message coherence
+  ---
+  duration_ms: 1.6382
+  ...
+# Subtest: real accepted tea-bag candidate now fails authoritative-location coherence
+ok 47 - real accepted tea-bag candidate now fails authoritative-location coherence
+  ---
+  duration_ms: 1.2355
+  ...
+# Subtest: legitimate observed and world-only episodes retain distinct knowledge paths
+ok 48 - legitimate observed and world-only episodes retain distinct knowledge paths
+  ---
+  duration_ms: 2.0012
+  ...
+# Subtest: M: AWG failure returns safely and leaves authoritative state unchanged
+ok 49 - M: AWG failure returns safely and leaves authoritative state unchanged
+  ---
+  duration_ms: 4.5909
+  ...
+# Subtest: M1: cancelled AWG is not parsed or reported as an empty candidate
+ok 50 - M1: cancelled AWG is not parsed or reported as an empty candidate
+  ---
+  duration_ms: 45.0117
+  ...
+# Subtest: AWG preempted for interactive Feddit traffic is cancelled cleanly, publishing no partial state
+ok 51 - AWG preempted for interactive Feddit traffic is cancelled cleanly, publishing no partial state
+  ---
+  duration_ms: 6.4351
+  ...
+# Subtest: M2: a normal empty AWG response remains an EMPTY_CANDIDATE failure
+ok 52 - M2: a normal empty AWG response remains an EMPTY_CANDIDATE failure
+  ---
+  duration_ms: 4.5009
+  ...
+# Subtest: N: AWG never runs ahead of higher-priority work
+ok 53 - N: AWG never runs ahead of higher-priority work
+  ---
+  duration_ms: 0.8908
+  ...
+# Subtest: N1: queued formation work cannot categorically starve an overdue AWG slot
+ok 54 - N1: queued formation work cannot categorically starve an overdue AWG slot
+  ---
+  duration_ms: 1.2817
+  ...
+# Subtest: N1b: location and plausible-cast constraints reject impossible Cy-visible events
+ok 55 - N1b: location and plausible-cast constraints reject impossible Cy-visible events
+  ---
+  duration_ms: 1.7299
+  ...
+# Subtest: N1c: offscreen cell event remains possible while Cy is on the yard
+ok 56 - N1c: offscreen cell event remains possible while Cy is on the yard
+  ---
+  duration_ms: 2.1277
+  ...
+# Subtest: N2: public timeline eligibility requires a Cy-visible trace
+ok 57 - N2: public timeline eligibility requires a Cy-visible trace
+  ---
+  duration_ms: 17.7094
+  ...
+# Subtest: deterministic note scenario preserves causality, observation and normal memory provenance
+ok 58 - deterministic note scenario preserves causality, observation and normal memory provenance
+  ---
+  duration_ms: 4.3335
+  ...
+# anger-retirement.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\anger-retirement.test.js
+ok 4 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\anger-retirement.test.js
+  ---
+  duration_ms: 943.2115
+  ...
+# arousal-retirement.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\arousal-retirement.test.js
+ok 5 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\arousal-retirement.test.js
+  ---
+  duration_ms: 936.7703
+  ...
+# Subtest: A world truth immutability
+ok 61 - A world truth immutability
+  ---
+  duration_ms: 5.2192
+  ...
+# Subtest: B provenance is mandatory and model calls use opaque references
+ok 62 - B provenance is mandatory and model calls use opaque references
+  ---
+  duration_ms: 121.587
+  ...
+# Subtest: C create
+ok 63 - C create
+  ---
+  duration_ms: 2.4125
+  ...
+# Subtest: D update versions memory without changing its source
+ok 64 - D update versions memory without changing its source
+  ---
+  duration_ms: 2.4757
+  ...
+# Subtest: E archive is not recallable
+ok 65 - E archive is not recallable
+  ---
+  duration_ms: 1.2645
+  ...
+# Subtest: F delete is not recallable
+ok 66 - F delete is not recallable
+  ---
+  duration_ms: 1.0128
+  ...
+# Subtest: G same sender
+ok 67 - G same sender
+  ---
+  duration_ms: 2.5745
+  ...
+# Subtest: H different sender
+ok 68 - H different sender
+  ---
+  duration_ms: 3.4488
+  ...
+# Subtest: I public cross-visitor uses anonymous public summary
+ok 69 - I public cross-visitor uses anonymous public summary
+  ---
+  duration_ms: 47.3268
+  ...
+# Subtest: J hidden identifiers never enter model or public telemetry
+ok 70 - J hidden identifiers never enter model or public telemetry
+  ---
+  duration_ms: 3.441
+  ...
+# Subtest: K motif can surface only through relevant candidates
+ok 71 - K motif can surface only through relevant candidates
+  ---
+  duration_ms: 3.7917
+  ...
+# Subtest: L irrelevant motif is absent when it is not retrieved or selected
+ok 72 - L irrelevant motif is absent when it is not retrieved or selected
+  ---
+  duration_ms: 0.6746
+  ...
+# Subtest: M conflict remains subjective and does not collapse records
+ok 73 - M conflict remains subjective and does not collapse records
+  ---
+  duration_ms: 1.3332
+  ...
+# Subtest: N generated prose is a subjective source and not world fact
+ok 74 - N generated prose is a subjective source and not world fact
+  ---
+  duration_ms: 1.5918
+  ...
+# Subtest: N2 queued expression sanitisation preserves separate clean bursts and historical source provenance
+ok 75 - N2 queued expression sanitisation preserves separate clean bursts and historical source provenance
+  ---
+  duration_ms: 2.2624
+  ...
+# Subtest: N3 contaminated stored memory cannot enter a surfacing or prose prompt
+ok 76 - N3 contaminated stored memory cannot enter a surfacing or prose prompt
+  ---
+  duration_ms: 4.6007
+  ...
+# Subtest: N4 real October journal control labels cannot enter memory formation or surfacing
+ok 77 - N4 real October journal control labels cannot enter memory formation or surfacing
+  ---
+  duration_ms: 4.0622
+  ...
+# Subtest: N5 post-restart entity, angle fragment and terminal bars cannot enter memory feedback
+ok 78 - N5 post-restart entity, angle fragment and terminal bars cannot enter memory feedback
+  ---
+  duration_ms: 5.5979
+  ...
+# Subtest: N6 real 16:58 unfinished separators cannot enter memory formation or surfacing
+ok 79 - N6 real 16:58 unfinished separators cannot enter memory formation or surfacing
+  ---
+  duration_ms: 90.6307
+  ...
+# Subtest: N7 real spaced im_end publications are removed at memory formation and read-time surfacing
+ok 80 - N7 real spaced im_end publications are removed at memory formation and read-time surfacing
+  ---
+  duration_ms: 103.7401
+  ...
+# Subtest: O working context is bounded to surfaced memories
+ok 81 - O working context is bounded to surfaced memories
+  ---
+  duration_ms: 27.2048
+  ...
+# Subtest: P zero memory does not call surfacing generation
+ok 82 - P zero memory does not call surfacing generation
+  ---
+  duration_ms: 17.6075
+  ...
+# Subtest: Q old retriever does not select live memory
+ok 83 - Q old retriever does not select live memory
+  ---
+  duration_ms: 7.5025
+  ...
+# Subtest: R hippocampal brain status remains provisional
+ok 84 - R hippocampal brain status remains provisional
+  ---
+  duration_ms: 5.4491
+  ...
+# Subtest: S restart uses server-persistent schema and API retrieval
+ok 85 - S restart uses server-persistent schema and API retrieval
+  ---
+  duration_ms: 297.5143
+  ...
+# Subtest: T public UI and API enforce public scope and omit IDs
+ok 86 - T public UI and API enforce public scope and omit IDs
+  ---
+  duration_ms: 56.7886
+  ...
+# Subtest: U live memory calls use compact model-facing grounded text
+ok 87 - U live memory calls use compact model-facing grounded text
+  ---
+  duration_ms: 32.792
+  ...
+# autobiographical-memory.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\autobiographical-memory.test.js
+ok 7 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\autobiographical-memory.test.js
+  ---
+  duration_ms: 1109.935
+  ...
+# Subtest: disabled by default: no arm file -> captures nothing and returns null
+ok 89 - disabled by default: no arm file -> captures nothing and returns null
+  ---
+  duration_ms: 14.7799
+  ...
+# Subtest: captureAwgResponse is request-preserving: returns the identical resolution/rejection
+ok 90 - captureAwgResponse is request-preserving: returns the identical resolution/rejection
+  ---
+  duration_ms: 15.9375
+  ...
+# Subtest: one-shot: armed -> captures once (no mutation, records hashes, disarms); further requests are null
+ok 91 - one-shot: armed -> captures once (no mutation, records hashes, disarms); further requests are null
+  ---
+  duration_ms: 62.4731
+  ...
+# Subtest: runChangedDurableState: trivial is not durable, thread/object are
+ok 92 - runChangedDurableState: trivial is not durable, thread/object are
+  ---
+  duration_ms: 4.461
+  ...
+# Subtest: noDurableChangeStreak counts trailing trivial accepts, ignoring non-accepts
+ok 93 - noDurableChangeStreak counts trailing trivial accepts, ignoring non-accepts
+  ---
+  duration_ms: 1.2746
+  ...
+# Subtest: noDurableChangeStreak stops at the most recent durable change
+ok 94 - noDurableChangeStreak stops at the most recent durable change
+  ---
+  duration_ms: 1.1114
+  ...
+# Subtest: a fully collapsed window reports zero durable rate and full concentration
+ok 95 - a fully collapsed window reports zero durable rate and full concentration
+  ---
+  duration_ms: 6.222
+  ...
+# Subtest: awgDroughtActive respects threshold and enabled flag
+ok 96 - awgDroughtActive respects threshold and enabled flag
+  ---
+  duration_ms: 1.1603
+  ...
+# Subtest: drought schema requires an object on thread-NONE EVENT branches only
+ok 97 - drought schema requires an object on thread-NONE EVENT branches only
+  ---
+  duration_ms: 18.4197
+  ...
+# Subtest: isSubjectOfTalk: absent subjects of talk are recognised, present/addressed actors are not
+ok 98 - isSubjectOfTalk: absent subjects of talk are recognised, present/addressed actors are not
+  ---
+  duration_ms: 5.0308
+  ...
+# Subtest: fixture 1 (Fisher/Locke discussed, not present) no longer false-rejects
+ok 99 - fixture 1 (Fisher/Locke discussed, not present) no longer false-rejects
+  ---
+  duration_ms: 47.5949
+  ...
+# Subtest: fixture 2 (Mr Keyes discussed) no longer false-rejects
+ok 100 - fixture 2 (Mr Keyes discussed) no longer false-rejects
+  ---
+  duration_ms: 2.8231
+  ...
+# Subtest: fixture 5 (Mr Keyes as topic of discussion) no longer false-rejects
+ok 101 - fixture 5 (Mr Keyes as topic of discussion) no longer false-rejects
+  ---
+  duration_ms: 1.3451
+  ...
+# Subtest: fixture 3 (impossible root speaker) still rejected via the speaker check
+ok 102 - fixture 3 (impossible root speaker) still rejected via the speaker check
+  ---
+  duration_ms: 2.1522
+  ...
+# Subtest: fixture 4 (Bailey addressed as present but omitted) still rejected
+ok 103 - fixture 4 (Bailey addressed as present but omitted) still rejected
+  ---
+  duration_ms: 1.1197
+  ...
+# Subtest: a directly-acting non-participant is still rejected (no presence weakening)
+ok 104 - a directly-acting non-participant is still rejected (no presence weakening)
+  ---
+  duration_ms: 1.1391
+  ...
+# behavioural-leakage.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\behavioural-leakage.test.js
+ok 11 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\behavioural-leakage.test.js
+  ---
+  duration_ms: 2169.8283
+  ...
+#   ok - applyBurstSeparator splices exactly one separator, never doubling
+#   ok - for all inputs, two bursts can never touch with no whitespace between
+#   ok - simulated emit path keeps bursts apart and stream==context
+#   ok - within-burst repeat guard flags verbatim restatement, not fresh prose
+#   ok - token-limit flush removes only the chopped word and marks the technical interruption
+# boundary.test.js: all 5 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\boundary.test.js
+ok 12 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\boundary.test.js
+  ---
+  duration_ms: 1497.8572
+  ...
+# brain.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\brain.test.js
+ok 13 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\brain.test.js
+  ---
+  duration_ms: 1534.7463
+  ...
+# Subtest: one immutable static core supplies identity and correspondence, not a second store
+ok 108 - one immutable static core supplies identity and correspondence, not a second store
+  ---
+  duration_ms: 9.4576
+  ...
+# Subtest: all existing shared character modes receive the same core
+ok 109 - all existing shared character modes receive the same core
+  ---
+  duration_ms: 3.0353
+  ...
+# Subtest: actual location remains a dynamic world fact, never a static core assumption
+ok 110 - actual location remains a dynamic world fact, never a static core assumption
+  ---
+  duration_ms: 125.7547
+  ...
+# Subtest: restrictions keep their supplied authority over nominal exercise opportunities
+ok 111 - restrictions keep their supplied authority over nominal exercise opportunities
+  ---
+  duration_ms: 7.8501
+  ...
+# Subtest: digital prison is not character canon and identity explanations remain unresolved
+ok 112 - digital prison is not character canon and identity explanations remain unresolved
+  ---
+  duration_ms: 1.7877
+  ...
+# Subtest: creator, technical delivery and operator architecture are gaps, not disclosures
+ok 113 - creator, technical delivery and operator architecture are gaps, not disclosures
+  ---
+  duration_ms: 0.9703
+  ...
+# Subtest: sentence, ultimate release and continuous awareness are not settled by the persona
+ok 114 - sentence, ultimate release and continuous awareness are not settled by the persona
+  ---
+  duration_ms: 1.0621
+  ...
+# Subtest: testimony and previous thought cannot become independent corroboration
+ok 115 - testimony and previous thought cannot become independent corroboration
+  ---
+  duration_ms: 1.3835
+  ...
+# Subtest: unknowns permit natural reasoning, not canned answers or mandatory mystery
+ok 116 - unknowns permit natural reasoning, not canned answers or mandatory mystery
+  ---
+  duration_ms: 1.8884
+  ...
+# Subtest: postcard question, picture, subjective context and repair remain separate from core facts
+ok 117 - postcard question, picture, subjective context and repair remain separate from core facts
+  ---
+  duration_ms: 3.8457
+  ...
+# Subtest: world-only product canon stays outside character knowledge, with AWG unchanged
+ok 118 - world-only product canon stays outside character knowledge, with AWG unchanged
+  ---
+  duration_ms: 2.1383
+  ...
+# Subtest: journal source contract, continuation, voice and generation settings remain intact
+ok 119 - journal source contract, continuation, voice and generation settings remain intact
+  ---
+  duration_ms: 1.4782
+  ...
+#   ok - the exact observed rewrite/rephrase/instruction/critique patterns are rejected
+#   ok - observed malformed separator family is rejected before waking prose publication
+#   ok - the two natural 21:25 and 21:44 control-template candidates remain invalid
+#   ok - journal and repair retain world/memory grounding without output-like control framing
+#   ok - the real 12:28/12:48 control-label leaks and structural variants fail while ordinary punctuation survives
+#   ok - all four natural post-restart bursts exercise entity, orphan-bar and angle-frame boundaries
+#   ok - actual post-tuning terminal pseudo-control gets one repair then silence
+#   ok - real 16:58 unfinished pipe-ellipsis separators fail with one repair then silence
+#   ok - real spaced im_end publications and bounded marker variants fail without rejecting ordinary prose
+#   ok - spaced im_end uses one repair then silence across shared waking prose paths
+#   ok - structural angle fragments fail without rejecting ordinary brackets, bars, comparisons or ellipses
+#   ok - safe entities and terminal delimiters are normalised; angle leakage gets one repair then silence
+#   ok - recent context is cleaned while the final cue alone prioritises clarity and the base voice stays rough
+#   ok - real October journal and drawing-intent fragments plus structural variants fail validation
+#   ok - editorial descriptions of Cy or an unfinished entry fail validation
+#   ok - ordinary prison uses of note, change, tone, response and here is remain valid
+#   ok - recent-expression context preserves separable Cy prose but drops pseudo-controls and editorial tails
+#   ok - October editorial tail is excluded from future recent prose without losing the Cy prefix
+#   ok - the primary waking prompt forbids external annotations around Cy prose
+#   ok - repair regenerates from the unchanged original grounded Soma/memory prompt
+#   ok - bad initial plus good retry accepts only the clean Cy candidate
+#   ok - bad initial plus bad retry stores no prose and resolves to silence
+#   ok - new control leakage gets one clean repair or silence without refeeding contaminated context
+#   ok - every shared waking prose purpose repairs clean output or discards persistent role drift
+#   ok - malformed postcard candidate is repaired once or discarded, never published unchanged
+#   ok - new marker and editorial candidates use one repair or silence for every waking prose purpose
+#   ok - normal journal and drawing-intent call the shared validated waking-prose generator
+#   ok - historical malformed fragments leave future context without deleting surrounding prose
+#   ok - contaminated public history is preserved while the live recent tail is removed
+#   ok - live prompt context drops the contaminated tail before Zone B or recent_expression
+#   ok - live prompt context removes the newly observed moderator correction tail
+#   ok - live prompt context removes an isolated external notification tail
+#   ok - flattened persisted context cannot hide an editorial role label
+#   ok - flattened persisted context removes the newly observed authorship/status tail
+#   ok - flattened persisted context removes the observed writing-as-Cy tail
+# 35 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\character-output.test.js
+ok 15 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\character-output.test.js
+  ---
+  duration_ms: 1757.3439
+  ...
+# Subtest: all accounting snapshots yield no character-facing cost prose or invented observation
+ok 121 - all accounting snapshots yield no character-facing cost prose or invented observation
+  ---
+  duration_ms: 5.4202
+  ...
+# Subtest: journal, postcard, drawing and warden directive consumers receive no operator explanation
+ok 122 - journal, postcard, drawing and warden directive consumers receive no operator explanation
+  ---
+  duration_ms: 64.1705
+  ...
+# Subtest: omitted cost slot is byte-identical to no slot, not a new instruction or inference choice
+ok 123 - omitted cost slot is byte-identical to no slot, not a new instruction or inference choice
+  ---
+  duration_ms: 2.1307
+  ...
+# Subtest: power integration, tariff, snapshot fields and persisted totals remain intact
+ok 124 - power integration, tariff, snapshot fields and persisted totals remain intact
+  ---
+  duration_ms: 70.0636
+  ...
+# Subtest: whole-pound crossing bookkeeping remains private diagnostic state, not prompt evidence
+ok 125 - whole-pound crossing bookkeeping remains private diagnostic state, not prompt evidence
+  ---
+  duration_ms: 36.3173
+  ...
+# Subtest: measurement/UI publication, timers, crossing consequences and consumers retain their wiring
+ok 126 - measurement/UI publication, timers, crossing consequences and consumers retain their wiring
+  ---
+  duration_ms: 328.2584
+  ...
+# Subtest: the deployed character knowledge boundary and ordinary observed world input remain usable
+ok 127 - the deployed character knowledge boundary and ordinary observed world input remain usable
+  ---
+  duration_ms: 6.369
+  ...
+# Subtest: live sleepiness/fullness reach character context without their engineering implementation
+ok 128 - live sleepiness/fullness reach character context without their engineering implementation
+  ---
+  duration_ms: 39.9548
+  ...
+# Subtest: existing published sleepiness anchors are reused without a new intensity/feeling mapping
+ok 129 - existing published sleepiness anchors are reused without a new intensity/feeling mapping
+  ---
+  duration_ms: 20.3952
+  ...
+# Subtest: unavailable or out-of-range sleepiness cannot manufacture a felt state or disclose calibration
+ok 130 - unavailable or out-of-range sleepiness cannot manufacture a felt state or disclose calibration
+  ---
+  duration_ms: 1.1273
+  ...
+# Subtest: raw pressure/phase remain inspectable but are never converted to feelings or engineering lessons
+ok 131 - raw pressure/phase remain inspectable but are never converted to feelings or engineering lessons
+  ---
+  duration_ms: 2.28
+  ...
+# Subtest: fullness uses only the already-promoted descriptive band, never hunger/comfort or display percent
+ok 132 - fullness uses only the already-promoted descriptive band, never hunger/comfort or display percent
+  ---
+  duration_ms: 2.9213
+  ...
+# Subtest: uncertain composition, absent intake and incomplete state do not create a fullness midpoint
+ok 133 - uncertain composition, absent intake and incomplete state do not create a fullness midpoint
+  ---
+  duration_ms: 4.5787
+  ...
+# Subtest: injury/exposure descriptions retain only supported facts, with no pain or injury severity added
+ok 134 - injury/exposure descriptions retain only supported facts, with no pain or injury severity added
+  ---
+  duration_ms: 2.1533
+  ...
+# Subtest: full structured evidence, numeric snapshots, history, state and sampling are unchanged by projection
+ok 135 - full structured evidence, numeric snapshots, history, state and sampling are unchanged by projection
+  ---
+  duration_ms: 24.0602
+  ...
+# Subtest: postcard providers, journals, drawing and warden receive the same cleaned grounded projection
+ok 136 - postcard providers, journals, drawing and warden receive the same cleaned grounded projection
+  ---
+  duration_ms: 70.3901
+  ...
+# Subtest: shared runtime preparation and expressive choice send plain indications, not raw diagnostic JSON
+ok 137 - shared runtime preparation and expressive choice send plain indications, not raw diagnostic JSON
+  ---
+  duration_ms: 25.8816
+  ...
+# Subtest: past outcome evidence remains available without posterior/subjective-control machinery
+ok 138 - past outcome evidence remains available without posterior/subjective-control machinery
+  ---
+  duration_ms: 1.1554
+  ...
+# Subtest: technical words independently supplied by a correspondent are not censored
+ok 139 - technical words independently supplied by a correspondent are not censored
+  ---
+  duration_ms: 48.1379
+  ...
+# Subtest: AWG is not supplied grounded Soma and character-core/power boundaries remain intact
+ok 140 - AWG is not supplied grounded Soma and character-core/power boundaries remain intact
+  ---
+  duration_ms: 10.8765
+  ...
+# chronology-hierarchy.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\chronology-hierarchy.test.js
+ok 18 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\chronology-hierarchy.test.js
+  ---
+  duration_ms: 1160.7991
+  ...
+# circadian-process-c.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\circadian-process-c.test.js
+ok 19 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\circadian-process-c.test.js
+  ---
+  duration_ms: 1373.0567
+  ...
+# Subtest: every enqueue gets a distinct identity even when the caller reuses the same object
+ok 143 - every enqueue gets a distinct identity even when the caller reuses the same object
+  ---
+  duration_ms: 136.1183
+  ...
+# Subtest: failed send queues the original delivery ID and retry resends that ID
+ok 144 - failed send queues the original delivery ID and retry resends that ID
+  ---
+  duration_ms: 201.488
+  ...
+# Subtest: old durable queue records acquire identities before any network send
+ok 145 - old durable queue records acquire identities before any network send
+  ---
+  duration_ms: 71.8069
+  ...
+# [cy] queue: quarantine/identity upgrade failed; active queue retained: upgrade failed
+# Subtest: failed identity upgrade sends nothing and retains the old queue bytes
+ok 146 - failed identity upgrade sends nothing and retains the old queue bytes
+  ---
+  duration_ms: 31.2588
+  ...
+# Subtest: failed old queue drain durably appends the new batch after old events
+ok 147 - failed old queue drain durably appends the new batch after old events
+  ---
+  duration_ms: 252.9211
+  ...
+# Subtest: stop waits for an active flush and then sends events added during it
+ok 148 - stop waits for an active flush and then sends events added during it
+  ---
+  duration_ms: 60.2751
+  ...
+# Subtest: concurrent flush callers await one in-flight operation; later batches retain ownership
+ok 149 - concurrent flush callers await one in-flight operation; later batches retain ownership
+  ---
+  duration_ms: 11.6046
+  ...
+# Subtest: shutdown bounds continuous new work and queues the last batch without duplication
+ok 150 - shutdown bounds continuous new work and queues the last batch without duplication
+  ---
+  duration_ms: 35.1935
+  ...
+# Subtest: failed send queues durably and retry sends old events before new ones
+ok 151 - failed send queues durably and retry sends old events before new ones
+  ---
+  duration_ms: 1000.8093
+  ...
+# Subtest: shutdown after failed send leaves the event durably queued
+ok 152 - shutdown after failed send leaves the event durably queued
+  ---
+  duration_ms: 539.42
+  ...
+# Subtest: queue write failure restores memory ownership and stop reports the failure
+ok 153 - queue write failure restores memory ownership and stop reports the failure
+  ---
+  duration_ms: 360.4561
+  ...
+# Subtest: memory source remains on disk across an enqueue failure and retries idempotently
+ok 154 - memory source remains on disk across an enqueue failure and retries idempotently
+  ---
+  duration_ms: 217.8231
+  ...
+# Subtest: valid-malformed-valid drains in order, quarantines exact bytes, and later drains stay clean
+ok 155 - valid-malformed-valid drains in order, quarantines exact bytes, and later drains stay clean
+  ---
+  duration_ms: 884.1593
+  ...
+# Subtest: an interrupted trailing JSON line is recoverable while preceding valid events drain
+ok 156 - an interrupted trailing JSON line is recoverable while preceding valid events drain
+  ---
+  duration_ms: 1013.7237
+  ...
+# Subtest: invalid UTF-8 bytes are quarantined exactly rather than decoded with replacement characters
+ok 157 - invalid UTF-8 bytes are quarantined exactly rather than decoded with replacement characters
+  ---
+  duration_ms: 78.3536
+  ...
+# Subtest: quarantine is a bounded rolling window with explicit eviction and oversize metadata
+ok 158 - quarantine is a bounded rolling window with explicit eviction and oversize metadata
+  ---
+  duration_ms: 767.6107
+  ...
+# Subtest: interrupted quarantine write leaves the active valid queue intact
+ok 159 - interrupted quarantine write leaves the active valid queue intact
+  ---
+  duration_ms: 392.3277
+  ...
+# Subtest: failed quarantine rotation keeps both the prior quarantine and active queue
+ok 160 - failed quarantine rotation keeps both the prior quarantine and active queue
+  ---
+  duration_ms: 1527.7824
+  ...
+# Subtest: failure compacting the active queue cannot erase its valid records
+ok 161 - failure compacting the active queue cannot erase its valid records
+  ---
+  duration_ms: 394.8101
+  ...
+# Subtest: task-1 flush preserves a new batch after a failed quarantine without joining a partial line
+ok 162 - task-1 flush preserves a new batch after a failed quarantine without joining a partial line
+  ---
+  duration_ms: 938.0617
+  ...
+# composed-feed.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\composed-feed.test.js
+ok 24 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\composed-feed.test.js
+  ---
+  duration_ms: 8439.6088
+  ...
+# Subtest: A: foreground work blocks AWG while an overdue cycle gets a fairness slot beside queued formation
+ok 164 - A: foreground work blocks AWG while an overdue cycle gets a fairness slot beside queued formation
+  ---
+  duration_ms: 120.4262
+  ...
+# Subtest: B: a Cy-observed accepted event becomes a normal durable memory source asynchronously
+ok 165 - B: a Cy-observed accepted event becomes a normal durable memory source asynchronously
+  ---
+  duration_ms: 24.2189
+  ...
+# Subtest: C and E: a world-only event cannot enter Cy prose, memory formation, the public trace or dreams
+ok 166 - C and E: a world-only event cannot enter Cy prose, memory formation, the public trace or dreams
+  ---
+  duration_ms: 11.5929
+  ...
+# Subtest: D: broker preserves same-sender, cross-sender and public privacy boundaries
+ok 167 - D: broker preserves same-sender, cross-sender and public privacy boundaries
+  ---
+  duration_ms: 108.4834
+  ...
+# Subtest: F: atomic persistence retains the latest AWG world mutation during overlapping saves
+ok 168 - F: atomic persistence retains the latest AWG world mutation during overlapping saves
+  ---
+  duration_ms: 4323.6298
+  ...
+# Subtest: G: migration 016 is independent of migration 017 table names and remains create-only
+ok 169 - G: migration 016 is independent of migration 017 table names and remains create-only
+  ---
+  duration_ms: 11.5924
+  ...
+# Subtest: A: CY cannot receive world-only hidden facts
+ok 170 - A: CY cannot receive world-only hidden facts
+  ---
+  duration_ms: 14.5248
+  ...
+# Subtest: B: AWG cannot receive sender-private memories
+ok 171 - B: AWG cannot receive sender-private memories
+  ---
+  duration_ms: 1.2005
+  ...
+# Subtest: C: same-sender context receives sender memory
+ok 172 - C: same-sender context receives sender memory
+  ---
+  duration_ms: 1.6015
+  ...
+# Subtest: D: cross-visitor privacy is enforced before assembly
+ok 173 - D: cross-visitor privacy is enforced before assembly
+  ---
+  duration_ms: 1.1099
+  ...
+# Subtest: E and F: duplicate source is represented once and reason is inspectable
+ok 174 - E and F: duplicate source is represented once and reason is inspectable
+  ---
+  duration_ms: 2.3984
+  ...
+# Subtest: G: budget exhaustion never deletes mandatory current-world facts
+ok 175 - G: budget exhaustion never deletes mandatory current-world facts
+  ---
+  duration_ms: 1.0192
+  ...
+# Subtest: H: UNKNOWN remains explicitly unknown in final rendering
+ok 176 - H: UNKNOWN remains explicitly unknown in final rendering
+  ---
+  duration_ms: 2.4042
+  ...
+# Subtest: I: SUBJECTIVE MEMORY cannot be relabelled by rendering
+ok 177 - I: SUBJECTIVE MEMORY cannot be relabelled by rendering
+  ---
+  duration_ms: 1.0745
+  ...
+# Subtest: J: consumers receive only their allowed source classes
+ok 178 - J: consumers receive only their allowed source classes
+  ---
+  duration_ms: 100.5121
+  ...
+# Subtest: model-facing rendering excludes raw source and sender identifiers
+ok 179 - model-facing rendering excludes raw source and sender identifiers
+  ---
+  duration_ms: 2.1172
+  ...
+# Subtest: epistemicDetail refines a memory origin without relabelling the policy class
+ok 180 - epistemicDetail refines a memory origin without relabelling the policy class
+  ---
+  duration_ms: 2.1114
+  ...
+# Subtest: waking journal preserves grounded facts and memory without echoable XML controls
+ok 181 - waking journal preserves grounded facts and memory without echoable XML controls
+  ---
+  duration_ms: 1.8213
+  ...
+# current-defensive-context.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\current-defensive-context.test.js
+ok 27 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\current-defensive-context.test.js
+  ---
+  duration_ms: 1942.4505
+  ...
+# day-rollover.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\day-rollover.test.js
+ok 28 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\day-rollover.test.js
+  ---
+  duration_ms: 2206.3752
+  ...
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\daytime-visibility.test.js
+ok 29 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\daytime-visibility.test.js
+  ---
+  duration_ms: 886.4706
+  ...
+#   ok - the original checkpoint is never mutated by a soak run - isolation holds (1)
+#   ok - the isolated temp working directory is cleaned up after the soak (existed before release: true) (2)
+#   ok - the AWG generator is fully synthetic and never attempts a real network/LLM call (3)
+#   ok - an 18-simulated-hour soak spanning sleep and waking hours runs to completion without throwing (4)
+#   ok - a full 24-simulated-hour soak creates zero controllability posteriors, as expected post-fix (5)
+#   ok - the harness exposes a directly composable tick()/finalize() API, not just the CLI runner (6)
+# dev-accelerated-world-soak.test.js: all 6 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dev-accelerated-world-soak.test.js
+ok 30 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dev-accelerated-world-soak.test.js
+  ---
+  duration_ms: 28312.7961
+  ...
+#   ok - fragment boundaries survive JSON parsing and compact output limits are enforced
+#   ok - assistant and model-scaffold frames are rejected before display
+#   ok - dream retrieval admits at most three public eligible traces and excludes sender-private material
+#   ok - the dream context packet is bounded and records the world/privacy boundary
+#   ok - the recurring motif is not hard-coded and dream prompting remains separate
+#   ok - relevant retrieved memories can enter dream material, including the motif only when retrieved
+#   ok - dream formation provenance is subjective DREAM_EXPRESSION, never WORLD_EVENT
+#   ok - dream layout is deterministic across historical re-renders
+# dream-fragments.test.js: all 8 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream-fragments.test.js
+ok 31 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream-fragments.test.js
+  ---
+  duration_ms: 1048.5698
+  ...
+# Subtest: persisted Force Day is loaded before the first sleep decision without applying other controls early
+ok 187 - persisted Force Day is loaded before the first sleep decision without applying other controls early
+  ---
+  duration_ms: 7.4678
+  ...
+# Subtest: startup waits for a valid persisted regime after transport or malformed response failures
+ok 188 - startup waits for a valid persisted regime after transport or malformed response failures
+  ---
+  duration_ms: 2.0305
+  ...
+# Subtest: dry-run startup retains its auto default when no optional tempo file exists
+ok 189 - dry-run startup retains its auto default when no optional tempo file exists
+  ---
+  duration_ms: 57.0114
+  ...
+# Subtest: Force Day arriving during dream setup prevents any model request
+ok 190 - Force Day arriving during dream setup prevents any model request
+  ---
+  duration_ms: 0.8999
+  ...
+# Subtest: Force Day during shared-model wait prevents inference from starting
+ok 191 - Force Day during shared-model wait prevents inference from starting
+  ---
+  duration_ms: 2.8421
+  ...
+# Subtest: Force Day during inference discards a completed stale dream result
+ok 192 - Force Day during inference discards a completed stale dream result
+  ---
+  duration_ms: 0.594
+  ...
+# Subtest: last publication guard discards a wake during asynchronous dream screening
+ok 193 - last publication guard discards a wake during asynchronous dream screening
+  ---
+  duration_ms: 3.1809
+  ...
+# Subtest: normal auto night dream and Force Night still publish; daytime journal remains eligible
+ok 194 - normal auto night dream and Force Night still publish; daytime journal remains eligible
+  ---
+  duration_ms: 28.8052
+  ...
+# Subtest: runner wires startup loading before location/sleep reconciliation and guards both dream paths
+ok 195 - runner wires startup loading before location/sleep reconciliation and guards both dream paths
+  ---
+  duration_ms: 35.0431
+  ...
+#   ok - dreamTextStyle() is fainter and smaller than waking prose
+#   ok - a dream murmur renders fainter than waking prose; a lucid night-waking line does not
+#   ok - dream strokes accumulate one at a time on a single, non-scrolling surface
+#   ok - a mid-drawing page reload replays the strokes and rebuilds the surface exactly
+#   ok - at lights_on the dream surface fades aside and normal paper resumes
+# dream-viewer.test.js: all 5 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream-viewer.test.js
+ok 33 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream-viewer.test.js
+  ---
+  duration_ms: 3354.0793
+  ...
+# dream-world-isolation.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream-world-isolation.test.js
+ok 34 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream-world-isolation.test.js
+  ---
+  duration_ms: 885.8671
+  ...
+#   ok - sleep window wraps 22:30->06:30; awake in between
+#   ok - small hours 01:00-05:00 sit strictly inside the sleep window
+#   ok - the dream-drawing start minute is always within the small hours
+#   ok - shapeMurmur enforces <=8 words, lowercase, no terminal punctuation
+#   ok - isMurmur accepts 3-8 lowercase words with no terminal stop, rejects the rest
+#   ok - dream temperature is fixed engineering configuration and remains above waking
+#   ok - dream and waking directive blocks share no markers - no cross-leak
+#   ok - dream prompts drop the waking context; dream text never enters Zone B
+#   ok - the night-waking line is lucid + punctuated, the opposite of a murmur
+#   ok - dreamMaterial weights the significant, recombines 2-3 fragments, instructs distortion
+#   ok - dream stroke pacing is one every 1-2 minutes (60000-120000 ms)
+#   ok - murmurs are spaced 5-20 minutes apart, much longer than the waking cadence
+#   ok - the dream drawing is abstract + concentric + enclosing, and every mark is a valid on-grid stroke
+# dream.test.js: all 13 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream.test.js
+ok 35 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\dream.test.js
+  ---
+  duration_ms: 1142.8087
+  ...
+# environment-schema.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\environment-schema.test.js
+ok 36 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\environment-schema.test.js
+  ---
+  duration_ms: 689.895
+  ...
+# environment.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\environment.test.js
+ok 37 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\environment.test.js
+  ---
+  duration_ms: 579.5541
+  ...
+# event-inspector.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\event-inspector.test.js
+ok 38 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\event-inspector.test.js
+  ---
+  duration_ms: 474.8623
+  ...
+# Subtest: no-delay day keeps the normal exercise movements, duration and one episode
+ok 202 - no-delay day keeps the normal exercise movements, duration and one episode
+  ---
+  duration_ms: 18.8987
+  ...
+# Subtest: 15-minute hold really defers admission, not the closing time
+ok 203 - 15-minute hold really defers admission, not the closing time
+  ---
+  duration_ms: 8.3575
+  ...
+# Subtest: 20-minute hold really defers admission, not the closing time
+ok 204 - 20-minute hold really defers admission, not the closing time
+  ---
+  duration_ms: 3.8679
+  ...
+# Subtest: 25-minute hold really defers admission, not the closing time
+ok 205 - 25-minute hold really defers admission, not the closing time
+  ---
+  duration_ms: 1.9704
+  ...
+# Subtest: 40-minute hold really defers admission, not the closing time
+ok 206 - 40-minute hold really defers admission, not the closing time
+  ---
+  duration_ms: 2.4774
+  ...
+# Subtest: decision is made once even under repeated same-time ticks and serialized restarts
+ok 207 - decision is made once even under repeated same-time ticks and serialized restarts
+  ---
+  duration_ms: 6.059
+  ...
+# Subtest: restart after the target admits only now, never backdates attendance or observed release
+ok 208 - restart after the target admits only now, never backdates attendance or observed release
+  ---
+  duration_ms: 2.5975
+  ...
+# Subtest: restart beyond the whole window records only no recorded attendance, not a yard visit
+ok 209 - restart beyond the whole window records only no recorded attendance, not a yard visit
+  ---
+  duration_ms: 1.6044
+  ...
+# Subtest: a late observed decision may consume the window without inventing an earlier wait
+ok 210 - a late observed decision may consume the window without inventing an earlier wait
+  ---
+  duration_ms: 2.9874
+  ...
+# Subtest: lockdown outlasts the delay: permission does not override the restriction
+ok 211 - lockdown outlasts the delay: permission does not override the restriction
+  ---
+  duration_ms: 3.9419
+  ...
+# Subtest: lockdown through closing records one missed episode and cannot release afterward
+ok 212 - lockdown through closing records one missed episode and cannot release afterward
+  ---
+  duration_ms: 2.2351
+  ...
+# Subtest: an active search prevents yard admission even after permission; completion permits entry
+ok 213 - an active search prevents yard admission even after permission; completion permits entry
+  ---
+  duration_ms: 3.2412
+  ...
+# Subtest: a hold never relocates Cy from an ongoing routine
+ok 214 - a hold never relocates Cy from an ongoing routine
+  ---
+  duration_ms: 2.7167
+  ...
+# Subtest: fresh startup in the window is not attendance; legacy recorded attendance is not rerolled
+ok 215 - fresh startup in the window is not attendance; legacy recorded attendance is not rerolled
+  ---
+  duration_ms: 1.7227
+  ...
+# Subtest: an entirely unobserved window without a decision cannot manufacture a missed-day story
+ok 216 - an entirely unobserved window without a decision cannot manufacture a missed-day story
+  ---
+  duration_ms: 0.7424
+  ...
+# Subtest: transit recovery cannot bypass a hold or lose the eventual attendance record
+ok 217 - transit recovery cannot bypass a hold or lose the eventual attendance record
+  ---
+  duration_ms: 1.903
+  ...
+# Subtest: night suppression survives permission and does not imply a visit
+ok 218 - night suppression survives permission and does not imply a visit
+  ---
+  duration_ms: 1.0312
+  ...
+# Subtest: the release target and closing time use the supplied London clock in BST and GMT
+ok 219 - the release target and closing time use the supplied London clock in BST and GMT
+  ---
+  duration_ms: 1.0288
+  ...
+# Subtest: facts name no officer, escort, conversation or staffing cause; no social/object effects
+ok 220 - facts name no officer, escort, conversation or staffing cause; no social/object effects
+  ---
+  duration_ms: 9.6925
+  ...
+# Subtest: event references persist on the same exercise record without duplicate admission links
+ok 221 - event references persist on the same exercise record without duplicate admission links
+  ---
+  duration_ms: 2.0959
+  ...
+# Subtest: the next daily exercise decision is independent; old episodes are bounded
+ok 222 - the next daily exercise decision is independent; old episodes are bounded
+  ---
+  duration_ms: 4.519
+  ...
+# Subtest: checkpointed admission, source links and stable pending deliveries survive real sectioned persistence
+ok 223 - checkpointed admission, source links and stable pending deliveries survive real sectioned persistence
+  ---
+  duration_ms: 4983.0212
+  ...
+# Subtest: runner wiring commits admission before movement and exercise history before network admission
+ok 224 - runner wiring commits admission before movement and exercise history before network admission
+  ---
+  duration_ms: 61.8902
+  ...
+# Subtest: failed checkpoint sends nothing; recovery and lost acknowledgements reuse stable deliveries
+ok 225 - failed checkpoint sends nothing; recovery and lost acknowledgements reuse stable deliveries
+  ---
+  duration_ms: 3.2419
+  ...
+# Subtest: a checkpoint crossing 15:15 cannot admit or backdate an exercise visit
+ok 226 - a checkpoint crossing 15:15 cannot admit or backdate an exercise visit
+  ---
+  duration_ms: 2.8542
+  ...
+# Subtest: same-minute checkpoint completion timestamps attendance at actual movement, not tick start
+ok 227 - same-minute checkpoint completion timestamps attendance at actual movement, not tick start
+  ---
+  duration_ms: 1.3233
+  ...
+# Subtest: a wake-to-sleep override during the save prevents exercise movement
+ok 228 - a wake-to-sleep override during the save prevents exercise movement
+  ---
+  duration_ms: 0.5316
+  ...
+# Subtest: restrictions introduced during a checkpoint are still checked by location reconciliation
+ok 229 - restrictions introduced during a checkpoint are still checked by location reconciliation
+  ---
+  duration_ms: 1.2687
+  ...
+# Subtest: clock reversal or invalid wall time fails closed without moving or rerolling
+ok 230 - clock reversal or invalid wall time fails closed without moving or rerolling
+  ---
+  duration_ms: 1.9819
+  ...
+# Subtest: failed exercise checkpoint cannot reach clock checking or movement
+ok 231 - failed exercise checkpoint cannot reach clock checking or movement
+  ---
+  duration_ms: 2.4242
+  ...
+# Subtest: the correction does not change non-exercise routine reconciliation
+ok 232 - the correction does not change non-exercise routine reconciliation
+  ---
+  duration_ms: 0.7139
+  ...
+# Subtest: an older checkpoint crossing closing cannot create a new backdated hold
+ok 233 - an older checkpoint crossing closing cannot create a new backdated hold
+  ---
+  duration_ms: 0.5387
+  ...
+# experienced-state.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\experienced-state.test.js
+ok 40 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\experienced-state.test.js
+  ---
+  duration_ms: 723.9838
+  ...
+# experienced-view.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\experienced-view.test.js
+ok 41 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\experienced-view.test.js
+  ---
+  duration_ms: 623.4508
+  ...
+# expressive-choice.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\expressive-choice.test.js
+ok 42 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\expressive-choice.test.js
+  ---
+  duration_ms: 1657.9156
+  ...
+# feeding-duplicate-stale.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\feeding-duplicate-stale.test.js
+ok 43 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\feeding-duplicate-stale.test.js
+  ---
+  duration_ms: 737.8311
+  ...
+# feeding-homeostasis.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\feeding-homeostasis.test.js
+ok 44 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\feeding-homeostasis.test.js
+  ---
+  duration_ms: 679.0473
+  ...
+#   ok - foreground timeout propagation: a genuinely stuck request is aborted after timeoutMs
+#   ok - graceful recovery: a normal (non-stuck) request is unaffected by the timeout
+#   ok - no timeout configured (null/0/negative) never fires - background call sites are unaffected
+#   ok - the timeout is cleared on settle, not left dangling
+#   ok - every known foreground call site is wired to FOREGROUND_INFERENCE_TIMEOUT_MS
+#   ok - shared-host queueing is excluded from provider timeout accounting
+#   ok - background AWG call site uses its own finite provider timeout, not the foreground constant
+#   ok - AWG and visible prose use purpose-aware, reason-tagged cancellation paths
+# foreground-timeout.test.js: all 8 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\foreground-timeout.test.js
+ok 45 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\foreground-timeout.test.js
+  ---
+  duration_ms: 3314.1322
+  ...
+# [cy-memory] ENVIRONMENT_EVENT formation PREEMPTED
+# [cy-memory] ENVIRONMENT_EVENT formation PREEMPTED
+# [cy-memory] ENVIRONMENT_EVENT formation PREEMPTED
+# Subtest: sustained recall ticks leave generic work for one explicit idle slot
+ok 240 - sustained recall ticks leave generic work for one explicit idle slot
+  ---
+  duration_ms: 34.9126
+  ...
+# Subtest: an empty ordinary tick never falls back to an unfiltered generic claim
+ok 241 - an empty ordinary tick never falls back to an unfiltered generic claim
+  ---
+  duration_ms: 1.3891
+  ...
+# Subtest: AWG first refusal blocks only a slot it actually used
+ok 242 - AWG first refusal blocks only a slot it actually used
+  ---
+  duration_ms: 12.87
+  ...
+# Subtest: stopped, short idle, paused and occupied inference slots cannot claim generic work
+ok 243 - stopped, short idle, paused and occupied inference slots cannot claim generic work
+  ---
+  duration_ms: 1.8101
+  ...
+# Subtest: generic admission protects sender work during its claim and generation
+ok 244 - generic admission protects sender work during its claim and generation
+  ---
+  duration_ms: 16.656
+  ...
+# Subtest: interactive work before admission cannot start a generic claim
+ok 245 - interactive work before admission cannot start a generic claim
+  ---
+  duration_ms: 1.1609
+  ...
+# Subtest: interactive work arriving during claim or retrieval prevents generic inference
+ok 246 - interactive work arriving during claim or retrieval prevents generic inference
+  ---
+  duration_ms: 10.1647
+  ...
+# Subtest: interactive inference preempts generic formation through its canonical receipt
+ok 247 - interactive inference preempts generic formation through its canonical receipt
+  ---
+  duration_ms: 3.8935
+  ...
+# Subtest: generic reservation preempts optional surfacing without overlapping inference
+ok 248 - generic reservation preempts optional surfacing without overlapping inference
+  ---
+  duration_ms: 413.8312
+  ...
+# Subtest: concurrent idle calls cannot claim two generic jobs
+ok 249 - concurrent idle calls cannot claim two generic jobs
+  ---
+  duration_ms: 259.5035
+  ...
+# [cy-memory] ENVIRONMENT_EVENT formation TIMEOUT
+# [cy-memory] ENVIRONMENT_EVENT formation ERROR
+# [cy-memory] CY_EXPRESSION formation INVALID
+# Subtest: a timed out generic attempt consumes the locally cached service slot
+ok 250 - a timed out generic attempt consumes the locally cached service slot
+  ---
+  duration_ms: 158.0349
+  ...
+# Subtest: a restarted runtime respects the same backend cadence and caches its refusal
+ok 251 - a restarted runtime respects the same backend cadence and caches its refusal
+  ---
+  duration_ms: 1.9856
+  ...
+# Subtest: generic service diagnostics contain outcomes without source or error content
+ok 252 - generic service diagnostics contain outcomes without source or error content
+  ---
+  duration_ms: 118.913
+  ...
+# Subtest: generic formation retains the canonical PERSON provenance guard
+ok 253 - generic formation retains the canonical PERSON provenance guard
+  ---
+  duration_ms: 6.7242
+  ...
+# Subtest: slow surfacing settlement keeps the next optional recall from taking the reserved slot
+ok 254 - slow surfacing settlement keeps the next optional recall from taking the reserved slot
+  ---
+  duration_ms: 2021.8416
+  ...
+# grounded-prose-context.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\grounded-prose-context.test.js
+ok 47 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\grounded-prose-context.test.js
+  ---
+  duration_ms: 1989.3011
+  ...
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\harm-public-card.test.js
+ok 48 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\harm-public-card.test.js
+  ---
+  duration_ms: 1127.1594
+  ...
+# history-feed.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\history-feed.test.js
+ok 49 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\history-feed.test.js
+  ---
+  duration_ms: 1235.391
+  ...
+# hud-view.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\hud-view.test.js
+ok 50 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\hud-view.test.js
+  ---
+  duration_ms: 1168.1053
+  ...
+# implementation-registry.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\implementation-registry.test.js
+ok 51 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\implementation-registry.test.js
+  ---
+  duration_ms: 960.1483
+  ...
+# Subtest: cy_import_map emits a versioned HTML import map before the entry module scripts
+ok 260 - cy_import_map emits a versioned HTML import map before the entry module scripts
+  ---
+  duration_ms: 28.7318
+  ...
+# Subtest: the HTML document is served no-cache so the import map is always fresh
+ok 261 - the HTML document is served no-cache so the import map is always fresh
+  ---
+  duration_ms: 3.8915
+  ...
+# Subtest: every local module in the full static+dynamic import chain is cache-bustable
+ok 262 - every local module in the full static+dynamic import chain is cache-bustable
+  ---
+  duration_ms: 137.8704
+  ...
+# Subtest: ambient texture and an ordinary search cannot establish object loss
+ok 263 - ambient texture and an ordinary search cannot establish object loss
+  ---
+  duration_ms: 11.8171
+  ...
+# Subtest: ambient texture never mints a durable open causal thread (reply/promise/transfer are colour, not threads)
+ok 264 - ambient texture never mints a durable open causal thread (reply/promise/transfer are colour, not threads)
+  ---
+  duration_ms: 5.2402
+  ...
+# Subtest: an officer refusal is recorded but is not a durable open thread (no resolution machinery)
+ok 265 - an officer refusal is recorded but is not a durable open thread (no resolution machinery)
+  ---
+  duration_ms: 0.8282
+  ...
+# Subtest: reconcileLedger demotes a persisted texture phantom in place, preserving the line, and keeps a real custody thread
+ok 266 - reconcileLedger demotes a persisted texture phantom in place, preserving the line, and keeps a real custody thread
+  ---
+  duration_ms: 36.176
+  ...
+# Subtest: only a revisioned, observed object transition establishes custody
+ok 267 - only a revisioned, observed object transition establishes custody
+  ---
+  duration_ms: 15.9722
+  ...
+# Subtest: distinct object transitions never collapse by matching prose
+ok 268 - distinct object transitions never collapse by matching prose
+  ---
+  duration_ms: 5.9927
+  ...
+# Subtest: old Sweep/photo and Locke/moved claims remain historical but never factual prompt evidence
+ok 269 - old Sweep/photo and Locke/moved claims remain historical but never factual prompt evidence
+  ---
+  duration_ms: 2.9289
+  ...
+# Subtest: ambiguous observations stay usable without being promoted to object fact
+ok 270 - ambiguous observations stay usable without being promoted to object fact
+  ---
+  duration_ms: 1.5729
+  ...
+# Subtest: journal prompt separates subjective continuation from labelled incident evidence
+ok 271 - journal prompt separates subjective continuation from labelled incident evidence
+  ---
+  duration_ms: 22.2404
+  ...
+# Subtest: current world object overrides and resolves a stale custody thread
+ok 272 - current world object overrides and resolves a stale custody thread
+  ---
+  duration_ms: 10.8471
+  ...
+# Subtest: selectJournalTurn follows the canonical source instead of its incident paraphrase
+ok 273 - selectJournalTurn follows the canonical source instead of its incident paraphrase
+  ---
+  duration_ms: 27.9984
+  ...
+# Subtest: selectJournalTurn reports nothing-new when no incident has occurred since the last entry
+ok 274 - selectJournalTurn reports nothing-new when no incident has occurred since the last entry
+  ---
+  duration_ms: 0.8405
+  ...
+# Subtest: selectJournalTurn does not call a moved incident clock a material development
+ok 275 - selectJournalTurn does not call a moved incident clock a material development
+  ---
+  duration_ms: 0.7493
+  ...
+# Subtest: selectJournalTurn prefers an open unresolved thread over a newer non-open incident
+ok 276 - selectJournalTurn prefers an open unresolved thread over a newer non-open incident
+  ---
+  duration_ms: 1.4026
+  ...
+# Subtest: turnDirective wording: fresh offers a new one-thing; nothing-new steers off restatement; otherwise empty
+ok 277 - turnDirective wording: fresh offers a new one-thing; nothing-new steers off restatement; otherwise empty
+  ---
+  duration_ms: 0.8569
+  ...
+# Subtest: buildDirectives folds the steer into the WAKING journal only, leaving ONE_SUBJECT and voice intact
+ok 278 - buildDirectives folds the steer into the WAKING journal only, leaving ONE_SUBJECT and voice intact
+  ---
+  duration_ms: 1.2102
+  ...
+# Subtest: wing noise interrupts visible journal prose but leaves AWG running
+ok 279 - wing noise interrupts visible journal prose but leaves AWG running
+  ---
+  duration_ms: 10.8909
+  ...
+# Subtest: interactive and operator causes still preempt admitted AWG
+ok 280 - interactive and operator causes still preempt admitted AWG
+  ---
+  duration_ms: 1.8134
+  ...
+# Subtest: lease loss directly cancels its request with a preserved reason
+ok 281 - lease loss directly cancels its request with a preserved reason
+  ---
+  duration_ms: 15.1689
+  ...
+# Subtest: clearing an old controller cannot clear its replacement
+ok 282 - clearing an old controller cannot clear its replacement
+  ---
+  duration_ms: 0.9775
+  ...
+# Subtest: serializes requests and keeps telemetry busy until the owner finishes
+ok 283 - serializes requests and keeps telemetry busy until the owner finishes
+  ---
+  duration_ms: 11.8195
+  ...
+# Subtest: foreground overtakes queued background work
+ok 284 - foreground overtakes queued background work
+  ---
+  duration_ms: 2.1432
+  ...
+# Subtest: an aborted queued request never reaches the provider slot
+ok 285 - an aborted queued request never reaches the provider slot
+  ---
+  duration_ms: 38.5342
+  ...
+# Subtest: a deferred owner remains idle until provider work actually begins
+ok 286 - a deferred owner remains idle until provider work actually begins
+  ---
+  duration_ms: 2.3974
+  ...
+# Subtest: abort reason survives into inference end telemetry
+ok 287 - abort reason survives into inference end telemetry
+  ---
+  duration_ms: 1.8299
+  ...
+# Subtest: pre-model stages distinguish Tempo, local queue, and arbiter wait
+ok 288 - pre-model stages distinguish Tempo, local queue, and arbiter wait
+  ---
+  duration_ms: 9.7848
+  ...
+# Subtest: an interrupted wait is measured without claiming model startup
+ok 289 - an interrupted wait is measured without claiming model startup
+  ---
+  duration_ms: 13.2667
+  ...
+# Subtest: workload labels are content-free and purpose-specific
+ok 290 - workload labels are content-free and purpose-specific
+  ---
+  duration_ms: 0.5272
+  ...
+# Subtest: both runner transports record stage timing before model start
+ok 291 - both runner transports record stage timing before model start
+  ---
+  duration_ms: 12.8929
+  ...
+#   ok - the random generic-injury producer cannot fire, so it cannot create an active confirmed injury, increase activeInjuryCount, or assert confirmed tissue damage (1/2/3)
+#   ok - the observation boundary this producer relied on for correctness is unchanged (8)
+#   ok - a properly grounded somatic event (real body site, mechanism, injury type) still creates a confirmed active injury via the untouched archetype and substrate (4)
+# injury-producer-removal.test.js: all 3 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\injury-producer-removal.test.js
+ok 57 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\injury-producer-removal.test.js
+  ---
+  duration_ms: 850.29
+  ...
+# instrumental-agency.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\instrumental-agency.test.js
+ok 58 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\instrumental-agency.test.js
+  ---
+  duration_ms: 1159.3414
+  ...
+#   ok - round-robin still selects and resolves its authored branch, deterministically alternating (1)
+#   ok - world consequences (outcomes, defensive context, narrative) still occur normally (2)
+#   ok - no chosen_action/EXECUTED claim attributed to Cy is produced by either the opening or resolved event (3)
+#   ok - none of the five engineering round-robin instrumental incidents update controllability posteriors (4)
+#   ok - no "Cy chose ..." public event is emitted; neutral wording is used instead (5)
+#   ok - the action-outcome-contingency substrate remains fully functional for a genuine future chooser (6)
+#   ok - defensive/world consequences (defensive_context, associative_learning) remain fully intact (7)
+#   ok - restart/replay of instrumental-agency state remains stable (8)
+#   ok - historical provenance (world-event/incident history, unretired state) is never altered by mere inspection (9)
+#   ok - deterministic reconciliation removes only round-robin-derived false action evidence, leaving a genuine pair byte-for-byte intact (10)
+# instrumental-round-robin-false-agency.test.js: all 10 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\instrumental-round-robin-false-agency.test.js
+ok 59 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\instrumental-round-robin-false-agency.test.js
+  ---
+  duration_ms: 777.1742
+  ...
+# Subtest: exact public leak and its independent continuation instructions are rejected
+ok 295 - exact public leak and its independent continuation instructions are rejected
+  ---
+  duration_ms: 120.6414
+  ...
+# Subtest: task structure generalises across paraphrases, wrappers, case and line breaks
+ok 296 - task structure generalises across paraphrases, wrappers, case and line breaks
+  ---
+  duration_ms: 246.0481
+  ...
+# Subtest: bare closing markup remnant independently fails before publication and is filtered from feedback
+ok 297 - bare closing markup remnant independently fails before publication and is filtered from feedback
+  ---
+  duration_ms: 23.7172
+  ...
+# Subtest: in-world imperatives, reported writing directions and literal punctuation remain valid
+ok 298 - in-world imperatives, reported writing directions and literal punctuation remain valid
+  ---
+  duration_ms: 8.3927
+  ...
+# Subtest: reported instruction cannot excuse a later independent task continuation
+ok 299 - reported instruction cannot excuse a later independent task continuation
+  ---
+  duration_ms: 3.3081
+  ...
+# Subtest: all shared waking routes use one repair and publish only a clean replacement
+ok 300 - all shared waking routes use one repair and publish only a clean replacement
+  ---
+  duration_ms: 68.1131
+  ...
+# Subtest: invalid repair becomes silence, including independent markup-only failure
+ok 301 - invalid repair becomes silence, including independent markup-only failure
+  ---
+  duration_ms: 14.6957
+  ...
+# Subtest: continuation and recent-expression consumers discard the instructional tail, not public history
+ok 302 - continuation and recent-expression consumers discard the instructional tail, not public history
+  ---
+  duration_ms: 46.933
+  ...
+# Subtest: existing whole-candidate rejection remains ahead of onChunk and context append
+ok 303 - existing whole-candidate rejection remains ahead of onChunk and context append
+  ---
+  duration_ms: 5.2526
+  ...
+# Subtest: waking journal uses prior prose once as subjective continuation, never observed evidence
+ok 304 - waking journal uses prior prose once as subjective continuation, never observed evidence
+  ---
+  duration_ms: 105.7464
+  ...
+# Subtest: journal prompt selects only the newest bounded subjective writing
+ok 305 - journal prompt selects only the newest bounded subjective writing
+  ---
+  duration_ms: 1.4761
+  ...
+# Subtest: selection ages out old text as new entries arrive without cutting a word
+ok 306 - selection ages out old text as new entries arrive without cutting a word
+  ---
+  duration_ms: 0.8691
+  ...
+# Subtest: journal exclusion is wired after caller options; other expression paths retain context
+ok 307 - journal exclusion is wired after caller options; other expression paths retain context
+  ---
+  duration_ms: 6.931
+  ...
+# Subtest: fixed cast is standing description, not a fresh event; quality settings are unchanged
+ok 308 - fixed cast is standing description, not a fresh event; quality settings are unchanged
+  ---
+  duration_ms: 15.0749
+  ...
+# Subtest: real public candidates and the earlier progress fixture fail whole-candidate validation
+ok 309 - real public candidates and the earlier progress fixture fail whole-candidate validation
+  ---
+  duration_ms: 100.4315
+  ...
+# Subtest: editorial meaning generalises across counts, units, delimiters and procedural wording
+ok 310 - editorial meaning generalises across counts, units, delimiters and procedural wording
+  ---
+  duration_ms: 37.9028
+  ...
+# Subtest: ordinary in-world vocabulary, quantities, annotations and dialogue remain unchanged
+ok 311 - ordinary in-world vocabulary, quantities, annotations and dialogue remain unchanged
+  ---
+  duration_ms: 31.9202
+  ...
+# Subtest: initial meta candidate is never salvaged for publication; clean repair alone is accepted
+ok 312 - initial meta candidate is never salvaged for publication; clean repair alone is accepted
+  ---
+  duration_ms: 6.6837
+  ...
+# Subtest: a different editorial form in repair still becomes silence, never a second repair
+ok 313 - a different editorial form in repair still becomes silence, never a second repair
+  ---
+  duration_ms: 1.7683
+  ...
+# Subtest: transport interruption does not acquire a new repair entitlement
+ok 314 - transport interruption does not acquire a new repair entitlement
+  ---
+  duration_ms: 0.6399
+  ...
+# Subtest: all existing waking purposes share repair/silence semantics for the new annotations
+ok 315 - all existing waking purposes share repair/silence semantics for the new annotations
+  ---
+  duration_ms: 14.845
+  ...
+# Subtest: live/restart flattened context drops the annotation and the entire unsafe continuation
+ok 316 - live/restart flattened context drops the annotation and the entire unsafe continuation
+  ---
+  duration_ms: 8.7799
+  ...
+# Subtest: actual second prompt continuation no longer admits the first published annotation
+ok 317 - actual second prompt continuation no longer admits the first published annotation
+  ---
+  duration_ms: 7.2419
+  ...
+# Subtest: expression source formation and surfacing reuse the same boundary without touching source history
+ok 318 - expression source formation and surfacing reuse the same boundary without touching source history
+  ---
+  duration_ms: 13.4427
+  ...
+# Subtest: durable pending memory jobs and queued recent-expression context cannot bypass filtering
+ok 319 - durable pending memory jobs and queued recent-expression context cannot bypass filtering
+  ---
+  duration_ms: 54.7948
+  ...
+# Subtest: prior malformed/control and explicit assistant-role boundaries stay active
+ok 320 - prior malformed/control and explicit assistant-role boundaries stay active
+  ---
+  duration_ms: 2.5575
+  ...
+# Subtest: timestamp, observation count and elapsed-only differences do not create freshness
+ok 321 - timestamp, observation count and elapsed-only differences do not create freshness
+  ---
+  duration_ms: 52.6326
+  ...
+# Subtest: random quiet-voice ledger paraphrases cannot replace a canonical discussion
+ok 322 - random quiet-voice ledger paraphrases cannot replace a canonical discussion
+  ---
+  duration_ms: 2.1762
+  ...
+# Subtest: same underlying hearing with a different perceptual variant is not a new incident
+ok 323 - same underlying hearing with a different perceptual variant is not a new incident
+  ---
+  duration_ms: 1.7724
+  ...
+# Subtest: material outcome, person, object or episode changes remain immediately eligible
+ok 324 - material outcome, person, object or episode changes remain immediately eligible
+  ---
+  duration_ms: 6.4104
+  ...
+# Subtest: actual direct confirmation can materially develop an earlier uncertain hearing
+ok 325 - actual direct confirmation can materially develop an earlier uncertain hearing
+  ---
+  duration_ms: 1.3406
+  ...
+# Subtest: new real meal episode is eligible, elapsed meal instrumentation and journal prose are not
+ok 326 - new real meal episode is eligible, elapsed meal instrumentation and journal prose are not
+  ---
+  duration_ms: 2.3412
+  ...
+# Subtest: typed meal evidence compares intake facts rather than a changing elapsed caption
+ok 327 - typed meal evidence compares intake facts rather than a changing elapsed caption
+  ---
+  duration_ms: 2.6766
+  ...
+# Subtest: Bailey/name observation is eligible with a canonical source; texture alone is not certified
+ok 328 - Bailey/name observation is eligible with a canonical source; texture alone is not certified
+  ---
+  duration_ms: 1.8775
+  ...
+# Subtest: past/future/offscreen/missing/unverified source records cannot manufacture freshness
+ok 329 - past/future/offscreen/missing/unverified source records cannot manufacture freshness
+  ---
+  duration_ms: 2.2029
+  ...
+# Subtest: correspondence remains a new arrival without exposing sender-scoped content through the selector
+ok 330 - correspondence remains a new arrival without exposing sender-scoped content through the selector
+  ---
+  duration_ms: 2.234
+  ...
+# Subtest: receipts are bounded hashes, deterministic across field order, and survive history eviction
+ok 331 - receipts are bounded hashes, deterministic across field order, and survive history eviction
+  ---
+  duration_ms: 8.5392
+  ...
+# Subtest: restart checkpoint retains engineering receipts without changing Soma or public history
+ok 332 - restart checkpoint retains engineering receipts without changing Soma or public history
+  ---
+  duration_ms: 3189.9407
+  ...
+# Subtest: receipt consumption is publication-bound; voice, continuation, model options and output cap stay unchanged
+ok 333 - receipt consumption is publication-bound; voice, continuation, model options and output cap stay unchanged
+  ---
+  duration_ms: 38.3976
+  ...
+# Subtest: retained 30-entry production subject replay uses exact context times and yields 19 fresh / 11 continuation
+ok 334 - retained 30-entry production subject replay uses exact context times and yields 19 fresh / 11 continuation
+  ---
+  duration_ms: 191.4769
+  ...
+# Subtest: real retained unsigned-keys discussions compare by the same source content, not later mishearing
+ok 335 - real retained unsigned-keys discussions compare by the same source content, not later mishearing
+  ---
+  duration_ms: 12.349
+  ...
+# Subtest: voice uses style features without concrete autobiographical examples
+ok 336 - voice uses style features without concrete autobiographical examples
+  ---
+  duration_ms: 11.2252
+  ...
+# Subtest: real Bill speculation stays one quoted thought and supplies no world evidence
+ok 337 - real Bill speculation stays one quoted thought and supplies no world evidence
+  ---
+  duration_ms: 11.1021
+  ...
+# Subtest: independent supplied conversation remains evidence, not a forbidden topic
+ok 338 - independent supplied conversation remains evidence, not a forbidden topic
+  ---
+  duration_ms: 3.1114
+  ...
+# Subtest: ledger organization is not content; arbitrary headings are projected by format, not keywords
+ok 339 - ledger organization is not content; arbitrary headings are projected by format, not keywords
+  ---
+  duration_ms: 4.9341
+  ...
+# Subtest: world evidence, remembered experience, dream memory and beliefs retain distinct provenance
+ok 340 - world evidence, remembered experience, dream memory and beliefs retain distinct provenance
+  ---
+  duration_ms: 17.6749
+  ...
+# Subtest: existing Soma observations and estimates keep their type without copying instructional preamble
+ok 341 - existing Soma observations and estimates keep their type without copying instructional preamble
+  ---
+  duration_ms: 1.4058
+  ...
+# Subtest: every retained production Soma datum survives its real bullet-prefixed representation
+ok 342 - every retained production Soma datum survives its real bullet-prefixed representation
+  ---
+  duration_ms: 23.594
+  ...
+# Subtest: fallback has the same source boundary when broker assembly is unavailable
+ok 343 - fallback has the same source boundary when broker assembly is unavailable
+  ---
+  duration_ms: 1.4949
+  ...
+# Subtest: selected canonical fresh subject remains available even if broker budget omitted its event
+ok 344 - selected canonical fresh subject remains available even if broker budget omitted its event
+  ---
+  duration_ms: 2.0286
+  ...
+# Subtest: prior text cannot escape its quoted source or create extra source records
+ok 345 - prior text cannot escape its quoted source or create extra source records
+  ---
+  duration_ms: 1.7315
+  ...
+# Subtest: no prior writing does not seed a fictitious day, ceiling, or event
+ok 346 - no prior writing does not seed a fictitious day, ceiling, or event
+  ---
+  duration_ms: 2.0578
+  ...
+# Subtest: 520-character recency, ONE_SUBJECT, 93-token cap and sampling stay intact
+ok 347 - 520-character recency, ONE_SUBJECT, 93-token cap and sampling stay intact
+  ---
+  duration_ms: 1.123
+  ...
+# Subtest: bounded repair sees the identical source boundary, not a new or laundered context
+ok 348 - bounded repair sees the identical source boundary, not a new or laundered context
+  ---
+  duration_ms: 0.5391
+  ...
+# Subtest: other broker consumers retain the existing renderer and privacy interface
+ok 349 - other broker consumers retain the existing renderer and privacy interface
+  ---
+  duration_ms: 1.1095
+  ...
+# Subtest: live journal flag and canonical selector projection are wired without changing publication
+ok 350 - live journal flag and canonical selector projection are wired without changing publication
+  ---
+  duration_ms: 2.8739
+  ...
+# Subtest: real audited prompt snapshots preserve sources and contain no concrete style example
+ok 351 - real audited prompt snapshots preserve sources and contain no concrete style example
+  ---
+  duration_ms: 16.4189
+  ...
+# launcher.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\launcher.test.js
+ok 65 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\launcher.test.js
+  ---
+  duration_ms: 493.9736
+  ...
+# left-inspector.test.js: compact heads, one active panel, accessibility, live updates and responsive geometry passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\left-inspector.test.js
+ok 66 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\left-inspector.test.js
+  ---
+  duration_ms: 619.7807
+  ...
+# legacy-hunger-isolation.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\legacy-hunger-isolation.test.js
+ok 67 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\legacy-hunger-isolation.test.js
+  ---
+  duration_ms: 584.1158
+  ...
+# live-status.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\live-status.test.js
+ok 68 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\live-status.test.js
+  ---
+  duration_ms: 564.2171
+  ...
+# Subtest: exercise window has one authoritative fictional one-hour configuration
+ok 356 - exercise window has one authoritative fictional one-hour configuration
+  ---
+  duration_ms: 4.3536
+  ...
+# Subtest: entering and leaving exercise creates explicit movements and persistent episodes
+ok 357 - entering and leaving exercise creates explicit movements and persistent episodes
+  ---
+  duration_ms: 9.9409
+  ...
+# Subtest: restart in transit resolves deterministically and records an observation gap
+ok 358 - restart in transit resolves deterministically and records an observation gap
+  ---
+  duration_ms: 2.4854
+  ...
+# Subtest: scheduled shower, association and phone have one physical location and one dated episode each
+ok 359 - scheduled shower, association and phone have one physical location and one dated episode each
+  ---
+  duration_ms: 10.1233
+  ...
+# Subtest: an interrupted routine cannot claim its selected full-slot outcome
+ok 360 - an interrupted routine cannot claim its selected full-slot outcome
+  ---
+  duration_ms: 2.4079
+  ...
+# Subtest: a mismatched restored routine cannot block future movement forever
+ok 361 - a mismatched restored routine cannot block future movement forever
+  ---
+  duration_ms: 1.4136
+  ...
+# Subtest: missed turns are recorded once without claiming physical attendance
+ok 362 - missed turns are recorded once without claiming physical attendance
+  ---
+  duration_ms: 0.8845
+  ...
+# Subtest: routine entry, outcome and return keep stable event provenance without duplicate links
+ok 363 - routine entry, outcome and return keep stable event provenance without duplicate links
+  ---
+  duration_ms: 1.8951
+  ...
+# Subtest: lockdown prevents yard and scheduled movement without suppressing unrelated future AWG
+ok 364 - lockdown prevents yard and scheduled movement without suppressing unrelated future AWG
+  ---
+  duration_ms: 2.3266
+  ...
+# Subtest: active cell search blocks routine departure and removed property cannot be found again
+ok 365 - active cell search blocks routine departure and removed property cannot be found again
+  ---
+  duration_ms: 5.0036
+  ...
+# Subtest: yard suppresses cell expressive actions and cell-only incidents
+ok 366 - yard suppresses cell expressive actions and cell-only incidents
+  ---
+  duration_ms: 2.187
+  ...
+# Subtest: yard contact is structured and quiet exercise is valid
+ok 367 - yard contact is structured and quiet exercise is valid
+  ---
+  duration_ms: 12.4859
+  ...
+# Subtest: present cell search follows restart-safe stages and finds only existing objects
+ok 368 - present cell search follows restart-safe stages and finds only existing objects
+  ---
+  duration_ms: 1.6308
+  ...
+# Subtest: cell search sees current delivered messages but ignores resolved message history
+ok 369 - cell search sees current delivered messages but ignores resolved message history
+  ---
+  duration_ms: 2.1205
+  ...
+# Subtest: offscreen search with no recorded object does not fabricate property or Cy knowledge
+ok 370 - offscreen search with no recorded object does not fabricate property or Cy knowledge
+  ---
+  duration_ms: 1.0379
+  ...
+# Subtest: search stage and knowledge survive reconciliation after restart
+ok 371 - search stage and knowledge survive reconciliation after restart
+  ---
+  duration_ms: 2.2216
+  ...
+# Subtest: lockdown starts once, opening the stable custody:lockdown context as ONGOING
+ok 372 - lockdown starts once, opening the stable custody:lockdown context as ONGOING
+  ---
+  duration_ms: 4.0651
+  ...
+# Subtest: a lockdown already active makes a second start a safe no-op
+ok 373 - a lockdown already active makes a second start a safe no-op
+  ---
+  duration_ms: 0.9898
+  ...
+# Subtest: the same custody:lockdown context remains active while the episode is active, and release does not fire early
+ok 374 - the same custody:lockdown context remains active while the episode is active, and release does not fire early
+  ---
+  duration_ms: 0.5889
+  ...
+# Subtest: explicit release closes the same context without negating the true start observation
+ok 375 - explicit release closes the same context without negating the true start observation
+  ---
+  duration_ms: 0.7498
+  ...
+# Subtest: duplicate/replayed release after resolution is a safe no-op
+ok 376 - duplicate/replayed release after resolution is a safe no-op
+  ---
+  duration_ms: 0.7118
+  ...
+# Subtest: restart mid-lockdown keeps it active toward the same persisted release time
+ok 377 - restart mid-lockdown keeps it active toward the same persisted release time
+  ---
+  duration_ms: 0.8348
+  ...
+# Subtest: restart after resolution keeps the lockdown resolved, not reopened
+ok 378 - restart after resolution keeps the lockdown resolved, not reopened
+  ---
+  duration_ms: 1.1314
+  ...
+# Subtest: a structurally invalid persisted lockdown episode is reset, not trusted blindly
+ok 379 - a structurally invalid persisted lockdown episode is reset, not trusted blindly
+  ---
+  duration_ms: 3.1892
+  ...
+# Subtest: persisted state predating this fix (no lockdownEpisode key at all) reconciles and starts cleanly
+ok 380 - persisted state predating this fix (no lockdownEpisode key at all) reconciles and starts cleanly
+  ---
+  duration_ms: 2.386
+  ...
+# Subtest: lockdown duration is drawn once at start and stays fixed across advances that do not release it
+ok 381 - lockdown duration is drawn once at start and stays fixed across advances that do not release it
+  ---
+  duration_ms: 1.2089
+  ...
+# Subtest: lockdown start opens the same stable context that release later closes, without touching unrelated contexts or falsifying history
+ok 382 - lockdown start opens the same stable context that release later closes, without touching unrelated contexts or falsifying history
+  ---
+  duration_ms: 86.8751
+  ...
+# Subtest: a later, genuinely new lockdown re-opens the same stable context cleanly after a prior one resolved
+ok 383 - a later, genuinely new lockdown re-opens the same stable context cleanly after a prior one resolved
+  ---
+  duration_ms: 6.8799
+  ...
+# Subtest: no directory configured: gate is inert (always running, admits, writes nothing)
+ok 384 - no directory configured: gate is inert (always running, admits, writes nothing)
+  ---
+  duration_ms: 41.1761
+  ...
+# Subtest: directory present, no request: running, admits, and publishes status
+ok 385 - directory present, no request: running, admits, and publishes status
+  ---
+  duration_ms: 4.1914
+  ...
+# Subtest: fresh request with no in-flight work: HELD and refuses ordinary admission
+ok 386 - fresh request with no in-flight work: HELD and refuses ordinary admission
+  ---
+  duration_ms: 5.0767
+  ...
+# Subtest: held but drainExisting: admits, and reports DRAINING while work is in flight
+ok 387 - held but drainExisting: admits, and reports DRAINING while work is in flight
+  ---
+  duration_ms: 1.7595
+  ...
+# Subtest: additionalActive in-flight work keeps state draining, not held
+ok 388 - additionalActive in-flight work keeps state draining, not held
+  ---
+  duration_ms: 0.8571
+  ...
+# Subtest: invalid request (bad version or id) is error, and never admits
+ok 389 - invalid request (bad version or id) is error, and never admits
+  ---
+  duration_ms: 2.4346
+  ...
+# Subtest: unavailable maintenance directory is treated as blocked/error (fail safe)
+ok 390 - unavailable maintenance directory is treated as blocked/error (fail safe)
+  ---
+  duration_ms: 1.2705
+  ...
+# Subtest: a failed status write downgrades to error and refuses admission
+ok 391 - a failed status write downgrades to error and refuses admission
+  ---
+  duration_ms: 1.2426
+  ...
+# Subtest: release is idempotent
+ok 392 - release is idempotent
+  ---
+  duration_ms: 2.0237
+  ...
+#   ok - delivery availability creates no intake; chosen eating and unavailable delivery retain feeding facts (1)
+#   ok - no delivery roll creates an action_opportunity or chooses consumption (2)
+#   ok - a meal outcome cannot update any action-outcome controllability posterior (3)
+#   ok - genuine choices retain action provenance without inventing adverse-outcome evidence (4)
+#   ok - real instrumental opportunities (officer/inmate round-robin paths) are structurally unchanged by the meal fix (5)
+#   ok - feeding/satiety distinguishes chosen eating, chosen decline, unavailable and unknown (6)
+#   ok - restart/replay of controllability state remains stable across meal events (7)
+#   ok - historical meal provenance (feeding-homeostasis records, meal identity) is fully preserved (8)
+#   ok - reconciliation removes only meal-derived fabricated trials, leaving every genuine instrumental entry byte-for-byte intact (9)
+# meal-action-outcome-inversion.test.js: all 9 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\meal-action-outcome-inversion.test.js
+ok 72 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\meal-action-outcome-inversion.test.js
+  ---
+  duration_ms: 839.2747
+  ...
+# Subtest: real sectioned checkpoints recover committed intake and its outbox together exactly once
+ok 394 - real sectioned checkpoints recover committed intake and its outbox together exactly once
+  ---
+  duration_ms: 9601.8886
+  ...
+# Subtest: meal checkpoints round-trip independently and reject unknown formats
+ok 395 - meal checkpoints round-trip independently and reject unknown formats
+  ---
+  duration_ms: 112.0313
+  ...
+# Subtest: available and unavailable episodes retain the first availability fact without rerolling
+ok 396 - available and unavailable episodes retain the first availability fact without rerolling
+  ---
+  duration_ms: 1.4944
+  ...
+# Subtest: live permission is fenced by time, day, location, sleep, regime and restriction identity
+ok 397 - live permission is fenced by time, day, location, sleep, regime and restriction identity
+  ---
+  duration_ms: 1.512
+  ...
+# Subtest: the bounded model request has exactly eat/decline and no invented ingredients
+ok 398 - the bounded model request has exactly eat/decline and no invented ingredients
+  ---
+  duration_ms: 1.8998
+  ...
+# Subtest: meal choice has no answer-looking response hint that duplicates ordered alternatives
+ok 399 - meal choice has no answer-looking response hint that duplicates ordered alternatives
+  ---
+  duration_ms: 1.2966
+  ...
+# Subtest: only an exact supported JSON action is accepted
+ok 400 - only an exact supported JSON action is accepted
+  ---
+  duration_ms: 0.7756
+  ...
+# Subtest: eat is offered once and persisted before its single effect
+ok 401 - eat is offered once and persisted before its single effect
+  ---
+  duration_ms: 4.0454
+  ...
+# Subtest: decline is offered once and persisted before its single effect
+ok 402 - decline is offered once and persisted before its single effect
+  ---
+  duration_ms: 1.6983
+  ...
+# Subtest: concurrent offers cannot create a second provider call
+ok 403 - concurrent offers cannot create a second provider call
+  ---
+  duration_ms: 2.1686
+  ...
+# Subtest: provider failure records unknown intake without fabricating a choice
+ok 404 - provider failure records unknown intake without fabricating a choice
+  ---
+  duration_ms: 2.5696
+  ...
+# Subtest: invalid JSON records unknown intake without fabricating a choice
+ok 405 - invalid JSON records unknown intake without fabricating a choice
+  ---
+  duration_ms: 1.2143
+  ...
+# Subtest: unsupported action records unknown intake without fabricating a choice
+ok 406 - unsupported action records unknown intake without fabricating a choice
+  ---
+  duration_ms: 0.6313
+  ...
+# Subtest: extra provider fields records unknown intake without fabricating a choice
+ok 407 - extra provider fields records unknown intake without fabricating a choice
+  ---
+  duration_ms: 0.8481
+  ...
+# Subtest: stale permission before the offer never calls the provider
+ok 408 - stale permission before the offer never calls the provider
+  ---
+  duration_ms: 0.7125
+  ...
+# Subtest: a cancelled offer checkpoints unknown intake without inference
+ok 409 - a cancelled offer checkpoints unknown intake without inference
+  ---
+  duration_ms: 0.7695
+  ...
+# Subtest: time change while generating discards the returned action
+ok 410 - time change while generating discards the returned action
+  ---
+  duration_ms: 1.3551
+  ...
+# Subtest: sleep change while generating discards the returned action
+ok 411 - sleep change while generating discards the returned action
+  ---
+  duration_ms: 0.5334
+  ...
+# Subtest: location change while generating discards the returned action
+ok 412 - location change while generating discards the returned action
+  ---
+  duration_ms: 0.4145
+  ...
+# Subtest: regime change while generating discards the returned action
+ok 413 - regime change while generating discards the returned action
+  ---
+  duration_ms: 0.482
+  ...
+# Subtest: restriction change while generating discards the returned action
+ok 414 - restriction change while generating discards the returned action
+  ---
+  duration_ms: 38.3269
+  ...
+# Subtest: cancel change while generating discards the returned action
+ok 415 - cancel change while generating discards the returned action
+  ---
+  duration_ms: 0.7126
+  ...
+# Subtest: permission expiring during checkpoint 1 prevents a later effect
+ok 416 - permission expiring during checkpoint 1 prevents a later effect
+  ---
+  duration_ms: 0.8087
+  ...
+# Subtest: permission expiring during checkpoint 2 prevents a later effect
+ok 417 - permission expiring during checkpoint 2 prevents a later effect
+  ---
+  duration_ms: 0.5483
+  ...
+# Subtest: losing admission at offer prevents a consumption effect
+ok 418 - losing admission at offer prevents a consumption effect
+  ---
+  duration_ms: 2.6885
+  ...
+# Subtest: losing admission at result prevents a consumption effect
+ok 419 - losing admission at result prevents a consumption effect
+  ---
+  duration_ms: 1.8021
+  ...
+# Subtest: losing admission at commit prevents a consumption effect
+ok 420 - losing admission at commit prevents a consumption effect
+  ---
+  duration_ms: 5.0182
+  ...
+# Subtest: concurrent expiration during a commit checkpoint cannot apply or close twice
+ok 421 - concurrent expiration during a commit checkpoint cannot apply or close twice
+  ---
+  duration_ms: 1.427
+  ...
+# Subtest: a committed decision recovers once without another model offer
+ok 422 - a committed decision recovers once without another model offer
+  ---
+  duration_ms: 1.0115
+  ...
+# Subtest: restart with AVAILABLE and no durable commit never resends inference
+ok 423 - restart with AVAILABLE and no durable commit never resends inference
+  ---
+  duration_ms: 0.8042
+  ...
+# Subtest: restart with OFFERED and no durable commit never resends inference
+ok 424 - restart with OFFERED and no durable commit never resends inference
+  ---
+  duration_ms: 0.3661
+  ...
+# Subtest: a committed decision cannot recover after its opportunity expires
+ok 425 - a committed decision cannot recover after its opportunity expires
+  ---
+  duration_ms: 0.6186
+  ...
+# Subtest: replaying meal A decision on meal B cannot consume meal B
+ok 426 - replaying meal A decision on meal B cannot consume meal B
+  ---
+  duration_ms: 0.5552
+  ...
+# Subtest: offer and commit checkpoint failures prevent inference or effects beyond durable state
+ok 427 - offer and commit checkpoint failures prevent inference or effects beyond durable state
+  ---
+  duration_ms: 2.3555
+  ...
+# Subtest: a failed final checkpoint is retried without repeating its in-memory effect
+ok 428 - a failed final checkpoint is retried without repeating its in-memory effect
+  ---
+  duration_ms: 1.1897
+  ...
+# Subtest: pending event receipts survive restart, enqueue once per process and acknowledge exact deliveries
+ok 429 - pending event receipts survive restart, enqueue once per process and acknowledge exact deliveries
+  ---
+  duration_ms: 2.6908
+  ...
+# Subtest: a failed outbox checkpoint never enqueues an unpersisted event
+ok 430 - a failed outbox checkpoint never enqueues an unpersisted event
+  ---
+  duration_ms: 0.9738
+  ...
+# Subtest: events appended during an outbox checkpoint wait for the next durable flush
+ok 431 - events appended during an outbox checkpoint wait for the next durable flush
+  ---
+  duration_ms: 1.0152
+  ...
+# Subtest: the real client preserves checkpointed meal receipt IDs and acknowledges only delivered entries
+ok 432 - the real client preserves checkpointed meal receipt IDs and acknowledges only delivered entries
+  ---
+  duration_ms: 4.1278
+  ...
+# Subtest: runner gives meals their bounded foreground turn after inbox/sleep gates and retains the canonical intake path
+ok 433 - runner gives meals their bounded foreground turn after inbox/sleep gates and retains the canonical intake path
+  ---
+  duration_ms: 6.1984
+  ...
+# Subtest: real Soma eat uses canonical intake exactly once and unchanged physiology
+ok 434 - real Soma eat uses canonical intake exactly once and unchanged physiology
+  ---
+  duration_ms: 203.498
+  ...
+# Subtest: real Soma decline uses canonical intake exactly once and unchanged physiology
+ok 435 - real Soma decline uses canonical intake exactly once and unchanged physiology
+  ---
+  duration_ms: 10.8463
+  ...
+# Subtest: real Soma records failed inference as unknown without zero intake or a fabricated action
+ok 436 - real Soma records failed inference as unknown without zero intake or a fabricated action
+  ---
+  duration_ms: 6.5217
+  ...
+# Subtest: strict forced-tool schema preserves disjoint canonical actions and exact candidate sets
+ok 437 - strict forced-tool schema preserves disjoint canonical actions and exact candidate sets
+  ---
+  duration_ms: 169.8805
+  ...
+# Subtest: strict schema rejects unexpected nondisjoint schemas and unbounded output before admission
+ok 438 - strict schema rejects unexpected nondisjoint schemas and unbounded output before admission
+  ---
+  duration_ms: 4.328
+  ...
+# Subtest: admission includes entire exact provider body and conservative framing bound
+ok 439 - admission includes entire exact provider body and conservative framing bound
+  ---
+  duration_ms: 51.155
+  ...
+# Subtest: explicit LOCAL alone uses unchanged canonical local request and still settles
+ok 440 - explicit LOCAL alone uses unchanged canonical local request and still settles
+  ---
+  duration_ms: 1.9798
+  ...
+# Subtest: LOCAL unavailable foreground capacity remains an operational retry, not a cloud fallback
+ok 441 - LOCAL unavailable foreground capacity remains an operational retry, not a cloud fallback
+  ---
+  duration_ms: 4.9112
+  ...
+# Subtest: dry run never reserves or invokes a paid sender formation request
+ok 442 - dry run never reserves or invokes a paid sender formation request
+  ---
+  duration_ms: 3.1448
+  ...
+# Subtest: OFF, missing credentials and cap holds are visible and never fall back locally
+ok 443 - OFF, missing credentials and cap holds are visible and never fall back locally
+  ---
+  duration_ms: 6.6683
+  ...
+# Subtest: ambiguous reservation response cannot dispatch and replay holds remain non-dispatching
+ok 444 - ambiguous reservation response cannot dispatch and replay holds remain non-dispatching
+  ---
+  duration_ms: 9.0369
+  ...
+# Subtest: same granted reservation cannot issue a second paid call in one runner
+ok 445 - same granted reservation cannot issue a second paid call in one runner
+  ---
+  duration_ms: 4.379
+  ...
+# Subtest: provider errors, timeout, cancellation and rate limit settle once with no local fallback
+ok 446 - provider errors, timeout, cancellation and rate limit settle once with no local fallback
+  ---
+  duration_ms: 4.682
+  ...
+# Subtest: unknown usage remains unknown and accounting failure cannot return an applicable decision
+ok 447 - unknown usage remains unknown and accounting failure cannot return an applicable decision
+  ---
+  duration_ms: 5.8255
+  ...
+# Subtest: sender provenance is required; other memory work cannot reach the cloud adapter
+ok 448 - sender provenance is required; other memory work cannot reach the cloud adapter
+  ---
+  duration_ms: 1.1354
+  ...
+# Subtest: formation provider uses beta strict tool, preserves actual alias and unwraps canonical decision only
+ok 449 - formation provider uses beta strict tool, preserves actual alias and unwraps canonical decision only
+  ---
+  duration_ms: 58.7183
+  ...
+# Subtest: malformed tool envelope is not accepted as prose or a model decision; usage is retained
+ok 450 - malformed tool envelope is not accepted as prose or a model decision; usage is retained
+  ---
+  duration_ms: 1.3485
+  ...
+# Subtest: journal context request does not await a slow surfacing model call
+ok 451 - journal context request does not await a slow surfacing model call
+  ---
+  duration_ms: 439.8192
+  ...
+# Subtest: foreground context can defer the background claim until its model call has started
+ok 452 - foreground context can defer the background claim until its model call has started
+  ---
+  duration_ms: 4.5032
+  ...
+# [cy-memory] CY_EXPRESSION formation INVALID
+# Subtest: postcard memory lookup observes its total engineering deadline
+ok 453 - postcard memory lookup observes its total engineering deadline
+  ---
+  duration_ms: 129.3321
+  ...
+# Subtest: more than 32 sources are durably offered without local eviction
+ok 454 - more than 32 sources are durably offered without local eviction
+  ---
+  duration_ms: 3.5204
+  ...
+# Subtest: source enqueue is idempotent across runtime restart
+ok 455 - source enqueue is idempotent across runtime restart
+  ---
+  duration_ms: 15.5208
+  ...
+# Subtest: restart can claim and process a previously persisted source
+ok 456 - restart can claim and process a previously persisted source
+  ---
+  duration_ms: 49.2006
+  ...
+# Subtest: NOTHING and invalid formation output are recorded distinctly
+ok 457 - NOTHING and invalid formation output are recorded distinctly
+  ---
+  duration_ms: 3.6495
+  ...
+# [cy-memory] CY_EXPRESSION formation TIMEOUT
+# Subtest: provider timeout is persisted and not treated as NOTHING
+ok 458 - provider timeout is persisted and not treated as NOTHING
+  ---
+  duration_ms: 50.528
+  ...
+# Subtest: malformed surfacing output is persisted as INVALID
+ok 459 - malformed surfacing output is persisted as INVALID
+  ---
+  duration_ms: 22.604
+  ...
+# Subtest: prepared set is sender-scoped and cannot cross visitors
+ok 460 - prepared set is sender-scoped and cannot cross visitors
+  ---
+  duration_ms: 7.5796
+  ...
+# Subtest: stale prepared set is not compatible with a new context
+ok 461 - stale prepared set is not compatible with a new context
+  ---
+  duration_ms: 2.0243
+  ...
+# [cy-memory] POSTCARD formation CREATE
+# Subtest: consumption is traced with the exact generation reference
+ok 462 - consumption is traced with the exact generation reference
+  ---
+  duration_ms: 31.6161
+  ...
+# Subtest: background work does not claim while visitor-facing inference is busy
+ok 463 - background work does not claim while visitor-facing inference is busy
+  ---
+  duration_ms: 0.9805
+  ...
+# Subtest: a long tempo reservation backs off memory polling instead of spinning
+ok 464 - a long tempo reservation backs off memory polling instead of spinning
+  ---
+  duration_ms: 1.0126
+  ...
+# Subtest: durable priority starts conservative and clears only after both queues are checked empty
+ok 465 - durable priority starts conservative and clears only after both queues are checked empty
+  ---
+  duration_ms: 1.0367
+  ...
+# Subtest: an available durable memory job retains priority for the immediate follow-up poll
+ok 466 - an available durable memory job retains priority for the immediate follow-up poll
+  ---
+  duration_ms: 1.2803
+  ...
+# Subtest: an aged sender source runs before a continuously replenished surfacing queue
+ok 467 - an aged sender source runs before a continuously replenished surfacing queue
+  ---
+  duration_ms: 4.661
+  ...
+# Subtest: AWG gate or model contention delays sender formation without losing it
+ok 468 - AWG gate or model contention delays sender formation without losing it
+  ---
+  duration_ms: 2.3575
+  ...
+# Subtest: reserved sender turn is paced and does not create a restart burst
+ok 469 - reserved sender turn is paced and does not create a restart burst
+  ---
+  duration_ms: 2.5815
+  ...
+# [cy-memory] POSTCARD formation CREATE
+# [cy-memory] CY_REPLY formation RESOLVE
+# Subtest: a waking opportunity waits for an already claimed sender job instead of preempting it
+ok 470 - a waking opportunity waits for an already claimed sender job instead of preempting it
+  ---
+  duration_ms: 12.9349
+  ...
+# Subtest: lost completion response retries the same claim token without regenerating memory
+ok 471 - lost completion response retries the same claim token without regenerating memory
+  ---
+  duration_ms: 37.8917
+  ...
+# Subtest: a clear same-sender unresolved topic produces a revisioned resolution
+ok 472 - a clear same-sender unresolved topic produces a revisioned resolution
+  ---
+  duration_ms: 4.6076
+  ...
+# Subtest: a source enqueue in flight prevents lower-priority world generation
+ok 473 - a source enqueue in flight prevents lower-priority world generation
+  ---
+  duration_ms: 0.7741
+  ...
+# Subtest: foreground interruption is recorded as preemption for surfacing
+ok 474 - foreground interruption is recorded as preemption for surfacing
+  ---
+  duration_ms: 12.1289
+  ...
+# Subtest: recent-expression text and query source type reach the server query without entering the model prompt
+ok 475 - recent-expression text and query source type reach the server query without entering the model prompt
+  ---
+  duration_ms: 6.8134
+  ...
+# Subtest: candidate match provenance and repeat detection reach the query ledger without changing selection
+ok 476 - candidate match provenance and repeat detection reach the query ledger without changing selection
+  ---
+  duration_ms: 3.0619
+  ...
+# Subtest: a memory inserted in the immediately preceding generation is marked repeated in the next query
+ok 477 - a memory inserted in the immediately preceding generation is marked repeated in the next query
+  ---
+  duration_ms: 6.1389
+  ...
+# Subtest: provenance instrumentation never reaches the model prompt
+ok 478 - provenance instrumentation never reaches the model prompt
+  ---
+  duration_ms: 2.2445
+  ...
+# Subtest: selection and model prompt are identical whether or not recent-expression provenance is supplied
+ok 479 - selection and model prompt are identical whether or not recent-expression provenance is supplied
+  ---
+  duration_ms: 72.6708
+  ...
+# Subtest: a fresh runtime after restart reports no repeats and does not crash on candidates carrying provenance
+ok 480 - a fresh runtime after restart reports no repeats and does not crash on candidates carrying provenance
+  ---
+  duration_ms: 2.2604
+  ...
+# Subtest: a pre-fix pending Cy expression is cleaned before retrieval, formation and prompt assembly
+ok 481 - a pre-fix pending Cy expression is cleaned before retrieval, formation and prompt assembly
+  ---
+  duration_ms: 2.7854
+  ...
+# Subtest: new Cy reply sources are cleaned before durable enqueue without changing the caller object
+ok 482 - new Cy reply sources are cleaned before durable enqueue without changing the caller object
+  ---
+  duration_ms: 1.6152
+  ...
+# Subtest: an entirely editorial pending Cy expression completes without model work
+ok 483 - an entirely editorial pending Cy expression completes without model work
+  ---
+  duration_ms: 1.6058
+  ...
+# Subtest: old queued surfacing context loses assistant-role provenance before querying
+ok 484 - old queued surfacing context loses assistant-role provenance before querying
+  ---
+  duration_ms: 1.3646
+  ...
+# Subtest: pending memory context removes the newer separator and editorial tail before surfacing
+ok 485 - pending memory context removes the newer separator and editorial tail before surfacing
+  ---
+  duration_ms: 1.6425
+  ...
+# Subtest: pending memory surfacing context removes the October thought-label control leak
+ok 486 - pending memory surfacing context removes the October thought-label control leak
+  ---
+  duration_ms: 1.4385
+  ...
+# Subtest: approved five-object reconciliation survives repeated checkpoint and restart cycles
+ok 487 - approved five-object reconciliation survives repeated checkpoint and restart cycles
+  ---
+  duration_ms: 3693.9827
+  ...
+# Subtest: spurious physical message creation is rejected
+ok 488 - spurious physical message creation is rejected
+  ---
+  duration_ms: 60.7774
+  ...
+# Subtest: WORLD_ONLY delivery persists possession without granting Cy receipt or content knowledge
+ok 489 - WORLD_ONLY delivery persists possession without granting Cy receipt or content knowledge
+  ---
+  duration_ms: 11.4984
+  ...
+# Subtest: observed delivery records receipt but content remains unknown until a grounded read
+ok 490 - observed delivery records receipt but content remains unknown until a grounded read
+  ---
+  duration_ms: 58.6167
+  ...
+# Subtest: resolved and retired messages leave current AWG context without deleting provenance
+ok 491 - resolved and retired messages leave current AWG context without deleting provenance
+  ---
+  duration_ms: 10.572
+  ...
+# Subtest: continuation advances an associated message instead of creating a duplicate object
+ok 492 - continuation advances an associated message instead of creating a duplicate object
+  ---
+  duration_ms: 13.161
+  ...
+# Subtest: distinct genuine messages can coexist and reconciliation never truncates durable objects
+ok 493 - distinct genuine messages can coexist and reconciliation never truncates durable objects
+  ---
+  duration_ms: 5.6587
+  ...
+# Subtest: the five production Fisher artifacts receive deterministic non-mutating reconciliation plans
+ok 494 - the five production Fisher artifacts receive deterministic non-mutating reconciliation plans
+  ---
+  duration_ms: 2.8221
+  ...
+# Subtest: reconciliation and merge provenance survive message normalization
+ok 495 - reconciliation and merge provenance survive message normalization
+  ---
+  duration_ms: 0.7422
+  ...
+#   ok - rawGenerate posts the same JSON shape and returns the same {ok,status,text,stats,model} contract as before
+#   ok - Ollama receives JSON schema only for explicitly structured calls
+#   ok - a non-2xx response is reported as {ok:false, status} without throwing
+#   ok - an aborted request rejects promptly with a distinguishable AbortError and tears down the connection
+#   ok - a pre-aborted signal short-circuits before any network activity
+# ollama-raw-transport.test.js: all 5 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\ollama-raw-transport.test.js
+ok 79 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\ollama-raw-transport.test.js
+  ---
+  duration_ms: 1965.6526
+  ...
+# operational-anxiety-state.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\operational-anxiety-state.test.js
+ok 80 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\operational-anxiety-state.test.js
+  ---
+  duration_ms: 1770.4809
+  ...
+# 500 kcal breakfast at 30 min: fat10 median 362.642816 mL (7.7%, FILLING), central95 334.397768-607.155785 mL; fat20 median 359.223048 mL (7.3%, FILLING), central95 334.505853-576.736801 mL; fat30 median 355.80328 mL (6.9%, FILLING), central95 334.073349-546.317818 mL
+# physiological-satiety.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\physiological-satiety.test.js
+ok 81 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\physiological-satiety.test.js
+  ---
+  duration_ms: 1832.3069
+  ...
+# plain-feed.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\plain-feed.test.js
+ok 82 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\plain-feed.test.js
+  ---
+  duration_ms: 883.3016
+  ...
+# postcard-archive.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\postcard-archive.test.js
+ok 83 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\postcard-archive.test.js
+  ---
+  duration_ms: 560.7889
+  ...
+# Subtest: direct public-safe recall snapshots at most two complete source-linked memories without a model
+ok 501 - direct public-safe recall snapshots at most two complete source-linked memories without a model
+  ---
+  duration_ms: 211.4484
+  ...
+# Subtest: empty, unavailable and timed-out optional reads never hold or change sender continuity
+ok 502 - empty, unavailable and timed-out optional reads never hold or change sender continuity
+  ---
+  duration_ms: 37.3127
+  ...
+# Subtest: scope, current-sender, provenance, origin and whole-recollection bounds fail closed
+ok 503 - scope, current-sender, provenance, origin and whole-recollection bounds fail closed
+  ---
+  duration_ms: 33.0902
+  ...
+# Subtest: existing own prison, dream and thought memories preserve distinct fallible provenance
+ok 504 - existing own prison, dream and thought memories preserve distinct fallible provenance
+  ---
+  duration_ms: 7.3156
+  ...
+# Subtest: underlying exchange/episode overlap cannot occupy both slots
+ok 505 - underlying exchange/episode overlap cannot occupy both slots
+  ---
+  duration_ms: 2.8221
+  ...
+# Subtest: required sender continuity is unchanged and never evicted by optional recall
+ok 506 - required sender continuity is unchanged and never evicted by optional recall
+  ---
+  duration_ms: 109.2386
+  ...
+# Subtest: two bounded items fit existing context budget; access evidence distinguishes offered from inserted
+ok 507 - two bounded items fit existing context budget; access evidence distinguishes offered from inserted
+  ---
+  duration_ms: 4.1255
+  ...
+# Subtest: local and DeepSeek consume identical canonical associative context exactly once
+ok 508 - local and DeepSeek consume identical canonical associative context exactly once
+  ---
+  duration_ms: 109.02
+  ...
+# Subtest: runner uses direct lookup only in postcards, and records actual budgeted insertion privately
+ok 509 - runner uses direct lookup only in postcards, and records actual budgeted insertion privately
+  ---
+  duration_ms: 42.4081
+  ...
+# Subtest: cost buckets preserve all costs and bound graph size without interpolation
+ok 510 - cost buckets preserve all costs and bound graph size without interpolation
+  ---
+  duration_ms: 286.224
+  ...
+# Subtest: invalid bucket timestamps are ignored and duplicate bucket totals are combined
+ok 511 - invalid bucket timestamps are ignored and duplicate bucket totals are combined
+  ---
+  duration_ms: 2.6856
+  ...
+# Subtest: public view shows aggregated accounting and cannot submit settings
+ok 512 - public view shows aggregated accounting and cannot submit settings
+  ---
+  duration_ms: 7.8221
+  ...
+# Subtest: default browser fetch retains the Window receiver rather than the panel instance
+ok 513 - default browser fetch retains the Window receiver rather than the panel instance
+  ---
+  duration_ms: 2.725
+  ...
+# Subtest: admin controls require explicit server authorization and preserve unsaved edits on refresh
+ok 514 - admin controls require explicit server authorization and preserve unsaved edits on refresh
+  ---
+  duration_ms: 4.8323
+  ...
+# Subtest: late history responses cannot replace a newly selected range
+ok 515 - late history responses cannot replace a newly selected range
+  ---
+  duration_ms: 19.9977
+  ...
+# Subtest: server strings cannot inject markup and failures keep explicit stale-state notice
+ok 516 - server strings cannot inject markup and failures keep explicit stale-state notice
+  ---
+  duration_ms: 19.6369
+  ...
+# Subtest: panel is collapsed by default and its layout remains contained at mobile widths
+ok 517 - panel is collapsed by default and its layout remains contained at mobile widths
+  ---
+  duration_ms: 139.3354
+  ...
+# Subtest: memory view reports independent mode, models, decisions, backlog and cached usage without private records
+ok 518 - memory view reports independent mode, models, decisions, backlog and cached usage without private records
+  ---
+  duration_ms: 48.4746
+  ...
+# Subtest: memory controls use explicit mode and never inherit reply AUTO or enabled semantics
+ok 519 - memory controls use explicit mode and never inherit reply AUTO or enabled semantics
+  ---
+  duration_ms: 3.2572
+  ...
+# Subtest: two sections retain independent budgets, ranges, permissions and failed refresh state
+ok 520 - two sections retain independent budgets, ranges, permissions and failed refresh state
+  ---
+  duration_ms: 6.594
+  ...
+# Subtest: memory history race uses newest response and escapes model names instead of exposing markup
+ok 521 - memory history race uses newest response and escapes model names instead of exposing markup
+  ---
+  duration_ms: 2.6569
+  ...
+# Subtest: memory save only sends its own settings, invalidates old GET and respects revoked permission
+ok 522 - memory save only sends its own settings, invalidates old GET and respects revoked permission
+  ---
+  duration_ms: 4.4975
+  ...
+# Subtest: memory polling preserves form edits and saving preserves expanded settings and keyboard focus
+ok 523 - memory polling preserves form edits and saving preserves expanded settings and keyboard focus
+  ---
+  duration_ms: 2.19
+  ...
+# Subtest: both summaries expose exactly output count and estimated spend without technical statistics
+ok 524 - both summaries expose exactly output count and estimated spend without technical statistics
+  ---
+  duration_ms: 6.1277
+  ...
+# Subtest: details name every outcome and token count instead of showing slash-separated numbers
+ok 525 - details name every outcome and token count instead of showing slash-separated numbers
+  ---
+  duration_ms: 2.6082
+  ...
+# Subtest: history selections change summaries while cloud budgets keep their independent UTC windows
+ok 526 - history selections change summaries while cloud budgets keep their independent UTC windows
+  ---
+  duration_ms: 5.4429
+  ...
+# Subtest: nonzero failures, unresolved cost and waiting sources remain visible outside the details
+ok 527 - nonzero failures, unresolved cost and waiting sources remain visible outside the details
+  ---
+  duration_ms: 1.6802
+  ...
+# Subtest: current cloud limits remain visible even when the selected history has no failures
+ok 528 - current cloud limits remain visible even when the selected history has no failures
+  ---
+  duration_ms: 21.77
+  ...
+# Subtest: reply cloud off uses local inference while memory off queues sources with the API mode overrides
+ok 529 - reply cloud off uses local inference while memory off queues sources with the API mode overrides
+  ---
+  duration_ms: 4.1523
+  ...
+# Subtest: configured cloud model remains distinct from models reported for a local route
+ok 530 - configured cloud model remains distinct from models reported for a local route
+  ---
+  duration_ms: 0.9621
+  ...
+# Subtest: small cloud costs use pence while detailed accounting preserves four decimal places
+ok 531 - small cloud costs use pence while detailed accounting preserves four decimal places
+  ---
+  duration_ms: 1.4962
+  ...
+# Subtest: all dashboard output ignores private records and escapes permitted server strings
+ok 532 - all dashboard output ignores private records and escapes permitted server strings
+  ---
+  duration_ms: 2.3196
+  ...
+# Subtest: one canonical context preserves sender text and separated sources for both providers
+ok 533 - one canonical context preserves sender text and separated sources for both providers
+  ---
+  duration_ms: 152.3913
+  ...
+# Subtest: UTF-8 bound includes conservative envelope and rejects unbounded paid output
+ok 534 - UTF-8 bound includes conservative envelope and rejects unbounded paid output
+  ---
+  duration_ms: 4.7923
+  ...
+# Subtest: canonical sender memories, unresolved topics and public recall survive both provider serializations
+ok 535 - canonical sender memories, unresolved topics and public recall survive both provider serializations
+  ---
+  duration_ms: 284.1436
+  ...
+# Subtest: lost reservation acknowledgement never reaches provider and retry retains identity
+ok 536 - lost reservation acknowledgement never reaches provider and retry retains identity
+  ---
+  duration_ms: 20.4352
+  ...
+# Subtest: paid rejected candidates are accounted and repaired once using the same provider
+ok 537 - paid rejected candidates are accounted and repaired once using the same provider
+  ---
+  duration_ms: 6.4906
+  ...
+# Subtest: unknown usage remains explicit, settlement failure prevents acceptance, failed repair is silence
+ok 538 - unknown usage remains explicit, settlement failure prevents acceptance, failed repair is silence
+  ---
+  duration_ms: 2.6488
+  ...
+# Subtest: dry run stays local and never reserves cloud; AUTO fallback must be acknowledged
+ok 539 - dry run stays local and never reserves cloud; AUTO fallback must be acknowledged
+  ---
+  duration_ms: 1.467
+  ...
+# Subtest: known cap denial permits AUTO fallback; ambiguous reservation never does
+ok 540 - known cap denial permits AUTO fallback; ambiguous reservation never does
+  ---
+  duration_ms: 2.3419
+  ...
+# Subtest: runtime override is postcard-scoped and accounting precedes public chunks
+ok 541 - runtime override is postcard-scoped and accounting precedes public chunks
+  ---
+  duration_ms: 15.2774
+  ...
+# Subtest: world interruptions and infrastructure holds never become quality failures
+ok 542 - world interruptions and infrastructure holds never become quality failures
+  ---
+  duration_ms: 2.2553
+  ...
+# Subtest: definitive empty postcard replies get one repair then a quality failure, not an ambiguity hold
+ok 543 - definitive empty postcard replies get one repair then a quality failure, not an ambiguity hold
+  ---
+  duration_ms: 2.9682
+  ...
+# Subtest: paid transport ambiguity differs from no dispatch and definitive rejection
+ok 544 - paid transport ambiguity differs from no dispatch and definitive rejection
+  ---
+  duration_ms: 11.7546
+  ...
+# Subtest: postcard SSE requires a provider completion signal, not just transport EOF
+ok 545 - postcard SSE requires a provider completion signal, not just transport EOF
+  ---
+  duration_ms: 11.5409
+  ...
+# Subtest: claim generation follows routing, reservation, fallback, outcome and publication fencing
+ok 546 - claim generation follows routing, reservation, fallback, outcome and publication fencing
+  ---
+  duration_ms: 67.2305
+  ...
+# Subtest: sender continuity waits independently of the old enrichment deadline without inference
+ok 547 - sender continuity waits independently of the old enrichment deadline without inference
+  ---
+  duration_ms: 236.5398
+  ...
+# Subtest: optional timeout cannot erase PERSON, unresolved topic or returning identity
+ok 548 - optional timeout cannot erase PERSON, unresolved topic or returning identity
+  ---
+  duration_ms: 144.0973
+  ...
+# Subtest: required timeout, malformed response and transport failure explicitly hold, never reset identity
+ok 549 - required timeout, malformed response and transport failure explicitly hold, never reset identity
+  ---
+  duration_ms: 42.2977
+  ...
+# Subtest: timeout aborts the transport; late completion cannot insert records into another turn
+ok 550 - timeout aborts the transport; late completion cannot insert records into another turn
+  ---
+  duration_ms: 38.7561
+  ...
+# Subtest: same-sender privacy and per-type budgets survive hostile or excessive responses
+ok 551 - same-sender privacy and per-type budgets survive hostile or excessive responses
+  ---
+  duration_ms: 652.7371
+  ...
+# Subtest: real prepared runtime enrichment respects privacy and deduplicates required sender memories
+ok 552 - real prepared runtime enrichment respects privacy and deduplicates required sender memories
+  ---
+  duration_ms: 7.8037
+  ...
+# Subtest: optional failure is reported; empty canonical sender result is distinct from failure
+ok 553 - optional failure is reported; empty canonical sender result is distinct from failure
+  ---
+  duration_ms: 16.6913
+  ...
+# Subtest: late optional prepared lookup cannot overwrite a newer sender working set
+ok 554 - late optional prepared lookup cannot overwrite a newer sender working set
+  ---
+  duration_ms: 33.1986
+  ...
+# Subtest: local and DeepSeek serialize identical protected continuity after optional timeout
+ok 555 - local and DeepSeek serialize identical protected continuity after optional timeout
+  ---
+  duration_ms: 114.2559
+  ...
+# Subtest: runner uses the frozen postcard snapshot for broker and fallback without global working overwrite
+ok 556 - runner uses the frozen postcard snapshot for broker and fallback without global working overwrite
+  ---
+  duration_ms: 36.1377
+  ...
+# Subtest: client canonical sender read forwards bounded cancellation and dry run does not use network
+ok 557 - client canonical sender read forwards bounded cancellation and dry run does not use network
+  ---
+  duration_ms: 50.4446
+  ...
+# postcard-prompt.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\postcard-prompt.test.js
+ok 88 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\postcard-prompt.test.js
+  ---
+  duration_ms: 1309.4462
+  ...
+# [cy-memory] CY_REPLY formation CREATE
+# Subtest: only eligible reply formation adds the independent compact summary slot
+ok 559 - only eligible reply formation adds the independent compact summary slot
+  ---
+  duration_ms: 59.3812
+  ...
+# Subtest: meaningful public recollection does not replace sender EPISODIC formation
+ok 560 - meaningful public recollection does not replace sender EPISODIC formation
+  ---
+  duration_ms: 4.2197
+  ...
+# Subtest: trivial opt-in exchange may yield neither sender nor public memory
+ok 561 - trivial opt-in exchange may yield neither sender nor public memory
+  ---
+  duration_ms: 1.3845
+  ...
+# Subtest: independent public slot can accompany a valid sender NOTHING
+ok 562 - independent public slot can accompany a valid sender NOTHING
+  ---
+  duration_ms: 8.7913
+  ...
+# Subtest: opt-out and historical sources cannot propose a public summary
+ok 563 - opt-out and historical sources cannot propose a public summary
+  ---
+  duration_ms: 2.415
+  ...
+# Subtest: bad optional output cannot erase an otherwise valid sender decision
+ok 564 - bad optional output cannot erase an otherwise valid sender decision
+  ---
+  duration_ms: 1.0938
+  ...
+# Subtest: Cy reply still cannot create PERSON facts even with opt-in
+ok 565 - Cy reply still cannot create PERSON facts even with opt-in
+  ---
+  duration_ms: 1.6892
+  ...
+# Subtest: submission permission is unchecked, per card, explicitly posted and cleared on success
+ok 566 - submission permission is unchecked, per card, explicitly posted and cleared on success
+  ---
+  duration_ms: 38.6705
+  ...
+# Subtest: one existing formation call delivers sender and public decisions in one completion
+ok 567 - one existing formation call delivers sender and public decisions in one completion
+  ---
+  duration_ms: 8.9705
+  ...
+#   ok - a physical pen waits at the shared animation gate before drawing
+#   ok - superseded writing completes immediately without dropping words
+#   ok - reply renders on a franked, censored postcard addressed back to the sender
+#   ok - a live reply participates in the single shared handwriting lane
+#   ok - an older reply can be completed immediately when a newer item arrives
+#   ok - an incoming picture is pinned to the card as a photo
+#   ok - a card opened before postcard_in is re-addressed and gets its photo (runner order)
+#   ok - reply strokes animate progressively on the card and never on the sheet
+#   ok - a long reply shrinks and crams toward the bottom edge rather than clipping
+#   ok - a completed postcard keeps its words without retaining an SVG renderer
+#   ok - a partial-window card is backfilled from the full reply at settle
+#   ok - an empty postcard attempt is removed and a later retry retains its addressee
+# postcard-viewer.test.js: all 12 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\postcard-viewer.test.js
+ok 90 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\postcard-viewer.test.js
+  ---
+  duration_ms: 1016.2417
+  ...
+#   ok - formatCost shows pence below GBP 1 and pounds at/above, switching at 1.00
+#   ok - meter displays the latest cost_total (3.0p) and kwh_total
+#   ok - identical replayed events leave the total unchanged (no client-side integration)
+#   ok - pence/pounds switch works either side of GBP 1.00 as the total moves
+#   ok - power paths use the original continuous sloped trace
+#   ok - rolling 30-minute history survives midnight
+# power.test.js: all 6 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\power.test.js
+ok 91 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\power.test.js
+  ---
+  duration_ms: 614.7395
+  ...
+# probabilistic-threat-learning.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\probabilistic-threat-learning.test.js
+ok 92 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\probabilistic-threat-learning.test.js
+  ---
+  duration_ms: 685.1866
+  ...
+# provider-journal-control-stop.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\provider-journal-control-stop.test.js
+ok 93 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\provider-journal-control-stop.test.js
+  ---
+  duration_ms: 1288.3776
+  ...
+#   ok - local model routes split postcard/drawing work and safely fall back to the primary model
+#   ok - computeCost prices a reported cache split at cache-hit/miss rates and converts to GBP
+#   ok - computeCost charges all prompt tokens at the cache-MISS rate when no split is reported
+#   ok - computeCost uses the model-specific rate row (Flash cheaper than Pro)
+#   ok - looksLikeRefusal flags genuine refusal openers
+#   ok - looksLikeRefusal leaves ordinary lowercase prose alone (no false positives)
+#   ok - deepseekToNdjsonReader turns SSE deltas into {response} lines + a done line with usage/cost
+#   ok - deepseekToNdjsonReader always emits a terminal done line, even if the source just ends
+# provider.test.js: all 8 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\provider.test.js
+ok 94 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\provider.test.js
+  ---
+  duration_ms: 701.7782
+  ...
+# raw-view.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\raw-view.test.js
+ok 95 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\raw-view.test.js
+  ---
+  duration_ms: 633.7421
+  ...
+# Subtest: reconcile produces the approved five-object/four-thread state from a resurrected world
+ok 574 - reconcile produces the approved five-object/four-thread state from a resurrected world
+  ---
+  duration_ms: 38.4143
+  ...
+# Subtest: reconcile is idempotent (running twice yields identical world)
+ok 575 - reconcile is idempotent (running twice yields identical world)
+  ---
+  duration_ms: 19.2673
+  ...
+# Subtest: reconcile leaves unrelated objects and threads untouched
+ok 576 - reconcile leaves unrelated objects and threads untouched
+  ---
+  duration_ms: 4.9891
+  ...
+# Subtest: reconcile clears a stale resolution left on an OPEN (current-message) thread
+ok 577 - reconcile clears a stale resolution left on an OPEN (current-message) thread
+  ---
+  duration_ms: 1.3507
+  ...
+# Subtest: reconciled state survives the real save/load/reconcile/restart path
+ok 578 - reconciled state survives the real save/load/reconcile/restart path
+  ---
+  duration_ms: 3611.61
+  ...
+# Subtest: isUnsupportedGenericInjury fingerprints exactly the removed producer's output
+ok 579 - isUnsupportedGenericInjury fingerprints exactly the removed producer's output
+  ---
+  duration_ms: 32.8702
+  ...
+# Subtest: classification retires only the unsupported generic artifacts, never anything grounded
+ok 580 - classification retires only the unsupported generic artifacts, never anything grounded
+  ---
+  duration_ms: 18.4734
+  ...
+# Subtest: retiring removes only the classified entries from the CURRENT ledger; history and stimuli are untouched
+ok 581 - retiring removes only the classified entries from the CURRENT ledger; history and stimuli are untouched
+  ---
+  duration_ms: 8.3256
+  ...
+# Subtest: reconciliation is idempotent: a second pass finds nothing left to retire
+ok 582 - reconciliation is idempotent: a second pass finds nothing left to retire
+  ---
+  duration_ms: 6.8124
+  ...
+# Subtest: reconciliation survives the real save/load path and preserves provenance across a restart
+ok 583 - reconciliation survives the real save/load path and preserves provenance across a restart
+  ---
+  duration_ms: 6918.9213
+  ...
+# Subtest: isContaminatedFeedingRecord fingerprints exactly the two removed producers' output, never a genuine meal
+ok 584 - isContaminatedFeedingRecord fingerprints exactly the two removed producers' output, never a genuine meal
+  ---
+  duration_ms: 72.6602
+  ...
+# Subtest: classifyFeeding retires only contaminated entries and correctly recomputes latestResolvedMeal/lastMealOfferedAt
+ok 585 - classifyFeeding retires only contaminated entries and correctly recomputes latestResolvedMeal/lastMealOfferedAt
+  ---
+  duration_ms: 6.0991
+  ...
+# Subtest: retireFeedingContamination removes only classified entries and repairs latestResolvedMeal/lastMealOfferedAt
+ok 586 - retireFeedingContamination removes only classified entries and repairs latestResolvedMeal/lastMealOfferedAt
+  ---
+  duration_ms: 5.3938
+  ...
+# Subtest: reconciliation is idempotent: a second pass finds nothing left to retire
+ok 587 - reconciliation is idempotent: a second pass finds nothing left to retire
+  ---
+  duration_ms: 4.571
+  ...
+# Subtest: isContaminatedIntakeHistoryEntry fingerprints exactly the contamination signature
+ok 588 - isContaminatedIntakeHistoryEntry fingerprints exactly the contamination signature
+  ---
+  duration_ms: 18.4982
+  ...
+# Subtest: classifySatiety allows reverting to LIVE only when every unresolved entry is contamination
+ok 589 - classifySatiety allows reverting to LIVE only when every unresolved entry is contamination
+  ---
+  duration_ms: 247.1339
+  ...
+# Subtest: a satiety status degraded by runner downtime (a different, legitimate reason) is never touched
+ok 590 - a satiety status degraded by runner downtime (a different, legitimate reason) is never touched
+  ---
+  duration_ms: 43.7163
+  ...
+# Subtest: retireSatietyContamination removes contamination entries and reverts status only when safe, preserving tracks/latestKnownIntake
+ok 591 - retireSatietyContamination removes contamination entries and reverts status only when safe, preserving tracks/latestKnownIntake
+  ---
+  duration_ms: 62.2082
+  ...
+# Subtest: reconciliation survives the real save/load path for both substrates
+ok 592 - reconciliation survives the real save/load path for both substrates
+  ---
+  duration_ms: 7443.7301
+  ...
+#   ok - the live state-notation leak (with 7734 / day lead-in) is stripped, prose kept
+#   ok - a STATE:-labelled notation block is stripped
+#   ok - ordinary prose (whole numbers, a single decimal) survives untouched
+#   ok - bare state-axis label runs are caught; single labels in real prose survive
+#   ok - a pure state-notation chunk collapses to empty and is dropped
+#   ok - state notation is absent; subjective prose occurs once before grounded directives and cue
+#   ok - journal prompts re-anchor the rough slang register after formal context without changing postcard instructions
+#   ok - the same strip applies wherever stripScaffold is called (dream/context feedback)
+#   ok - memory and context scaffolding is recognised as an assistant frame
+#   ok - assistant analysis frames are rejected and saved-context contamination is cut at its start
+#   ok - the stop-request assistant leak is removed while ordinary in-character stop prose survives
+# 11 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\repeatguard.test.js
+ok 99 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\repeatguard.test.js
+  ---
+  duration_ms: 1340.8814
+  ...
+#   ok - stale derived continuation is backed up and cleared; world/memory remain intact
+#   ok - observed derived assistant tail is hash-guarded, backed up, and cleared
+#   ok - stale approval hash cannot clear a changed context
+#   ok - concurrent continuation update is not erased
+#   ok - unrelated continuation cannot be cleared by this one-time operation
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\reset-journal-continuation.test.js
+ok 100 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\reset-journal-continuation.test.js
+  ---
+  duration_ms: 3346.1413
+  ...
+# five-minute 500 kcal replay vs five-second cadence: maximum gastric difference 1.031906 mL
+# five-minute 750 kcal replay vs five-second cadence: maximum gastric difference 1.036771 mL
+# satiety-restart-recovery.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\satiety-restart-recovery.test.js
+ok 101 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\satiety-restart-recovery.test.js
+  ---
+  duration_ms: 3710.6676
+  ...
+# Subtest: sender grammar exposes only action-specific fields and exactly offered references
+ok 596 - sender grammar exposes only action-specific fields and exactly offered references
+  ---
+  duration_ms: 368.4587
+  ...
+# Subtest: classification instructions distinguish facts, open topics, greetings and actual resolution
+ok 597 - classification instructions distinguish facts, open topics, greetings and actual resolution
+  ---
+  duration_ms: 1.2353
+  ...
+# Subtest: sender semantics prioritize closing settled topics and prohibit invented interpretations
+ok 598 - sender semantics prioritize closing settled topics and prohibit invented interpretations
+  ---
+  duration_ms: 2.983
+  ...
+# Subtest: all valid sender actions attach scope, IDs, revisions and provenance deterministically
+ok 599 - all valid sender actions attach scope, IDs, revisions and provenance deterministically
+  ---
+  duration_ms: 7.2714
+  ...
+# Subtest: rejections are bounded structural codes, never snippets of private output
+ok 600 - rejections are bounded structural codes, never snippets of private output
+  ---
+  duration_ms: 6.0192
+  ...
+# [cy-memory] POSTCARD formation INVALID
+# Subtest: actual formation orchestration sends schema through provider and persists safe rejection code
+ok 601 - actual formation orchestration sends schema through provider and persists safe rejection code
+  ---
+  duration_ms: 288.6709
+  ...
+# [cy-memory] POSTCARD formation CREATE
+# [cy-memory] POSTCARD formation INVALID
+# [cy-memory] POSTCARD formation ERROR
+# [cy-memory] POSTCARD formation ERROR
+# [cy-memory] POSTCARD formation ERROR
+# [cy-memory] POSTCARD formation ERROR
+# [cy-memory] POSTCARD formation ERROR
+# [cy-memory] POSTCARD formation ERROR
+# [cy-memory] POSTCARD formation PREEMPTED
+# [cy-memory] POSTCARD formation PREEMPTED
+# [cy-memory] POSTCARD formation PREEMPTED
+# [cy-memory] POSTCARD formation PREEMPTED
+# [cy-memory] POSTCARD formation CREATE
+# [cy-memory] POSTCARD formation ERROR
+# Subtest: remote sender decision uses canonical parser/provenance and one transactional accounting receipt
+ok 602 - remote sender decision uses canonical parser/provenance and one transactional accounting receipt
+  ---
+  duration_ms: 35.4177
+  ...
+# Subtest: malformed cloud decisions still use the same invalid-decision boundary
+ok 603 - malformed cloud decisions still use the same invalid-decision boundary
+  ---
+  duration_ms: 35.9744
+  ...
+# Subtest: cloud holds/failures stay retryable and never consume the invalid decision category
+ok 604 - cloud holds/failures stay retryable and never consume the invalid decision category
+  ---
+  duration_ms: 43.3398
+  ...
+# Subtest: foreground local work cannot preempt remote extraction but shutdown cancels it
+ok 605 - foreground local work cannot preempt remote extraction but shutdown cancels it
+  ---
+  duration_ms: 12.9299
+  ...
+# Subtest: explicit local sender mode keeps foreground preemption and canonical parser
+ok 606 - explicit local sender mode keeps foreground preemption and canonical parser
+  ---
+  duration_ms: 1.6269
+  ...
+# Subtest: pause or shutdown during retrieval cannot launch paid formation afterward
+ok 607 - pause or shutdown during retrieval cannot launch paid formation afterward
+  ---
+  duration_ms: 1.323
+  ...
+# Subtest: foreground during sender retrieval does not cancel subsequent remote formation
+ok 608 - foreground during sender retrieval does not cancel subsequent remote formation
+  ---
+  duration_ms: 1.2262
+  ...
+# Subtest: non-sender formation remains on the original local callback
+ok 609 - non-sender formation remains on the original local callback
+  ---
+  duration_ms: 1.1992
+  ...
+# Subtest: server-selected LOCAL rechecks pacing after admission rather than trusting a stale mode hint
+ok 610 - server-selected LOCAL rechecks pacing after admission rather than trusting a stale mode hint
+  ---
+  duration_ms: 63.6406
+  ...
+# Subtest: production wiring makes sender admission independent of local tempo/lease while LOCAL is rechecked
+ok 611 - production wiring makes sender admission independent of local tempo/lease while LOCAL is rechecked
+  ---
+  duration_ms: 74.391
+  ...
+# shared Ollama lease: 12 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\shared-ollama-lease.test.js
+ok 104 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\shared-ollama-lease.test.js
+  ---
+  duration_ms: 5766.7379
+  ...
+# shell-layout.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\shell-layout.test.js
+ok 105 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\shell-layout.test.js
+  ---
+  duration_ms: 1152.2666
+  ...
+#   ok - deterministic: identical input and ctx produce identical output
+#   ok - inverse: high despair strips all capitals and sentence-initial caps
+#   ok - inverse: high numbness also flattens the page
+#   ok - baseline: at low expressed with no seed the text is untouched
+#   ok - span sweep: "I NEVER TOUCHED IT" - function words carried along
+#   ok - boundary: the span stops at the comma, later words stay lower-case
+#   ok - extreme: full run + letter-doubling (STOPPP)
+#   ok - word weights are ordered profanity > threat > grudge name > negation > food > rest
+#   ok - grudge names: live from relations, thresholded
+#   ok - lag: a trigger raises anger, expressed follows a beat behind
+#   ok - asymmetry: fast rise, slow decay; expressed comedown is the slowest of all
+#   ok - angerSignals: profanity/threat/imperative density -> a 0..1 intensity
+# 12 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\shout.test.js
+ok 106 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\shout.test.js
+  ---
+  duration_ms: 680.945
+  ...
+# silence.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\silence.test.js
+ok 107 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\silence.test.js
+  ---
+  duration_ms: 480.979
+  ...
+# sleep-homeostasis.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\sleep-homeostasis.test.js
+ok 108 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\sleep-homeostasis.test.js
+  ---
+  duration_ms: 471.6033
+  ...
+# sleep-schedule-provenance.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\sleep-schedule-provenance.test.js
+ok 109 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\sleep-schedule-provenance.test.js
+  ---
+  duration_ms: 475.8035
+  ...
+# Subtest: available history restores LIVE state and repeated replay creates no duplicate history
+ok 618 - available history restores LIVE state and repeated replay creates no duplicate history
+  ---
+  duration_ms: 164.1069
+  ...
+# Subtest: timeout preserves checkpoint, current prediction and public history
+ok 619 - timeout preserves checkpoint, current prediction and public history
+  ---
+  duration_ms: 139.8946
+  ...
+# Subtest: timeout cannot bypass the unknown-gap guard after lights-out
+ok 620 - timeout cannot bypass the unknown-gap guard after lights-out
+  ---
+  duration_ms: 87.5669
+  ...
+# Subtest: malformed and unexpectedly empty archives retain the valid checkpoint
+ok 621 - malformed and unexpectedly empty archives retain the valid checkpoint
+  ---
+  duration_ms: 29.9346
+  ...
+# Subtest: client rejects a malformed HTTP response instead of silently replaying zero records
+ok 622 - client rejects a malformed HTTP response instead of silently replaying zero records
+  ---
+  duration_ms: 6.6417
+  ...
+# Subtest: the private history endpoint uses indexed sleep types and projects only Soma input
+ok 623 - the private history endpoint uses indexed sleep types and projects only Soma input
+  ---
+  duration_ms: 48.5017
+  ...
+# social-contact-substrate.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\social-contact-substrate.test.js
+ok 111 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\social-contact-substrate.test.js
+  ---
+  duration_ms: 491.535
+  ...
+#   ok - the location-compatibility rule (WING_OR_LANDING for inmate/non-search-officer contact, CELL for a search, never the yard) is correct (1, 2, 4)
+#   ok - a cell-bound (or yard-bound) Cy cannot receive an association direct-contact episode, because fireSocial is never even called (1, 2)
+#   ok - officer interactions (both search and non-search) require Cy's authoritative location to match the picked event, checked before any side effect (4)
+#   ok - instrumental social/officer openings cannot bypass the same co-presence gate, because they are only reached after it (5)
+#   ok - the yard contact mechanism, the Social substrate itself, and the cast pickers are provably untouched by this fix (3, 10)
+#   ok - invalid-location contact never calls captureEnvironmentEvent, so it creates no Cy-observed memory source and no grounded-prose Social fact (6, 7)
+#   ok - AWG OBSERVED/WORLD_ONLY boundaries remain intact; an unsupported encounter is dropped, never relabeled as having happened elsewhere (8)
+#   ok - repeated random-producer firings are independently re-validated against Cy's current location on every tick, so mismatched encounters cannot accumulate as grounded episodes (9)
+#   ok - restart/replay behaviour is unaffected: a gated-out tick never reaches the Social substrate at all, and the substrate's own restart reconciliation (untouched by this fix) still behaves as before (11)
+# social-officer-contact-grounding.test.js: all 9 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\social-officer-contact-grounding.test.js
+ok 112 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\social-officer-contact-grounding.test.js
+  ---
+  duration_ms: 2060.8956
+  ...
+# soma-column-layout.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-column-layout.test.js
+ok 113 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-column-layout.test.js
+  ---
+  duration_ms: 411.4402
+  ...
+# soma-cycle.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-cycle.test.js
+ok 114 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-cycle.test.js
+  ---
+  duration_ms: 1001.7943
+  ...
+# {"fullBytes":2745648,"liveBytes":20400,"diagnosticBytes":2378}
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-live-snapshot.test.js
+ok 115 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-live-snapshot.test.js
+  ---
+  duration_ms: 2011.799
+  ...
+# soma-promotion.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-promotion.test.js
+ok 116 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-promotion.test.js
+  ---
+  duration_ms: 769.3805
+  ...
+# soma-replay.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-replay.test.js
+ok 117 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma-replay.test.js
+  ---
+  duration_ms: 1542.5757
+  ...
+# soma.integration.test.js: all checks passed
+# SOMA_SCENARIO {"afterLivedEvents":{"episodes":3,"attention":"Mr Locke searched the cell and moved the blue postcard","selectedMemory":"Mr Locke moved the blue postcard again","prediction":{"error":0.993,"expected":"officer","observed":"postcard","next":null}},"journal":{"groundedSomaContext":"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [OBSERVED FACT] Currently awake.\\n- [OBSERVED FACT] Present external cues: officer at cell, proctor, cell; outcome class coercive loss of control, temporal status imminent, world ambiguity clear, objective controllability none, outcome status unknown, resolution status unresolved; outcome class physical harm, temporal status imminent, world ambiguity clear, objective controllability none, outcome status unknown, resolution status unresolved.\\n- [PAST EXPERIENCE] The proctor cue has 1 adverse and 0 non-adverse outcomes across 1 resolved observations.\\n- [PAST EXPERIENCE] The cell cue has 1 adverse and 0 non-adverse outcomes across 1 resolved observations.\\n- [PAST EXPERIENCE] The proctor cue has 0 adverse and 1 non-adverse outcomes across 1 resolved observations.\\n- [PAST EXPERIENCE] The cell cue has 0 adverse and 1 non-adverse outcomes across 1 resolved observations.\\n- [OBSERVED FACT] Definite food intake was recorded 60 minutes ago.\\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\\n</PRIVATE_CURRENT_FACTS>"},"afterOwnOutput":{"expression":{"repetition":0,"intensity":0,"triggerActivation":0.392,"commitment":true,"mode":"journal","themes":["locke","blue","postcard"],"observedAtMs":1789041607000},"appraisalUnchanged":true},"restart":{"episodes":3,"selectedMemoryId":2},"failure":{"version":null,"status":"unavailable","reason":"instrumented update failure"}}
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma.integration.test.js
+ok 118 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma.integration.test.js
+  ---
+  duration_ms: 4580.7833
+  ...
+# soma.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma.test.js
+ok 119 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\soma.test.js
+  ---
+  duration_ms: 1783.4992
+  ...
+# somatic-nociceptive-substrate.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\somatic-nociceptive-substrate.test.js
+ok 120 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\somatic-nociceptive-substrate.test.js
+  ---
+  duration_ms: 1312.4763
+  ...
+#   ok - record folds a paid call into the total and returns per-call + cumulative figures
+#   ok - successive calls accumulate the cumulative total and token counters
+#   ok - cumulative spend persists to state and reloads (survives a restart)
+#   ok - record derives uncached prompt tokens when the provider omits them
+#   ok - non-emitting spend is tracked, snapshotted and persisted as its own subset of the total
+# spend.test.js: all 5 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\spend.test.js
+ok 121 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\spend.test.js
+  ---
+  duration_ms: 1590.1364
+  ...
+# tempo-view.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tempo-view.test.js
+ok 122 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tempo-view.test.js
+  ---
+  duration_ms: 1132.6742
+  ...
+# tempo.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tempo.test.js
+ok 123 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tempo.test.js
+  ---
+  duration_ms: 1293.7304
+  ...
+#   ok - first ingestion of a new event updates threat learning normally (1)
+#   ok - replaying the exact same event ID a second time is a complete no-op (2)
+#   ok - two distinct event IDs for the same semantic event both count independently (3)
+#   ok - all distinct cue/outcome trials from a single first-time event update correctly on first ingestion (4)
+#   ok - defensive-context history and current-state provenance record a source event only once (5)
+#   ok - a start event and a later resolution event for the SAME stable context both process, because their event IDs differ (6)
+#   ok - deduplicating one event does not affect unrelated contexts (7)
+#   ok - the dedup ledger for both substrates survives a real JSON checkpoint/restart cycle (8)
+#   ok - a checkpoint saved before this dedup field existed loads safely and continues deduplicating forward, never retroactively (9)
+#   ok - the bounded dedup ledger retains every event needed for a realistic restart/replay window, evicting only the single oldest entry once genuinely full (10)
+# threat-defensive-dedup.test.js: all 10 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\threat-defensive-dedup.test.js
+ok 124 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\threat-defensive-dedup.test.js
+  ---
+  duration_ms: 1767.2922
+  ...
+# three-process-sleepiness.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\three-process-sleepiness.test.js
+ok 125 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\three-process-sleepiness.test.js
+  ---
+  duration_ms: 1133.5847
+  ...
+# timeline.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\timeline.test.js
+ok 126 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\timeline.test.js
+  ---
+  duration_ms: 760.5066
+  ...
+# timetravel.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\timetravel.test.js
+ok 127 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\timetravel.test.js
+  ---
+  duration_ms: 935.375
+  ...
+# tpm-restart-continuity.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tpm-restart-continuity.test.js
+ok 128 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tpm-restart-continuity.test.js
+  ---
+  duration_ms: 1051.154
+  ...
+#   ok - cold-tea irritation alone does not create a new intake record (1)
+#   ok - no-eggs irritation alone does not create an ambiguous duplicate meal observation (2)
+#   ok - repeated tray-irritation events cannot flip a valid LIVE satiety model to INPUT_INCOMPLETE (3)
+#   ok - explicit meal offered/received/consumed facts still update feeding and satiety normally (4)
+#   ok - a genuinely grounded availability change updates the existing meal identity correctly (5)
+#   ok - event-ID deduplication remains intact for both tray-irritation events and genuine meals (6)
+#   ok - restart/replay behaviour remains stable (7)
+#   ok - AWG OBSERVED/WORLD_ONLY boundaries remain unchanged; the fix withholds a fact, it does not reclassify observation (8)
+#   ok - historical feeding provenance for genuine meals remains fully available and untouched (9)
+# tray-irritation-feeding-contamination.test.js: all 9 checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tray-irritation-feeding-contamination.test.js
+ok 129 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\tray-irritation-feeding-contamination.test.js
+  ---
+  duration_ms: 668.0531
+  ...
+# vitals-persistence.test.js: all checks passed
+# Subtest: C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\vitals-persistence.test.js
+ok 130 - C:\\Users\\jodyf\\Documents\\Codex\\2026-09-03\\som\\cy-meal-consumption-choice\\runner\\vitals-persistence.test.js
+  ---
+  duration_ms: 16351.6353
+  ...
+# Subtest: sectioned checkpoint preserves routine location and staged search across restarts
+ok 644 - sectioned checkpoint preserves routine location and staged search across restarts
+  ---
+  duration_ms: 1188.7638
+  ...
+# Subtest: the scheduler uses the persisted location for genuine routine outcomes and search stages
+ok 645 - the scheduler uses the persisted location for genuine routine outcomes and search stages
+  ---
+  duration_ms: 3.8372
+  ...
+# Subtest: world episode changes flush urgently and AWG defers without consuming a slot
+ok 646 - world episode changes flush urgently and AWG defers without consuming a slot
+  ---
+  duration_ms: 1.2077
+  ...
+# Subtest: the public location and mode pills name actual routine places
+ok 647 - the public location and mode pills name actual routine places
+  ---
+  duration_ms: 0.9945
+  ...
+# Subtest: new transition advances exactly once and republishing preserves identity
+ok 648 - new transition advances exactly once and republishing preserves identity
+  ---
+  duration_ms: 29.6331
+  ...
+# Subtest: both crash orders choose the higher version, not the timestamp
+ok 649 - both crash orders choose the higher version, not the timestamp
+  ---
+  duration_ms: 3.3495
+  ...
+# Subtest: stale replay and equal-version conflict never reverse a terminal state
+ok 650 - stale replay and equal-version conflict never reverse a terminal state
+  ---
+  duration_ms: 1.6197
+  ...
+# Subtest: compacted resolved thread keeps its version and usable terminal marker
+ok 651 - compacted resolved thread keeps its version and usable terminal marker
+  ---
+  duration_ms: 2.3555
+  ...
+# Subtest: acknowledged retired object can compact without stale resurrection
+ok 652 - acknowledged retired object can compact without stale resurrection
+  ---
+  duration_ms: 5.7767
+  ...
+# Subtest: only acknowledgement of the current terminal transition compacts an object
+ok 653 - only acknowledgement of the current terminal transition compacts an object
+  ---
+  duration_ms: 1.0352
+  ...
+# Subtest: legacy migration rehearsal reports disagreement and needs explicit choice
+ok 654 - legacy migration rehearsal reports disagreement and needs explicit choice
+  ---
+  duration_ms: 4.2009
+  ...
+# Subtest: repeated reconciliation survives crash before and after SQL publication
+ok 655 - repeated reconciliation survives crash before and after SQL publication
+  ---
+  duration_ms: 9.5965
+  ...
+# Subtest: unavailable SQL leaves checkpoint untouched and later reconnect releases reconciliation
+ok 656 - unavailable SQL leaves checkpoint untouched and later reconnect releases reconciliation
+  ---
+  duration_ms: 4.4826
+  ...
+1..656
+# tests 656
+# suites 0
+# pass 656
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 39172.2416

@@ -1,0 +1,3 @@
+# Preserve captured artifacts and their checksum manifest byte-for-byte.
+* -text
+*.log -whitespace

@@ -65,6 +65,10 @@ assert.equal(scheduledRoutineLabel({ name: 'lunch_partial', meal: 'lunch', outco
   'lunch came; Cy ate some');
 assert.equal(scheduledRoutineLabel({ name: 'tea_missed', meal: 'tea', outcome: 'missed' }),
   'tea did not reach Cy');
+assert.equal(scheduledRoutineLabel({ name: 'tea_available', meal: 'tea', outcome: 'available' }),
+  'tea arrived; available for Cy to eat');
+assert.equal(scheduledRoutineLabel({ name: 'tea_unknown', meal: 'tea', outcome: 'unknown' }),
+  'tea: consumption not established');
 assert.equal(scheduledRoutineLabel({ name: 'supper snack_refused', meal: 'supper snack', outcome: 'refused' }),
   'supper snack came; Cy did not eat it');
 assert.equal(scheduledRoutineLabel({ name: 'shower_cold', routine: 'shower', outcome: 'shower_cold' }),

@@ -1,0 +1,56 @@
+{
+  "sourceFilesVerified": 260,
+  "changedSourceFiles": [],
+  "isolatedRunnerStateCreated": false,
+  "postRunHealth": {
+    "arbiter": {
+      "ok": true,
+      "active": {
+        "client": "feddit",
+        "purpose": "feddit",
+        "priorityClass": "synthetic",
+        "heldMs": 79185,
+        "expiresInMs": 15904
+      },
+      "queued": {
+        "interactive": 0,
+        "cy": 0,
+        "user": 0,
+        "synthetic": 0
+      },
+      "metrics": {
+        "cy": {
+          "grants": 563,
+          "releases": 563,
+          "expiries": 0,
+          "waitMsAverage": 29401,
+          "waitMsMax": 300144,
+          "holdMsAverage": 79456,
+          "holdMsMax": 384281
+        },
+        "feddit": {
+          "grants": 552,
+          "releases": 551,
+          "expiries": 0,
+          "waitMsAverage": 18602,
+          "waitMsMax": 247853,
+          "holdMsAverage": 140373,
+          "holdMsMax": 300231
+        }
+      },
+      "startupGraceMs": 0,
+      "profile": {
+        "num_ctx": 3072,
+        "num_thread": 4
+      }
+    },
+    "remainingDiagnosticProcesses": [],
+    "ollama": {
+      "version": "0.34.1"
+    }
+  },
+  "rehearsalRevision": "62dec2e",
+  "runtimeAtInference": "5087e53",
+  "archiveSha256": "c86cef6b0052ce5705e4a4a52ac9e617e967b051e5896414a6f3100a8b0684b5",
+  "restoration": "No pause/unload/start/hold/restart/config or production-state API was used; no restoration mutation needed."
+}

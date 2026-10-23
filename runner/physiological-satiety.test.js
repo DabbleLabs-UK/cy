@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
-import { PRISON_REGIME_CONFIGURATION, PRISON_SCHEDULE, chooseMealEvent, mealExpectation } from './environment.js';
+import { PRISON_REGIME_CONFIGURATION, PRISON_SCHEDULE, materialiseMealConsumption, mealExpectation } from './environment.js';
 import { HMPPS_REFERENCE_RATION, ingestionRecordFromEnvironment } from './feeding-homeostasis.js';
 import { groundedSomaDirective, observeSomaFeedingRecord, reconcileSoma, tickSoma } from './soma.js';
 import {
@@ -140,7 +140,7 @@ const snackExpectedRecord = createEnvironmentRecord(createEnvironmentEvent('meal
 const scheduledOnlySnack = ingestionRecordFromEnvironment(snackExpectedRecord);
 assert.equal(scheduledOnlySnack.intakeOutcome, 'MEAL_EXPECTED');
 assert.equal(scheduledOnlySnack.consumedEnergyKcal, null);
-assert.equal(chooseMealEvent('supper_snack', () => 0.99).world.physical.food.intake_outcome, 'refused');
+assert.equal(materialiseMealConsumption('supper_snack', 'decline').world.physical.food.intake_outcome, 'refused');
 const mealMinutes = PRISON_SCHEDULE.filter((slot) => slot.kind === 'meal').map((slot) => slot.mins).sort((a, b) => a - b);
 const gaps = mealMinutes.map((minute, index) => {
   const next = mealMinutes[(index + 1) % mealMinutes.length] + (index === mealMinutes.length - 1 ? 1440 : 0);

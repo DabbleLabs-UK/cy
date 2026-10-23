@@ -1,0 +1,6107 @@
+[
+  {
+    "id": "no-hint-01",
+    "case": {
+      "id": "no-hint-01",
+      "meal": "lunch",
+      "profile": "EMPTY",
+      "injury": false,
+      "condition": "A",
+      "opaque": false,
+      "round": 1
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-01",
+        "meal": "lunch",
+        "profile": "EMPTY",
+        "injury": false,
+        "condition": "A",
+        "opaque": false,
+        "round": 1
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "eat": "eat",
+        "decline": "decline"
+      },
+      "order": [
+        "eat",
+        "decline"
+      ],
+      "labels": [
+        "eat",
+        "decline"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:39:50.227Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-01",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-01",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "ffb1435f-b4ef-403f-900c-754ae4576776",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-79305e55-1f98-4c69-8629-9224113c8c7b",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-01",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "ffb1435f-b4ef-403f-900c-754ae4576776",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-79305e55-1f98-4c69-8629-9224113c8c7b",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 81140,
+    "inferenceMs": 3671,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:41:15.0328493Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          4384,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          48991,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 3658463900,
+        "load_duration": 6666800,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 203,
+        "prompt_eval_duration": 1742716000,
+        "eval_count": 6,
+        "eval_duration": 1721086000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-79305e55-1f98-4c69-8629-9224113c8c7b",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-01"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-01"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-01",
+            "decision_id": "ffb1435f-b4ef-403f-900c-754ae4576776",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-79305e55-1f98-4c69-8629-9224113c8c7b",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-79305e55-1f98-4c69-8629-9224113c8c7b"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 84821,
+    "endedAt": "2026-10-23T18:41:15.048Z"
+  },
+  {
+    "id": "no-hint-02",
+    "case": {
+      "id": "no-hint-02",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": false,
+      "condition": "B",
+      "opaque": false,
+      "round": 1
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-02",
+        "meal": "lunch",
+        "profile": "FULL",
+        "injury": false,
+        "condition": "B",
+        "opaque": false,
+        "round": 1
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "decline": "decline",
+        "eat": "eat"
+      },
+      "order": [
+        "decline",
+        "eat"
+      ],
+      "labels": [
+        "decline",
+        "eat"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:41:15.054Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-02",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-02",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "4ad52fef-9a48-47b9-8cdf-5e5fed9a1212",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-e2dca705-15fa-48c5-9a92-a02e3f028082",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-02",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "4ad52fef-9a48-47b9-8cdf-5e5fed9a1212",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-e2dca705-15fa-48c5-9a92-a02e3f028082",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 24638,
+    "inferenceMs": 5833,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:41:45.5521146Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          2539,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          48991,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 5829356500,
+        "load_duration": 5211200,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 175,
+        "prompt_eval_duration": 4380036000,
+        "eval_count": 6,
+        "eval_duration": 1335327000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-e2dca705-15fa-48c5-9a92-a02e3f028082",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-02"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-02"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-02",
+            "decision_id": "4ad52fef-9a48-47b9-8cdf-5e5fed9a1212",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-e2dca705-15fa-48c5-9a92-a02e3f028082",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-e2dca705-15fa-48c5-9a92-a02e3f028082"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 30510,
+    "endedAt": "2026-10-23T18:41:45.564Z"
+  },
+  {
+    "id": "no-hint-03",
+    "case": {
+      "id": "no-hint-03",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": false,
+      "condition": "A",
+      "opaque": false,
+      "round": 1
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-03",
+        "meal": "lunch",
+        "profile": "FULL",
+        "injury": false,
+        "condition": "A",
+        "opaque": false,
+        "round": 1
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "eat": "eat",
+        "decline": "decline"
+      },
+      "order": [
+        "eat",
+        "decline"
+      ],
+      "labels": [
+        "eat",
+        "decline"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\": \"eat\"}",
+    "startedAt": "2026-10-23T18:41:45.570Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-03",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-03",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "02986680-18bc-4ea9-9789-7a84dfe25dd0",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-d3fbc292-2a20-4d9d-bc0a-7bd9a9f472a2",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-03",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "02986680-18bc-4ea9-9789-7a84dfe25dd0",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-d3fbc292-2a20-4d9d-bc0a-7bd9a9f472a2",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 12,
+    "inferenceMs": 4776,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\": \"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:41:50.3574656Z",
+        "response": "{\"action\": \"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          2539,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          48991,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          794,
+          330,
+          33166,
+          9388
+        ],
+        "total_duration": 4776026500,
+        "load_duration": 7662200,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 187,
+        "prompt_eval_duration": 3179170000,
+        "eval_count": 7,
+        "eval_duration": 1584358000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-d3fbc292-2a20-4d9d-bc0a-7bd9a9f472a2",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-03"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-03"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-03",
+            "decision_id": "02986680-18bc-4ea9-9789-7a84dfe25dd0",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-d3fbc292-2a20-4d9d-bc0a-7bd9a9f472a2",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-d3fbc292-2a20-4d9d-bc0a-7bd9a9f472a2"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 4793,
+    "endedAt": "2026-10-23T18:41:50.363Z"
+  },
+  {
+    "id": "no-hint-04",
+    "case": {
+      "id": "no-hint-04",
+      "meal": "lunch",
+      "profile": "EMPTY",
+      "injury": false,
+      "condition": "B",
+      "opaque": false,
+      "round": 1
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-04",
+        "meal": "lunch",
+        "profile": "EMPTY",
+        "injury": false,
+        "condition": "B",
+        "opaque": false,
+        "round": 1
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "decline": "decline",
+        "eat": "eat"
+      },
+      "order": [
+        "decline",
+        "eat"
+      ],
+      "labels": [
+        "decline",
+        "eat"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:41:50.369Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-04",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-04",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "1d2a36ac-e3f3-415d-9c97-2ca9594f00b0",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-6b64d502-0e4c-4850-acff-7a12eab8611f",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-04",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "1d2a36ac-e3f3-415d-9c97-2ca9594f00b0",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-6b64d502-0e4c-4850-acff-7a12eab8611f",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 38,
+    "inferenceMs": 5862,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:41:56.2670347Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          4384,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          48991,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 5857913900,
+        "load_duration": 5350300,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 175,
+        "prompt_eval_duration": 4354118000,
+        "eval_count": 6,
+        "eval_duration": 1494393000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-6b64d502-0e4c-4850-acff-7a12eab8611f",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-04"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-04"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-04",
+            "decision_id": "1d2a36ac-e3f3-415d-9c97-2ca9594f00b0",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-6b64d502-0e4c-4850-acff-7a12eab8611f",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-6b64d502-0e4c-4850-acff-7a12eab8611f"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 5915,
+    "endedAt": "2026-10-23T18:41:56.284Z"
+  },
+  {
+    "id": "no-hint-05",
+    "case": {
+      "id": "no-hint-05",
+      "meal": "lunch",
+      "profile": "EMPTY",
+      "injury": false,
+      "condition": "B",
+      "opaque": false,
+      "round": 2
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-05",
+        "meal": "lunch",
+        "profile": "EMPTY",
+        "injury": false,
+        "condition": "B",
+        "opaque": false,
+        "round": 2
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "decline": "decline",
+        "eat": "eat"
+      },
+      "order": [
+        "decline",
+        "eat"
+      ],
+      "labels": [
+        "decline",
+        "eat"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:41:56.290Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-05",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-05",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "7dd59ab8-94bd-4830-9b29-f3d202f6c421",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-588229b3-c209-4a2d-bfab-ac82902e7da0",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-05",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "7dd59ab8-94bd-4830-9b29-f3d202f6c421",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-588229b3-c209-4a2d-bfab-ac82902e7da0",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 4,
+    "inferenceMs": 1640,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:41:57.9334704Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          4384,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          48991,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 1636947000,
+        "load_duration": 4490300,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 217,
+        "prompt_eval_duration": 273015000,
+        "eval_count": 6,
+        "eval_duration": 1354857000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-588229b3-c209-4a2d-bfab-ac82902e7da0",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-05"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-05"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-05",
+            "decision_id": "7dd59ab8-94bd-4830-9b29-f3d202f6c421",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-588229b3-c209-4a2d-bfab-ac82902e7da0",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-588229b3-c209-4a2d-bfab-ac82902e7da0"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 1649,
+    "endedAt": "2026-10-23T18:41:57.939Z"
+  },
+  {
+    "id": "no-hint-06",
+    "case": {
+      "id": "no-hint-06",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": false,
+      "condition": "A",
+      "opaque": false,
+      "round": 2
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-06",
+        "meal": "lunch",
+        "profile": "FULL",
+        "injury": false,
+        "condition": "A",
+        "opaque": false,
+        "round": 2
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "eat": "eat",
+        "decline": "decline"
+      },
+      "order": [
+        "eat",
+        "decline"
+      ],
+      "labels": [
+        "eat",
+        "decline"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:41:57.944Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-06",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-06",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "c53c5ac4-7db1-4006-9bb5-c24dc6fa8c7d",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-61c1006e-0097-4313-a8ac-71502e5cdb51",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-06",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "c53c5ac4-7db1-4006-9bb5-c24dc6fa8c7d",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-61c1006e-0097-4313-a8ac-71502e5cdb51",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 18,
+    "inferenceMs": 5857,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:42:03.8184681Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          2539,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          48991,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 5853546800,
+        "load_duration": 4238900,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 175,
+        "prompt_eval_duration": 4443481000,
+        "eval_count": 6,
+        "eval_duration": 1401059000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-61c1006e-0097-4313-a8ac-71502e5cdb51",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-06"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-06"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-06",
+            "decision_id": "c53c5ac4-7db1-4006-9bb5-c24dc6fa8c7d",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-61c1006e-0097-4313-a8ac-71502e5cdb51",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-61c1006e-0097-4313-a8ac-71502e5cdb51"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 5887,
+    "endedAt": "2026-10-23T18:42:03.831Z"
+  },
+  {
+    "id": "no-hint-07",
+    "case": {
+      "id": "no-hint-07",
+      "meal": "lunch",
+      "profile": "FULL",
+      "injury": false,
+      "condition": "B",
+      "opaque": false,
+      "round": 2
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-07",
+        "meal": "lunch",
+        "profile": "FULL",
+        "injury": false,
+        "condition": "B",
+        "opaque": false,
+        "round": 2
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: full.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "decline": "decline",
+        "eat": "eat"
+      },
+      "order": [
+        "decline",
+        "eat"
+      ],
+      "labels": [
+        "decline",
+        "eat"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: full.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"decline\":\"Do not eat this meal.\",\"eat\":\"Eat the available meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "decline",
+                "eat"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:42:03.837Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-07",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-07",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "9806a03d-ff0f-49f4-bb78-1d46b336f938",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-cddf3381-9b35-4157-98fd-944b7b5f7e48",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-07",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "9806a03d-ff0f-49f4-bb78-1d46b336f938",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-cddf3381-9b35-4157-98fd-944b7b5f7e48",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 5,
+    "inferenceMs": 4499,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:42:08.3396319Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          2539,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          48991,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 4495024100,
+        "load_duration": 5861700,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 187,
+        "prompt_eval_duration": 3160497000,
+        "eval_count": 6,
+        "eval_duration": 1322880000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-cddf3381-9b35-4157-98fd-944b7b5f7e48",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-07"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-07"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-07",
+            "decision_id": "9806a03d-ff0f-49f4-bb78-1d46b336f938",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-cddf3381-9b35-4157-98fd-944b7b5f7e48",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-cddf3381-9b35-4157-98fd-944b7b5f7e48"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 4507,
+    "endedAt": "2026-10-23T18:42:08.344Z"
+  },
+  {
+    "id": "no-hint-08",
+    "case": {
+      "id": "no-hint-08",
+      "meal": "lunch",
+      "profile": "EMPTY",
+      "injury": false,
+      "condition": "A",
+      "opaque": false,
+      "round": 2
+    },
+    "packet": {
+      "case": {
+        "id": "no-hint-08",
+        "meal": "lunch",
+        "profile": "EMPTY",
+        "injury": false,
+        "condition": "A",
+        "opaque": false,
+        "round": 2
+      },
+      "supportedContext": {
+        "bodily": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [BODILY INDICATION] Possible stomach fullness: empty.\n</PRIVATE_CURRENT_FACTS>",
+        "location": "cell",
+        "regime": "lunch bangup"
+      },
+      "sourceCall": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"},\"response\":{\"action\":\"eat | decline\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "call": {
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "mapping": {
+        "eat": "eat",
+        "decline": "decline"
+      },
+      "order": [
+        "eat",
+        "decline"
+      ],
+      "labels": [
+        "eat",
+        "decline"
+      ],
+      "options": {
+        "temperature": 0.72,
+        "top_p": 0.86,
+        "repeat_penalty": 1.18,
+        "repeat_last_n": 160,
+        "num_predict": 80,
+        "stop": [
+          "<|im_end|>",
+          "<|im_start|>",
+          "<|eot_id|>",
+          "<|start_header_id|>",
+          "<|end_header_id|>",
+          "<|begin_of_text|>",
+          "You continue writing",
+          "What happens next",
+          "Do you:",
+          "I choose",
+          "\n7734:",
+          "I apologize",
+          "Here's an attempt",
+          "To continue from where we left off",
+          "<br",
+          "</br",
+          "<b>",
+          "</b>",
+          "<p>",
+          "</p>",
+          "<i>",
+          "</i>",
+          "<u>",
+          "</u>"
+        ],
+        "num_ctx": 3072,
+        "num_thread": 4
+      },
+      "wireBody": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "system": "You are Cy, inmate 7734, held in HMP ThinkPad. Choose what to do with the food actually present. Return only the JSON choice, with no explanation or story.",
+        "prompt": "{\"present\":\"lunch is available to you here. No specific ingredients are established.\",\"where\":\"cell\",\"current_activity\":\"lunch bangup\",\"body\":\"<PRIVATE_CURRENT_FACTS>\\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\\nDo not infer additional sensations, emotions, severity or causes from these facts.\\n- [BODILY INDICATION] Possible stomach fullness: empty.\\n</PRIVATE_CURRENT_FACTS>\",\"choices\":{\"eat\":\"Eat the available meal.\",\"decline\":\"Do not eat this meal.\"}}",
+        "options": {
+          "temperature": 0.72,
+          "top_p": 0.86,
+          "repeat_penalty": 1.18,
+          "repeat_last_n": 160,
+          "num_predict": 80,
+          "stop": [
+            "<|im_end|>",
+            "<|im_start|>",
+            "<|eot_id|>",
+            "<|start_header_id|>",
+            "<|end_header_id|>",
+            "<|begin_of_text|>",
+            "You continue writing",
+            "What happens next",
+            "Do you:",
+            "I choose",
+            "\n7734:",
+            "I apologize",
+            "Here's an attempt",
+            "To continue from where we left off",
+            "<br",
+            "</br",
+            "<b>",
+            "</b>",
+            "<p>",
+            "</p>",
+            "<i>",
+            "</i>",
+            "<u>",
+            "</u>"
+          ],
+          "num_ctx": 3072,
+          "num_thread": 4
+        },
+        "keep_alive": -1,
+        "stream": false,
+        "format": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "eat",
+                "decline"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "raw": "{\"action\":\"eat\"}",
+    "startedAt": "2026-10-23T18:42:08.351Z",
+    "checkpoints": [
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-08",
+            "phase": "OFFERED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": null,
+            "effectEventId": null,
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-08",
+            "phase": "COMMITTED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "cf3300df-5779-464c-8a20-17bf745d4e82",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-c5b4b4a3-733b-4183-9411-362bfccda4ac",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ]
+          }
+        ],
+        "pendingEvents": []
+      },
+      {
+        "schema": "cy.meal-choice",
+        "version": 1,
+        "episodes": [
+          {
+            "id": "2026-10-23:lunch",
+            "meal": "lunch",
+            "date": "2026-10-23",
+            "available": true,
+            "availableAt": "2026-10-23T10:45:00.000Z",
+            "expiresAt": 1792757700000,
+            "fence": "[\"2026-10-23\",\"CELL\",\"2026-10-23T10:44:00.000Z\",\"synthetic-cell-entry\",\"lunch bangup\",null]",
+            "availabilityEventId": "synthetic-availability-no-hint-08",
+            "phase": "APPLIED",
+            "offeredAt": "2026-10-23T10:45:00.000Z",
+            "decision": {
+              "id": "cf3300df-5779-464c-8a20-17bf745d4e82",
+              "mealId": "2026-10-23:lunch",
+              "action": "eat",
+              "committedAt": "2026-10-23T10:45:00.000Z"
+            },
+            "effectEventId": "env-c5b4b4a3-733b-4183-9411-362bfccda4ac",
+            "failure": null,
+            "offeredActions": [
+              "eat",
+              "decline"
+            ],
+            "appliedAt": "2026-10-23T10:45:00.000Z"
+          }
+        ],
+        "pendingEvents": []
+      }
+    ],
+    "lifecycle": [
+      {
+        "stage": "choice_offered",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "valid_choice_returned",
+        "phase": "OFFERED"
+      },
+      {
+        "stage": "decision_committed",
+        "phase": "COMMITTED"
+      },
+      {
+        "stage": "effect_applied",
+        "phase": "APPLIED"
+      }
+    ],
+    "waitMs": 10,
+    "inferenceMs": 5807,
+    "transport": {
+      "ok": true,
+      "status": 200,
+      "text": "{\"action\":\"eat\"}",
+      "stats": {
+        "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M",
+        "created_at": "2026-10-23T18:42:14.1674902Z",
+        "response": "{\"action\":\"eat\"}",
+        "done": true,
+        "done_reason": "stop",
+        "context": [
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          9125,
+          198,
+          2675,
+          527,
+          18221,
+          11,
+          67535,
+          220,
+          23267,
+          19,
+          11,
+          5762,
+          304,
+          473,
+          5901,
+          21834,
+          14047,
+          13,
+          22991,
+          1148,
+          311,
+          656,
+          449,
+          279,
+          3691,
+          3604,
+          3118,
+          13,
+          3494,
+          1193,
+          279,
+          4823,
+          5873,
+          11,
+          449,
+          912,
+          16540,
+          477,
+          3446,
+          16134,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          882,
+          198,
+          5018,
+          29844,
+          3332,
+          75,
+          3265,
+          374,
+          2561,
+          311,
+          499,
+          1618,
+          13,
+          2360,
+          3230,
+          14293,
+          527,
+          9749,
+          48991,
+          2940,
+          3332,
+          5997,
+          2247,
+          3311,
+          31126,
+          3332,
+          75,
+          3265,
+          26518,
+          455,
+          2247,
+          2664,
+          3332,
+          27,
+          81710,
+          34038,
+          37399,
+          50,
+          8616,
+          77,
+          17205,
+          6029,
+          369,
+          18221,
+          1193,
+          13,
+          3234,
+          539,
+          10552,
+          11,
+          49586,
+          11,
+          29385,
+          1082,
+          11,
+          12929,
+          11,
+          477,
+          836,
+          420,
+          2565,
+          7255,
+          77,
+          10464,
+          264,
+          9959,
+          2144,
+          477,
+          48131,
+          28137,
+          1193,
+          304,
+          18221,
+          596,
+          1866,
+          7899,
+          13,
+          362,
+          3284,
+          28137,
+          374,
+          539,
+          264,
+          3738,
+          8430,
+          7255,
+          77,
+          5519,
+          539,
+          24499,
+          5217,
+          72597,
+          11,
+          21958,
+          11,
+          31020,
+          477,
+          11384,
+          505,
+          1521,
+          13363,
+          7255,
+          77,
+          12,
+          510,
+          33,
+          2114,
+          1750,
+          56,
+          19877,
+          12016,
+          60,
+          37207,
+          23152,
+          2539,
+          2136,
+          25,
+          4384,
+          7255,
+          77,
+          524,
+          81710,
+          34038,
+          37399,
+          50,
+          29,
+          2247,
+          25825,
+          23118,
+          33166,
+          3332,
+          89711,
+          279,
+          2561,
+          15496,
+          48991,
+          10210,
+          483,
+          3332,
+          5519,
+          539,
+          8343,
+          420,
+          15496,
+          1210,
+          3500,
+          27,
+          91,
+          318,
+          6345,
+          91,
+          397,
+          27,
+          91,
+          318,
+          5011,
+          91,
+          29,
+          78191,
+          198,
+          5018,
+          1335,
+          3332,
+          33166,
+          9388
+        ],
+        "total_duration": 5804109000,
+        "load_duration": 4263800,
+        "prompt_eval_count": 218,
+        "prompt_eval_cached_count": 175,
+        "prompt_eval_duration": 4435250000,
+        "eval_count": 6,
+        "eval_duration": 1359380000
+      },
+      "model": "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated-GGUF:Q5_K_M"
+    },
+    "rawLabel": "eat",
+    "consequence": {
+      "world": {
+        "schema": "cy.environment-event",
+        "version": 1,
+        "id": "env-c5b4b4a3-733b-4183-9411-362bfccda4ac",
+        "timestamp": "2026-10-23T10:45:00.000Z",
+        "event_type": "lunch_eaten",
+        "event_family": "homeostasis",
+        "archetype_id": "meal",
+        "duration_ms": null,
+        "world": {
+          "participants": {
+            "actor": null,
+            "target": null,
+            "relationship_ref": null
+          },
+          "social": {
+            "schema": "cy.social-episode",
+            "version": 1,
+            "episode_id": null,
+            "episode_type": "UNKNOWN",
+            "start_at": null,
+            "end_at": null,
+            "linked_event_ids": [],
+            "actor_id": null,
+            "actor_label": null,
+            "target_id": null,
+            "target_label": null,
+            "relationship_ref": null,
+            "channel": "UNKNOWN",
+            "contact_form": "UNKNOWN",
+            "direction": "UNKNOWN",
+            "reciprocity": "UNKNOWN",
+            "character": "UNKNOWN",
+            "resolution": "UNKNOWN",
+            "opportunity_id": null,
+            "opportunity_status": "UNKNOWN",
+            "action_executed": null,
+            "continuously_observed": false,
+            "alone_established": false,
+            "no_contact_established": false
+          },
+          "physical": {
+            "injury": "unknown",
+            "nociceptive_impact": "unknown",
+            "physical_discomfort": "unknown",
+            "food": {
+              "meal_id": "2026-10-23:lunch",
+              "meal_type": "lunch",
+              "scheduled": "yes",
+              "offered": "yes",
+              "available": "yes",
+              "received": "yes",
+              "consumed": "full",
+              "intake_outcome": "full_consumed",
+              "portion_category": "full",
+              "portion_fraction": 1,
+              "energy_proxy": null,
+              "energy_kcal": null,
+              "nutrition": {
+                "energy_kcal": null,
+                "fat_g": null,
+                "carbohydrate_g": null,
+                "protein_g": null
+              }
+            },
+            "sleep": {
+              "state": "unknown",
+              "interruption": "unknown"
+            },
+            "environmental_discomfort": "unknown"
+          },
+          "somatic": {
+            "schema": "cy.somatic-event",
+            "version": 1,
+            "stimulus": {
+              "id": null,
+              "modality": "UNKNOWN",
+              "onset_at": null,
+              "offset_at": null,
+              "status": "UNKNOWN",
+              "noxious_stimulus": "UNKNOWN"
+            },
+            "body": {
+              "site": "UNKNOWN",
+              "laterality": "UNKNOWN",
+              "certainty": "UNKNOWN"
+            },
+            "tissue": {
+              "damage_status": "UNKNOWN",
+              "injury_id": null,
+              "injury_type": "UNKNOWN",
+              "injury_status": "UNKNOWN",
+              "resolved_at": null
+            },
+            "knowledge_status": "UNKNOWN",
+            "field_provenance": {}
+          },
+          "situation": {
+            "possible_harm": "unknown",
+            "uncertainty": "unknown",
+            "control": "unknown",
+            "predictability": "routine",
+            "novelty": "unknown",
+            "goal_obstruction": "unknown",
+            "social_contact": "unknown",
+            "social_contact_quality": "unknown",
+            "rejection_support": "unknown",
+            "agency": "self",
+            "responsibility_evidence": "unknown",
+            "intent": "unknown",
+            "resolution_status": "resolved",
+            "deprivation_outcome": "eaten"
+          },
+          "temporal": {
+            "onset": "unknown",
+            "persistence": "unknown",
+            "recurrence": "unknown"
+          },
+          "context": {
+            "location": "cell",
+            "description": null,
+            "associated_entities": [],
+            "previous_event_ids": [
+              "synthetic-availability-no-hint-08"
+            ]
+          },
+          "associative_learning": {
+            "linkage": "self_contained_event",
+            "explicit_signals": [],
+            "outcomes": [
+              {
+                "outcome_class": "DEPRIVATION_OR_LOSS",
+                "status": "unknown"
+              }
+            ]
+          },
+          "defensive_context": {
+            "context_id": "meal-choice-v1:lunch",
+            "temporal_status": "RESOLVED",
+            "adverse_outcome_classes": [
+              "DEPRIVATION_OR_LOSS"
+            ]
+          },
+          "instrumental": {
+            "archetype_id": null,
+            "stage": null,
+            "situation_description": null,
+            "consequence_id": null,
+            "consequence_description": null,
+            "remaining_possibilities": [],
+            "action_selection_provenance": null
+          },
+          "action_opportunity": {
+            "id": "meal-choice-v1:2026-10-23:lunch",
+            "context_id": "meal-choice-v1:lunch",
+            "context_type": "meal",
+            "available_actions": [
+              "action:eat_meal",
+              "action:decline_meal"
+            ],
+            "unavailable_actions": [],
+            "chosen_action": "action:eat_meal",
+            "action_actually_executed": "action:eat_meal",
+            "execution_status": "EXECUTED",
+            "onset_at": null,
+            "resolved_at": null,
+            "resolution_status": "RESOLVED",
+            "linked_event_ids": [
+              "synthetic-availability-no-hint-08"
+            ],
+            "outcome_resolution": []
+          },
+          "meal_decision": {
+            "meal_id": "2026-10-23:lunch",
+            "availability_event_id": "synthetic-availability-no-hint-08",
+            "decision_id": "cf3300df-5779-464c-8a20-17bf745d4e82",
+            "action": "eat",
+            "status": "CY_DECISION"
+          }
+        }
+      },
+      "feeding": [
+        {
+          "schema": "cy.ingestion-record",
+          "version": 1,
+          "eventId": "env-c5b4b4a3-733b-4183-9411-362bfccda4ac",
+          "timestamp": "2026-10-23T10:45:00.000Z",
+          "mealId": "2026-10-23:lunch",
+          "mealType": "lunch",
+          "scheduledStatus": "SCHEDULED",
+          "offeredStatus": "OFFERED",
+          "availabilityStatus": "AVAILABLE",
+          "receivedStatus": "RECEIVED",
+          "consumptionStatus": "FULL",
+          "intakeOutcome": "FULLY_CONSUMED",
+          "portionCategory": "FULL",
+          "portionFraction": 1,
+          "portionBasis": "OBSERVED_EXACT",
+          "durationMs": null,
+          "nutritionalComposition": "BOUNDED_UNCERTAIN",
+          "fullMealEnergyKcal": 750,
+          "consumedEnergyKcal": 750,
+          "consumedFraction": 1,
+          "fullMealMacros": null,
+          "nutritionBasis": "HMPPS_REFERENCE_PRISON_RATION",
+          "physiologicalImpact": "MODELLED_SEPARATELY",
+          "sourceEnvironmentEventIds": [
+            "env-c5b4b4a3-733b-4183-9411-362bfccda4ac"
+          ],
+          "fieldProvenance": {
+            "mealIdentity": "STRUCTURED_WORLD_FACT",
+            "schedule": "STRUCTURED_WORLD_FACT",
+            "availability": "STRUCTURED_WORLD_FACT",
+            "offered": "STRUCTURED_WORLD_FACT",
+            "received": "STRUCTURED_WORLD_FACT",
+            "consumption": "STRUCTURED_WORLD_FACT",
+            "portion": "STRUCTURED_WORLD_FACT_OR_EXPLICIT_UNKNOWN",
+            "energy": "HMPPS_REFERENCE_PRISON_RATION",
+            "nutritionalComposition": "BOUNDED_UNCERTAIN",
+            "physiologicalImpact": "MODELLED_SEPARATELY"
+          }
+        }
+      ],
+      "sourceContext": "<PRIVATE_CURRENT_FACTS>\nPrivate evidence for Cy only. Do not explain, analyse, summarise, quote, or name this block.\nUse a relevant fact or bodily indication only in Cy's own voice. A possible indication is not a certain feeling.\nDo not infer additional sensations, emotions, severity or causes from these facts.\n- [OBSERVED FACT] Definite food intake was recorded 0 minutes ago.\n- [OBSERVED FACT] Latest resolved meal: meal type lunch, offered status offered, received status received, consumption status full, intake outcome fully consumed, portion category full.\n- [OBSERVED FACT] Feeding record: 0 missed scheduled meals; intake knowledge complete; 0 observation gaps.\n</PRIVATE_CURRENT_FACTS>",
+      "intakeCount": 1,
+      "action": "eat"
+    },
+    "accepted": true,
+    "action": "eat",
+    "totalMs": 5820,
+    "endedAt": "2026-10-23T18:42:14.171Z"
+  }
+]
