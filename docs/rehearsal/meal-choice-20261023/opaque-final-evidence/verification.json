@@ -1,0 +1,60 @@
+{
+  "sourceFilesVerified": 260,
+  "changedSourceFiles": [],
+  "isolatedRunnerStateCreated": false,
+  "postRunHealth": {
+    "arbiter": {
+      "ok": true,
+      "active": {
+        "client": "cy",
+        "purpose": "expressive_choice",
+        "priorityClass": "cy",
+        "heldMs": 46761,
+        "expiresInMs": 18300
+      },
+      "queued": {
+        "interactive": 0,
+        "cy": 0,
+        "user": 0,
+        "synthetic": 1
+      },
+      "metrics": {
+        "cy": {
+          "grants": 598,
+          "releases": 597,
+          "expiries": 0,
+          "waitMsAverage": 28267,
+          "waitMsMax": 300144,
+          "holdMsAverage": 75501,
+          "holdMsMax": 384281
+        },
+        "feddit": {
+          "grants": 562,
+          "releases": 562,
+          "expiries": 0,
+          "waitMsAverage": 18292,
+          "waitMsMax": 247853,
+          "holdMsAverage": 139929,
+          "holdMsMax": 300231
+        }
+      },
+      "startupGraceMs": 0,
+      "profile": {
+        "num_ctx": 3072,
+        "num_thread": 4
+      }
+    },
+    "remainingDiagnosticProcesses": [],
+    "ollama": {
+      "version": "0.34.1"
+    }
+  },
+  "runtimeRevision": "1219d21",
+  "rehearsalRevision": "a79d539",
+  "sourceArchiveSha256": "936ffd9aa9af28ab70ea31d8e6c31ec3dc97a842e4a20274b51825ac687e6ef7",
+  "restoration": "No pause/unload/start/hold/restart/config or production-state API was used; no restoration mutation needed.",
+  "activeProviderReadOnlyCheck": {
+    "provider": "ollama",
+    "paused": 0
+  }
+}

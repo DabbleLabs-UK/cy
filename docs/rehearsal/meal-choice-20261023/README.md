@@ -6,6 +6,12 @@ Follow-up: `ORDER-RESULTS.md` records the later 24-call order diagnostic and
 eight-call answer-hint correction check. That work retains one runtime deletion
 of the redundant response hint on the unmerged feature branch; no rollout.
 
+Latest: `OPAQUE-FINAL-RESULTS.md` records the final 32-call fully counterbalanced
+diagnostic. Semantic eating dominated both IDs and both display/enum positions;
+it recommends shipping as genuine but currently near-deterministic bounded
+agency. This supersedes the earlier readiness reservation, not its historical
+evidence. Context sensitivity is still unproven. No merge/deploy was performed.
+
 Exactly 20 predeclared synthetic opportunities, no repairs/replacements/retries.
 Four existing meal types cross sparse/empty/partly-full/full context; two cases
 add a supported synthetic forearm abrasion and two repeat earlier inputs exactly.

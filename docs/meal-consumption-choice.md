@@ -170,3 +170,17 @@ This removes an empirically implicated cue, not proof of context-sensitive agenc
 No merge/deployment is recommended yet. See
 `rehearsal/meal-choice-20261023/ORDER-RESULTS.md` for exact prompts, raw evidence,
 small-sample limitations and AGENCY NOT DEMONSTRATED verdict.
+
+## Final bounded opaque diagnostic
+
+The separately authorized final 32-call diagnostic counterbalanced semantic
+mapping, display order, schema-enum order and EMPTY/FULL context independently.
+The corrected model chose eat 32/32, while returning A/B 16/16 and selecting
+first/second display and enum positions 16/16 each. This supports semantic model
+selection rather than residual ID/position bias under the user's operational
+standard. Context-sensitive variation remains unproven. No runtime changes or
+ratio tuning followed. The recommendation is now SHIP AS GENUINE BUT CURRENTLY
+NEAR-DETERMINISTIC AGENCY, subject to separately authorized final review/rollout.
+Opaque IDs remain rehearsal-only. See
+`rehearsal/meal-choice-20261023/OPAQUE-FINAL-RESULTS.md` for the complete matrix,
+raw evidence, tests and limitations. No merge/deployment occurred in that task.
