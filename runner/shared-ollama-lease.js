@@ -87,12 +87,15 @@ export function createSharedOllamaClient(baseUrl, { fetchImpl = fetch } = {}) {
         profile,
         waitMs: Math.max(0, Number(grant.waitMs) || 0),
         ownerAtRequest,
-        async release() {
+        async release({ timeoutMs = null } = {}) {
           if (released) return;
           released = true;
           clearInterval(timer);
           try {
-            await fetchImpl(`${root}/v1/leases/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            await fetchImpl(`${root}/v1/leases/${encodeURIComponent(id)}`, {
+              method: 'DELETE',
+              ...(timeoutMs > 0 ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+            });
           } catch {
             // Lease expiry is the fail-safe if the local release cannot reach the arbiter.
           }

@@ -74,6 +74,12 @@ import { createSomaRuntime } from './soma-runtime.js';
 import { restoreStartupSleepHistory } from './sleep-startup.js';
 import { observeEnvironmentRecord } from './grounded-environment-transition.js';
 import { prepareSomaGeneration } from './soma-cycle.js';
+import { formatGroundedProseContext } from './grounded-prose-context.js';
+import {
+  mealChoiceState, mealContext, openMeal, liveMeal, decideMeal,
+  expireMeals, recoverMeals, stageMealEvent, flushMealEvents, acknowledgeMealEvents,
+} from './meal-choice.js';
+import { materialiseMealConsumption, mealUnknownConsumption } from './environment.js';
 import { PostcardInference, postcardFailureClass, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
 import { MemoryFormationInference } from './memory-formation-inference.js';
 import { canonicalPostcardContext } from './postcard-context.js';
@@ -462,7 +468,7 @@ const REGIME = [
   { mins: 6 * 60 + 30, phase: 'lights_on', label: 'lights on. the strip light. awake whether you want to be or not.' },
   { mins: 7 * 60 + 30, phase: 'unlock_slop', label: 'unlock and slop. doors off, breakfast such as it is.' },
   { mins: 8 * 60 + 30, phase: 'work_assoc', label: 'work or association may be available, depending on the actual movement record.' },
-  { mins: 11 * 60 + 45, phase: 'lunch_bangup', label: 'lunch and bang-up. fed and locked back in.' },
+  { mins: 11 * 60 + 45, phase: 'lunch_bangup', label: 'lunch and bang-up. the actual meal record says whether food arrived and was eaten.' },
   { mins: EXERCISE_REGIME.startMinutes, phase: 'exercise_yard', label: 'exercise is scheduled; the actual location record says whether it happened.' },
   { mins: EXERCISE_REGIME.endMinutes, phase: 'return_to_cell', label: 'exercise ended. returned to the cell.' },
   { mins: 16 * 60 + 45, phase: 'tea', label: 'tea. the last hot thing of the day.' },
@@ -572,6 +578,7 @@ async function main() {
   // prose. A restart therefore cannot silently turn an intended action into a
   // resolved trial or lose the concrete continuation still owed by the world.
   vitals.instrumentalAgency = reconcileInstrumentalAgencyState(vitals.instrumentalAgency);
+  vitals.mealChoice = mealChoiceState(vitals.mealChoice);
   // Ambient world state is authoritative runner-persistent state. The public
   // database receives private inspection mirrors, but a restart resumes from
   // this state rather than reconstructing canon from prose.
@@ -649,10 +656,13 @@ async function main() {
   let exerciseCheckpointPending = false;
   let firstExerciseTick = true;
   const exerciseEnqueued = new Set();
+  const mealEnqueued = new Set();
   client.onDelivered = (events) => {
     if (acknowledgeDayRollovers(vitals, events)) urgentVitalsDirty = true;
     if (acknowledgeExerciseDeliveries(vitals.locationRegime, events)) urgentVitalsDirty = true;
+    if (acknowledgeMealEvents(vitals.mealChoice, events)) urgentVitalsDirty = true;
     for (const event of events) exerciseEnqueued.delete(event.delivery_id);
+    for (const event of events) mealEnqueued.delete(event.delivery_id);
     if (worldMirrorReady && compactAcknowledgedRetiredObjects(vitals.worldSimulation, events)) {
       urgentVitalsDirty = true;
     }
@@ -1029,9 +1039,11 @@ async function main() {
     cyObserved = true,
     dreamEligible = true,
     exerciseEpisodeId = null,
+    mealEpisodeId = null,
+    suppliedEventId = null,
     occurredAt = null,
   } = {}) {
-    const eventId = `env-${randomUUID()}`;
+    const eventId = suppliedEventId || `env-${randomUUID()}`;
     const eventTimestamp = occurredAt ? tsNow(new Date(occurredAt)) : tsNow();
     const suppliedOpportunity = world.action_opportunity && typeof world.action_opportunity === 'object'
       ? world.action_opportunity : null;
@@ -1122,7 +1134,10 @@ async function main() {
     if (cyObserved) {
       Object.assign(record, observeEnvironmentRecord(soma, record));
     }
-    if (exerciseEpisodeId) queueExerciseEvent({ kind: 'world_event_record', ts: eventTimestamp, payload: record });
+    if (mealEpisodeId) stageMealEvent(vitals.mealChoice, {
+      kind: 'world_event_record', ts: eventTimestamp, payload: record, meal_episode_id: mealEpisodeId,
+    });
+    else if (exerciseEpisodeId) queueExerciseEvent({ kind: 'world_event_record', ts: eventTimestamp, payload: record });
     else emit({ kind: 'world_event_record', payload: record });
     recentWorldHistory.push({
       id: event.id,
@@ -1140,7 +1155,13 @@ async function main() {
       journalSubject: journalSubjectFromWorldRecord(record, { cyObserved }),
     });
     while (recentWorldHistory.length > 24) recentWorldHistory.shift();
-    if (cyObserved && autobiographicalMemory) {
+    if (cyObserved && !mealEpisodeId) rememberEnvironmentRecord(record);
+    return record;
+  }
+
+  function rememberEnvironmentRecord(record) {
+    const event = record.world_event;
+    if (autobiographicalMemory) {
       const source = sourceFromEnvironmentRecord(record);
       if (source) {
         // Arrival-side sustainability boundary: only plausible episodes become
@@ -1170,7 +1191,6 @@ async function main() {
         };
       }
     }
-    return record;
   }
 
   function captureEpisodeEvent(event, {
@@ -2703,7 +2723,10 @@ async function main() {
     let waitReported = false;
     const awgInReservedIdle = admittedAwgSlot && purpose === 'ambient_world_generation';
     const coordinatorBackground = background || awgInReservedIdle;
-    const cancellationScope = awgInReservedIdle ? 'awg' : (background ? null : 'visible');
+    // The meal transaction owns its visible cancellation slot through both
+    // checkpoint barriers, not just the model request. Its signal relays here.
+    const cancellationScope = purpose === 'meal_choice' ? null
+      : awgInReservedIdle ? 'awg' : (background ? null : 'visible');
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
     // prose does. Higher-priority work aborts its dedicated AWG slot explicitly.
@@ -2769,6 +2792,7 @@ async function main() {
         const out = await provider.rawGenerate({
           system, prompt, opts: requestOpts, signal: ac.signal, purpose, format,
         });
+        if (purpose === 'meal_choice' && ac.signal.aborted) throw cancellationError(ac.signal);
         requireInferenceEligibility(isEligible, ac);
         requestStats = out.stats || null;
         outputChars = String(out.text || '').length;
@@ -2811,7 +2835,7 @@ async function main() {
           ...inferenceStats(requestStats),
         });
       }
-      if (hostLease) await hostLease.release();
+      if (hostLease) await hostLease.release(purpose === 'meal_choice' ? { timeoutMs: 5000 } : undefined);
       if (signal) signal.removeEventListener('abort', relayAbort);
       if (background && startedAtMs !== null) {
         const endedAtMs = Date.now();
@@ -4177,7 +4201,7 @@ async function main() {
     emit({ kind: 'event', payload: { name: 'wing_noise', line, asleep, mid } });
   }
 
-  function fireScheduled(slot, now) {
+  async function fireScheduled(slot, now) {
     const clock = londonParts(new Date(now));
     if (slot.kind === 'routine' && !canStartScheduledRoutine(vitals.locationRegime, clock.date, slot.routine)) return;
     const mealId = slot.kind === 'meal'
@@ -4185,13 +4209,45 @@ async function main() {
       : null;
     let expectedRecord = null;
     if (mealId) {
+      // A restarted/repeated scheduler pass cannot reroll delivery or resubmit
+      // a choice. This checkpointed episode, not prevMins, owns meal identity.
+      if (vitals.mealChoice.episodes.some((episode) => episode.id === mealId)) return;
+      const context = currentMealContext();
+      // Do not invent a cell delivery while Cy is absent/asleep. This says
+      // intake was not established, not that he refused or the institution failed.
+      const currentClock = londonParts(new Date(context.nowMs));
+      const nextSlot = PRISON_SCHEDULE.find((item) => item.mins > slot.mins);
+      const observed = context.location === LOCATIONS.CELL && !context.asleep
+        && currentClock.date === clock.date && currentClock.mins >= slot.mins
+        && context.phase === currentRegime(slot.mins).phase
+        && currentClock.mins < (nextSlot?.mins ?? 1440);
+      const event = observed ? materialiseScheduledEvent(slot, Math.random, { mealId })
+        : mealUnknownConsumption(slot.meal, { mealId });
+      if (!observed) {
+        Object.assign(event.world.physical.food, { offered: 'UNKNOWN', available: 'UNKNOWN', received: 'UNKNOWN' });
+        event.text = `${slot.meal.replaceAll('_', ' ')} consumption was not established while Cy was away or asleep`;
+        event.observation.summary = event.text;
+        event.world.context.location = context.location?.toLowerCase() || 'UNKNOWN';
+      }
+      const eventId = `env-${randomUUID()}`;
+      const { episode } = openMeal(vitals.mealChoice, {
+        id: mealId, meal: slot.meal, context,
+        available: observed && event.world.meal_availability?.available === true,
+        availabilityEventId: eventId,
+      });
+      if (!observed) { episode.phase = 'NO_DECISION'; episode.failure = 'NO_OBSERVED_AVAILABILITY'; }
       const expected = mealExpectation(slot.meal, mealId);
       expectedRecord = captureEnvironmentEvent(expected.archetypeId, {
         eventType: expected.name,
         summary: expected.text,
         world: expected.world,
         observation: expected.observation,
+        mealEpisodeId: mealId, occurredAt: context.nowMs,
       });
+      recordScheduledOutcome(event, null, expectedRecord, { mealEpisodeId: mealId, suppliedEventId: eventId });
+      mealDiagnostic(episode.available ? 'meal_available' : 'no_consumption_opportunity', episode);
+      await checkpointMeals();
+      return;
     }
     const event = materialiseScheduledEvent(slot, Math.random, { mealId });
     if (slot.kind === 'routine') {
@@ -4210,7 +4266,7 @@ async function main() {
       ? `routine:${clock.date}:${slot.routine}` : null, expectedRecord);
   }
 
-  function recordScheduledOutcome(event, routineEpisodeId = null, expectedRecord = null) {
+  function recordScheduledOutcome(event, routineEpisodeId = null, expectedRecord = null, captureOptions = {}) {
     if (expectedRecord) {
       event.world.context = event.world.context || {};
       event.world.context.previous_event_ids = [expectedRecord.world_event.id];
@@ -4220,6 +4276,7 @@ async function main() {
       summary: event.text,
       world: event.world,
       observation: event.observation,
+      ...captureOptions,
     });
     if (routineEpisodeId) {
       vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, structured.world_event.id, {
@@ -4239,7 +4296,105 @@ async function main() {
       somaInput: structured.soma_input,
       environmentEventId: structured.world_event.id,
     });
-    fireEvent(event.name, event.public || {}, { observe: false, environmentRecord: structured });
+    if (captureOptions.mealEpisodeId) {
+      // Structured food observation above is the existing authoritative intake
+      // path. A checkpointed publication never re-executes that observation.
+      stageMealEvent(vitals.mealChoice, {
+        kind: 'event', ts: structured.world_event.timestamp,
+        meal_episode_id: captureOptions.mealEpisodeId,
+        payload: { name: event.name, ...event.public, text: event.text,
+          environment_event_id: structured.world_event.id },
+      });
+    } else fireEvent(event.name, event.public || {}, { observe: false, environmentRecord: structured });
+  }
+
+  function currentMealContext() {
+    const nowMs = Date.now();
+    const { date, mins } = londonParts(new Date(nowMs));
+    const next = PRISON_SCHEDULE.find((slot) => slot.mins > mins);
+    const boundary = nowMs - nowMs % 60_000 + ((next?.mins ?? 1440) - mins) * 60_000;
+    const location = vitals.locationRegime;
+    const search = location.searchEpisode;
+    const lockdown = location.lockdownEpisode;
+    return mealContext({ nowMs, date, location: location.current,
+      phase: currentRegime(mins).phase, asleep: effectiveAsleep(mins), nextBoundaryAt: boundary,
+      restricted: (search && !['AFTERMATH_OBSERVED', 'COMPLETE'].includes(search.stage))
+        || lockdown?.status === 'ACTIVE' || !!location.activeRoutineEpisode,
+      restrictionIdentity: [search?.id, search?.stage, lockdown?.id, lockdown?.status, client.regime],
+    });
+  }
+
+  function mealDiagnostic(stage, episode, reason = null) {
+    recordInferenceDiagnostic({ event: 'meal_choice', stage, at: tsNow(),
+      meal_id: episode.id, availability_event_id: episode.availabilityEventId,
+      phase: episode.phase, options: episode.offeredActions || [],
+      action: episode.decision?.action || null, decision_id: episode.decision?.id || null,
+      effect_event_id: episode.effectEventId, reason });
+  }
+
+  function applyMeal(episode, appliedAtMs) {
+    if (episode.decision?.mealId !== episode.id) throw new Error('Meal decision identity mismatch');
+    const event = materialiseMealConsumption(episode.meal, episode.decision.action, {
+      mealId: episode.id, availabilityEventId: episode.availabilityEventId, decisionId: episode.decision.id,
+    });
+    recordScheduledOutcome(event, null, null, { mealEpisodeId: episode.id,
+      suppliedEventId: episode.effectEventId, occurredAt: appliedAtMs });
+  }
+
+  function unknownMeal(episode) {
+    const event = mealUnknownConsumption(episode.meal, {
+      mealId: episode.id, availabilityEventId: episode.availabilityEventId,
+    });
+    recordScheduledOutcome(event, null, null, { mealEpisodeId: episode.id,
+      occurredAt: Date.now() });
+  }
+
+  const mealCallbacks = {
+    readContext: currentMealContext, apply: applyMeal, unknown: unknownMeal, diagnostic: mealDiagnostic,
+  };
+
+  async function checkpointMeals() {
+    await flushMealEvents(vitals.mealChoice, {
+      checkpoint: () => saveVitals(vitalsPath, vitals), enqueued: mealEnqueued,
+      enqueue: (event) => {
+        client.enqueueMealEpisodeEvent(event);
+        if (event.kind === 'world_event_record') rememberEnvironmentRecord(event.payload);
+      },
+    });
+  }
+
+  async function serviceMealChoice() {
+    const episode = vitals.mealChoice.episodes.find((item) => item.phase === 'AVAILABLE');
+    if (!episode) return false;
+    const controller = new AbortController();
+    generationCancellation.register('visible', controller, { purpose: 'meal_choice' });
+    const admittedRegimeEpoch = regimeEpoch;
+    // End-to-end bound includes Tempo/coordinator/arbiter waits as well as the
+    // existing per-inference limit. It cannot monopolise an unbounded wait.
+    const timer = setTimeout(() => abortWithReason(controller, 'MEAL_CHOICE_TIMEOUT'), FOREGROUND_INFERENCE_TIMEOUT_MS);
+    try {
+      const cognition = prepareSomaGeneration(soma, { now: Date.now() });
+      const body = formatGroundedProseContext({ sections: (cognition.groundedContext?.sections || [])
+        .filter((section) => ['sleep', 'somatic', 'feeding'].includes(section.id))
+        .map((section) => ({ ...section, entries: section.entries.filter((entry) =>
+          ['predicted_kss', 'physiological_satiety', 'active_injury', 'active_noxious_stimulus'].includes(entry.fact)) })) });
+      const isAdmitted = () => running && !client.paused && !pendingPostcards.length
+        && !pendingWarden.length && !maintenance.blocked && regimeEpoch === admittedRegimeEpoch;
+      await decideMeal(vitals.mealChoice, episode, {
+        ...mealCallbacks, checkpoint: checkpointMeals, signal: controller.signal,
+        isAdmitted,
+        characterContext: { bodily: body, location: 'cell', regime: currentRegime(londonParts().mins).phase.replaceAll('_', ' ') },
+        generate: (call) => rawGenerate({ ...call, opts: options(vitals, config.threads, 'journal', { num_predict: 80 }),
+          purpose: 'meal_choice', accountingMode: 'meal_choice', attempt: 'meal-choice',
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS, signal: controller.signal,
+          isEligible: () => isAdmitted() && liveMeal(episode, currentMealContext()) && episode.phase === 'OFFERED',
+        }),
+      });
+    } finally {
+      clearTimeout(timer);
+      generationCancellation.clear('visible', controller);
+    }
+    return true;
   }
 
   // ---- deterministic environment scheduler (runs each vitals tick) ----
@@ -4316,7 +4471,7 @@ async function main() {
 
     for (const slot of PRISON_SCHEDULE) {
       if (slot.kind === 'routine' && slot.routine === 'exercise') continue;
-      if (crossed(slot.mins, mins, prevMins)) fireScheduled(slot, now);
+      if (crossed(slot.mins, mins, prevMins)) await fireScheduled(slot, now);
     }
     // regime boundary crossings that can DEVIATE (late unlock, cancelled
     // association). A deviation is an amplifiable event AND a concrete incident.
@@ -4329,6 +4484,8 @@ async function main() {
       }
     }
     prevMins = mins;
+    if (expireMeals(vitals.mealChoice, currentMealContext(), mealCallbacks)
+      || vitals.mealChoice.pendingEvents.length) await checkpointMeals();
 
     const phase = currentRegime(mins).phase;
     // These random ambient/cell producers have no grounded off-cell contract.
@@ -4381,6 +4538,12 @@ async function main() {
   }
 
   // ---- vitals tick every tickMs ----
+  // Resolve prior offers before any world timer can silently reinterpret them.
+  // Recovery can apply only a committed, still-live decision; it never resends
+  // an uncertain provider request or infers consumption across downtime.
+  recoverMeals(vitals.mealChoice, mealCallbacks);
+  await checkpointMeals();
+
   const tickTimer = setInterval(async () => {
     // Draining work retains ordinary timers. Once held, do not evolve the world
     // or invoke the prose-stall watchdog merely because maintenance is long.
@@ -4553,14 +4716,15 @@ async function main() {
     // Either way: log LOUDLY and escalate a context reset - the manual recovery
     // (clearing the fed-back context) done automatically. Runs on this independent
     // timer so it fires even if the generation loop itself is hung.
-    const stalled = failedCyclesSinceEmit >= STALL_CYCLES;
+    const mealTransactionActive = generationCancellation.active('visible')?.purpose === 'meal_choice';
+    const stalled = !mealTransactionActive && failedCyclesSinceEmit >= STALL_CYCLES;
     // AWG emits no handwriting tokens while it works, so the waking-prose
     // no-token watchdog is not a valid liveness test for that request class.
     // AWG has its own finite provider timeout and remains interruptible by all
     // higher-priority inbound work through the purpose-aware cancellation registry.
     const proseInferenceBusy = inferPhase !== 'idle'
-      && activeInferencePurpose !== 'ambient_world_generation';
-    const hung = proseInferenceBusy && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
+      && !['ambient_world_generation', 'meal_choice'].includes(activeInferencePurpose);
+    const hung = !mealTransactionActive && proseInferenceBusy && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
     if (
       running &&
       !client.paused &&
@@ -4921,7 +5085,8 @@ async function main() {
       if (maintenance.refresh().state !== 'running') break;
       const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;
       const regimeChanged = breakOnRegime && regimeEpoch !== startingRegimeEpoch;
-      if (pendingPostcards.length || pendingWarden.length || tempoChanged || regimeChanged) break;
+      if (pendingPostcards.length || pendingWarden.length || tempoChanged || regimeChanged
+        || vitals.mealChoice.episodes.some((episode) => episode.phase === 'AVAILABLE')) break;
       await sleep(Math.min(500, Math.max(0, end - Date.now())));
     }
   }
@@ -5294,6 +5459,7 @@ async function main() {
         await dreamStep(mins);
         continue;
       }
+      if (await serviceMealChoice()) continue;
       // just woke: carry a dream fragment into the morning only if it scored high
       // (he does not otherwise remember it), then resume the ruled-paper journal.
       if (currentMode === 'dream') {

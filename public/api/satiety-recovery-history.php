@@ -15,7 +15,7 @@ try {
     // Event names use the display label "supper snack"; meal_id uses the
     // machine key "supper_snack". The latter is validated during replay.
     foreach (['breakfast', 'lunch', 'tea', 'supper snack'] as $meal) {
-        foreach (['expected', 'eaten', 'partial', 'missed', 'refused'] as $outcome) {
+        foreach (['expected', 'eaten', 'partial', 'missed', 'refused', 'unknown'] as $outcome) {
             $types[] = $meal . '_' . $outcome;
         }
     }

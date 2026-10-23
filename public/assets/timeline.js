@@ -244,11 +244,13 @@ export function scheduledRoutineLabel(payload) {
   const meal = String(p.meal || '');
   const outcome = String(p.outcome || '');
   if (['breakfast', 'lunch', 'tea', 'supper snack'].includes(meal)
-    && ['eaten', 'partial', 'missed', 'refused'].includes(outcome)
+    && ['eaten', 'partial', 'missed', 'refused', 'available', 'unknown'].includes(outcome)
     && name === `${meal}_${outcome}`) {
     if (outcome === 'eaten') return `${meal} came and Cy ate it`;
     if (outcome === 'partial') return `${meal} came; Cy ate some`;
     if (outcome === 'missed') return `${meal} did not reach Cy`;
+    if (outcome === 'available') return `${meal} arrived; available for Cy to eat`;
+    if (outcome === 'unknown') return `${meal}: consumption not established`;
     return `${meal} came; Cy did not eat it`;
   }
   if (outcome !== name) return '';

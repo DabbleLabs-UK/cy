@@ -83,33 +83,56 @@ export function mealExpectation(meal, mealId) {
 export function chooseMealEvent(meal, rnd = Math.random, { mealId = null } = {}) {
   const label = MEAL_LABELS[meal] || 'meal';
   const roll = rnd();
-  let outcome = 'eaten';
-  let amount = 1;
-  let text = `${label} came and he ate it`;
-  let appraisal = { deprivation: 0.02, controlLoss: 0.03 };
-  if (roll >= 0.82 && roll < 0.93) {
-    outcome = 'partial';
-    amount = 0.45;
-    text = `${label} came but he could only eat some of it`;
-    appraisal = { deprivation: 0.24, controlLoss: 0.08 };
-  } else if (roll >= 0.93 && roll < 0.98) {
-    outcome = 'missed';
-    amount = 0;
-    text = `${label} did not reach him before the door shut`;
-    appraisal = { deprivation: 0.72, controlLoss: 0.68 };
-  } else if (roll >= 0.98) {
-    outcome = 'refused';
-    amount = 0;
-    text = `${label} came but he could not make himself eat it`;
-    appraisal = { deprivation: 0.5, controlLoss: 0.2 };
+  if (roll >= 0.93 && roll < 0.98) {
+    return mealConsumptionEvent(meal, 'missed', { mealId });
   }
-  const consumed = outcome === 'eaten' ? 'full' : outcome === 'partial' ? 'partial' : 'none';
+
+  const text = `${label} arrived and was available to eat`;
+  return {
+    name: `${label}_available`,
+    text,
+    tags: ['meal', 'food', label, 'available'],
+    public: { meal: label, outcome: 'available' },
+    archetypeId: 'ambient_world_event',
+    world: {
+      meal_availability: { meal_id: mealId, meal_type: label, available: true },
+      context: { location: 'cell' },
+    },
+    observation: { summary: text, observed_facts: { meal: label, outcome: 'available' } },
+    provisional: null,
+    outcome: `${label} available`,
+  };
+}
+
+export function materialiseMealConsumption(meal, action, options = {}) {
+  if (action !== 'eat' && action !== 'decline') {
+    throw new Error(`unknown meal consumption action: ${action}`);
+  }
+  return mealConsumptionEvent(meal, action === 'eat' ? 'eaten' : 'refused', { ...options, action });
+}
+
+export function mealUnknownConsumption(meal, options = {}) {
+  return mealConsumptionEvent(meal, 'unknown', options);
+}
+
+function mealConsumptionEvent(meal, outcome, {
+  mealId = null, availabilityEventId = null, decisionId = null, action = null,
+} = {}) {
+  const label = MEAL_LABELS[meal] || 'meal';
+  const unknown = outcome === 'unknown';
+  const missed = outcome === 'missed';
+  const amount = unknown ? null : outcome === 'eaten' ? 1 : 0;
+  const text = outcome === 'eaten' ? `${label} came and he ate it`
+    : outcome === 'refused' ? `${label} came and he chose not to eat it`
+      : missed ? `${label} did not reach him before the door shut`
+        : `${label} was available; whether he ate it was not established`;
+  const consumed = unknown ? 'UNKNOWN' : outcome === 'eaten' ? 'full' : 'none';
   const intakeOutcome = outcome === 'eaten' ? 'full_consumed'
-    : outcome === 'partial' ? 'partial_consumed'
-      : outcome === 'missed' ? 'unavailable' : 'refused';
-  const deprivationOutcome = outcome === 'eaten' ? 'did_not_occur'
-    : outcome === 'partial' ? 'unknown' : 'occurred';
-  const contextId = `meal:${label}`;
+    : unknown ? 'UNKNOWN' : missed ? 'unavailable' : 'refused';
+  const deprivationOutcome = missed ? 'occurred' : 'unknown';
+  const contextId = missed ? `meal:${label}` : `meal-choice-v1:${meal}`;
+  const previousEventIds = availabilityEventId ? [availabilityEventId] : [];
+  const actionId = action === 'eat' ? 'action:eat_meal' : 'action:decline_meal';
   return {
     name: `${label}_${outcome}`,
     text,
@@ -122,21 +145,30 @@ export function chooseMealEvent(meal, rnd = Math.random, { mealId = null } = {})
           meal_id: mealId,
           meal_type: label,
           scheduled: 'yes',
-          offered: outcome === 'missed' ? 'no' : 'yes',
-          available: outcome === 'missed' ? 'no' : 'yes',
-          received: outcome === 'missed' ? 'no' : 'yes',
+          offered: missed ? 'no' : 'yes',
+          available: missed ? 'no' : 'yes',
+          received: missed ? 'no' : 'yes',
           consumed,
           intake_outcome: intakeOutcome,
-          portion_category: outcome === 'eaten' ? 'full' : outcome === 'partial' ? 'partial' : 'none',
+          portion_category: unknown ? 'UNKNOWN' : outcome === 'eaten' ? 'full' : 'none',
           portion_fraction: amount,
         },
       },
       situation: {
         deprivation_outcome: outcome,
-        agency: outcome === 'refused' ? 'self' : outcome === 'missed' ? 'institution' : 'routine',
+        agency: unknown ? 'unknown' : missed ? 'institution' : 'self',
         resolution_status: 'resolved',
       },
-      context: { location: 'cell' },
+      context: { location: 'cell', previous_event_ids: previousEventIds },
+      ...(!missed ? {
+        meal_decision: {
+          meal_id: mealId,
+          availability_event_id: availabilityEventId,
+          decision_id: decisionId,
+          action: unknown ? null : action,
+          status: unknown ? 'NO_VALID_CY_DECISION' : 'CY_DECISION',
+        },
+      } : {}),
       associative_learning: {
         linkage: 'self_contained_event',
         outcomes: [{
@@ -149,19 +181,28 @@ export function chooseMealEvent(meal, rnd = Math.random, { mealId = null } = {})
         temporal_status: 'RESOLVED',
         adverse_outcome_classes: ['DEPRIVATION_OR_LOSS'],
       },
-      // No world.action_opportunity here: the meal outcome (eaten/partial/
-      // missed/refused) is rolled BEFORE any apparent "accept/refuse" label
-      // could exist, so it never represents a genuine action selected before
-      // its outcome. Asserting one - even a NOT_AVAILABLE stub for 'missed' -
-      // would let action-outcome-contingency learn a fabricated
-      // action-conditioned trial from a fact that isn't an action at all.
-      // Reintroduce this only once a real chooser (Cy/model) selects before
-      // the outcome is known.
+      ...(!missed && !unknown ? {
+        action_opportunity: {
+          id: `meal-choice-v1:${mealId || decisionId || meal}`,
+          context_id: contextId,
+          context_type: 'meal',
+          available_actions: ['action:eat_meal', 'action:decline_meal'],
+          unavailable_actions: [],
+          chosen_action: actionId,
+          action_actually_executed: actionId,
+          execution_status: 'EXECUTED',
+          resolution_status: 'RESOLVED',
+          linked_event_ids: previousEventIds,
+          outcome_resolution: [],
+        },
+      } : {}),
     },
     observation: { summary: text, observed_facts: { meal: label, outcome } },
-    provisional: {
+    provisional: unknown ? null : {
       body: { meal: { name: label, outcome, amount } },
-      appraisal,
+      appraisal: missed ? { deprivation: 0.72, controlLoss: 0.68 }
+        : outcome === 'refused' ? { deprivation: 0.5, controlLoss: 0.2 }
+          : { deprivation: 0.02, controlLoss: 0.03 },
       social: null,
       effects: [],
     },
