@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { searchPropertyFixture } from './fixtures/search-property.js';
 import {
   INSTRUMENTAL_ACTION_SELECTION,
   createInstrumentalAgencyState,
@@ -56,6 +57,7 @@ for (const definition of definitions) {
   for (const chosenAction of definition.actions) {
     const state = createInstrumentalAgencyState();
     const prepared = openInstrumentalOpportunity(state, {
+      ...(definition.id === 'cell_search_handover' ? searchPropertyFixture(actor.key) : {}),
       sourceKind: definition.sourceKind,
       sourceEventType: definition.sourceEventType,
       actorKey: actor.key,
@@ -92,7 +94,8 @@ for (const definition of definitions) {
     assert.equal(takePendingInstrumentalOpportunities(restarted).length, 1);
     assert.equal(restarted.pending.length, 0);
 
-    const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT });
+    const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT,
+      ...(definition.id === 'cell_search_handover' ? searchPropertyFixture(actor.key) : {}) });
     assert.equal('action_opportunity' in resolution.world, false,
       `${definition.id}: C: a resolved engineering round-robin branch must never assert world.action_opportunity`);
     assert.ok(resolution.world.associative_learning.outcomes.every((outcome) => outcome.status !== 'unknown'),

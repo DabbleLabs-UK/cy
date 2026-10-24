@@ -18,6 +18,8 @@
 // INSTRUMENTAL_ACTION_SELECTION. Only a future genuine agent/model chooser
 // should ever populate world.action_opportunity for these incidents.
 
+import { bindSearchProperty, searchPropertyBindingValid } from './location-regime.js';
+
 export const INSTRUMENTAL_AGENCY_SCHEMA = 'cy.instrumental-agency';
 export const INSTRUMENTAL_AGENCY_VERSION = 1;
 export const INSTRUMENTAL_AGENCY_MODEL_ID = 'prison-instrumental-opportunities';
@@ -338,6 +340,9 @@ export function openInstrumentalOpportunity(state, {
   opportunityId,
   timestamp,
   forcedAction = null,
+  searchState = null,
+  searchId = null,
+  objects = [],
 } = {}) {
   const definition = instrumentalDefinitionFor(sourceKind, sourceEventType);
   if (!definition) return null;
@@ -349,6 +354,10 @@ export function openInstrumentalOpportunity(state, {
   if (!cleanActorKey || !cleanActorName || !opportunityId || !timestamp) {
     throw new Error('instrumental opportunity identity, actor and timestamp are required');
   }
+  const propertyBinding = definition.id === 'cell_search_handover'
+    ? bindSearchProperty(searchState, { searchId, actorId: cleanActorKey, objects }) : null;
+  if (definition.id === 'cell_search_handover' && (!propertyBinding
+    || state.pending.some((item) => item.propertyBinding?.searchId === searchId))) return null;
   const cursor = Number.isInteger(state.selectionCounters[definition.id])
     ? state.selectionCounters[definition.id] : 0;
   const chosenAction = forcedAction == null
@@ -371,6 +380,7 @@ export function openInstrumentalOpportunity(state, {
     chosenAction,
     onsetAt: String(timestamp),
     openingEnvironmentEventId: '',
+    ...(propertyBinding ? { propertyBinding } : {}),
   };
   return {
     pending,
@@ -379,6 +389,11 @@ export function openInstrumentalOpportunity(state, {
       eventType: `instrumental_${definition.id}_opened`,
       text: situationText,
       world: {
+        ...(propertyBinding ? { search_episode: {
+          id: propertyBinding.searchId, object_id: propertyBinding.objectId,
+          stage: 'PROPERTY_RESULT', object_revision: propertyBinding.revision,
+          object_transition_id: propertyBinding.transitionId,
+        } } : {}),
         participants: { actor: cleanActorKey, target: 'cy', relationship_ref: cleanActorKey },
         ...(definition.openingArchetypeId === 'cell_search' ? {
           physical: {
@@ -452,9 +467,13 @@ export function queueInstrumentalOpportunity(state, pending, openingEnvironmentE
   return clone(queued);
 }
 
-export function resolveInstrumentalOpportunity(pending, { timestamp } = {}) {
+export function resolveInstrumentalOpportunity(pending, { timestamp, searchState = null, objects = [] } = {}) {
   if (!validPending(pending) || !timestamp) throw new Error('valid pending opportunity and timestamp are required');
   const definition = DEFINITIONS.find((item) => item.id === pending.archetypeId);
+  // Old unbound pending records are retained on restart, but cannot fabricate
+  // a consequence. A current matching search/object must still be available.
+  if (definition.id === 'cell_search_handover' && (pending.actorKey !== pending.propertyBinding?.actorId
+    || !searchPropertyBindingValid(searchState, pending.propertyBinding, objects))) return null;
   const branch = definition.branches[pending.chosenAction];
   const consequenceText = branch.text(pending.actorName);
   const hostile = branch.outcomes.some((outcome) => outcome.outcome_class === 'SOCIAL_HOSTILITY'
@@ -468,6 +487,11 @@ export function resolveInstrumentalOpportunity(pending, { timestamp } = {}) {
     eventType: `instrumental_${definition.id}_resolved`,
     text: consequenceText,
     world: {
+      ...(pending.propertyBinding ? { search_episode: {
+        id: pending.propertyBinding.searchId, object_id: pending.propertyBinding.objectId,
+        stage: 'PROPERTY_RESULT', object_revision: pending.propertyBinding.revision,
+        object_transition_id: pending.propertyBinding.transitionId,
+      } } : {}),
       participants: { actor: pending.actorKey, target: 'cy', relationship_ref: pending.actorKey },
       situation: {
         control: 'limited',

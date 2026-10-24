@@ -22,7 +22,8 @@ import {
   startCellSearchEpisode,
   startLockdownEpisode,
   startScheduledRoutineEpisode,
-  markSearchPropertyAction,
+  bindSearchProperty,
+  resolveSearchPropertyAction,
 } from './location-regime.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import { createSocialContactState, observeSocialContactRecord } from './social-contact-substrate.js';
@@ -233,9 +234,13 @@ test('present cell search follows restart-safe stages and finds only existing ob
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 60_000, objects: [object] });
   assert.equal(result.event.world.search_episode.property_result, 'EXISTING_OBJECT_INSPECTED');
   assert.equal(result.actionOpportunity, 'HAND_OVER_OR_WITHHOLD');
-  const retained = markSearchPropertyAction(result.state, { action: 'action:withhold_item', objectId: object.id });
+  const binding = bindSearchProperty(result.state, {
+    searchId: result.state.searchEpisode.id, actorId: 'mr_proctor', objects: [object],
+  });
+  const options = { binding, objects: [object], opportunityId: 'opportunity:property', timestamp: new Date(AT + 65_000).toISOString() };
+  const retained = resolveSearchPropertyAction(result.state, { ...options, action: 'action:withhold_item' }).state;
   assert.equal(retained.searchEpisode.property_result, 'EXISTING_OBJECT_RETAINED');
-  const confiscated = markSearchPropertyAction(result.state, { action: 'action:hand_over_item', objectId: object.id });
+  const confiscated = resolveSearchPropertyAction(result.state, { ...options, action: 'action:hand_over_item' }).state;
   assert.equal(confiscated.searchEpisode.property_result, 'EXISTING_OBJECT_CONFISCATED');
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 80_000, objects: [object] });
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 100_000, objects: [object] });

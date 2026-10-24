@@ -23,6 +23,7 @@
 //   node runner/instrumental-round-robin-false-agency.test.js
 
 import assert from 'node:assert/strict';
+import { searchPropertyFixture } from './fixtures/search-property.js';
 import { readFileSync } from 'node:fs';
 import {
   INSTRUMENTAL_ACTION_SELECTION,
@@ -78,10 +79,11 @@ function recordFrom(spec, id, timestamp) {
   const state = createInstrumentalAgencyState();
   const prepared = openInstrumentalOpportunity(state, {
     sourceKind: 'officer', sourceEventType: 'search', actorKey: 'proctor', actorName: 'Mr Proctor',
+    ...searchPropertyFixture(),
     opportunityId: 'opportunity:rr-3', timestamp: OPEN_AT,
   });
   const queued = queueInstrumentalOpportunity(state, prepared.pending, 'opening-event-id');
-  const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT });
+  const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT, ...searchPropertyFixture() });
   assert.ok(resolution.world.associative_learning.outcomes.length > 0,
     'the authored branch still produces real, explicit outcome facts');
   assert.ok(resolution.world.associative_learning.outcomes.every((o) => o.status !== 'unknown'));
@@ -115,6 +117,7 @@ function recordFrom(spec, id, timestamp) {
     const controllability = createControllabilityState();
     const prepared = openInstrumentalOpportunity(state, {
       sourceKind: definition.sourceKind, sourceEventType: definition.sourceEventType,
+      ...(definition.id === 'cell_search_handover' ? searchPropertyFixture(actorKey) : {}),
       actorKey, actorName: actorKey, opportunityId: `opportunity:posterior-${definition.id}`, timestamp: OPEN_AT,
     });
     const openingRecord = recordFrom(prepared.opening, `${definition.id}-open`, OPEN_AT);
@@ -123,7 +126,8 @@ function recordFrom(spec, id, timestamp) {
     assert.equal(openResult.reason, 'no_action_opportunity');
 
     const queued = queueInstrumentalOpportunity(state, prepared.pending, openingRecord.world_event.id);
-    const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT });
+    const resolution = resolveInstrumentalOpportunity(queued, { timestamp: RESOLVED_AT,
+      ...(definition.id === 'cell_search_handover' ? searchPropertyFixture(actorKey) : {}) });
     const resolvedRecord = recordFrom(resolution, `${definition.id}-resolved`, RESOLVED_AT);
     const resolveResult = observeControllabilityRecord(controllability, resolvedRecord);
     assert.equal(resolveResult.updated, false, `${definition.id}: resolution must not update controllability`);

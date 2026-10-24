@@ -210,7 +210,7 @@ import {
   createYardObservation,
   eventAllowedAtLocation,
   locationContextId,
-  markSearchPropertyAction,
+  resolveSearchPropertyAction,
   nextRegimeTransition,
   reconcileLocationRegimeState,
   reconcileRegimeLocation,
@@ -265,7 +265,7 @@ import {
 } from './ambient-world-generator.js';
 import { captureAwgRequest, captureAwgResponse, captureAwgOutcome } from './awg-capture.js';
 import { normaliseMessageState } from './message-object-lifecycle.js';
-import { advanceWorldEntity, compactAcknowledgedRetiredObjects,
+import { compactAcknowledgedRetiredObjects,
   synchronizeWorldMirror } from './world-mirror.js';
 import {
   reconcileInstrumentalAgencyState,
@@ -1346,7 +1346,7 @@ async function main() {
     if (advanced.actionOpportunity === 'COMPLY_OR_REFUSE') {
       beginInstrumentalIncident('officer', 'order', episode.actor_id, episode.actor_name);
     } else if (advanced.actionOpportunity === 'HAND_OVER_OR_WITHHOLD') {
-      beginInstrumentalIncident('officer', 'search', episode.actor_id, episode.actor_name);
+      beginInstrumentalIncident('officer', 'search', episode.actor_id, episode.actor_name, episode.id);
     }
   }
 
@@ -1371,7 +1371,7 @@ async function main() {
     publishEpisodeEvent(advanced.event, record);
   }
 
-  function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName) {
+  function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName, searchId = null) {
     const prepared = openInstrumentalOpportunity(vitals.instrumentalAgency, {
       sourceKind,
       sourceEventType,
@@ -1379,6 +1379,7 @@ async function main() {
       actorName,
       opportunityId: `instrumental:${randomUUID()}`,
       timestamp: tsNow(),
+      searchId, searchState: vitals.locationRegime, objects: vitals.worldSimulation.objects,
     });
     if (!prepared) return null;
     const opening = prepared.opening;
@@ -1438,7 +1439,20 @@ async function main() {
     }
     for (const opportunity of pending) {
       const resolutionTimestamp = tsNow();
-      const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: resolutionTimestamp });
+      const outcome = resolveInstrumentalOpportunity(opportunity, {
+        timestamp: resolutionTimestamp, searchState: vitals.locationRegime,
+        objects: vitals.worldSimulation.objects,
+      });
+      const property = opportunity.archetypeId === 'cell_search_handover'
+        ? resolveSearchPropertyAction(vitals.locationRegime, {
+          binding: opportunity.propertyBinding, objects: vitals.worldSimulation.objects,
+          action: opportunity.chosenAction, opportunityId: opportunity.opportunityId,
+          timestamp: resolutionTimestamp,
+        }) : null;
+      if (!outcome || (property && !property.applied)) {
+        console.warn(`[cy] search property outcome rejected: stale or unbound opportunity ${opportunity.opportunityId}`);
+        continue;
+      }
       const isSocial = opportunity.archetypeId.startsWith('inmate_')
         || ['officer_order', 'cell_search_handover'].includes(opportunity.archetypeId);
       const actualContact = ![
@@ -1469,33 +1483,22 @@ async function main() {
         provisionalConsumer: false,
       });
       if (opportunity.archetypeId === 'cell_search_handover') {
-        const objectId = vitals.locationRegime.searchEpisode
-          && vitals.locationRegime.searchEpisode.object_id;
-        vitals.locationRegime = markSearchPropertyAction(vitals.locationRegime, {
-          action: opportunity.chosenAction,
-          objectId,
-        });
-        if (opportunity.chosenAction === 'action:hand_over_item' && objectId) {
-          const object = vitals.worldSimulation.objects.find((item) => item.id === objectId);
-          if (object) {
-            const before = { ...object };
-            object.holderId = opportunity.actorKey;
-            object.location = 'officer_desk';
-            object.status = 'CONFISCATED';
-            object.updatedAt = resolutionTimestamp;
-            Object.assign(object, advanceWorldEntity(object));
-            const incident = makeObjectTransitionIncident({
-              before, after: object, sourceEventId: structured.world_event.id,
-              actor: opportunity.actorName, observedByCy: true,
-            });
-            if (incident) {
-              incident.ts = resolutionTimestamp;
-              pushIncident(vitals.ledger, incident);
-              vitals.lastIncidentMs = Date.now();
-            }
-            reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
-            emit({ kind: 'world_object_record', payload: object });
+        vitals.locationRegime = property.state;
+        if (opportunity.chosenAction === 'action:hand_over_item') {
+          const object = vitals.worldSimulation.objects.find((item) => item.id === opportunity.propertyBinding.objectId);
+          const before = property.before;
+          Object.assign(object, property.object);
+          const incident = makeObjectTransitionIncident({
+            before, after: object, sourceEventId: structured.world_event.id,
+            actor: opportunity.actorName, observedByCy: true,
+          });
+          if (incident) {
+            incident.ts = resolutionTimestamp;
+            pushIncident(vitals.ledger, incident);
+            vitals.lastIncidentMs = Date.now();
           }
+          reconcileObjectIncidentThreads(vitals.ledger, vitals.worldSimulation.objects);
+          emit({ kind: 'world_object_record', payload: object });
         }
       }
       emit({

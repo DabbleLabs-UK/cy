@@ -5,6 +5,7 @@
 
 import { EXERCISE_REGIME } from './environment.js';
 import { isCurrentMessageObject } from './message-object-lifecycle.js';
+import { advanceWorldEntity, worldEntityRevision } from './world-mirror.js';
 import { exerciseAdmissionAllows } from './exercise-admission.js';
 
 export const LOCATION_REGIME_SCHEMA = 'cy.location-regime';
@@ -523,12 +524,7 @@ export function startCellSearchEpisode(stateValue, {
   const id = typeof makeId === 'function' ? makeId('search') : `search:${nowMs}`;
   const at = new Date(nowMs).toISOString();
   const cyPresent = state.current.id === LOCATIONS.CELL;
-  const existing = (Array.isArray(objects) ? objects : []).find((object) =>
-    object && (object.status === 'ACTIVE'
-      || (object.type === 'message' && object.status === 'DELIVERED'
-        && isCurrentMessageObject(object)))
-      && object.location === 'cell'
-      && ['cy', 'cy:7734'].includes(object.holderId || object.ownerId));
+  const existing = (Array.isArray(objects) ? objects : []).find(searchObjectAvailableToCy);
   state.searchEpisode = {
     id, status: 'ACTIVE', stage: 'INITIATED', stage_entered_at: at,
     started_at: at, completed_at: null,
@@ -614,12 +610,10 @@ export function advanceCellSearchEpisode(stateValue, {
     next = 'PROPERTY_RESULT';
     const object = (Array.isArray(objects) ? objects : []).find((item) => item
       && item.id === episode.object_id
-      && item.location === 'cell'
-      && (item.status === 'ACTIVE'
-        || (item.type === 'message' && item.status === 'DELIVERED' && isCurrentMessageObject(item))));
+      && searchObjectAvailableToCy(item));
     episode.property_result = object ? 'EXISTING_OBJECT_INSPECTED' : 'NOTHING_FOUND';
     summary = object ? 'Officers examined an existing item in the cell' : 'The search found nothing';
-    actionOpportunity = object && episode.cy_present_at_start ? 'HAND_OVER_OR_WITHHOLD' : null;
+    actionOpportunity = object && cyObserved ? 'HAND_OVER_OR_WITHHOLD' : null;
   } else if (episode.stage === 'PROPERTY_RESULT') {
     next = 'SEARCH_COMPLETE';
     summary = 'The officers completed the cell search';
@@ -777,11 +771,58 @@ export function registerEpisodeEvent(stateValue, eventId, {
   return state;
 }
 
-export function markSearchPropertyAction(stateValue, { action, objectId = null } = {}) {
+// Eligibility is not ownership. Bind only the object already selected by this
+// live search; never find a replacement or use a previous/latest search.
+export function searchObjectAvailableToCy(object) {
+  return Boolean(object && typeof object.id === 'string' && object.id
+    && object.location === 'cell'
+    && ['cy', 'cy:7734'].includes(object.holderId || object.ownerId)
+    && (object.status === 'ACTIVE' || (object.type === 'message'
+      && object.status === 'DELIVERED' && isCurrentMessageObject(object))));
+}
+
+export function bindSearchProperty(state, { searchId, actorId, objects = [] } = {}) {
+  const search = state?.searchEpisode;
+  if (!searchId || search?.id !== searchId || search.status !== 'ACTIVE'
+    || search.stage !== 'PROPERTY_RESULT' || !search.cy_present_at_start
+    || state.current?.id !== LOCATIONS.CELL || search.actor_id !== actorId
+    || search.property_result !== 'EXISTING_OBJECT_INSPECTED' || search.property_action
+    || !search.object_id || !Array.isArray(objects)) return null;
+  const object = objects.find((item) => item?.id === search.object_id);
+  if (!searchObjectAvailableToCy(object)) return null;
+  let revision;
+  try { revision = worldEntityRevision(object, { allowLegacy: true }); } catch { return null; }
+  return { searchId, objectId: object.id, actorId,
+    revision: revision?.revision ?? null, transitionId: revision?.transitionId ?? null };
+}
+
+export function searchPropertyBindingValid(state, binding, objects = []) {
+  if (!binding) return false;
+  const current = bindSearchProperty(state, {
+    searchId: binding.searchId, actorId: binding.actorId, objects,
+  });
+  return !!current && ['searchId', 'objectId', 'actorId', 'revision', 'transitionId']
+    .every((key) => current[key] === binding[key]);
+}
+
+// Pure, synchronous preparation of both sides of the same consequence. The
+// receipt also fences retention (which need not change the object's revision).
+export function resolveSearchPropertyAction(stateValue, {
+  binding, objects = [], action, opportunityId, timestamp,
+} = {}) {
+  if (!opportunityId || !timestamp
+    || !['action:hand_over_item', 'action:withhold_item'].includes(action)
+    || !searchPropertyBindingValid(stateValue, binding, objects)) {
+    return { applied: false, state: stateValue, object: null, before: null };
+  }
   const state = clone(stateValue);
-  if (!state.searchEpisode) return state;
-  state.searchEpisode.object_id = objectId || state.searchEpisode.object_id;
-  if (action === 'action:hand_over_item') state.searchEpisode.property_result = 'EXISTING_OBJECT_CONFISCATED';
-  else if (action === 'action:withhold_item') state.searchEpisode.property_result = 'EXISTING_OBJECT_RETAINED';
-  return state;
+  const before = clone(objects.find((item) => item.id === binding.objectId));
+  const object = action === 'action:hand_over_item' ? advanceWorldEntity({
+    ...before, holderId: binding.actorId, location: 'officer_desk',
+    status: 'CONFISCATED', updatedAt: timestamp,
+  }) : clone(before);
+  state.searchEpisode.property_result = action === 'action:hand_over_item'
+    ? 'EXISTING_OBJECT_CONFISCATED' : 'EXISTING_OBJECT_RETAINED';
+  state.searchEpisode.property_action = { opportunityId, objectId: binding.objectId, action, timestamp };
+  return { applied: true, state, object, before };
 }

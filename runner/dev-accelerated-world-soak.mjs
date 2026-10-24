@@ -69,7 +69,7 @@ import {
   startLockdownEpisode,
   advanceLockdownEpisode,
   createYardObservation,
-  markSearchPropertyAction,
+  resolveSearchPropertyAction,
   registerEpisodeEvent,
   CELL_SEARCH_TICK_CHANCE,
   YARD_OBSERVATION_INTERVAL_MS,
@@ -399,7 +399,7 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
     if (advanced.actionOpportunity === 'COMPLY_OR_REFUSE') {
       beginInstrumentalIncident('officer', 'order', episode.actor_id, episode.actor_name, nowMs);
     } else if (advanced.actionOpportunity === 'HAND_OVER_OR_WITHHOLD') {
-      beginInstrumentalIncident('officer', 'search', episode.actor_id, episode.actor_name, nowMs);
+      beginInstrumentalIncident('officer', 'search', episode.actor_id, episode.actor_name, nowMs, episode.id);
     }
   }
 
@@ -421,10 +421,11 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
   }
 
   let pendingInstrumental = [];
-  function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName, nowMs) {
+  function beginInstrumentalIncident(sourceKind, sourceEventType, actorKey, actorName, nowMs, searchId = null) {
     const prepared = openInstrumentalOpportunity(vitals.instrumentalAgency, {
       sourceKind, sourceEventType, actorKey, actorName,
       opportunityId: `instrumental:${randomUUID()}`, timestamp: new Date(nowMs).toISOString(),
+      searchId, searchState: vitals.locationRegime, objects: vitals.worldSimulation.objects,
     });
     if (!prepared) return null;
     const opening = prepared.opening;
@@ -452,7 +453,17 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
     const pending = takePendingInstrumentalOpportunities(vitals.instrumentalAgency);
     for (const opportunity of pending) {
       const resolutionTimestamp = new Date(nowMs).toISOString();
-      const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: resolutionTimestamp });
+      const outcome = resolveInstrumentalOpportunity(opportunity, {
+        timestamp: resolutionTimestamp, searchState: vitals.locationRegime,
+        objects: vitals.worldSimulation.objects,
+      });
+      const property = opportunity.archetypeId === 'cell_search_handover'
+        ? resolveSearchPropertyAction(vitals.locationRegime, {
+          binding: opportunity.propertyBinding, objects: vitals.worldSimulation.objects,
+          action: opportunity.chosenAction, opportunityId: opportunity.opportunityId,
+          timestamp: resolutionTimestamp,
+        }) : null;
+      if (!outcome || (property && !property.applied)) continue;
       const isSocial = opportunity.archetypeId.startsWith('inmate_')
         || ['officer_order', 'cell_search_handover'].includes(opportunity.archetypeId);
       const actualContact = !['action:remain_silent', 'action:withdraw', 'action:disengage'].includes(opportunity.chosenAction);
@@ -475,8 +486,9 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
         observation: outcome.observation, nowMs,
       });
       if (opportunity.archetypeId === 'cell_search_handover') {
-        const objectId = vitals.locationRegime.searchEpisode && vitals.locationRegime.searchEpisode.object_id;
-        vitals.locationRegime = markSearchPropertyAction(vitals.locationRegime, { action: opportunity.chosenAction, objectId });
+        vitals.locationRegime = property.state;
+        const object = vitals.worldSimulation.objects.find((item) => item.id === opportunity.propertyBinding.objectId);
+        Object.assign(object, property.object);
       }
       report.counts.instrumentalResolved += 1;
     }
