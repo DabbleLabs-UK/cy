@@ -1,0 +1,344 @@
+{
+  "_comment": "Content-free retained natural timings only. Counterfactual generic meal pacing at real expressive/meal queue timestamps, NOT actual meal opportunities or predicted success rates. Verified restart boundaries reset the pacer. Inference end records approximate pacer timestamps by milliseconds. Existing noise-mid flags are conditional on the historical execution and omit other risks. No private correspondence, prompts, model output or new inference.",
+  "startMs": 1792787316981,
+  "endMs": 1792858406307,
+  "speed": 5,
+  "transactionTimeoutMs": 600000,
+  "verifiedRestartMs": [
+    1792787177227,
+    1792827064016,
+    1792852819125
+  ],
+  "observedMidNoiseMs": [
+    1792789227278,
+    1792826100021,
+    1792827101418,
+    1792829169954,
+    1792832550914,
+    1792832966640,
+    1792841350939,
+    1792842738686,
+    1792851707264,
+    1792852883037,
+    1792853543974,
+    1792857298802,
+    1792858406307
+  ],
+  "samples": [
+    {
+      "queuedAtMs": 1792788984842,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792788041924,
+      "previousBusyMs": 78976
+    },
+    {
+      "queuedAtMs": 1792789042687,
+      "purpose": "drawing",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792789042678,
+      "previousBusyMs": 57828
+    },
+    {
+      "queuedAtMs": 1792790784894,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_surfacing",
+      "previousEndedAtMs": 1792790200720,
+      "previousBusyMs": 44408
+    },
+    {
+      "queuedAtMs": 1792790943427,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792790943405,
+      "previousBusyMs": 57829
+    },
+    {
+      "queuedAtMs": 1792820537846,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792818683675,
+      "previousBusyMs": 97581
+    },
+    {
+      "queuedAtMs": 1792820614758,
+      "purpose": "drawing",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792820614740,
+      "previousBusyMs": 76887
+    },
+    {
+      "queuedAtMs": 1792822337892,
+      "purpose": "journal",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792821451384,
+      "previousBusyMs": 88541
+    },
+    {
+      "queuedAtMs": 1792822543681,
+      "purpose": "journal",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792822543665,
+      "previousBusyMs": 125202
+    },
+    {
+      "queuedAtMs": 1792824137926,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792823313372,
+      "previousBusyMs": 80357
+    },
+    {
+      "queuedAtMs": 1792824201259,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792824201247,
+      "previousBusyMs": 59773
+    },
+    {
+      "queuedAtMs": 1792825937966,
+      "purpose": "expressive_choice",
+      "previousPurpose": "ambient_world_generation",
+      "previousEndedAtMs": 1792824831737,
+      "previousBusyMs": 257025
+    },
+    {
+      "queuedAtMs": 1792825998056,
+      "purpose": "drawing",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792825998047,
+      "previousBusyMs": 60060
+    },
+    {
+      "queuedAtMs": 1792827071405,
+      "purpose": "journal",
+      "previousPurpose": null,
+      "previousEndedAtMs": null,
+      "previousBusyMs": 0
+    },
+    {
+      "queuedAtMs": 1792828871465,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_surfacing",
+      "previousEndedAtMs": 1792827549070,
+      "previousBusyMs": 71111
+    },
+    {
+      "queuedAtMs": 1792828956124,
+      "purpose": "drawing",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792828956107,
+      "previousBusyMs": 76374
+    },
+    {
+      "queuedAtMs": 1792830671535,
+      "purpose": "journal",
+      "previousPurpose": "memory_surfacing",
+      "previousEndedAtMs": 1792830492704,
+      "previousBusyMs": 84319
+    },
+    {
+      "queuedAtMs": 1792832471718,
+      "purpose": "expressive_choice",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792831294005,
+      "previousBusyMs": 241161
+    },
+    {
+      "queuedAtMs": 1792832550991,
+      "purpose": "journal",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792831294005,
+      "previousBusyMs": 241161
+    },
+    {
+      "queuedAtMs": 1792832796069,
+      "purpose": "journal",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792832796048,
+      "previousBusyMs": 146014
+    },
+    {
+      "queuedAtMs": 1792835107352,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792834391893,
+      "previousBusyMs": 120008
+    },
+    {
+      "queuedAtMs": 1792835300962,
+      "purpose": "drawing",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792835300914,
+      "previousBusyMs": 60799
+    },
+    {
+      "queuedAtMs": 1792836907328,
+      "purpose": "journal",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792836238350,
+      "previousBusyMs": 81288
+    },
+    {
+      "queuedAtMs": 1792838826144,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792838825960,
+      "previousBusyMs": 120033
+    },
+    {
+      "queuedAtMs": 1792839442546,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792839442526,
+      "previousBusyMs": 58465
+    },
+    {
+      "queuedAtMs": 1792840626201,
+      "purpose": "expressive_choice",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792839556231,
+      "previousBusyMs": 113676
+    },
+    {
+      "queuedAtMs": 1792840686050,
+      "purpose": "drawing",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792840686042,
+      "previousBusyMs": 59829
+    },
+    {
+      "queuedAtMs": 1792842426270,
+      "purpose": "journal",
+      "previousPurpose": "memory_surfacing",
+      "previousEndedAtMs": 1792842273553,
+      "previousBusyMs": 36636
+    },
+    {
+      "queuedAtMs": 1792844226360,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_surfacing",
+      "previousEndedAtMs": 1792843797539,
+      "previousBusyMs": 45036
+    },
+    {
+      "queuedAtMs": 1792844416364,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792844416319,
+      "previousBusyMs": 60542
+    },
+    {
+      "queuedAtMs": 1792846026371,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792845278383,
+      "previousBusyMs": 89738
+    },
+    {
+      "queuedAtMs": 1792846154119,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792846154083,
+      "previousBusyMs": 56337
+    },
+    {
+      "queuedAtMs": 1792846330568,
+      "purpose": "journal",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792846330557,
+      "previousBusyMs": 134720
+    },
+    {
+      "queuedAtMs": 1792851317862,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792849246951,
+      "previousBusyMs": 119995
+    },
+    {
+      "queuedAtMs": 1792851374463,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792851374453,
+      "previousBusyMs": 56580
+    },
+    {
+      "queuedAtMs": 1792851511034,
+      "purpose": "journal",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792851510992,
+      "previousBusyMs": 136519
+    },
+    {
+      "queuedAtMs": 1792852828069,
+      "purpose": "expressive_choice",
+      "previousPurpose": null,
+      "previousEndedAtMs": null,
+      "previousBusyMs": 0
+    },
+    {
+      "queuedAtMs": 1792852883266,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792852883234,
+      "previousBusyMs": 46877
+    },
+    {
+      "queuedAtMs": 1792853441224,
+      "purpose": "journal",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792853441186,
+      "previousBusyMs": 107914
+    },
+    {
+      "queuedAtMs": 1792854628142,
+      "purpose": "expressive_choice",
+      "previousPurpose": "journal",
+      "previousEndedAtMs": 1792853441186,
+      "previousBusyMs": 107914
+    },
+    {
+      "queuedAtMs": 1792854684567,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792854684557,
+      "previousBusyMs": 56404
+    },
+    {
+      "queuedAtMs": 1792856428195,
+      "purpose": "expressive_choice",
+      "previousPurpose": "ambient_world_generation",
+      "previousEndedAtMs": 1792855041663,
+      "previousBusyMs": 224603
+    },
+    {
+      "queuedAtMs": 1792856572185,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792856572149,
+      "previousBusyMs": 57386
+    },
+    {
+      "queuedAtMs": 1792857114083,
+      "purpose": "meal_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792857110250,
+      "previousBusyMs": 120033
+    },
+    {
+      "queuedAtMs": 1792858228235,
+      "purpose": "expressive_choice",
+      "previousPurpose": "memory_formation",
+      "previousEndedAtMs": 1792857110250,
+      "previousBusyMs": 120033
+    },
+    {
+      "queuedAtMs": 1792858363587,
+      "purpose": "journal",
+      "previousPurpose": "expressive_choice",
+      "previousEndedAtMs": 1792858363551,
+      "previousBusyMs": 57283
+    }
+  ]
+}

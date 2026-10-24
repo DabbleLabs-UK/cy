@@ -849,9 +849,10 @@ async function main() {
     });
   }
   async function waitForInferenceTempo(signal, purpose, { pairedWithChoice = false } = {}) {
-    // Incoming human/operator work stays responsive. Its completed request still
-    // establishes pacing for whatever model work follows it.
-    if (purpose === 'postcard' || purpose === 'warden') return 0;
+    // Incoming human/operator work and bounded world-action selection do not
+    // wait for expressive quiet. They still take the coordinator/shared lease,
+    // remain cancellable, and their completed requests pace subsequent prose.
+    if (purpose === 'postcard' || purpose === 'warden' || purpose === 'meal_choice') return 0;
     // The action chooser and its directly following journal are one visible
     // expression cycle. Only a successful immediately preceding chooser earns
     // this exemption; failed or intervening requests retain normal pacing.
