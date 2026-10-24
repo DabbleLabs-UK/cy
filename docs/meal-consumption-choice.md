@@ -18,7 +18,11 @@ choice. A new meal offers only `eat` and `decline`.
 The runner does not fabricate a cell delivery while Cy is absent/asleep or a
 schedule pass has become stale across the originating regime/window. Such a
 pass records unknown delivery/intake, not an institutional failure or refusal.
-Restrictions can make a delivered meal non-actionable without rewriting delivery.
+An active search or routine can make a delivered meal non-actionable without
+rewriting delivery. Lockdown alone does not: its authoritative meaning is stopped
+movement/association, not loss of access to food already delivered in CELL.
+Lockdown identity/status remains in the permission fence, so a lockdown change
+during an offer/inference/checkpoint still invalidates that result conservatively.
 
 ## Authoritative checkpoint
 
