@@ -4318,8 +4318,10 @@ async function main() {
     const lockdown = location.lockdownEpisode;
     return mealContext({ nowMs, date, location: location.current,
       phase: currentRegime(mins).phase, asleep: effectiveAsleep(mins), nextBoundaryAt: boundary,
+      // Lockdown stops movement, not eating food already delivered in CELL.
+      // Keep its identity/status in the fence: changes still stale an offer.
       restricted: (search && !['AFTERMATH_OBSERVED', 'COMPLETE'].includes(search.stage))
-        || lockdown?.status === 'ACTIVE' || !!location.activeRoutineEpisode,
+        || !!location.activeRoutineEpisode,
       restrictionIdentity: [search?.id, search?.stage, lockdown?.id, lockdown?.status, client.regime],
     });
   }
