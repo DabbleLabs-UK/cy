@@ -258,14 +258,24 @@ for (const stage of ['spend', 'release']) test(`drawing intent cancelled during 
   assert.equal(f.calls.release, 1);
 });
 
-test('journal context, stream validation and Tempo functions remain LF-normalized byte-identical to deployed baseline', () => {
+test('journal context and Tempo stay identical; stream differs only at the journal repeat boundary', () => {
   const baseline = execFileSync('git', ['show', '227b294:runner/run.js'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   for (const [start, end] of [
     ['async function waitForInferenceTempo(', '  soma.observe('],
     ['function buildCtx(', '  async function doPostcard('],
     ['async function doPostcard(', '  async function doWarden('],
-    ['async function streamGenerate(', '  async function rawGenerate('],
   ]) assert.equal(extract(source, start, end), extract(baseline, start, end));
+  // The journal-repeat fix carries the already-rendered exposure to its full
+  // candidate check. Permit exactly that diff, not a blanket stream exemption.
+  const stream = (text) => extract(text, 'async function streamGenerate(', '  async function rawGenerate(');
+  const expectedStream = stream(baseline)
+    .replace("    timeoutMs = null, pairedWithChoice", "    journalContinuation = null,\n    timeoutMs = null, pairedWithChoice")
+    .replace('    if (contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail)) {',
+      "    const repeated = mode === 'journal' && journalContinuation !== null\n" +
+      '      ? isJournalRepeat(accounted.out, journalContinuation)\n' +
+      '      : contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail);\n' +
+      '    if (repeated) {');
+  assert.equal(stream(source), expectedStream);
   const stageTwo = (text) => extract(text, '    const sys2 = drawDslSystem();', '  // ---- inbox:');
   // Only comments stop claiming a failed picture has emitted preparatory prose.
   const executable = (text) => text.split('\n').filter((line) => !line.trimStart().startsWith('//')).join('\n')

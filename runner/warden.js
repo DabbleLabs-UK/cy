@@ -591,15 +591,22 @@ function normText(s) {
 // `minRun`+ normalised chars from the opening of `text` appears verbatim in the
 // last `tail` chars of the context. Catches the model replaying its own recent
 // output instead of continuing it.
-export function isRepeat(text, contextTail, { minRun = 40, tail = 400 } = {}) {
+export function isRepeat(text, contextTail, { minRun = 40, tail = 400, head = 240 } = {}) {
   const n = normText(text);
   const c = normText(contextTail).slice(-tail);
   if (n.length < minRun || c.length < minRun) return false;
-  const probe = n.slice(0, 240);
+  const probe = n.slice(0, head);
   for (let i = 0; i + minRun <= probe.length; i++) {
     if (c.includes(probe.slice(i, i + minRun))) return true;
   }
   return false;
+}
+
+// Journals compare the whole candidate to the exact continuation exposed by
+// prompt construction. Keep the existing normalization and substantial-run
+// threshold; other callers retain their existing windows and behavior.
+export function isJournalRepeat(text, journalContinuation) {
+  return isRepeat(text, journalContinuation, { head: Infinity, tail: Infinity });
 }
 
 // True if `chunk` substantially restates something ALREADY emitted earlier in the

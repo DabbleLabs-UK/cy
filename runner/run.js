@@ -45,6 +45,7 @@ import {
   ZONE_A,
   buildDirectives,
   buildPrompt,
+  buildPromptRequest,
   options,
   letterPredict,
   completionDirective,
@@ -159,6 +160,7 @@ import {
   assistantFrameHits,
   createWarden,
   isRepeat,
+  isJournalRepeat,
   looksLikeAssistantFrame,
   narrationHits,
   repeatsWithinBurst,
@@ -2344,6 +2346,7 @@ async function main() {
   // original Cy/world prompt, and two failures become silence.
   async function streamGenerate({
     system, prompt, opts, mode, purpose, contextTail, allowRepeat = false, attempt = 'initial',
+    journalContinuation = null,
     timeoutMs = null, pairedWithChoice = false, providerOverride = null, postcardTurn = null,
   }) {
     // Visible prose is foreground work. Stop any lower-priority memory job before
@@ -2606,7 +2609,10 @@ async function main() {
       burstTrimmed++;
     }
 
-    if (contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail)) {
+    const repeated = mode === 'journal' && journalContinuation !== null
+      ? isJournalRepeat(accounted.out, journalContinuation)
+      : contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail);
+    if (repeated) {
       recordInferenceOutcome(guarded.requestId, 'repeat');
       await logHoldbackDiscard(accounted.out, mode);
       for (const attempt of attempts) await recordSpend(attempt.stats, mode, false);
@@ -5665,10 +5671,11 @@ async function main() {
           await logCapHit(mode, discards);
           break;
         }
-        // Keep the full stored tail for the existing verbatim near-repeat guard.
-        // buildPrompt applies the journal-only subjective recency selection.
+        // Prompt construction selects the continuation once. Carry that exact
+        // exposure to validation, including on each existing bounded retry.
         const tail = contextText();
-        const prompt = buildPrompt(tail, mode, null, directives);
+        const request = buildPromptRequest(tail, mode, null, directives);
+        const prompt = request.prompt;
         const opts = {
           ...baseOpts,
           temperature: Number(Math.min(1.6, baseOpts.temperature + tempBump).toFixed(3)),
@@ -5682,6 +5689,7 @@ async function main() {
           opts,
           mode,
           contextTail: tail,
+          journalContinuation: request.journalContinuation,
           allowRepeat,
           attempt: discards ? `near-repeat-retry-${discards}` : 'journal-initial',
           timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
