@@ -22,7 +22,6 @@ import {
   startCellSearchEpisode,
   startLockdownEpisode,
   startScheduledRoutineEpisode,
-  markSearchPropertyAction,
 } from './location-regime.js';
 import { createEnvironmentEvent, createEnvironmentRecord } from './environment-schema.js';
 import { createSocialContactState, observeSocialContactRecord } from './social-contact-substrate.js';
@@ -232,11 +231,7 @@ test('present cell search follows restart-safe stages and finds only existing ob
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 40_000, objects: [object] });
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 60_000, objects: [object] });
   assert.equal(result.event.world.search_episode.property_result, 'EXISTING_OBJECT_INSPECTED');
-  assert.equal(result.actionOpportunity, 'HAND_OVER_OR_WITHHOLD');
-  const retained = markSearchPropertyAction(result.state, { action: 'action:withhold_item', objectId: object.id });
-  assert.equal(retained.searchEpisode.property_result, 'EXISTING_OBJECT_RETAINED');
-  const confiscated = markSearchPropertyAction(result.state, { action: 'action:hand_over_item', objectId: object.id });
-  assert.equal(confiscated.searchEpisode.property_result, 'EXISTING_OBJECT_CONFISCATED');
+  assert.equal(result.actionOpportunity, null, 'inspection no longer opens a property outcome branch');
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 80_000, objects: [object] });
   result = advanceCellSearchEpisode(result.state, { nowMs: AT + 100_000, objects: [object] });
   assert.equal(result.event.world.search_episode.stage, 'AFTERMATH_OBSERVED');

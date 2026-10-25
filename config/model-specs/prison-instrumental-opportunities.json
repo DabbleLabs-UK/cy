@@ -6,6 +6,7 @@
   "locked": true,
   "public_name": "Prison instrumental opportunities",
   "implementation_status": "IMPLEMENTED",
+  "_retired_property_scenario": "cell_search_handover was retired on 2026-10-25. Neither new nor restored pending work may resolve it. Ordinary staged inspection/search progression and independent canonical object mechanics remain unchanged; no replacement scenario is added.",
   "purpose": "Extend existing prison incidents with explicit available actions, executed actions, concrete deterministic world consequences and resolved categorical outcomes for the existing action-outcome learner.",
   "audit": {
     "existing_candidates_found": [
@@ -17,7 +18,7 @@
       "officer refusal, write-up, lockup and kindness: no genuine action branch was already implied",
       "other inmate events and routine outcomes: either already completed facts or lacked a sufficiently concrete action-dependent continuation"
     ],
-    "implemented_subset_reason": "The first five candidates already contain an actor, a direct situation and an obvious executable alternative. The rest remain ordinary incidents rather than being converted into fake choices."
+    "implemented_subset_reason": "The original audit selected five candidates. Requested item handover is now retired because safe object/search consequences required disproportionate durability machinery; the other four remain. The rest remain ordinary incidents rather than being converted into fake choices."
   },
   "archetypes": [
     {
@@ -29,16 +30,6 @@
         "action:refuse_instruction": "instruction remains uncompleted; refusal recorded; exchange ends without further action"
       },
       "resolved_outcomes": ["COERCIVE_LOSS_OF_CONTROL", "SOCIAL_HOSTILITY"]
-    },
-    {
-      "id": "cell_search_handover",
-      "source": "existing OFFICER_EVENTS search incident",
-      "actions": ["action:hand_over_item", "action:withhold_item"],
-      "branches": {
-        "action:hand_over_item": "item transferred and no longer available; search ends",
-        "action:withhold_item": "cell searched; nothing found; item remains available to Cy"
-      },
-      "resolved_outcomes": ["DEPRIVATION_OR_LOSS", "COERCIVE_LOSS_OF_CONTROL", "PHYSICAL_HARM"]
     },
     {
       "id": "inmate_check_in",
@@ -102,7 +93,7 @@
     },
     {
       "name": "implemented_archetype_count",
-      "value": 5,
+      "value": 4,
       "classification": "ENGINEERING / ENUMERATION; the conservative audited subset, not a psychological quantity"
     },
     {
@@ -112,8 +103,8 @@
     },
     {
       "name": "canonical_action_id_count",
-      "value": 10,
-      "classification": "ENGINEERING / ENUMERATION; derived from five disjoint two-action definitions"
+      "value": 8,
+      "classification": "ENGINEERING / ENUMERATION; derived from four disjoint two-action definitions"
     },
     {
       "name": "selection_cursor_initial_value",

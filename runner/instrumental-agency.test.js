@@ -38,7 +38,7 @@ function recordFrom(spec, id) {
 }
 
 const definitions = instrumentalOpportunityDefinitions();
-assert.equal(definitions.length, 5, 'the implementation starts with exactly five audited archetypes');
+assert.equal(definitions.length, 4, 'four active archetypes remain after retiring property handover');
 
 const canonicalActions = new Set();
 for (const definition of definitions) {

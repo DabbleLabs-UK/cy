@@ -69,55 +69,6 @@ const DEFINITIONS = Object.freeze([
     },
   },
   {
-    id: 'cell_search_handover',
-    sourceKind: 'officer',
-    sourceEventType: 'search',
-    contextFamily: 'custody',
-    contextType: 'requested_item_handover',
-    openingArchetypeId: 'cell_search',
-    location: 'cell',
-    actions: ['action:hand_over_item', 'action:withhold_item'],
-    situation: (actor) => `${actor} demanded the loose item before searching Cy's cell`,
-    branches: {
-      'action:hand_over_item': {
-        consequenceId: 'item_transferred_search_ended',
-        text: (actor) => `Cy handed it over; ${actor} took the item and ended the search`,
-        remainingPossibilities: ['the item is no longer available to Cy', 'the cell search is concluded'],
-        situation: {
-          possible_harm: 'none',
-          uncertainty: 'none',
-          control: 'limited',
-          goal_obstruction: 'present',
-          intent: 'unknown',
-          deprivation_outcome: 'lost',
-        },
-        outcomes: [
-          { outcome_class: 'DEPRIVATION_OR_LOSS', status: 'occurred' },
-          { outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'did_not_occur' },
-          { outcome_class: 'PHYSICAL_HARM', status: 'did_not_occur' },
-        ],
-      },
-      'action:withhold_item': {
-        consequenceId: 'cell_searched_item_retained',
-        text: (actor) => `Cy withheld it; ${actor} searched the cell, found nothing, and the item remained with Cy`,
-        remainingPossibilities: ['the item remains available to Cy', 'the cell has been searched'],
-        situation: {
-          possible_harm: 'none',
-          uncertainty: 'none',
-          control: 'limited',
-          goal_obstruction: 'present',
-          intent: 'unknown',
-          deprivation_outcome: 'none',
-        },
-        outcomes: [
-          { outcome_class: 'DEPRIVATION_OR_LOSS', status: 'did_not_occur' },
-          { outcome_class: 'COERCIVE_LOSS_OF_CONTROL', status: 'occurred' },
-          { outcome_class: 'PHYSICAL_HARM', status: 'did_not_occur' },
-        ],
-      },
-    },
-  },
-  {
     id: 'inmate_check_in',
     sourceKind: 'social',
     sourceEventType: 'checked_in',
@@ -312,6 +263,8 @@ export function reconcileInstrumentalAgencyState(raw) {
     const value = Number(raw.selectionCounters && raw.selectionCounters[definition.id]);
     if (Number.isInteger(value) && value >= 0) state.selectionCounters[definition.id] = value;
   }
+  // Retired property opportunities have no definition and fail validPending.
+  // Drop only pending work, without rewriting published history or world state.
   state.pending = Array.isArray(raw.pending) ? raw.pending.filter(validPending).map(clone) : [];
   return state;
 }
@@ -453,6 +406,8 @@ export function queueInstrumentalOpportunity(state, pending, openingEnvironmentE
 }
 
 export function resolveInstrumentalOpportunity(pending, { timestamp } = {}) {
+  // Defence in depth for a legacy caller holding a pre-recovery pending record.
+  if (pending?.archetypeId === 'cell_search_handover') return null;
   if (!validPending(pending) || !timestamp) throw new Error('valid pending opportunity and timestamp are required');
   const definition = DEFINITIONS.find((item) => item.id === pending.archetypeId);
   const branch = definition.branches[pending.chosenAction];
@@ -521,7 +476,8 @@ export function resolveInstrumentalOpportunity(pending, { timestamp } = {}) {
 
 export function takePendingInstrumentalOpportunities(state) {
   if (!state || !Array.isArray(state.pending)) return [];
-  const pending = state.pending.map(clone);
+  // Also retire raw in-memory legacy work before runner-side side effects.
+  const pending = state.pending.filter(item => item?.archetypeId !== 'cell_search_handover').map(clone);
   state.pending = [];
   return pending;
 }

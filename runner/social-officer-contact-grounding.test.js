@@ -107,8 +107,8 @@ ok('officer interactions (both search and non-search) require Cy\'s authoritativ
   assert.match(nearby, /vitals\.locationRegime\.current\.id === INMATE_SOCIAL_COMPATIBLE_LOCATION[\s\S]*fireSocial\(\);/,
     'the only call site that can reach fireSocial (and therefore its instrumental opening) is location-gated');
 }
-assert.equal((source.match(/(?<!function )beginInstrumentalIncident\(/g) || []).length, 4,
-  'exactly the 4 known call sites exist (the definition itself excluded): 2 inside advanceCellSearch (already validated), 2 inside fireSocial/fireOfficer (now gated) - no new bypass was introduced');
+assert.equal((source.match(/(?<!function )beginInstrumentalIncident\(/g) || []).length, 3,
+  'exactly 3 active call sites remain: the staged instruction plus gated fireSocial/fireOfficer; the staged property branch is retired');
 ok('instrumental social/officer openings cannot bypass the same co-presence gate, because they are only reached after it (5)');
 
 // ---- 3/10: later world-continuity work may extend location-regime.js, but the

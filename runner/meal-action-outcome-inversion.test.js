@@ -114,7 +114,7 @@ function mealRecord(id, meal, action, mealId = null) {
 // ---- 5: real instrumental opportunities remain unchanged ----
 {
   const definitions = instrumentalOpportunityDefinitions();
-  assert.equal(definitions.length, 5, 'all five instrumental archetypes remain');
+  assert.equal(definitions.length, 4, 'four non-property instrumental archetypes remain');
   const state = createInstrumentalAgencyState();
   const prepared = openInstrumentalOpportunity(state, {
     sourceKind: 'officer', sourceEventType: 'order', actorKey: 'proctor', actorName: 'Mr Proctor',

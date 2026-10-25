@@ -69,7 +69,6 @@ import {
   startLockdownEpisode,
   advanceLockdownEpisode,
   createYardObservation,
-  markSearchPropertyAction,
   registerEpisodeEvent,
   CELL_SEARCH_TICK_CHANCE,
   YARD_OBSERVATION_INTERVAL_MS,
@@ -398,8 +397,6 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
     const episode = vitals.locationRegime.searchEpisode;
     if (advanced.actionOpportunity === 'COMPLY_OR_REFUSE') {
       beginInstrumentalIncident('officer', 'order', episode.actor_id, episode.actor_name, nowMs);
-    } else if (advanced.actionOpportunity === 'HAND_OVER_OR_WITHHOLD') {
-      beginInstrumentalIncident('officer', 'search', episode.actor_id, episode.actor_name, nowMs);
     }
   }
 
@@ -453,8 +450,9 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
     for (const opportunity of pending) {
       const resolutionTimestamp = new Date(nowMs).toISOString();
       const outcome = resolveInstrumentalOpportunity(opportunity, { timestamp: resolutionTimestamp });
+      if (!outcome) continue;
       const isSocial = opportunity.archetypeId.startsWith('inmate_')
-        || ['officer_order', 'cell_search_handover'].includes(opportunity.archetypeId);
+        || opportunity.archetypeId === 'officer_order';
       const actualContact = !['action:remain_silent', 'action:withdraw', 'action:disengage'].includes(opportunity.chosenAction);
       const socialOutcome = isSocial ? {
         episode_id: `social:${opportunity.opportunityId}`, episode_type: actualContact ? 'CONTACT' : 'OPPORTUNITY',
@@ -474,10 +472,6 @@ export function createWorldSoakHarness({ vitals, startMs, makeId = (prefix) => `
         world: { ...outcome.world, ...(socialOutcome ? { social: socialOutcome } : {}) },
         observation: outcome.observation, nowMs,
       });
-      if (opportunity.archetypeId === 'cell_search_handover') {
-        const objectId = vitals.locationRegime.searchEpisode && vitals.locationRegime.searchEpisode.object_id;
-        vitals.locationRegime = markSearchPropertyAction(vitals.locationRegime, { action: opportunity.chosenAction, objectId });
-      }
       report.counts.instrumentalResolved += 1;
     }
   }
