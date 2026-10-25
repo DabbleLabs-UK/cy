@@ -77,7 +77,7 @@ function recordFrom(spec, id, timestamp) {
 {
   const state = createInstrumentalAgencyState();
   const prepared = openInstrumentalOpportunity(state, {
-    sourceKind: 'officer', sourceEventType: 'search', actorKey: 'proctor', actorName: 'Mr Proctor',
+    sourceKind: 'officer', sourceEventType: 'order', actorKey: 'proctor', actorName: 'Mr Proctor',
     opportunityId: 'opportunity:rr-3', timestamp: OPEN_AT,
   });
   const queued = queueInstrumentalOpportunity(state, prepared.pending, 'opening-event-id');
@@ -130,7 +130,7 @@ function recordFrom(spec, id, timestamp) {
     assert.equal(resolveResult.reason, 'no_action_opportunity');
     assert.deepEqual(controllability.pairs, {}, `${definition.id}: no posterior pair is ever created`);
   }
-  ok('none of the five engineering round-robin instrumental incidents update controllability posteriors (4)');
+  ok('none of the four active engineering round-robin incidents update controllability posteriors (4)');
 }
 
 // ---- 5: no "Cy chose..." public event is emitted ----

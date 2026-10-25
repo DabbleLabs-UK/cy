@@ -619,7 +619,7 @@ export function advanceCellSearchEpisode(stateValue, {
         || (item.type === 'message' && item.status === 'DELIVERED' && isCurrentMessageObject(item))));
     episode.property_result = object ? 'EXISTING_OBJECT_INSPECTED' : 'NOTHING_FOUND';
     summary = object ? 'Officers examined an existing item in the cell' : 'The search found nothing';
-    actionOpportunity = object && episode.cy_present_at_start ? 'HAND_OVER_OR_WITHHOLD' : null;
+    // Inspection is a finding, not permission for the retired property scenario.
   } else if (episode.stage === 'PROPERTY_RESULT') {
     next = 'SEARCH_COMPLETE';
     summary = 'The officers completed the cell search';
@@ -774,14 +774,5 @@ export function registerEpisodeEvent(stateValue, eventId, {
     storedRoutine.event_ids.push(id);
   }
   if (locationSource) state.current.source_event_id = id;
-  return state;
-}
-
-export function markSearchPropertyAction(stateValue, { action, objectId = null } = {}) {
-  const state = clone(stateValue);
-  if (!state.searchEpisode) return state;
-  state.searchEpisode.object_id = objectId || state.searchEpisode.object_id;
-  if (action === 'action:hand_over_item') state.searchEpisode.property_result = 'EXISTING_OBJECT_CONFISCATED';
-  else if (action === 'action:withhold_item') state.searchEpisode.property_result = 'EXISTING_OBJECT_RETAINED';
   return state;
 }

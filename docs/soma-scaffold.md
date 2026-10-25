@@ -362,6 +362,10 @@ coefficients.
 
 ## Grounded prison instrumental opportunities
 
+Historical scaffold description: the property-handover archetype described below
+was retired on 2026-10-25. Four active definitions remain; historical evidence is
+not rewritten. See `retired-property-handover-20261025.md` for the current boundary.
+
 The authoritative world-rule specification is
 config/model-specs/prison-instrumental-opportunities.json. The implementation is
 in runner/instrumental-agency.js and extends existing cast incidents rather than
