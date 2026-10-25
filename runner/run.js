@@ -999,6 +999,7 @@ async function main() {
   // ledger, and reset the "fresh incident" clock the silence engine reads.
   function recordIncident(kind, ctx = {}) {
     const inc = makeIncident(kind, { ...ctx, relations: {} });
+    if (!inc) return null;
     inc.ts = tsNow();
     pushIncident(vitals.ledger, inc);
     vitals.lastIncidentMs = Date.now();
@@ -1494,20 +1495,6 @@ async function main() {
     }
     if (name === 'assoc_cancelled') {
       return captureEnvironmentEvent('cancelled_activity', { eventType: name, summary });
-    }
-    if (name === 'no_eggs' || name === 'cold_tea') {
-      // Tray-irritation colour, not a meal/intake transition: nothing about
-      // what was actually offered, available, received or consumed is
-      // established here, so no world.physical.food fact is asserted. See
-      // feeding-homeostasis.js's isFeedingRecord for the grounding this
-      // deliberately withholds.
-      return captureEnvironmentEvent('meal', {
-        eventType: name,
-        summary,
-        world: {
-          situation: { deprivation_outcome: name === 'no_eggs' ? 'partial' : 'unknown' },
-        },
-      });
     }
     return null;
   }
@@ -4482,13 +4469,6 @@ async function main() {
       recordIncident('regime', { sub: 'lockdown', phase, mins });
     }
 
-    // trivial daily irritations (awake) - tiny normally, huge under high amp
-    if (!asleep && Math.random() < 0.004) {
-      const trivial = ['no_eggs', 'cold_tea'];
-      const sub = trivial[Math.floor(Math.random() * trivial.length)];
-      recordIncident('trivial', { sub, phase, mins });
-      fireEvent(sub);
-    }
     // social frictions between inmates (awake) - build warmth/suspicion/grudge.
     // Association-style in-person contact is only plausible while Cy is out on
     // the wing/landing, never while he is locked in his cell or at the yard

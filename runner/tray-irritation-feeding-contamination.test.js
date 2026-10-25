@@ -17,8 +17,8 @@
 // intake outcome, portion, or a real nutrition macro/energy value) - archetype
 // ID alone no longer qualifies, and the nested nutrition object's own
 // always-present shape can never itself satisfy the check. The run.js
-// no_eggs/cold_tea handler no longer asserts any food fact at all, since as
-// authored it never established one.
+// no_eggs/cold_tea handler stopped asserting food facts and has subsequently
+// been retired altogether. Historical fixtures still exercise this guard.
 //
 // Self-checking: throws (non-zero exit) on any failure.
 //
@@ -44,7 +44,7 @@ const ok = (msg) => { n++; console.log('  ok - ' + msg); };
 
 const T0 = '2026-09-27 12:00:00.000';
 
-// Exactly the shape the fixed run.js handler now produces: 'meal' archetype,
+// Exactly the shape the historical run.js handler produced: 'meal' archetype,
 // no world.physical.food override at all - the same shape any other purely
 // narrative event (a social remark, an officer aside) already has.
 function trayIrritationRecord(id, kind, timestamp = T0) {
@@ -217,12 +217,9 @@ function realMealRecord(id, {
   assert.match(source,
     /if \(cyObserved\) \{\s*\n\s*Object\.assign\(record, observeEnvironmentRecord\(soma, record\)\);/,
     'the cyObserved -> observeEnvironmentRecord grounded-seam boundary is unchanged');
-  assert.match(source,
-    /if \(name === 'no_eggs' \|\| name === 'cold_tea'\) \{[\s\S]{0,400}captureEnvironmentEvent\('meal', \{/,
-    'the tray-irritation producer still routes through the ordinary captureEnvironmentEvent seam, not a new bespoke path');
-  assert.doesNotMatch(source, /cyObserved:\s*false[\s\S]{0,200}no_eggs/,
-    'this fix never relabels the tray-irritation event as WORLD_ONLY - it simply carries no feeding fact');
-  ok('AWG OBSERVED/WORLD_ONLY boundaries remain unchanged; the fix withholds a fact, it does not reclassify observation (8)');
+  assert.doesNotMatch(source, /no_eggs|cold_tea/,
+    'retired tray-irritation producers and their food/deprivation mapper are absent');
+  ok('OBSERVED/WORLD_ONLY boundaries remain unchanged; retired producers are absent (8)');
 }
 
 // ---- 9: historical feeding provenance remains available ----

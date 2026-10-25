@@ -79,15 +79,6 @@ const BUILDERS = {
     return inc;
   },
 
-  // the small daily indignities of the tray.
-  trivial(ctx) {
-    if (ctx.sub === 'no_eggs') {
-      return { actor: 'no eggs on the tray', verb: '', object: 'again', detail: pick(['third morning running', 'powder as usual', 'nobody said why'], ctx.rnd) };
-    }
-    // cold_tea and the fallback
-    return { actor: pick(['the tea', 'the tray'], ctx.rnd), verb: 'came cold', object: '', detail: pick(['third time this week', 'again', 'stone cold', 'and the toast with it'], ctx.rnd) };
-  },
-
   // a shout through the door in the night.
   noise(ctx) {
     const who = ctx.rnd() < 0.6 ? fullName(pick(INMATE_KEYS, ctx.rnd)) : 'someone down the ones';
@@ -229,8 +220,10 @@ export function reconcileLedger(saved) {
 }
 
 // Build an incident of `kind` from templates. Returns the record WITHOUT a ts
-// (run.js stamps it on push). Never throws on an unknown kind.
+// (run.js stamps it on push). Never throws on an unknown kind. The retired
+// tray-irritation kind returns null, not a replacement texture incident.
 export function makeIncident(kind, ctx = {}) {
+  if (kind === 'trivial') return null;
   const build = BUILDERS[kind] || BUILDERS.texture;
   const c = { rnd: Math.random, relations: {}, ...ctx };
   const rec = build(c) || {};
