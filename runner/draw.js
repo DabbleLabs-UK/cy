@@ -4,8 +4,9 @@
 // pen.js) fed a coarse 0-100 stroke DSL instead of glyphs. This module owns the
 // runner-side half of that: parsing the DSL the model emits (defensively - the
 // model WILL emit rubbish lines), deciding WHEN he draws and WHAT, splitting a
-// drawing into build-up passes, and the two-stage prompt text (he decides in one
-// line of his own voice, then a second generation produces only the DSL).
+// drawing into build-up passes, and the DSL prompt text. Live private subject
+// selection is in drawing-subject.js; older prose-intent helpers below remain
+// compatibility diagnostics, not the production subject boundary.
 //
 // Nothing here talks to ollama or the network; run.js drives the generations and
 // emits the events. Pure functions, so selftest.js can exercise the lot.
@@ -308,6 +309,7 @@ export function resolveRequest(req, _v, _options = {}) {
 
 // A short subject keyword pulled out of his one-line decision, for the fixation
 // "keeps drawing the same thing" memory and the stored subject.
+// Legacy compatibility parser only. Never use it to validate live subjects.
 export function subjectFromLine(line) {
   let s = String(line || '').toLowerCase().trim();
   // prefer whatever follows a draw/sketch verb ANYWHERE in the line - the model
@@ -325,7 +327,7 @@ export function subjectFromLine(line) {
 
 // ---- prompts --------------------------------------------------------------
 
-// STAGE 1: a FORM directive fed to the normal voice system, so his decision is
+// LEGACY STAGE 1 (compatibility diagnostics only): a FORM directive fed to the normal voice system, so his decision is
 // written in his own hand as one short line and lands in the stream. He must NOT
 // draw in words here - just say what and why, then stop.
 export function drawIntentDirective(intent, { redrawSubject = null } = {}) {

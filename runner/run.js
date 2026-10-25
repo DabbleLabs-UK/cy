@@ -105,13 +105,9 @@ import {
   moodSnapshot,
   detectDrawRequest,
   resolveRequest,
-  subjectFromLine,
-  subjectLooksProse,
   validateDrawing,
   strokesToDsl,
   strokeSig,
-  drawIntentDirective,
-  drawDecidePrompt,
   drawDslSystem,
   drawDslPrompt,
   drawPassPrompt,
@@ -121,6 +117,7 @@ import {
   isSmallHours,
   pickDreamStartMin,
 } from './draw.js';
+import { drawingSubjectRequest, parseDrawingSubject } from './drawing-subject.js';
 import { updateAffect } from './shout.js';
 import {
   reconcileLedger,
@@ -1645,17 +1642,16 @@ async function main() {
       /* never crash on debug logging */
     }
   }
-  // A drawing that failed to render - logged as its OWN thing, never as a near-repeat
-  // discard. `why` is 'empty' (the DSL pass returned nothing usable - the model can
-  // legitimately emit its END stop first) or 'unusable' (parsed, but too few strokes
-  // to be a drawing). Drawing is a garnish: a failure here is noted and skipped, the
-  // decision line still stands, and the main stream is never starved of a cycle.
+  // Downstream geometry failure only. Subject failures have their own private
+  // diagnostic and never masquerade as missing strokes or a journal entry.
   async function logDrawFail(why, text) {
+    recordInferenceDiagnostic({ event: 'drawing-subject', at: tsNow(),
+      status: 'downstream-drawing-failure', reason: why === 'empty' ? 'empty-dsl' : 'unusable-strokes' });
     const snippet = (text || '').replace(/\s+/g, ' ').trim().slice(0, 80);
     const line =
       why === 'empty'
-        ? '[cy] draw failed: DSL pass returned empty - skipping the drawing (garnish, stream unaffected)'
-        : `[cy] draw failed: too few usable strokes, skipping: "${snippet}"`;
+        ? '[cy] drawing downstream failure: DSL pass returned empty'
+        : `[cy] drawing downstream failure: unusable strokes: "${snippet}"`;
     console.warn(line);
     try {
       const { appendFile } = await import('node:fs/promises');
@@ -2755,6 +2751,7 @@ async function main() {
         const out = await provider.rawGenerate({
           system, prompt, opts: requestOpts, signal: ac.signal, purpose, format,
         });
+        if (purpose === 'drawing' && attempt === 'drawing-intent') ac.signal.throwIfAborted();
         if (purpose === 'meal_choice' && ac.signal.aborted) throw cancellationError(ac.signal);
         requireInferenceEligibility(isEligible, ac);
         requestStats = out.stats || null;
@@ -2774,7 +2771,8 @@ async function main() {
         // paid-provider spend still counts for the (non-streamed) drawing DSL call. A
         // DSL pass that returned text is productive (it will attempt to render); an empty
         // return paid for nothing, so it lands in the non-emitting series.
-        await recordSpend(out.stats, accountingMode, !!(out.text && out.text.trim()));
+        await recordSpend(out.stats, accountingMode,
+          attempt !== 'drawing-intent' && !!(out.text && out.text.trim()));
         return returnMeta
           ? { ok: true, text: out.text || '', stats: out.stats || null, model: out.model || provider.model }
           : out.text || '';
@@ -2785,7 +2783,12 @@ async function main() {
       if (awgInReservedIdle && ac.signal.aborted) throw cancellationError(ac.signal);
       if (background) throw error;
       return returnMeta
-        ? { ok: false, text: '', stats: null, model: provider.model, error: String(error && error.message || error) }
+        ? { ok: false, text: '', stats: null, model: provider.model, error: String(error && error.message || error),
+          ...(purpose === 'drawing' && attempt === 'drawing-intent' ? {
+            aborted: ac.signal.aborted,
+            abortReason: ac.signal.aborted ? cancellationReason(ac.signal) : null,
+            modelStarted: startedAtMs !== null,
+          } : {}) }
         : ''; // aborted, unreachable, or bad body - caller treats as no drawing
     } finally {
       if (lease) {
@@ -2814,6 +2817,13 @@ async function main() {
         }
       } else if (cancellationScope) {
         generationCancellation.clear(cancellationScope, ac);
+      }
+      // A subject is still private while accounting and lease cleanup await.
+      // Do not let a success prepared earlier escape an interruption in either
+      // await and start a fresh, uncancelled stroke request afterward.
+      if (purpose === 'drawing' && attempt === 'drawing-intent' && returnMeta && ac.signal.aborted) {
+        return { ok: false, text: '', stats: requestStats, model: provider.model,
+          aborted: true, abortReason: cancellationReason(ac.signal), modelStarted: startedAtMs !== null };
       }
     }
   }
@@ -3507,13 +3517,12 @@ async function main() {
 
   // ---- drawing: he picks up the pen and draws instead of writing ----
   //
-  // Two stages. First he decides, in ONE line of his own voice, what he is
-  // drawing and why - streamed like any other thought, so it lands in the page.
-  // Then a second, non-streamed generation produces ONLY the stroke DSL, which
+  // Two stages. Private subject selection first, with no prose publication or
+  // continuation. Then the existing generation produces ONLY the stroke DSL, which
   // is parsed defensively, split into build-up passes, and emitted as `draw`
   // events (one per pass) plus a private `draw_saved` record for the drawings
   // table. Fewer than MIN_STROKES valid strokes and the drawing is discarded -
-  // the decision line still stands.
+  // no preparatory text is ever substituted for a failed picture.
   async function doDraw({ cognition = null, incidentContext = '' } = {}) {
     const now = Date.now();
     currentMode = 'journal';
@@ -3522,47 +3531,52 @@ async function main() {
     const req = pendingDrawRequests.shift() || null;
     const intent = req ? resolveRequest(req, vitals) : { mode: 'spontaneous', subject: null, requestedBy: null };
 
-    // ---- stage 1: the one-line decision, in voice, streamed to the page ----
-    // A bespoke prompt (drawDecidePrompt) whose LAST line is the naming cue, NOT a
-    // reprise of his prose - otherwise the model just carries the journal on and the
-    // "subject" comes back as diary text (the observed bug).
-    const ctx = buildCtx(cognition);
-    if (incidentContext) ctx.incidents = incidentContext;
-    ctx.bans = bansDirective(vitals.recentOpeners);
-    ctx.form = drawIntentDirective(intent);
-    const dir1 = buildDirectives(vitals, 'journal', ctx);
-    const p1 = drawDecidePrompt(contextText(), dir1);
+    // ---- stage 1: one private, schema-constrained drawing subject ----
+    // No buildCtx, journal directives, prose buffer or recent-expression tail.
+    // The ordinary broker still owns availability, provenance and privacy.
+    const generationRef = `drawing-subject:${now}`;
+    autobiographicalMemory.consumeWorking(generationRef);
+    const grounded = cognition || (() => {
+      const value = soma.groundedDirective({ now });
+      return { groundedDirective: value.directive, groundedContext: value.context };
+    })();
+    const context = buildBrokerContext(CONTEXT_CONSUMERS.CY_PROSE, {
+      generationRef, cognition: grounded, incidentContext, recentExpression: '',
+    });
+    if (!context.ok) {
+      recordInferenceDiagnostic({ event: 'drawing-subject', at: tsNow(),
+        status: 'subject-selection-failure', reason: 'context-unavailable' });
+      vitals.lastDrawMs = now;
+      vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
+      return 'empty';
+    }
+    const call = drawingSubjectRequest({ packet: context.packet,
+      requestedSubject: intent.subject });
     const o1 = options(vitals, config.threads, 'journal', { num_predict: 40 });
-    o1.stop = [...o1.stop, '\n']; // one line only
-    await logPrompt('draw-decide', ZONE_A + '\n\n---PROMPT---\n' + p1);
-    const r1 = await streamGenerate({
-      system: ZONE_A, prompt: p1, opts: o1, mode: 'journal', purpose: 'drawing', attempt: 'drawing-intent',
+    await logPrompt('draw-subject', call.system + '\n\n---PROMPT---\n' + call.prompt);
+    const r1 = await rawGenerate({
+      ...call, opts: o1, purpose: 'drawing', attempt: 'drawing-intent', returnMeta: true,
       timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS,
     });
     if (r1.aborted) {
+      recordInferenceDiagnostic({ event: 'drawing-subject', at: tsNow(),
+        status: r1.modelStarted ? 'interrupted-during-subject' : 'interrupted-before-subject',
+        reason: r1.abortReason });
       vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
       return 'aborted'; // an interrupt landed - let the loop handle it, try drawing again later
     }
-    const line = (r1.full || '').trim();
-    // the decision line is itself real journal text; whether the DSL below renders or
-    // not, a cycle that put a line on the page counts as emitted, never empty.
-    const decisionEmitted = !!line;
-
-    // What he is actually drawing. A requested subject is concrete already; a
-    // spontaneous subject is extracted from the model's line and must be short.
-    let subject;
-    if (intent.mode === 'honour' || intent.mode === 'badly') subject = intent.subject || subjectFromLine(line);
-    else subject = subjectFromLine(line);
-    subject = (subject || '').trim();
-    if (!subject || (intent.mode !== 'honour' && intent.mode !== 'badly' && subjectLooksProse(subject))) {
-      // stage 1 gave prose, not a subject: no drawing this time, the line still stands.
-      await logDrawFail('unusable', line);
+    const selected = r1.ok ? parseDrawingSubject(r1.text)
+      : { ok: false, reason: 'provider-failure', subject: null };
+    recordInferenceDiagnostic({ event: 'drawing-subject', at: tsNow(),
+      status: selected.ok ? 'subject-accepted' : 'subject-selection-failure',
+      reason: selected.reason, output_chars: String(r1.text || '').length });
+    if (!selected.ok) {
       vitals.lastDrawMs = now;
       vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
-      return decisionEmitted ? 'emitted' : 'empty';
+      return 'empty';
     }
-    // the caption is the SHORT subject, never the journal prose that preceded it.
-    const title = subject.slice(0, 60);
+    const subject = selected.subject;
+    const title = subject;
 
     // ---- stage 2: the DSL, non-streamed, built up in validated passes ----
     // Each pass is its own generation and is validated the same way: the base pass
@@ -3589,11 +3603,11 @@ async function main() {
     });
     if (!baseRaw || !baseRaw.trim()) {
       // an empty DSL pass is a FAILURE, not a repeat (the model emitted END first, or
-      // was cut off). Skip the garnish; the decision line already stands.
+      // was cut off). No preparatory prose was published in its place.
       await logDrawFail('empty', baseRaw);
       vitals.lastDrawMs = now;
       vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
-      return decisionEmitted ? 'emitted' : 'empty';
+      return 'empty';
     }
     const baseVal = validateDrawing(parseStrokes(baseRaw).strokes, { min: MIN_STROKES, maxText: 1 });
     if (!baseVal.ok) {
@@ -3601,7 +3615,7 @@ async function main() {
       await logDrawFail('unusable', baseRaw);
       vitals.lastDrawMs = now;
       vitals.expressiveCadence = recordExpressiveDrawingFailure(vitals.expressiveCadence);
-      return decisionEmitted ? 'emitted' : 'empty';
+      return 'empty';
     }
 
     const passSpecs = [{ label: 'under', strokes: baseVal.strokes }];
