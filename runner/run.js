@@ -69,6 +69,7 @@ import {
   dreamMemoryQuery,
   selectDreamMemoryTraces,
   validateDreamOutput,
+  dreamFragmentsArePublishable,
 } from './dream.js';
 import { createSomaRuntime } from './soma-runtime.js';
 import { restoreStartupSleepHistory } from './sleep-startup.js';
@@ -5135,6 +5136,9 @@ async function main() {
   // sanitation and warden screen as waking prose, but dream content never enters
   // Zone B, the incident ledger, or any grounded Soma observation path.
   async function emitDreamFragments(fragments, detail = {}) {
+    // Never sanitize technical packaging into apparent dream content. Enforce
+    // the same value boundary here even if a caller bypasses raw parsing.
+    if (!dreamFragmentsArePublishable(fragments)) return false;
     const screened = [];
     for (const fragment of fragments) {
       const chunk = stripScaffold(sanitize(fragment));
@@ -5146,7 +5150,7 @@ async function main() {
       }
       screened.push(chunk.trim());
     }
-    if (!screened.length) return false;
+    if (!dreamFragmentsArePublishable(screened)) return false;
     if (detail.isEligible && !detail.isEligible()) return false;
     const id = detail.id || randomUUID();
     emit({

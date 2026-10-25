@@ -132,12 +132,40 @@ export function dreamGenerationDirective(packet, { lucid = false, wakeLine = '' 
   ].join('\n');
 }
 
-function extractJson(raw) {
-  const text = String(raw || '').trim();
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try { return JSON.parse(text.slice(start, end + 1)); } catch { return null; }
+function structuredFragments(raw) {
+  let parsed;
+  try { parsed = JSON.parse(String(raw || '').trim()); } catch { return null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+      || Object.keys(parsed).length !== 1 || !Object.hasOwn(parsed, 'fragments')
+      || !Array.isArray(parsed.fragments) || !parsed.fragments.length
+      || !parsed.fragments.every((value) => typeof value === 'string' && value.trim())) return null;
+  return parsed.fragments;
+}
+
+// Packaging is not dream language. Inspect the complete values before shaping
+// (and again afterward), so truncation cannot conceal a role/control suffix.
+// Ordinary words such as assistant, system, error or fragments are not banned.
+function hasDreamScaffolding(value) {
+  const text = String(value || '').replace(/\\(["'])/g, '$1');
+  return looksLikeAssistantFrame(text)
+    || /```|~~~/.test(text)
+    || /^\s*[{}\[\],]+\s*$/.test(text)
+    || /\bfragments["']?\s*:/i.test(text)
+    || /[{[]\s*["'][^"'\n]+["']\s*:/.test(text)
+    || /^\s*\[\s*(?:["'{\[]|-?\d|true\b|false\b|null\b)/.test(text)
+    || /^\s*["'][^"'\n]+["']\s*:\s*[\[{"]/.test(text)
+    || />[ \t]*(?:assistant|user|system|developer|tool)\b/i.test(text)
+    || /(?:^|[\r\n|>])\s*(?:assistant|user|system|developer|tool)\s*(?::|>)/i.test(text)
+    || /<\/?(?:assistant|user|system|developer|analysis|final|think|tool)\b[^>]*>/i.test(text)
+    || /<\||\|(?:im_start|im_end|eot_id|endoftext|start_header_id|end_header_id)\|/i.test(text)
+    || /(?:<[ \t]*\|*[ \t]*|\|+[ \t]*)im[ \t_]+end[ \t]*(?:\|+[ \t]*>+|>+|\|+)\|*/i.test(text)
+    || /\[\/?INST\]|<<\/?SYS>>/i.test(text)
+    || /^\s*(?:SyntaxError\b|TypeError\b|JSONDecodeError\b|Traceback\s*\(|(?:JSON\s+)?pars(?:e|ing)\s+error\b|error\s+parsing\s+JSON\b|error\s*:\s*(?:unexpected token|unexpected end|invalid JSON|failed to parse)\b|at\s+JSON\.parse\b|debug\s*:\s*(?:parser|model|response)\b)/i.test(text);
+}
+
+export function dreamFragmentsArePublishable(values) {
+  return Array.isArray(values) && values.length > 0
+    && values.every((value) => typeof value === 'string' && value.trim() && !hasDreamScaffolding(value));
 }
 
 function shapeFragment(value) {
@@ -151,19 +179,20 @@ function shapeFragment(value) {
 }
 
 export function parseDreamFragments(raw) {
-  const parsed = extractJson(raw);
-  let values = parsed && Array.isArray(parsed.fragments) ? parsed.fragments : null;
-  if (!values) {
-    values = String(raw || '').split(/[\r\n]+/)
-      .map((line) => line.replace(/^\s*[-*]\s*/, '').trim())
-      .filter(Boolean);
-  }
-  return values.map(shapeFragment).filter(Boolean).slice(0, DREAM_MAX_FRAGMENTS);
+  const values = structuredFragments(raw);
+  if (!dreamFragmentsArePublishable(values)) return [];
+  const fragments = values.map(shapeFragment).filter(Boolean).slice(0, DREAM_MAX_FRAGMENTS);
+  return dreamFragmentsArePublishable(fragments) ? fragments : [];
 }
 
 export function validateDreamOutput(raw) {
   if (looksLikeAssistantFrame(raw)) {
     return { valid: false, fragments: [], result: 'REJECTED_ASSISTANT_FRAME' };
+  }
+  const values = structuredFragments(raw);
+  if (!values) return { valid: false, fragments: [], result: 'REJECTED_INVALID_SHAPE' };
+  if (values.some(hasDreamScaffolding)) {
+    return { valid: false, fragments: [], result: 'REJECTED_TECHNICAL_SCAFFOLDING' };
   }
   const fragments = parseDreamFragments(raw);
   return fragments.length
