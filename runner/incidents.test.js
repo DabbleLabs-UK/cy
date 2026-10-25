@@ -240,7 +240,9 @@ test('selectJournalTurn follows the canonical source instead of its incident par
   const now = Date.now();
   const lastJournalAtMs = now - 120000; // wrote 2 min ago
   const ledger = [
-    { ...makeIncident('trivial', { sub: 'no_eggs', rnd: () => 0 }), ts: localTs(now - 300000) }, // stale (before last entry)
+    // Persisted legacy text remains readable; do not invoke a retired producer.
+    { actor: 'no eggs on the tray', verb: '', object: 'again', detail: 'third morning running',
+      resolved: false, ts: localTs(now - 300000) }, // stale (before last entry)
     { ...makeIncident('officer', { actorKey: 'keyes', slight: 'pulled you out', rnd: () => 0 }), ts: localTs(now - 10000) }, // fresh
   ];
   const record = { world_event: { id: 'event-keyes', event_type: 'officer_instruction',
@@ -259,7 +261,8 @@ test('selectJournalTurn reports nothing-new when no incident has occurred since 
   const now = Date.now();
   const lastJournalAtMs = now - 60000;
   const ledger = [
-    { ...makeIncident('trivial', { sub: 'cold_tea', rnd: () => 0 }), ts: localTs(now - 300000) }, // older than last entry
+    { actor: 'the tea', verb: 'came cold', object: '', detail: 'again',
+      resolved: false, ts: localTs(now - 300000) }, // persisted, older than last entry
   ];
   const turn = selectJournalTurn(ledger, { lastJournalAtMs, lastIncidentMs: now - 300000 });
   assert.equal(turn.freshLine, '');

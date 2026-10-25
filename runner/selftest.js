@@ -223,7 +223,6 @@ const filed = (k, c) => {
 };
 filed('social', { actorKey: 'reg', slight: 'swapped your meal tray for a worse one', evType: 'swapped_tray', phase: 'work_assoc', mins: 540 });
 filed('officer', { actorKey: 'sweep', slight: 'turned the cell over and left it worse', evType: 'search', phase: 'work_assoc', mins: 540 });
-filed('trivial', { sub: 'cold_tea', mins: 480 });
 filed('regime', { sub: 'late_unlock', mins: 450 });
 filed('texture', { phase: 'lights_out', mins: 180 });
 line('every incident has the required record shape: ' +
