@@ -391,7 +391,7 @@ assert.equal(effectiveAsleepForRegime('day', 23 * 60), false);
 assert.match(runSource, /return effectiveAsleepForRegime\(client\.regime, mins\);/);
 assert.match(runSource, /lastPublishedWakingExpressionMs = Date\.now\(\)/);
 assert.match(runSource, /recordExpressiveDrawingFailure\(vitals\.expressiveCadence\)/);
-assert.match(runSource, /logDrawFail\('unusable', line\);[\s\S]*?recordExpressiveDrawingFailure/);
+assert.match(runSource, /if \(!selected.ok\) \{[\s\S]*?recordExpressiveDrawingFailure[\s\S]*?return 'empty'/);
 assert.match(runSource, /logDrawFail\('empty', baseRaw\);[\s\S]*?recordExpressiveDrawingFailure/);
 assert.match(runSource, /logDrawFail\('unusable', baseRaw\);[\s\S]*?recordExpressiveDrawingFailure/);
 assert.match(runSource, /eligibleExpressionGap\(\{/);

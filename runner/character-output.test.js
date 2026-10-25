@@ -572,12 +572,12 @@ ok('new marker and editorial candidates use one repair or silence for every waki
   assert.match(runSource, /onPhase:\s*setInfer/,
     'shared inference phase reporting stays live through the coordinator callback');
   assert.match(runSource, /const guarded = await generateWithCharacterRepair\(/);
-  assert.match(runSource, /const r1 = await streamGenerate\(\{[\s\S]*?purpose: 'drawing', attempt: 'drawing-intent'/);
+  assert.match(runSource, /const r1 = await rawGenerate\(\{[\s\S]*?purpose: 'drawing', attempt: 'drawing-intent', returnMeta: true/);
   assert.match(runSource, /if \(discards >= MAX_DISCARDS\) \{[\s\S]*?await logCapHit\(mode, discards\);[\s\S]*?break;/);
   assert.match(runSource, /contextTail: tail,[\s\S]*?allowRepeat,[\s\S]*?attempt: discards \? `near-repeat-retry-\$\{discards\}`/);
   assert.doesNotMatch(runSource, /forced-after-repeats|contextTail: forceEmit \? undefined : tail/);
 }
-ok('normal journal and drawing-intent call the shared validated waking-prose generator');
+ok('normal journal retains shared prose validation while drawing preparation stays private');
 
 {
   const historical = 'wot u mean hola? |}| still thinkin bout it |}';
