@@ -14,6 +14,18 @@ meaningful fragments, each capped at twelve words and 96 characters. The model
 call has a 96-token output limit and no retries. These are engineering context,
 model-call, and presentation limits, not psychological coefficients.
 
+The complete response must parse as exactly one object containing a non-empty
+`fragments` array of non-empty strings. Substring extraction and raw-line
+fallback are not supported. Fragment values are checked for obvious JSON,
+role/chat-template, response-wrapper and parser/debug scaffolding before the
+existing presentation caps and again afterward. Any such value rejects the
+whole response; packaging is never salvaged into dream content. The publication
+gate repeats the value check before sanitation and after screening, before any
+public event or subjective-memory source is emitted. Invalid responses use the
+existing private rejection diagnostic and produce no dream, repair call or
+replacement content. Ordinary surreal language and punctuation remain allowed;
+English words such as "assistant" are not banned. Historical dreams are unchanged.
+
 `DREAM_MEMORY_SURFACING` queries the existing autobiographical store but passes
 only active `PUBLIC_RECALLABLE` episodic, person, motif, or unresolved-thread
 records to the model. `SENDER_RECALLABLE` and `INTERNAL_ONLY` records are excluded
