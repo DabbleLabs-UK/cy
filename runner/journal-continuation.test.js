@@ -101,7 +101,7 @@ test('journal exclusion is wired after caller options; other expression paths re
     /reg remembers everything/);
   assert.match(drawDecidePrompt(priorWriting, 'Draw one thing.'), /reg remembers everything/);
   assert.match(runSource, /recentExpressionText: contextText\(\)\.slice\(-640\)/);
-  assert.match(runSource, /const tail = contextText\(\);\s*const prompt = buildPrompt\(tail, mode, null, directives\)/);
+  assert.match(runSource, /const tail = contextText\(\);\s*const request = buildPromptRequest\(tail, mode, null, directives\)/);
   assert.match(runSource, /contextTail: tail,/);
   const longProse = priorWriting + ' the wing was quiet.'.repeat(50);
   const journalPrompt = buildPrompt(longProse, 'journal', null);
@@ -114,7 +114,7 @@ test('journal exclusion is wired after caller options; other expression paths re
 test('fixed cast is standing description, not a fresh event; quality settings are unchanged', () => {
   assert.match(ZONE_A, /THE WING - standing descriptions of who is in here, not new events/);
   const runSource = readFileSync(new URL('./run.js', import.meta.url), 'utf8');
-  assert.match(runSource, /const tail = contextText\(\);\s*const prompt = buildPrompt\(tail, mode, null, directives\)/);
+  assert.match(runSource, /const tail = contextText\(\);\s*const request = buildPromptRequest\(tail, mode, null, directives\)/);
   assert.match(runSource, /if \(!r\.repeat\)/);
   assert.match(runSource, /recordExpressiveJournal\(vitals\.expressiveCadence/);
   assert.match(runSource, /wakingJournalContext: true/);

@@ -787,11 +787,23 @@ export function selectJournalContinuation(prose) {
 }
 
 export function buildPrompt(contextText, mode, payload, directives = '') {
+  return buildPromptRequest(contextText, mode, payload, directives).prompt;
+}
+
+// Carry the very same continuation used to render the request to its acceptance
+// boundary. This is ephemeral validation metadata, not another model input.
+export function buildPromptRequest(contextText, mode, payload, directives = '') {
   const fullContext = contextText && contextText.trim() ? contextText.trim() : '';
   const ctxBlock = mode === 'journal'
     ? selectJournalContinuation(fullContext) : fullContext;
   const zoneC = directives && directives.trim() ? directives.trim() : '';
+  return {
+    prompt: renderPrompt(ctxBlock, mode, payload, zoneC),
+    journalContinuation: mode === 'journal' ? ctxBlock : null,
+  };
+}
 
+function renderPrompt(ctxBlock, mode, payload, zoneC) {
   if (mode === 'postcard' && payload) {
     const who = payload.from_name ? payload.from_name : 'someone outside';
     const hasBody = payload.body && payload.body.trim();

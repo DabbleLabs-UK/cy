@@ -1,0 +1,29 @@
+{
+  "_note": "Four published natural journals missed by the production 1dc609d guard. Retained gen telemetry, not new inference. Context is the trailing at-most-900 characters of zone_b after trim; this preserves both the actual 520-character prompt view and the old normalized last-400 window. Times are retained BST. Existing malformed prose is historical evidence, not a new publication.",
+  "cases": [
+    {
+      "sequence": 2894968,
+      "timestamp": "2026-10-23 12:36:18.410",
+      "savedContextSuffix": "n b4 they did that - how long since then? cos dont really know how much time passed when ya go from association back to yer cell. now ur left tryna figger out why they took them away and if im done thnks for the search, but still dont get how long ive been here. cos time dosnt work proper when ur stuck in association back t yer cell rn ppl keep sayin its 3 weeks? i aint seen root since they took him away, dunno if hes bang-up or wot. wot's all dis then? so much goin' on rn ppl say im gettin moved tonight at wing. two cells along some bird says they're movin me, moving YOU. dunno wot that means - cos i cant make head nor tail of this regime 11:36 b4 they did thnks for nothin but confusion - still got my thoughts stuck on dat meds trolley wheels squeakin along the ones...",
+      "candidate": " wot's all dis then? cos i dont get why lockn down means we gotta lose our canteen too? rn ppl keep sayin its 3 weeks now, but im stuck here - nothin happens fast. theyre bang-up for life b4 wot else u can think abt. u cant make sense of this regime anyway. meds trolley wheels squeakin along the ones..."
+    },
+    {
+      "sequence": 2909130,
+      "timestamp": "2026-10-23 21:30:43.098",
+      "savedContextSuffix": "gotta be out there thinkin 'bout me when im cooped up here |. dunno y i keep comin back 2 this tho... anyway, there's still no eggs |. and now we're stuck in... cant remember when last time had anythin'. now mr keyes comes along takin' some thing away from me | dont know wot its 4 anyway | reckon thats all there is really - nothing else happend after that tbh | cos im still tryna get this out of my head b4 i can think straight rn | ppls call 'em \"events\" nyt it means nothn but noise | <banged up for the...",
+      "candidate": " gotta be thinkin 'bout me when im cooped up here | dunno y i keep comin back 2 dis place tho... cos thats just the way its always been | meds trolley wheels squeakin' along the corridor, cuts across wot u were sayin | <banged up for the...\"|"
+    },
+    {
+      "sequence": 2910793,
+      "timestamp": "2026-10-23 22:33:34.950",
+      "savedContextSuffix": "gotta be out there thinkin 'bout me when im cooped up here |. dunno y i keep comin back 2 this tho... anyway, there's still no eggs |. and now we're stuck in... cant remember when last time had anythin'. now mr keyes comes along takin' some thing away from me | dont know wot its 4 anyway | reckon thats all there is really - nothing else happend after that tbh | cos im still tryna get this out of my head b4 i can think straight rn | ppls call 'em \"events\" nyt it means nothn but noise | <banged up for the... gotta be thinkin 'bout me when im cooped up here | dunno y i keep comin back 2 dis place tho... cos thats just the way its always been | meds trolley wheels squeakin' along the corridor, cuts across wot u were sayin | <banged up for the...\"|",
+      "candidate": " some thinkin b4 i can think straight rn | cos im still stuck on that noise after dark - dont know wot its for anyway | maybe just my mind playn but cant shake off this feelin like theres sumthin away from me | dunno y ppl call 'em \"events\" nyt it means nothn but noise | banged up 4 so long now... | meds trolley wheels squeakin' along the corridor, cuts across..."
+    },
+    {
+      "sequence": 2939517,
+      "timestamp": "2026-10-24 16:49:49.897",
+      "savedContextSuffix": "bout me tho, tonight at wing... cos i handed it over, sweep took it n ended search. tbh its like my mind, proper messed up rn ppl wdnt remember all this crap... dunno if id eat that rubbish tbh its all cos of dat proctor bloke wot says me numba at trace miss... | . know sumfin went down but cant recall proper. dont even get started rn ppl wdnt remember dis much time... dunno if id eat that rubbish tbh | . thinkin bout sweep takin my stuff then just leavin' like he does b4 it goes back on a tray and i'm left wondering | . wonder why bill asked... cos i'm still thinkin bout that bit wot went down by the gate - miss bailey n mr keyes talkn low, no one signs back out? like, cos i handed over me stuff, sweep took it an ended search. dunno if id eat dat rubbish tbh ppl wdnt remember dis much time... i cant get this idea outta me head | . wonder why bill asked | . now its stuck in there b4 i...",
+      "candidate": " id still be wonderin bout sweep takin me stuff then leavin like he does b4 i even notice wot's gone | . cos its all so dodgy these days | . miss bailey n mr keyes were talkn low by the gate... dunno why but that came back 2 me just now | . dont know if id eat dat rubbish tbh ppl wdnt remember dis much time... cant get this idea outta me..."
+    }
+  ]
+}
