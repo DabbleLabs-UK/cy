@@ -1,0 +1,36 @@
+{
+  "schema": "cy.journal-finalization-natural-fixtures.v1",
+  "note": "Original raw text is available only for the three saved repair candidates. No missing provider termination reason has been reconstructed; length/stop metadata in tests is explicitly synthetic.",
+  "cases": [
+    {
+      "seq": 2905496,
+      "timestamp": "2026-10-23 19:13:58.128",
+      "rawRepair": "cant remember when last time had anythin'. now mr keyes comes along takin' some thing away from me | dont know wot its 4 anyway | reckon thats all there is really - nothing else happend after that tbh | cos im still tryna get this out of my head b4 i can think straight rn | ppls call 'em \"events\" nyt it means nothn but noise | <banged up for the night",
+      "published": " cant remember when last time had anythin'. now mr keyes comes along takin' some thing away from me | dont know wot its 4 anyway | reckon thats all there is really - nothing else happend after that tbh | cos im still tryna get this out of my head b4 i can think straight rn | ppls call 'em \"events\" nyt it means nothn but noise | <banged up for the...",
+      "observedTokens": 93,
+      "observedProviderReason": null
+    },
+    {
+      "seq": 2935053,
+      "timestamp": "2026-10-24 14:00:24.448",
+      "rawRepair": "tbh its all cos of dat proctor bloke wot says me numba at trace miss... | . know sumfin went down but cant recall proper. dont even get started rn ppl wdnt remember dis much time... dunno if id eat that rubbish tbh | . thinkin bout sweep takin my stuff then just leavin' like he does b4 it goes back on a tray and i'm left wondering | . wonder why bill asked fer",
+      "published": " tbh its all cos of dat proctor bloke wot says me numba at trace miss... | . know sumfin went down but cant recall proper. dont even get started rn ppl wdnt remember dis much time... dunno if id eat that rubbish tbh | . thinkin bout sweep takin my stuff then just leavin' like he does b4 it goes back on a tray and i'm left wondering | . wonder why bill asked...",
+      "observedTokens": 93,
+      "observedProviderReason": null
+    },
+    {
+      "seq": 2980428,
+      "timestamp": "2026-10-25 17:20:21.648",
+      "rawRepair": "i dunno wot im thinkin rn but i keep goin back ta mr keyes cos hes always so calm - like, this is da way its gotta b 2 me... | we've been talkn bout reg remembering things all day n night for months now, an no one else gets t recall anythin except maybe nick tho he dont say much anyways... | why cant they just fkn check wiv him already? | hows it even",
+      "published": " i dunno wot im thinkin rn but i keep goin back ta mr keyes cos hes always so calm - like, this is da way its gotta b 2 me... | we've been talkn bout reg remembering things all day n night for months now, an no one else gets t recall anythin except maybe nick tho he dont say much anyways... | why cant they just fkn check wiv him already? | hows it...",
+      "observedTokens": 93,
+      "observedProviderReason": null
+    }
+  ],
+  "completeCapQuestion": {
+    "seq": 2944437,
+    "published": " dont know why mr keyes were talkn low by da gate... ppl wdnt remember dis much time cos i dont eat dat rubbish tbh | . cant get dis idea outta me, b4 they move us tonight rn | cannot shut up abt that phone ringing n no 1 picked uup | thinkin bout Mr Keyes and if hes tryna cover sumfin for Reg... maybe fisher got ta him wiv somethng new?",
+    "observedTokens": 93,
+    "note": "Published text, not a reconstructed raw response."
+  }
+}

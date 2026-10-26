@@ -258,7 +258,7 @@ for (const stage of ['spend', 'release']) test(`drawing intent cancelled during 
   assert.equal(f.calls.release, 1);
 });
 
-test('journal context and Tempo stay identical; stream differs only at the journal repeat boundary', () => {
+test('journal context and Tempo stay identical outside tested repeat/finalization boundaries', () => {
   const baseline = execFileSync('git', ['show', '227b294:runner/run.js'], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
   for (const [start, end] of [
     ['async function waitForInferenceTempo(', '  soma.observe('],
@@ -275,7 +275,16 @@ test('journal context and Tempo stay identical; stream differs only at the journ
       '      ? isJournalRepeat(accounted.out, journalContinuation)\n' +
       '      : contextTail && accounted.out.trim() && isRepeat(accounted.out, contextTail);\n' +
       '    if (repeated) {');
-  assert.equal(stream(source), expectedStream);
+  // The later finalization fix stages and validates journal bytes immediately
+  // before publication. Permit that separately tested block and literal flush;
+  // keep collection, drawing separation and all other stream code pinned.
+  const finalization = extract(source,
+    "    if (mode === 'journal') {\n      // Run existing per-chunk filters",
+    '    await logBurstStrip(rawFull, mode);\n    for (let i = 0; i < attempts.length; i++)');
+  const beforeFinalization = stream(source)
+    .replace(finalization, 'for (const chunk of chunks) await onChunk(chunk, mode);')
+    .replace('...buffer.flush()]', '...buffer.flush({ tokenLimited: guarded.tokenLimited })]');
+  assert.equal(beforeFinalization, expectedStream);
   const stageTwo = (text) => extract(text, '    const sys2 = drawDslSystem();', '  // ---- inbox:');
   // Only comments stop claiming a failed picture has emitted preparatory prose.
   const executable = (text) => text.split('\n').filter((line) => !line.trimStart().startsWith('//')).join('\n')

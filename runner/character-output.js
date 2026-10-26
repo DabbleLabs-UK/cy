@@ -5,7 +5,7 @@
 // the rejected text back to the model: the retry receives the original Cy/world
 // prompt plus one short output-only instruction.
 
-import { assistantFrameHits, looksLikeAssistantFrame, malformedProseControlHits, normalizeWakingProse } from './warden.js';
+import { assistantFrameHits, looksLikeAssistantFrame, malformedProseControlHits, normalizeWakingProse, sanitizeCharacterContext } from './warden.js';
 
 export const CHARACTER_REPAIR_INSTRUCTION =
   "Return only the inmate's next in-character text. No commentary about writing, " +
@@ -27,6 +27,42 @@ export function validateCharacterCandidate(candidate) {
     ok: false,
     reasons: hits,
   };
+}
+
+// Counts reaching num_predict are not a provider termination reason. In
+// particular, a normal stop can coincide with the configured token ceiling.
+export function journalTerminationEvidence(stats) {
+  const supplied = stats?.done_reason ?? stats?.finish_reason;
+  const reason = typeof supplied === 'string' && supplied.trim()
+    ? supplied.trim().toLowerCase() : null;
+  return { reason, explicitLength: stats?.done !== false && reason === 'length' };
+}
+
+// A deliberately conservative surface-completion test, used ONLY when the
+// provider explicitly reports length termination. It is not a grammar/fact
+// checker. Ellipses do not establish completion of a mechanically stopped tail.
+function hasCompleteJournalEnding(text) {
+  const end = String(text || '').trimEnd();
+  return /[\p{L}\p{N}][.!?]["')\]]*$/u.test(end)
+    && !/(?:\.[ \t]*){2,}["')\]]*$/.test(end);
+}
+
+// Call on the exact staged publication, after all existing text filters. Check
+// the original as well so filtering cannot disguise a length-truncated tail.
+// This function never changes words, adds punctuation, or requests a repair.
+export function validateJournalPublication(text, stats, originalText = text) {
+  const termination = journalTerminationEvidence(stats);
+  const validation = validateCharacterCandidate(text);
+  const reasons = [...validation.reasons];
+  if (!String(text || '').trim()) reasons.push('empty final journal');
+  if (sanitizeCharacterContext(text) !== text) {
+    reasons.push('final journal would change under feedback sanitation');
+  }
+  if (termination.explicitLength
+      && (!hasCompleteJournalEnding(originalText) || !hasCompleteJournalEnding(text))) {
+    reasons.push('explicit length termination without a complete ending');
+  }
+  return { ok: reasons.length === 0, reasons, termination };
 }
 
 // `generate` returns a provider result with a `candidate` string. Error,
