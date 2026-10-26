@@ -749,8 +749,8 @@ export class Client {
     return this._memoryRequest('enqueue_surfacing', value || {});
   }
 
-  async claimMemorySurfacing() {
-    return this._memoryRequest('claim_surfacing');
+  async claimMemorySurfacing(value = {}) {
+    return this._memoryRequest('claim_surfacing', value);
   }
 
   async completeMemorySurfacing(value) {

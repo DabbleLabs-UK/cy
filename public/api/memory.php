@@ -140,35 +140,18 @@ try {
     }
 
     if ($action === 'claim_surfacing') {
-        $db->beginTransaction();
-        $db->exec(
-            "UPDATE autobiographical_memory_surfacing_queue
-             SET status = 'RETRYABLE', available_at = NOW(3),
-                 last_error = 'recovered after interrupted processing', updated_at = NOW(3)
-             WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)"
-        );
-        $job = $db->query(
-            "SELECT * FROM autobiographical_memory_surfacing_queue
-             WHERE status IN ('PENDING', 'RETRYABLE') AND available_at <= NOW(3)
-             ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE"
-        )->fetch();
-        if ($job) {
-            $db->prepare(
-                "UPDATE autobiographical_memory_surfacing_queue
-                 SET status = 'PROCESSING', attempts = attempts + 1,
-                     started_at = NOW(3), updated_at = NOW(3) WHERE id = ?"
-            )->execute([(int)$job['id']]);
-            $job['context'] = json_decode((string)$job['context_payload'], true) ?: [];
-            unset($job['context_payload']);
+        try {
+            $result = captive_memory_claim_surfacing($db, $input);
+        } catch (InvalidArgumentException $error) {
+            captive_error_response($error->getMessage(), 422);
         }
-        $db->commit();
-        captive_json_response(['ok' => true, 'job' => $job ?: null]);
+        captive_json_response(['ok' => true] + $result);
     }
 
     if ($action === 'complete_surfacing') {
         $jobId = max(0, (int)($input['job_id'] ?? 0));
         $category = strtoupper((string)($input['result_category'] ?? 'ERROR'));
-        $allowed = ['PREPARED', 'NO_CANDIDATES', 'INVALID', 'ERROR', 'TIMEOUT', 'PREEMPTED'];
+        $allowed = ['PREPARED', 'NO_CANDIDATES', 'INVALID', 'ERROR', 'TIMEOUT', 'PREEMPTED', 'SUPERSEDED'];
         if ($jobId < 1 || !in_array($category, $allowed, true)) {
             captive_error_response('invalid surfacing completion', 422);
         }
@@ -180,6 +163,16 @@ try {
             $db->rollBack();
             captive_error_response('surfacing job not found', 404);
         }
+        // A late completion may not resurrect a journal row retired by a newer
+        // desired context or a restart. Historical attempts/sets stay untouched.
+        if (($job['status'] === 'SUPERSEDED' || $category === 'SUPERSEDED')
+            && captive_memory_is_journal_surfacing($job)) {
+            $category = 'SUPERSEDED';
+            $input['selected_memories'] = [];
+        } elseif ($category === 'SUPERSEDED') {
+            $db->rollBack();
+            captive_error_response('only journal surfacing may be superseded', 422);
+        }
         $selected = is_array($input['selected_memories'] ?? null) ? array_slice($input['selected_memories'], 0, 3) : [];
         $selectedIds = array_values(array_filter(array_map(
             static fn(mixed $memory): string => is_array($memory) ? (string)($memory['id'] ?? '') : '',
@@ -187,8 +180,8 @@ try {
         )));
         $candidateIds = array_slice(array_values(array_filter($input['candidate_ids'] ?? [], 'is_string')), 0, 10);
         $setId = null;
-        $finished = in_array($category, ['PREPARED', 'NO_CANDIDATES'], true);
-        if ($finished) {
+        $finished = in_array($category, ['PREPARED', 'NO_CANDIDATES', 'SUPERSEDED'], true);
+        if ($finished && $category !== 'SUPERSEDED') {
             $setId = (string)($input['prepared_set_id'] ?? '');
             if (!preg_match('/^[a-f0-9-]{36}$/', $setId)) {
                 $db->rollBack();
@@ -216,7 +209,7 @@ try {
              SET status = ?, completed_at = IF(?, NOW(3), completed_at),
                  available_at = IF(?, available_at, DATE_ADD(NOW(3), INTERVAL ? SECOND)),
                  last_error = ?, updated_at = NOW(3) WHERE id = ?"
-        )->execute([$finished ? 'PREPARED' : 'RETRYABLE', $finished ? 1 : 0, $finished ? 1 : 0, $delay, $errorText, $jobId]);
+        )->execute([$category === 'SUPERSEDED' ? 'SUPERSEDED' : ($finished ? 'PREPARED' : 'RETRYABLE'), $finished ? 1 : 0, $finished ? 1 : 0, $delay, $errorText, $jobId]);
         $attempt = $db->prepare(
             'INSERT INTO autobiographical_memory_surfacing_attempts
                 (queue_id, prepared_set_id, context_fingerprint, subject_visitor_id,
@@ -235,7 +228,7 @@ try {
             $json($selectedIds), $category, $errorText,
         ]);
         $db->commit();
-        captive_json_response(['ok' => true, 'status' => $finished ? 'PREPARED' : 'RETRYABLE', 'prepared_set_id' => $setId]);
+        captive_json_response(['ok' => true, 'status' => $category === 'SUPERSEDED' ? 'SUPERSEDED' : ($finished ? 'PREPARED' : 'RETRYABLE'), 'prepared_set_id' => $setId]);
     }
 
     if ($action === 'prepared_get') {
