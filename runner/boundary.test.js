@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { burstSeparator, applyBurstSeparator } from './prompt.js';
-import { SentenceBuffer, finishTokenLimitedTail, repeatsWithinBurst } from './warden.js';
+import { SentenceBuffer, repeatsWithinBurst } from './warden.js';
 
 let n = 0;
 const ok = (msg) => { n++; console.log('  ok - ' + msg); };
@@ -91,19 +91,13 @@ assert.equal(repeatsWithinBurst('grey slabs same every day not. ', first), false
 assert.equal(repeatsWithinBurst(first, ''), false);
 ok('within-burst repeat guard flags verbatim restatement, not fresh prose');
 
-// ---- 5. hard token caps never publish a chopped final token ----
-assert.equal(
-  finishTokenLimitedTail('sweat drippin down, Root is tryin tae mess wi'),
-  'sweat drippin down, Root is tryin tae mess...',
-);
-assert.equal(finishTokenLimitedTail('an intentional complete ending.'), 'an intentional complete ending.');
-assert.equal(finishTokenLimitedTail('single'), '', 'a lone clipped token is safer to discard');
+// ---- 5. buffering must never disguise an ending with invented punctuation ----
 const capped = new SentenceBuffer();
 capped.push('canny get past dis feeling dat root is trying tae mess wi');
-assert.deepEqual(capped.flush({ tokenLimited: true }), ['canny get past dis feeling dat root is trying tae mess...']);
+assert.deepEqual(capped.flush({ tokenLimited: true }), ['canny get past dis feeling dat root is trying tae mess wi']);
 const natural = new SentenceBuffer();
 natural.push('feel like');
 assert.deepEqual(natural.flush(), ['feel like'], 'a natural fragment remains part of Cy voice');
-ok('token-limit flush removes only the chopped word and marks the technical interruption');
+ok('flush preserves literal model text; journal publication decides completion');
 
 console.log(`\nboundary.test.js: all ${n} checks passed`);

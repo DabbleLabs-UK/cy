@@ -172,7 +172,7 @@ import {
   stripScaffold,
   stripScaffoldAccounted,
 } from './warden.js';
-import { generateWithCharacterRepair } from './character-output.js';
+import { generateWithCharacterRepair, validateJournalPublication } from './character-output.js';
 import { Client, tsNow } from './client.js';
 import {
   acknowledgeDayRollovers,
@@ -2256,7 +2256,7 @@ async function main() {
   //   2. WITHIN-BURST REPEAT - if this chunk restates a phrase already emitted in
   //      this same burst, drop it and cut the burst short, so a burst cannot loop
   //      the same line twice ("im finished the thought of ... im finished ...").
-  async function onChunk(rawChunk, mode) {
+  async function onChunk(rawChunk, mode, staged = null) {
     if (burstStopped) return; // the repeat guard already ended this burst
     const cleaned = sanitize(rawChunk);
     // The held-opening guard catches generations that START in assistant voice.
@@ -2314,14 +2314,24 @@ async function main() {
       return; // dropped: boundary/repeat state is untouched, carries to next chunk
     }
     // (1) boundary - checked against the full emitted context, applied every chunk
-    chunk = applyBurstSeparator(contextBuf, chunk);
+    chunk = applyBurstSeparator(staged ? staged.context + staged.text : contextBuf, chunk);
     // (2) within-burst repeat - drop the restated chunk and stop the burst here
-    if (!burstAllowRepeat && repeatsWithinBurst(chunk, burstEmitted)) {
+    if (!burstAllowRepeat && repeatsWithinBurst(chunk, staged ? staged.text : burstEmitted)) {
       burstStopped = true;
       await logWithinBurstRepeat(chunk, mode);
       generationCancellation.abort('visible', 'WITHIN_BURST_REPEAT');
       return;
     }
+    if (staged) {
+      staged.text += chunk;
+      return;
+    }
+    await publishChunk(chunk, mode);
+  }
+
+  // Only already-screened bytes enter publication and then feedback. Staged
+  // journals use this same commit edge without another text transformation.
+  async function publishChunk(chunk, mode) {
     // Provisional appraisal, drives and experienced-state values do not alter
     // rendered prose. The model output is shown exactly as screened.
     emit({ kind: 'text', payload: { s: chunk, mode } });
@@ -2622,7 +2632,7 @@ async function main() {
     const buffer = warden.newBuffer();
     // Persist a validated outcome before any visible reply bytes are emitted.
     // The ingest transaction separately records actual postcard publication.
-    const chunks = [...buffer.push(accounted.out), ...buffer.flush({ tokenLimited: guarded.tokenLimited })];
+    const chunks = [...buffer.push(accounted.out), ...buffer.flush()];
     if (postcardTurn) {
       let visible = false;
       for (const raw of chunks) {
@@ -2640,7 +2650,27 @@ async function main() {
       }
       await postcardTurn.outcome('generated');
     }
-    for (const chunk of chunks) await onChunk(chunk, mode);
+    if (mode === 'journal') {
+      // Run existing per-chunk filters/separators/repeat checks without emitting
+      // or appending context. Validate exactly the resulting publication, not
+      // an earlier candidate which later filters might alter.
+      const staged = { context: contextBuf, text: '' };
+      for (const chunk of chunks) await onChunk(chunk, mode, staged);
+      // Feedback already trims final whitespace. Do it before validation and
+      // publication, then commit once so per-chunk trimming cannot join words.
+      staged.text = staged.text.trimEnd();
+      const finalValidation = validateJournalPublication(staged.text, guarded.stats, rawFull);
+      recordInferenceOutcome(guarded.requestId, finalValidation.ok
+        ? 'journal-finalization-accepted' : 'rejected-journal-finalization', finalValidation);
+      if (!finalValidation.ok) {
+        await logBurstStrip(rawFull, mode);
+        for (const result of attempts) await recordSpend(result.stats, mode, false);
+        return { ...guarded, full: '', journalFinalizationRejected: true, finalValidation };
+      }
+      await publishChunk(staged.text, mode);
+    } else {
+      for (const chunk of chunks) await onChunk(chunk, mode);
+    }
     await logBurstStrip(rawFull, mode);
     for (let i = 0; i < attempts.length; i++) {
       await recordSpend(attempts[i].stats, mode, i === attempts.length - 1 && !!burstEmitted.trim());
