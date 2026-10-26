@@ -126,7 +126,14 @@ test('timing, mirror, object lifecycle and accounting implementations are unchan
   assert.deepEqual(spec.archetypes.map(item => item.id), agency.instrumentalOpportunityDefinitions().map(item => item.id));
   for (const path of ['runner/world-mirror.js', 'runner/message-object-lifecycle.js', 'runner/meal-choice.js',
     'runner/environment.js', 'runner/cast.js', 'runner/client.js']) {
-    assert.equal((await readFile(new URL('../' + path, import.meta.url), 'utf8')).replaceAll('\r\n', '\n'), originalSource(path), path);
+    let actual = (await readFile(new URL('../' + path, import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
+    if (path === 'runner/client.js') {
+      // Optional memory claim authority is unrelated to search delivery. Allow
+      // only that exact wrapper change; keep every other client byte pinned.
+      actual = actual.replace("async claimMemorySurfacing(value = {}) {\n    return this._memoryRequest('claim_surfacing', value);",
+        "async claimMemorySurfacing() {\n    return this._memoryRequest('claim_surfacing');");
+    }
+    assert.equal(actual, originalSource(path), path);
   }
   assert.ok(originalSource('runner/location-regime.js').includes(`export const CELL_SEARCH_TICK_CHANCE = ${CELL_SEARCH_TICK_CHANCE};`));
   assert.doesNotMatch(currentSource, /markSearchPropertyAction|preparedPropertyResolutions|pendingPropertyEvents|enqueueSearchPropertyEvent/);

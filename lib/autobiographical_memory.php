@@ -11,6 +11,76 @@ const CY_MEMORY_REASONS = [
 ];
 const CY_MEMORY_CANDIDATE_LIMIT = 10;
 const CY_MEMORY_PUBLIC_LIMIT = 20;
+
+// Optional journal surfacing has one live desired fingerprint, not a durable
+// obligation to revisit every historical prompt. Formation is unrelated.
+function captive_memory_is_journal_surfacing(array $job): bool
+{
+    $context = $job['context'] ?? json_decode((string)($job['context_payload'] ?? '{}'), true);
+    return ($job['subject_visitor_id'] ?? null) === null
+        && ($job['sender_scope_key'] ?? '') === ''
+        && is_array($context)
+        && preg_match('/^journal:[0-9]+$/D', (string)($context['generationRef'] ?? '')) === 1;
+}
+
+function captive_memory_claim_surfacing(PDO $db, array $input = []): array
+{
+    $hasAuthority = array_key_exists('journal_context_fingerprint', $input);
+    $fingerprint = $input['journal_context_fingerprint'] ?? null;
+    if ($hasAuthority && $fingerprint !== null
+        && (!is_string($fingerprint) || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1)) {
+        throw new InvalidArgumentException('invalid desired journal fingerprint');
+    }
+    $journal = "(subject_visitor_id IS NULL AND sender_scope_key = ''
+        AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(context_payload, '$.generationRef')), '')
+            COLLATE utf8mb4_bin REGEXP '^journal:[0-9]+$'
+        AND LOCATE(CHAR(10), JSON_UNQUOTE(JSON_EXTRACT(context_payload, '$.generationRef'))) = 0
+        AND LOCATE(CHAR(13), JSON_UNQUOTE(JSON_EXTRACT(context_payload, '$.generationRef'))) = 0)";
+    $db->beginTransaction();
+    try {
+        $superseded = 0;
+        if ($hasAuthority) {
+            $retire = $db->prepare("UPDATE autobiographical_memory_surfacing_queue
+                SET status = 'SUPERSEDED', completed_at = NOW(3), updated_at = NOW(3),
+                    last_error = 'journal context superseded before claim'
+                WHERE status IN ('PENDING','PROCESSING','RETRYABLE') AND $journal"
+                . ($fingerprint === null ? '' : ' AND context_fingerprint <> ?'));
+            $retire->execute($fingerprint === null ? [] : [$fingerprint]);
+            $superseded = $retire->rowCount();
+        }
+        $db->exec("UPDATE autobiographical_memory_surfacing_queue
+            SET status = 'RETRYABLE', available_at = NOW(3),
+                last_error = 'recovered after interrupted processing', updated_at = NOW(3)
+            WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)");
+        // Older clients supply no authority: fail closed for journal work while
+        // retaining their ordinary non-journal optional-consumer behavior.
+        $eligible = "NOT $journal";
+        $args = [];
+        if ($hasAuthority && $fingerprint !== null) {
+            $eligible = "($eligible OR context_fingerprint = ?)";
+            $args[] = $fingerprint;
+        }
+        $select = $db->prepare("SELECT * FROM autobiographical_memory_surfacing_queue
+            WHERE status IN ('PENDING','RETRYABLE') AND available_at <= NOW(3)
+                AND ($eligible)
+            ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE");
+        $select->execute($args);
+        $job = $select->fetch();
+        if ($job) {
+            $db->prepare("UPDATE autobiographical_memory_surfacing_queue
+                SET status = 'PROCESSING', attempts = attempts + 1,
+                    started_at = NOW(3), updated_at = NOW(3) WHERE id = ?")->execute([(int)$job['id']]);
+            $job['context'] = json_decode((string)$job['context_payload'], true) ?: [];
+            unset($job['context_payload']);
+        }
+        $db->commit();
+        return ['job' => $job ?: null, 'journal_superseded_count' => $superseded];
+    } catch (Throwable $error) {
+        if ($db->inTransaction()) $db->rollBack();
+        throw $error;
+    }
+}
+
 const CY_MEMORY_FORMATION_FAILURE_LIMIT = 6;
 const CY_MEMORY_GENERIC_SOURCE_TYPES = ['ENVIRONMENT_EVENT', 'DREAM_EXPRESSION', 'CY_EXPRESSION'];
 // Source types that are provenance markers rather than evidence OF the content.

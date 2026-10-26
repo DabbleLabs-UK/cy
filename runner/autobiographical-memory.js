@@ -602,15 +602,21 @@ export function redactAutobiographicalMemoryFromTelemetry(value) {
 
 export function publicMemoryQueryTelemetry(inspection) {
   if (!inspection || typeof inspection !== 'object') return null;
+  const pending = inspection.status === 'PENDING';
   return {
     status: inspection.status || 'UNKNOWN',
+    // Missing arrays on PENDING are unknown results, not a zero-hit search.
+    // PENDING is prompt readiness, not a queue-attempt state: retrieval may be
+    // unclaimed or already in flight. Only a completed result proves search.
+    retrieval_attempted: pending ? null
+      : ['PREPARED', 'LIVE'].includes(inspection.status) ? true : null,
     sender_known: !!inspection.senderKnown,
     mechanisms: Array.isArray(inspection.mechanisms) ? inspection.mechanisms : [],
     privacy_filter: inspection.privacyFilter || null,
-    candidate_count: Array.isArray(inspection.candidateIds) ? inspection.candidateIds.length : 0,
-    offered_count: Array.isArray(inspection.offeredIds) ? inspection.offeredIds.length : 0,
-    selected_count: Array.isArray(inspection.selectedIds) ? inspection.selectedIds.length : 0,
-    inserted_count: Array.isArray(inspection.insertedIds) ? inspection.insertedIds.length : 0,
+    candidate_count: pending ? null : Array.isArray(inspection.candidateIds) ? inspection.candidateIds.length : 0,
+    offered_count: pending ? null : Array.isArray(inspection.offeredIds) ? inspection.offeredIds.length : 0,
+    selected_count: pending ? null : Array.isArray(inspection.selectedIds) ? inspection.selectedIds.length : 0,
+    inserted_count: pending ? null : Array.isArray(inspection.insertedIds) ? inspection.insertedIds.length : 0,
     boundaries: inspection.boundaries || null,
   };
 }

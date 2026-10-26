@@ -28,6 +28,12 @@ const SENDER_RESERVED_INTERVAL_MS = 10 * 60 * 1000;
 const GENERIC_SERVICE_INTERVAL_MS = 30 * 60 * 1000;
 const GENERIC_EMPTY_POLL_MS = 60 * 1000;
 
+// The production journal producer already supplies this namespace. Do not
+// classify other optional consumers, or unknown legacy payloads, by age.
+export function isJournalSurfacingContext(context = {}, visitorId = null) {
+  return !visitorId && /^journal:[0-9]+$/.test(String(context.generationRef || ''));
+}
+
 function stableContext(value = {}) {
   return {
     text: String(value.text || '').trim().slice(0, 600),
@@ -242,6 +248,16 @@ export class AutobiographicalMemoryRuntime {
       && (!inspection.expiresAtMs || inspection.expiresAtMs > this.now());
   }
 
+  desiredJournalFingerprint() {
+    return this.desired && isJournalSurfacingContext(this.desired, this.desired.visitorId)
+      ? this.desired.fingerprint : null;
+  }
+
+  obsoleteJournalSurfacing(job, context) {
+    return !job.sender_scope_key && isJournalSurfacingContext(context, job.subject_visitor_id)
+      && job.context_fingerprint !== this.desiredJournalFingerprint();
+  }
+
   clearWorking(status, error = null) {
     this.working = { directive: '', selected: [], inspection: { status, error } };
   }
@@ -342,7 +358,11 @@ export class AutobiographicalMemoryRuntime {
       }
       if (!didWork && !this.genericRecallPending && this.canRunBackground('surfacing')) {
         this.activeWorkKind = 'surfacing';
-        const surfacing = await this.client.claimMemorySurfacing();
+        const surfacing = await this.client.claimMemorySurfacing({
+          // Explicit null after restart means there is no live journal desire.
+          // It retires persisted journal work, not other consumers or memories.
+          journal_context_fingerprint: this.desiredJournalFingerprint(),
+        });
         if (surfacing && surfacing.job) {
           didWork = true;
           await this.processSurfacing(surfacing.job);
@@ -526,7 +546,15 @@ export class AutobiographicalMemoryRuntime {
     let privacyRemovedCount = 0;
     let category = 'ERROR';
     let error = null;
+    let retrievalAttempted = false;
+    const requireCurrentJournal = () => {
+      if (this.obsoleteJournalSurfacing(job, context)) {
+        throw Object.assign(new Error('journal context superseded'), { journalSuperseded: true });
+      }
+    };
     try {
+      requireCurrentJournal();
+      retrievalAttempted = true;
       const response = await this.client.queryMemories({
         query: { text: context.text, tags: context.tags, location: context.location },
         visitorId: job.subject_visitor_id || null,
@@ -535,6 +563,7 @@ export class AutobiographicalMemoryRuntime {
         querySourceType: context.querySourceType,
       });
       candidates = Array.isArray(response && response.candidates) ? response.candidates : [];
+      requireCurrentJournal();
       const grounded = this.broker('MEMORY_SURFACING', {
         generationRef: context.generationRef || `memory-surfacing:${this.now()}`,
         currentSenderId: job.subject_visitor_id || null,
@@ -553,7 +582,9 @@ export class AutobiographicalMemoryRuntime {
       call = request.call;
       if (!request.candidates.length) category = 'NO_CANDIDATES';
       else {
+        requireCurrentJournal();
         const raw = await this.backgroundGenerate(request.call);
+        requireCurrentJournal();
         const decision = parseSurfacingDecision(raw, request.candidates);
         if (!decision.valid) {
           category = 'INVALID';
@@ -570,12 +601,17 @@ export class AutobiographicalMemoryRuntime {
       }
     } catch (caught) {
       error = errorText(caught);
-      if (category !== 'INVALID') {
+      if (caught?.journalSuperseded || this.obsoleteJournalSurfacing(job, context)) {
+        category = 'SUPERSEDED';
+        error = retrievalAttempted ? 'journal context superseded after retrieval started'
+          : 'journal context superseded before retrieval';
+        selected = [];
+      } else if (category !== 'INVALID') {
         category = isAbort(caught) ? (this.interruptReason ? 'PREEMPTED' : 'TIMEOUT') : 'ERROR';
       }
     }
     const setId = this.makeId();
-    await this.client.completeMemorySurfacing({
+    const completion = await this.client.completeMemorySurfacing({
       job_id: Number(job.id), prepared_set_id: setId,
       result_category: category, selected_memories: selected,
       candidate_ids: candidates.map((memory) => memory.id), privacy_removed_count: privacyRemovedCount,
@@ -583,6 +619,10 @@ export class AutobiographicalMemoryRuntime {
       model: provider.model, prompt_chars: promptChars(call), latency_ms: this.now() - started,
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
     });
+    if (completion?.status === 'SUPERSEDED') {
+      category = 'SUPERSEDED';
+      selected = [];
+    }
     if (category === 'PREPARED' || category === 'NO_CANDIDATES') {
       // Provenance only, from here to the end of this block: none of it is
       // read back into fetching/ranking/selection/insertion above. It exists

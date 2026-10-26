@@ -82,7 +82,8 @@ try {
          FROM autobiographical_memory_surfacing_attempts"
     )->fetch() ?: [];
     $surfaceQueue = $db->query(
-        "SELECT SUM(status IN ('PENDING', 'PROCESSING', 'RETRYABLE')) AS queue_depth
+        "SELECT SUM(status IN ('PENDING', 'PROCESSING', 'RETRYABLE')) AS queue_depth,
+                SUM(status = 'SUPERSEDED' AND attempts = 0) AS superseded_before_attempt
          FROM autobiographical_memory_surfacing_queue"
     )->fetch() ?: [];
     $recentFormation = $db->query(
@@ -126,6 +127,7 @@ try {
             ],
             'surfacing' => [
                 'queue_depth' => (int)($surfaceQueue['queue_depth'] ?? 0),
+                'superseded_before_attempt' => (int)($surfaceQueue['superseded_before_attempt'] ?? 0),
                 'attempts' => (int)($surfacing['attempts'] ?? 0),
                 'prepared' => (int)($surfacing['prepared'] ?? 0),
                 'consumed' => (int)($surfacing['consumed'] ?? 0),
