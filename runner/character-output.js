@@ -29,6 +29,22 @@ export function validateCharacterCandidate(candidate) {
   };
 }
 
+// The observed journal leaks open a new clause after sentence punctuation or a
+// pipe, then attach '<' directly to a tag-name-shaped word and another word.
+// Match only that position (also output/line start), and only if no '>' closes
+// the flat tag grammar before the next '<' or output end. This is not a rule
+// about arbitrary unmatched angles, mathematical operands, or pipe punctuation.
+const UNCLOSED_JOURNAL_CLAUSE_ANGLE = /(?:^|[.!?|\r\n])[ \t]*<[A-Za-z][A-Za-z0-9]*[ \t]+[A-Za-z][^<>]*(?=<|$)/;
+
+export function validateJournalCandidate(candidate) {
+  const validation = validateCharacterCandidate(candidate);
+  if (!UNCLOSED_JOURNAL_CLAUSE_ANGLE.test(normalizeWakingProse(candidate))) return validation;
+  return {
+    ok: false,
+    reasons: [...validation.reasons, 'unclosed clause-initial angle prefix'],
+  };
+}
+
 // Counts reaching num_predict are not a provider termination reason. In
 // particular, a normal stop can coincide with the configured token ceiling.
 export function journalTerminationEvidence(stats) {
@@ -52,7 +68,7 @@ function hasCompleteJournalEnding(text) {
 // This function never changes words, adds punctuation, or requests a repair.
 export function validateJournalPublication(text, stats, originalText = text) {
   const termination = journalTerminationEvidence(stats);
-  const validation = validateCharacterCandidate(text);
+  const validation = validateJournalCandidate(text);
   const reasons = [...validation.reasons];
   if (!String(text || '').trim()) reasons.push('empty final journal');
   if (sanitizeCharacterContext(text) !== text) {

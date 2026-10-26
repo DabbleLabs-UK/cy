@@ -283,6 +283,7 @@ test('journal context and Tempo stay identical outside tested repeat/finalizatio
     '    await logBurstStrip(rawFull, mode);\n    for (let i = 0; i < attempts.length; i++)');
   const beforeFinalization = stream(source)
     .replace(finalization, 'for (const chunk of chunks) await onChunk(chunk, mode);')
+    .replace("      ...(mode === 'journal' ? { validate: validateJournalCandidate } : {}),\n", '')
     .replace('...buffer.flush()]', '...buffer.flush({ tokenLimited: guarded.tokenLimited })]');
   assert.equal(beforeFinalization, expectedStream);
   const stageTwo = (text) => extract(text, '    const sys2 = drawDslSystem();', '  // ---- inbox:');

@@ -149,10 +149,30 @@ test('unknown termination does not become a below-cap fragment heuristic or a co
   }
 });
 
-test('the separate unclosed-angle-prefix gap is not silently changed', async () => {
-  const f = runtimeFixture();
-  const text = '<lunch was available but did they eat it?';
-  assert.equal((await f.execute(text, stop)).full, text);
+const angleFixtures = JSON.parse(readFileSync(new URL('./fixtures/journal-unclosed-angle-natural-20261026.json', import.meta.url)));
+for (const fixture of angleFixtures.cases) {
+  test(`natural angle ${fixture.seq}: final publication rejects before prose and feedback`, async () => {
+    const f = runtimeFixture();
+    const r = await f.execute(fixture.rawRepair || fixture.published,
+      { done: true, eval_count: fixture.tokens }); // Unknown reason, not a cap heuristic.
+    assert.equal(r.full, '');
+    assert.equal(r.journalFinalizationRejected, true);
+    assert.ok(r.finalValidation.reasons.includes('unclosed clause-initial angle prefix'));
+    assert.deepEqual(f.calls.feedback, []);
+    assert.deepEqual(f.calls.saved, []);
+    assert.deepEqual(f.calls.soma, []);
+    assert.equal(f.calls.events.filter(e => e.kind === 'text').length, 0);
+  });
+}
+
+test('ordinary comparisons and heart notation still publish and feed back unchanged', async () => {
+  for (const text of ['42 < 43', 'counted the tiles: 42 < 43, still one short.', 'put <3 in the margin']) {
+    const f = runtimeFixture();
+    const r = await f.execute(text, stop);
+    assert.equal(r.full, text);
+    assert.deepEqual(f.calls.feedback, [text]);
+    assert.equal(f.calls.saved.at(-1).endsWith(text), true);
+  }
 });
 
 test('final malformed control is rejected before even an otherwise-valid prefix publishes', async () => {
