@@ -172,7 +172,7 @@ import {
   stripScaffold,
   stripScaffoldAccounted,
 } from './warden.js';
-import { generateWithCharacterRepair, validateJournalPublication } from './character-output.js';
+import { generateWithCharacterRepair, validateJournalCandidate, validateJournalPublication } from './character-output.js';
 import { Client, tsNow } from './client.js';
 import {
   acknowledgeDayRollovers,
@@ -2577,6 +2577,7 @@ async function main() {
 
     const guarded = await generateWithCharacterRepair({
       prompt,
+      ...(mode === 'journal' ? { validate: validateJournalCandidate } : {}),
       ...(postcardTurn ? { validate: () => validatePostcardCandidate(attempts.at(-1)?.candidate || '') } : {}),
       generate: async (candidatePrompt, attemptDetail) => {
         const result = await collectCandidate(candidatePrompt, attemptDetail);

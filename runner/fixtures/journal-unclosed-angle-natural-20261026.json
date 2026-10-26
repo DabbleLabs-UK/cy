@@ -1,0 +1,46 @@
+{
+  "schema": "cy.journal-unclosed-angle-natural.v1",
+  "note": "Published text is retained for all four cases. Only sequence2905496 has a saved raw repair; no other original response or termination reason is reconstructed. Timestamps are BST on23/24 October.",
+  "cases": [
+    {
+      "seq": 2905496,
+      "timestamp": "2026-10-23 19:13:58.128",
+      "tokens": 93,
+      "published": " cant remember when last time had anythin'. now mr keyes comes along takin' some thing away from me | dont know wot its 4 anyway | reckon thats all there is really - nothing else happend after that tbh | cos im still tryna get this out of my head b4 i can think straight rn | ppls call 'em \"events\" nyt it means nothn but noise | <banged up for the...",
+      "angleOffset": 330,
+      "precedingText": " call 'em \"events\" nyt it means nothn but noise | ",
+      "rawRepair": "cant remember when last time had anythin'. now mr keyes comes along takin' some thing away from me | dont know wot its 4 anyway | reckon thats all there is really - nothing else happend after that tbh | cos im still tryna get this out of my head b4 i can think straight rn | ppls call 'em \"events\" nyt it means nothn but noise | <banged up for the night",
+      "providerTerminationReason": null
+    },
+    {
+      "seq": 2909130,
+      "timestamp": "2026-10-23 21:30:43.098",
+      "tokens": 72,
+      "published": " gotta be thinkin 'bout me when im cooped up here | dunno y i keep comin back 2 dis place tho... cos thats just the way its always been | meds trolley wheels squeakin' along the corridor, cuts across wot u were sayin | <banged up for the...\"|",
+      "angleOffset": 219,
+      "precedingText": "long the corridor, cuts across wot u were sayin | ",
+      "rawRepair": null,
+      "providerTerminationReason": null
+    },
+    {
+      "seq": 2925278,
+      "timestamp": "2026-10-24 07:48:11.141",
+      "tokens": 93,
+      "published": " dont know wot its for anyway | meds trolley wheels squeakin' along corridor cuts across my mind rn... like im sittin here watchn them whizz past - dont even get me started on mr sweep comin at me like i was hidn somethin from him rn... <banged up 4 so long now... must be some kinda mistake cuz no one gets checked that thorough and regular rn ppl wouldnt forget this much time...",
+      "angleOffset": 237,
+      "precedingText": "min at me like i was hidn somethin from him rn... ",
+      "rawRepair": null,
+      "providerTerminationReason": null
+    },
+    {
+      "seq": 2931837,
+      "timestamp": "2026-10-24 11:59:16.273",
+      "tokens": 63,
+      "published": " b4 i even get started wot's goin on rn ppl wdnt forget dis much time... <lunch was available but did they eat it? dunno, dont know if id eat that rubbish tbh cos they said so many times - cant trust 'em now",
+      "angleOffset": 73,
+      "precedingText": "wot's goin on rn ppl wdnt forget dis much time... ",
+      "rawRepair": null,
+      "providerTerminationReason": null
+    }
+  ]
+}
