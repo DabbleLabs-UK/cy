@@ -8,6 +8,9 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { filterMemoriesBeforePrompt } from '../runner/autobiographical-memory.js';
+import { AutobiographicalMemoryRuntime, memoryContextFingerprint } from '../runner/memory-runtime.js';
+import { journalFromWorking } from '../runner/fixtures/memory-status-journal.mjs';
 
 test('journal surfacing retires persisted obsolete work before claim; preserves memories and other consumers', {
   skip: process.env.CY_TEST_DB_ISOLATED !== '1',
@@ -65,8 +68,7 @@ test('journal surfacing retires persisted obsolete work before claim; preserves 
       text: 'synthetic meaningful episode', sourceVisibility: 'INTERNAL_ONLY' } });
     const memoriesBefore = sql('SELECT * FROM autobiographical_memories');
     const formationBefore = sql('SELECT * FROM autobiographical_memory_formation_queue');
-    const enqueue = async (name, generationRef, visitor = null) => {
-      const fingerprint = hash(name);
+    const enqueue = async (name, generationRef, visitor = null, fingerprint = hash(name)) => {
       await api('enqueue_surfacing', { context_fingerprint: fingerprint, visitor_id: visitor,
         context: { text: name, generationRef } });
       return { fingerprint, id: Number(sql(`SELECT id FROM autobiographical_memory_surfacing_queue WHERE context_fingerprint='${fingerprint}'`)) };
@@ -90,6 +92,41 @@ test('journal surfacing retires persisted obsolete work before claim; preserves 
     assert.equal(completed.status, 'PREPARED');
     assert.equal(Number(sql(`SELECT COUNT(*) FROM autobiographical_memory_prepared_sets WHERE id='${preparedId}'`)), 1);
 
+    // Real stored ACTIVE row -> query API -> runner projection -> JSON/PHP/DB
+    // prepared round trip -> unchanged activation -> actual journal context.
+    const found = await api('query', { query: { text: 'synthetic observed yard visit' }, limit: 10 });
+    const retrieved = found.candidates.find(memory => memory.id === seed);
+    assert.equal(retrieved.status, 'ACTIVE');
+    const projected = filterMemoriesBeforePrompt([retrieved]);
+    assert.equal(projected[0].status, retrieved.status);
+    const journalContext = { text: 'synthetic observed yard visit', location: 'cell', generationRef: 'journal:9500' };
+    const selectedJob = await enqueue(journalContext.text, journalContext.generationRef, null, memoryContextFingerprint(journalContext));
+    assert.equal(Number((await api('claim_surfacing', { journal_context_fingerprint: selectedJob.fingerprint })).job.id), selectedJob.id);
+    const selectedSetId = randomUUID();
+    await api('complete_surfacing', { job_id: selectedJob.id, prepared_set_id: selectedSetId,
+      result_category: 'PREPARED', candidate_ids: [seed], selected_memories: projected });
+    const saved = await api('prepared_get', { context_fingerprint: selectedJob.fingerprint });
+    assert.deepEqual(saved.prepared_set.selected_memories, projected);
+    assert.equal(JSON.parse(sql(`SELECT selected_memories FROM autobiographical_memory_prepared_sets WHERE id='${selectedSetId}'`))[0].status, 'ACTIVE');
+    let consumption;
+    const runtime = new AutobiographicalMemoryRuntime({
+      makeId: randomUUID, generate: async () => { throw new Error('inference forbidden'); },
+      client: {
+        async getPreparedMemorySet() { return saved; },
+        async enqueueMemorySurfacing() { throw new Error('compatible prepared set must be used'); },
+        consumePreparedMemorySet({ preparedSetId, generationRef }) {
+          consumption = api('consume_prepared', { prepared_set_id: preparedSetId, generation_ref: generationRef });
+          return consumption;
+        },
+      },
+    });
+    assert.equal((await runtime.requestWorkingContext(journalContext)).selected[0].status, 'ACTIVE');
+    const journal = journalFromWorking(runtime);
+    assert.match(journal.prompt, /synthetic observed yard visit/);
+    assert.match(journal.context.sharedContext, /"source":"recollection"/);
+    await consumption;
+    assert.equal(sql(`SELECT consumed_by FROM autobiographical_memory_prepared_sets WHERE id='${selectedSetId}'`), 'journal-prose:1000');
+
     const inFlight = await enqueue('in-flight', 'journal:10000');
     await api('claim_surfacing', { journal_context_fingerprint: inFlight.fingerprint });
     const newer = await enqueue('newer', 'journal:11000');
@@ -101,7 +138,7 @@ test('journal surfacing retires persisted obsolete work before claim; preserves 
       assert.equal(late.status, 'SUPERSEDED'); assert.equal(late.prepared_set_id, null);
     }
     assert.equal(sql(`SELECT status FROM autobiographical_memory_surfacing_queue WHERE id=${inFlight.id}`), 'SUPERSEDED');
-    assert.equal(Number(sql('SELECT COUNT(*) FROM autobiographical_memory_prepared_sets')), 1);
+    assert.equal(Number(sql('SELECT COUNT(*) FROM autobiographical_memory_prepared_sets')), 2);
 
     // Restart has no current desire; it retires old journal work, not other consumers.
     await stop(); api = await start();
