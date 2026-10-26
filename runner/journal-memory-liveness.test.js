@@ -161,9 +161,11 @@ test('existing valid full-record prepared cache still activates and is consumed 
   assert.equal(calls.model, 0);
 });
 
-test('pre-existing double-filter status loss reproduces on the deployed base, not just this candidate', async () => {
-  const file = new URL('./autobiographical-memory.js', import.meta.url).href;
+test('pre-existing status loss reproduces with baseline projection; fixed projection activates', async () => {
   const warden = new URL('./warden.js', import.meta.url).href;
+  const oldMemorySource = execFileSync('git', ['show', `${BASE}:runner/autobiographical-memory.js`], { encoding: 'utf8' })
+    .replace("from './warden.js'", `from '${warden}'`);
+  const file = 'data:text/javascript;base64,' + Buffer.from(oldMemorySource).toString('base64');
   const baseSource = execFileSync('git', ['show', `${BASE}:runner/memory-runtime.js`], { encoding: 'utf8' })
     .replace("from './autobiographical-memory.js'", `from '${file}'`)
     .replace("from './warden.js'", `from '${warden}'`);
@@ -175,7 +177,8 @@ test('pre-existing double-filter status loss reproduces on the deployed base, no
   assert.equal(calls.completed[0].selected_memories.length, 1);
   assert.equal(calls.completed[1].selected_memories.length, 1);
   assert.equal(old.working.selected.length, 0, 'baseline drops projected records with no status');
-  assert.deepEqual(r.working.selected, old.working.selected, 'eligibility repair is outside this task');
+  assert.equal(r.working.selected.length, 1);
+  assert.equal(r.working.selected[0].status, memory.status);
 });
 
 test('unrelated optional consumer is not classified as obsolete journal work', async () => {

@@ -136,6 +136,7 @@ export function filterMemoriesBeforePrompt(memories, { currentVisitorId = null }
       if (!content) return null;
       return {
         id: memory.id,
+        status: memory.status, // Preserve eligibility metadata for later re-filtering.
         type: memory.type,
         privacyScope: memory.privacyScope,
         subjectVisitorId: memory.subjectVisitorId || null,
