@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -281,7 +282,7 @@ test('journal context and Tempo stay identical outside tested repeat/finalizatio
   const finalization = extract(source,
     "    if (mode === 'journal') {\n      // Run existing per-chunk filters",
     '    await logBurstStrip(rawFull, mode);\n    for (let i = 0; i < attempts.length; i++)');
-  const beforeFinalization = stream(source)
+  const beforeFinalization = beforeJournalTerminationTelemetry(stream(source))
     .replace(finalization, 'for (const chunk of chunks) await onChunk(chunk, mode);')
     .replace("      ...(mode === 'journal' ? { validate: validateJournalCandidate } : {}),\n", '')
     .replace('...buffer.flush()]', '...buffer.flush({ tokenLimited: guarded.tokenLimited })]');

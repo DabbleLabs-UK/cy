@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import * as memoryModule from './autobiographical-memory.js';
 import { AutobiographicalMemoryRuntime, memoryContextFingerprint } from './memory-runtime.js';
 import { journalFromWorking } from './fixtures/memory-status-journal.mjs';
+import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
 
 const BASE='a8d4d0ea0cbbb35f399536bed8f1fb2cfbe3ad51';
 const original=path=>execFileSync('git',['show',`${BASE}:${path}`],{encoding:'utf8'}).replace(/\r\n/g,'\n');
@@ -34,7 +35,7 @@ test('the only runtime change is copying the already-validated authoritative sta
   assert.equal(current.replace('        status: memory.status, // Preserve eligibility metadata for later re-filtering.\n',''),oldSource);
   for(const path of ['runner/memory-runtime.js','runner/client.js','runner/run.js','runner/prompt.js',
     'runner/postcard-memory.js','runner/postcard-associative-memory.js','lib/autobiographical_memory.php','public/api/memory.php']) {
-    assert.equal(readFileSync(new URL('../'+path,import.meta.url),'utf8').replace(/\r\n/g,'\n'),original(path),path);
+    assert.equal(beforeJournalTerminationTelemetry(readFileSync(new URL('../'+path,import.meta.url),'utf8').replace(/\r\n/g,'\n')),original(path),path);
   }
 });
 

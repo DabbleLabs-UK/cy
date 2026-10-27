@@ -214,7 +214,7 @@ export function looksLikeRefusal(text) {
 // line per content delta, then a final `{done:true, ...}` line carrying the
 // counters plus `usage` and computed `cost`. This is what lets run.js consume both
 // providers through the identical readNdjsonStream path.
-export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx, requireCompletion = false }) {
+export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx, requireCompletion = false, retainTerminationSource = false }) {
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let buf = '';
@@ -228,6 +228,7 @@ export function deepseekToNdjsonReader(srcReader, { model, priceRow, fx, require
       done: true,
       done_reason: finishReason || 'stop',
       finish_reason: finishReason || 'stop',
+      ...(retainTerminationSource ? { provider_finish_reason_reported: !!finishReason } : {}),
       // ollama-shaped counters so emitGen reads them with no special-casing
       prompt_eval_count: c.tokensIn,
       eval_count: c.tokensOut,
@@ -511,6 +512,7 @@ function makeDeepSeek(config, key) {
         status: 200,
         reader: deepseekToNdjsonReader(res.body.getReader(), {
           model: ds.model, priceRow: priceRow(), fx, requireCompletion: purpose === 'postcard',
+          retainTerminationSource: purpose === 'journal',
         }),
         model: ds.model,
       };

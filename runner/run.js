@@ -173,6 +173,7 @@ import {
   stripScaffoldAccounted,
 } from './warden.js';
 import { generateWithCharacterRepair, validateJournalCandidate, validateJournalPublication } from './character-output.js';
+import { recordJournalTerminationDiagnostic } from './journal-termination-telemetry.js';
 import { Client, tsNow } from './client.js';
 import {
   acknowledgeDayRollovers,
@@ -2426,6 +2427,8 @@ async function main() {
             ? { abort_reason: cancellationReason(ac.signal) } : {}),
           ...inferenceStats(stats),
         });
+        if (requestPurpose === 'journal') recordJournalTerminationDiagnostic(recordInferenceDiagnostic,
+          { id: lease.id, stats, provider: provider.id });
       };
       try {
         await waitTrace.measure('tempoIdleMs', () => waitForInferenceTempo(ac.signal, requestPurpose,

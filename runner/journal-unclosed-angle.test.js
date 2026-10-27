@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import {
@@ -126,12 +127,12 @@ test('the new rule is journal-only and does not strip old history or change othe
   assert.equal(validateCharacterCandidate(text).ok, old.validateCharacterCandidate(text).ok);
   assert.equal(sanitizeCharacterContext(text), text);
   for (const path of ['warden.js', 'prompt.js', 'provider.js', 'drawing-subject.js', 'draw.js']) {
-    assert.equal(source(path), baseline(path), path);
+    assert.equal(beforeJournalTerminationTelemetry(source(path)), baseline(path), path);
   }
 });
 
 test('runtime changes only journal candidate hook; finalization pipeline/retry loop remains byte-identical', () => {
-  const run = source('run.js')
+  const run = beforeJournalTerminationTelemetry(source('run.js'))
     .replace('generateWithCharacterRepair, validateJournalCandidate, validateJournalPublication',
       'generateWithCharacterRepair, validateJournalPublication')
     .replace("      ...(mode === 'journal' ? { validate: validateJournalCandidate } : {}),\n", '');
