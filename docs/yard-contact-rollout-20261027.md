@@ -40,6 +40,7 @@ contact interpretation, relationship scores or current-presence semantics.
 | Tracked JSON parsing | 100/100 |
 | Whitespace | clean |
 | Additional yard checks on identical merge tree | 56/56, 52.879 seconds |
+| Additional full serial merged-worktree confirmation | 979/979, 169.299 seconds; no skips/cancellations |
 
 All tests used deterministic offline fixtures and fake providers. The full
 runner and API groups used narrow escalation for isolated loopback transports,
@@ -58,8 +59,8 @@ Archive SHA-256:
 Independent package review verified all six payloads against Git, all eleven
 archive members, 34 dependency/baseline hashes and the deployment allowlists.
 Both hosts independently verified all staged member hashes. Runtime dependency
-installation precedes run.js. No API, SQL, provider configuration, prompt,
-model, scheduler policy or other feature file was deployed.
+installation precedes run.js. No API, SQL, provider configuration, shared prompt
+file, model setting, unrelated scheduler policy or other feature file was deployed.
 
 | Host | Active path | Deployed SHA-256 |
 | --- | --- | --- |
@@ -118,6 +119,33 @@ natural-evidence cutoff:
 **27 October 2026 22:25:50.972 GMT/UTC**
 (`2026-10-27T22:25:50.972Z`).
 
+Independent deployed-state review used fresh read-only SSH hash checks and
+confirmed all six DELL files plus VPS3 metadata against the merge, with no
+material finding in deployment or initial recovery/health. A separate review
+of this evidence document found no factual discrepancy in the initial receipts.
+
+## Ordinary checkpoint advancement and final verification
+
+The existing write-behind policy coalesced ordinary ticks until its normal
+ten-minute maximum; no save was forced. Generation `1793140530976-6464-2` was
+created at 22:35:30.976Z and saved successfully at 22:35:32.683Z. Full checkpoint
+graph/hash observation at 22:35:54.923Z validated this generation and its prior
+startup generation, exact deployed file hashes and mirror convergence 0/0.
+The yard ledger remained empty and all meal phases/hash were unchanged.
+
+The SELECT-only observation at 22:35:57.159Z reported stateWriteCount 3,
+failedSaveCount 0, lastError null and no fallback recovery. Stream head advanced
+to 3067636, with current vitals at 22:35:51.691Z. All four canonical memory table
+counts/hashes remained unchanged. Ordinary queue service continued, not manual
+queue manipulation or a newly introduced memory action.
+
+Final health at 22:35:59.909Z retained exactly one runner PID6464, unchanged
+worker/arbiter PID13868, both expected listeners, cleared restart marker,
+empty source/delivery spools and CY/Feddit HTTP 200. Arbiter Cy lease expiries
+remained three. Server metadata and unchanged API dependency hashes verified
+again at 22:36:01Z. No unexpected recovery/replay, duplicate yard projection or
+unrelated durable-world mutation was identified.
+
 ## Natural evidence limit
 
 The private yard lane was empty after restart. Read-only SQL at
@@ -126,6 +154,10 @@ zero post-cutoff public yard rows. No greeting, decision, movement, journal,
 provider call or synthetic event was forced. A naturally occurring unrelated
 expressive-choice request was interrupted by wing noise, followed by ordinary
 journal work; this is not evidence of yard agency.
+
+A final SELECT-only check at 22:36:01.208Z again found zero canonical greeting
+openings/resolutions and zero public yard rows after cutoff. No opportunity
+existed to inspect a natural Cy yard decision or judge response preferences.
 
 Natural respond/decline behavior and the complete causal yard path remain
 unproven. Deployment correctness is not a behavioral demonstration. The next
