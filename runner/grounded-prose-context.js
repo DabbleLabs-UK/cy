@@ -437,6 +437,11 @@ function socialSection(state, now) {
         reciprocity: snapshot.latestEpisode.reciprocity,
         socialCharacter: snapshot.latestEpisode.socialCharacter,
         resolution: snapshot.latestEpisode.resolution,
+        ...(['RESPONDED', 'DECLINED', 'NO_DECISION', 'NO_ACTION'].includes(snapshot.latestEpisode.opportunity?.status)
+          ? { yardDecision: {
+              status: snapshot.latestEpisode.opportunity.status,
+              action: snapshot.latestEpisode.opportunity.actionExecuted,
+            } } : {}),
       },
     ));
   }
@@ -576,7 +581,7 @@ function modelFacingLine(item) {
     case 'current_social_context':
       return `[${item.epistemicStatus}] Social context: ${value.currentlyInteracting ? `interacting with ${words(value.currentlyWith)}` : value.currentlyAlone ? 'confirmed alone' : 'no current interaction observed'}; character ${words(value.currentSocialCharacter)}.`;
     case 'latest_social_episode':
-      return `[${item.epistemicStatus}] Latest social episode: ${compactFields(value, ['episodeType', 'participants', 'contactForm', 'reciprocity', 'socialCharacter', 'resolution'])}.`;
+      return `[${item.epistemicStatus}] Latest social episode: ${compactFields(value, ['episodeType', 'participants', 'contactForm', 'reciprocity', 'socialCharacter', 'resolution'])}.${value.yardDecision ? ` Cy's greeting turn: ${value.yardDecision.status === 'RESPONDED' ? 'returned the greeting' : value.yardDecision.status === 'DECLINED' ? 'deliberately declined this exchange' : 'no executed Cy decision is established'}.` : ''}`;
     case 'last_direct_contact':
     case 'last_reciprocal_contact':
     case 'last_supportive_contact':

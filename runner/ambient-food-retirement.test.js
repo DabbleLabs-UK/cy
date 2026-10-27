@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
 import * as incidents from './incidents.js';
 import { initialVitals, applyEvent, ampOf, clamp } from './vitals.js';
+import { yardContactState, expireYardTurns } from './yard-contact-choice.js';
 
 const BASE = 'd335e0f';
 const current = readFileSync(new URL('./run.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -26,6 +27,7 @@ function fixture(text = current, module = incidents, { overheard = false } = {})
   vitals.ledger = [];
   vitals.locationRegime = { current: { id: 'CELL' }, activeExerciseEpisode: null };
   vitals.mealChoice = { pendingEvents: [] };
+  vitals.yardContactChoice = yardContactState();
   vitals.lastMailMs = AT;
   let randoms = [];
   const maths = Object.create(Math);
@@ -45,6 +47,8 @@ function fixture(text = current, module = incidents, { overheard = false } = {})
     processLocationRegime: () => {}, advanceCellSearch: () => {}, advanceLockdown: () => {},
     PRISON_SCHEDULE: [], REGIME: [], DEVIATIONS: {}, crossed: () => false,
     expireMeals: () => false, currentMealContext: () => ({}), mealCallbacks: {}, checkpointMeals: async () => {},
+    expireYardTurns, currentYardTurnContext: () => ({ nowMs: AT, eligible: false }),
+    checkpointYardTurns: async () => assert.equal(vitals.yardContactChoice.encounters.length, 0),
     currentRegime: () => ({ phase: 'bangup' }), LOCATIONS: { CELL: 'CELL' },
     maybeWingNoise: () => {}, CELL_SEARCH_TICK_CHANCE: 0.001,
     beginCellSearch: () => calls.neighbors.push('search'), beginLockdown: () => false,

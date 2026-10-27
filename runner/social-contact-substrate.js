@@ -218,8 +218,15 @@ function isContact(episode) {
 }
 
 function latest(episodes, predicate) {
+  // YARD TURN BEGIN: same-point outcome priority
+  // A discrete greeting can resolve within the opening timestamp's precision.
+  // Prefer its recorded outcome over its opening, without extending presence.
+  const resolvedYardTurn = (item) => item.opportunity?.opportunityId?.startsWith('yard-')
+    && ['RESPONDED', 'DECLINED', 'NO_DECISION', 'NO_ACTION'].includes(item.opportunity.status) ? 1 : 0;
+  // YARD TURN END: same-point outcome priority
   return [...episodes].filter(predicate).sort((a, b) =>
-    timestampMs(b.endTimestamp || b.startTimestamp) - timestampMs(a.endTimestamp || a.startTimestamp))[0] || null;
+    timestampMs(b.endTimestamp || b.startTimestamp) - timestampMs(a.endTimestamp || a.startTimestamp)
+      || resolvedYardTurn(b) - resolvedYardTurn(a))[0] || null;
 }
 
 function context(state, now, includePrivate) {

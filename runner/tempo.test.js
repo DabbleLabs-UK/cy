@@ -151,7 +151,7 @@ assert.match(runSource, /if \(!background && !awgInReservedIdle\) \{\s*await wai
   'an admitted AWG slot does not wait out the same tempo reservation a second time');
 assert.match(runSource, /background: coordinatorBackground, transport: 'raw'/,
   'admitted AWG work remains lower priority in the serialized inference coordinator');
-assert.match(runSource, /!\['ambient_world_generation', 'meal_choice'\]\.includes\(activeInferencePurpose\)/,
+assert.match(runSource, /!\['ambient_world_generation', 'meal_choice', 'yard_contact_choice'\]\.includes\(activeInferencePurpose\)/,
   'the foreground no-token watchdog cannot silently shorten the finite AWG provider budget');
 assert.match(runSource, /backgroundTempoGate\.recordBackgroundWork\(startedAtMs, endedAtMs, client\.tempo\.speed\)/,
   'each background model call earns its own tempo quiet');

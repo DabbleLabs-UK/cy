@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { buildPrompt, buildPromptRequest, selectJournalContinuation } from './prompt.js';
 import { isRepeat, isJournalRepeat } from './warden.js';
 import { generateWithCharacterRepair } from './character-output.js';
+import { beforeYardContactTurn } from './fixtures/yard-contact-turn-source.mjs';
 
 const BASE = '1dc609d2116c0035735c312e69bc64bec0e7c52f';
 const run = readFileSync(new URL('./run.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -255,6 +256,6 @@ test('the private drawing and ambient-food retirement paths are unchanged', () =
   const oldRun = baseline('run.js');
   assert.equal(extract(run, '  async function doDraw(', '  // ---- inbox:'),
     extract(oldRun, '  async function doDraw(', '  // ---- inbox:'));
-  assert.equal(extract(run, '  const tickTimer = setInterval(async () => {', '  const hostTimer = setInterval('),
+  assert.equal(extract(beforeYardContactTurn(run), '  const tickTimer = setInterval(async () => {', '  const hostTimer = setInterval('),
     extract(oldRun, '  const tickTimer = setInterval(async () => {', '  const hostTimer = setInterval('));
 });
