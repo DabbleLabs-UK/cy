@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
+import { beforeJournalCellPublication } from './fixtures/journal-cell-publication-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -279,7 +280,7 @@ test('journal context and Tempo stay identical outside tested repeat/finalizatio
   // The later finalization fix stages and validates journal bytes immediately
   // before publication. Permit that separately tested block and literal flush;
   // keep collection, drawing separation and all other stream code pinned.
-  const finalization = extract(source,
+  const finalization = extract(beforeJournalCellPublication(source),
     "    if (mode === 'journal') {\n      // Run existing per-chunk filters",
     '    await logBurstStrip(rawFull, mode);\n    for (let i = 0; i < attempts.length; i++)');
   const beforeFinalization = beforeJournalTerminationTelemetry(stream(source))

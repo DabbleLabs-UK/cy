@@ -50,6 +50,7 @@ function extract(text, start, end) {
 function runtimeFixture({ screen = () => ({ ok: true }), failEmit = false } = {}) {
   const calls = { events: [], feedback: [], saved: [], soma: [], spend: [], outcomes: [] };
   const helpers = extract(run, '  async function onChunk(', '  // Generate waking Cy prose');
+  const locationGuard = extract(run, '    function journalLocationResult(', '    const collectCandidate =');
   const contextAppend = extract(run, '  async function appendContext(', '  // Shrink the effective context tail')
     .replace('async function appendContext(', 'async function actualAppendContext(');
   const ending = extract(run, '    const rawFull = guarded.candidate', '  // A one-shot, non-streaming generation');
@@ -60,7 +61,7 @@ function runtimeFixture({ screen = () => ({ ok: true }), failEmit = false } = {}
     let burstAllowRepeat = false, wardenBlocksInGen = 0, burstTrimmed = 0;
     let lastTextMs = 0, watchdogStep = 0, failedCyclesSinceEmit = 0, nonEmittingStreak = 0;
     let burstStripRemoved = {}, burstAnnihilated = { scaffold: 0, narration: 0, stateNotation: 0 };
-    const vitals = {};
+    const vitals = { locationRegime: { current: { id: 'CELL' } } };
     const guarded = { candidate, stats, requestId: 'offline-only' };
     const attempts = [guarded];
     const mode = 'journal', journalContinuation = '', contextTail = '', postcardTurn = null;
@@ -73,12 +74,14 @@ function runtimeFixture({ screen = () => ({ ok: true }), failEmit = false } = {}
       feedbackSink(chunk);
     }
     ${helpers}
+    ${locationGuard}
     ${body}
   })`, {
     sanitize, looksLikeAssistantFrame, narrationHits, stateNotationHits,
     sanitizeCharacterContext,
     stripScaffoldAccounted, applyBurstSeparator, repeatsWithinBurst, isRepeat, isJournalRepeat,
     validateJournalPublication,
+    LOCATIONS: { CELL: 'CELL' },
     warden: { screenOut: screen, logBlock: async () => {}, newBuffer: () => new SentenceBuffer() },
     emitSink: (event) => { if (failEmit && event.kind === 'text') throw new Error('publication failed'); calls.events.push(event); },
     feedbackSink: (text) => calls.feedback.push(text),
