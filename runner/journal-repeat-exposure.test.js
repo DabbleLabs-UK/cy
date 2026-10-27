@@ -137,6 +137,7 @@ function runtimeFixture(candidateForRequest) {
     return { full: candidate };
   })`, {
     isRepeat, isJournalRepeat, published: calls.published,
+    journalLocationResult: result => result, // Existing repeat-only fixture stays in CELL.
     recordInferenceOutcome: (...args) => calls.outcomes.push(args),
     logHoldbackDiscard: async (...args) => calls.discarded.push(args),
     recordSpend: async (...args) => calls.spend.push(args),

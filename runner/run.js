@@ -2379,10 +2379,19 @@ async function main() {
     const provider = providerOverride || activeProvider();
     const attempts = [];
 
+    // A prompt's CELL snapshot does not license later publication elsewhere.
+    // Keep this journal-only; truthful inference/accounting still survives.
+    function journalLocationResult(result) {
+      if (mode !== 'journal' || vitals.locationRegime.current.id === LOCATIONS.CELL) return result;
+      recordInferenceOutcome(result.requestId, 'rejected-journal-location');
+      return { ...result, full: '', repeat: false, aborted: true,
+        abortReason: 'JOURNAL_LOCATION_CHANGED', journalLocationRejected: true };
+    }
+
     const collectCandidate = async (candidatePrompt, { repair = false } = {}) => {
       const ac = new AbortController();
       generationCancellation.register('visible', ac, { purpose: purpose || mode });
-      const result = await collectCandidateBody(candidatePrompt, { repair }, ac);
+      const result = journalLocationResult(await collectCandidateBody(candidatePrompt, { repair }, ac));
       if (postcardTurn) await postcardTurn.afterCandidate(result);
       return result;
     };
@@ -2630,7 +2639,7 @@ async function main() {
       recordInferenceOutcome(guarded.requestId, 'repeat');
       await logHoldbackDiscard(accounted.out, mode);
       for (const attempt of attempts) await recordSpend(attempt.stats, mode, false);
-      return { ...guarded, full: accounted.out, repeat: true };
+      return journalLocationResult({ ...guarded, full: accounted.out, repeat: true });
     }
 
     const buffer = warden.newBuffer();
@@ -2670,6 +2679,12 @@ async function main() {
         await logBurstStrip(rawFull, mode);
         for (const result of attempts) await recordSpend(result.stats, mode, false);
         return { ...guarded, full: '', journalFinalizationRejected: true, finalValidation };
+      }
+      // No await between this live read and publishChunk's synchronous emit.
+      const locationChecked = journalLocationResult(guarded);
+      if (locationChecked.journalLocationRejected) {
+        for (const result of attempts) await recordSpend(result.stats, mode, false);
+        return locationChecked;
       }
       await publishChunk(staged.text, mode);
     } else {
