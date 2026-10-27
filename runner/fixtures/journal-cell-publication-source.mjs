@@ -1,7 +1,8 @@
 // Exact reviewed location-only delta for earlier byte-pinning regressions.
 // journal-cell-publication.test.js separately pins this against production.
+import { beforeYardContactTurn } from './yard-contact-turn-source.mjs';
 export function beforeJournalCellPublication(source) {
-  return source
+  return beforeYardContactTurn(source)
     .replace("    // A prompt's CELL snapshot does not license later publication elsewhere.\n"
       + '    // Keep this journal-only; truthful inference/accounting still survives.\n'
       + '    function journalLocationResult(result) {\n'

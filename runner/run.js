@@ -81,6 +81,13 @@ import {
   mealChoiceState, mealContext, openMeal, liveMeal, decideMeal,
   expireMeals, recoverMeals, stageMealEvent, flushMealEvents, acknowledgeMealEvents,
 } from './meal-choice.js';
+// YARD TURN BEGIN: imports
+import {
+  yardContactState, yardTurnContext, qualifiesYardGreeting, openYardGreeting,
+  liveYardTurn, decideYardTurn, expireYardTurns, recoverYardTurns,
+  flushYardTurns, acknowledgeYardDeliveries,
+} from './yard-contact-choice.js';
+// YARD TURN END: imports
 import { materialiseMealConsumption, mealUnknownConsumption } from './environment.js';
 import { PostcardInference, postcardFailureClass, postcardMayFallback, validatePostcardCandidate } from './postcard-inference.js';
 import { MemoryFormationInference } from './memory-formation-inference.js';
@@ -578,6 +585,9 @@ async function main() {
   // resolved trial or lose the concrete continuation still owed by the world.
   vitals.instrumentalAgency = reconcileInstrumentalAgencyState(vitals.instrumentalAgency);
   vitals.mealChoice = mealChoiceState(vitals.mealChoice);
+  // YARD TURN BEGIN: state
+  vitals.yardContactChoice = yardContactState(vitals.yardContactChoice);
+  // YARD TURN END: state
   // Ambient world state is authoritative runner-persistent state. The public
   // database receives private inspection mirrors, but a restart resumes from
   // this state rather than reconstructing canon from prose.
@@ -656,10 +666,18 @@ async function main() {
   let firstExerciseTick = true;
   const exerciseEnqueued = new Set();
   const mealEnqueued = new Set();
+  // YARD TURN BEGIN: delivery sets
+  const yardEnqueued = new Set();
+  const yardRemembered = new Set();
+  // YARD TURN END: delivery sets
   client.onDelivered = (events) => {
     if (acknowledgeDayRollovers(vitals, events)) urgentVitalsDirty = true;
     if (acknowledgeExerciseDeliveries(vitals.locationRegime, events)) urgentVitalsDirty = true;
     if (acknowledgeMealEvents(vitals.mealChoice, events)) urgentVitalsDirty = true;
+    // YARD TURN BEGIN: delivery acknowledgement
+    if (acknowledgeYardDeliveries(vitals.yardContactChoice, events)) urgentVitalsDirty = true;
+    for (const event of events) yardEnqueued.delete(event.delivery_id);
+    // YARD TURN END: delivery acknowledgement
     for (const event of events) exerciseEnqueued.delete(event.delivery_id);
     for (const event of events) mealEnqueued.delete(event.delivery_id);
     if (worldMirrorReady && compactAcknowledgedRetiredObjects(vitals.worldSimulation, events)) {
@@ -852,6 +870,9 @@ async function main() {
     // wait for expressive quiet. They still take the coordinator/shared lease,
     // remain cancellable, and their completed requests pace subsequent prose.
     if (purpose === 'postcard' || purpose === 'warden' || purpose === 'meal_choice') return 0;
+    // YARD TURN BEGIN: causal quiet exemption
+    if (purpose === 'yard_contact_choice') return 0;
+    // YARD TURN END: causal quiet exemption
     // The action chooser and its directly following journal are one visible
     // expression cycle. Only a successful immediately preceding chooser earns
     // this exemption; failed or intervening requests retain normal pacing.
@@ -1291,6 +1312,22 @@ async function main() {
     const variant = roll < 0.35 ? 'quiet' : roll < 0.60 ? 'company'
       : roll < 0.85 ? 'conversation' : 'avoided';
     const yard = createYardObservation({ nowMs: now, cast, variant, makeId: (prefix) => `${prefix}-${randomUUID()}` });
+    // YARD TURN BEGIN: discrete greeting admission
+    if (qualifiesYardGreeting(cast, variant)) {
+      const encounter = openYardGreeting(vitals.yardContactChoice, {
+        id: yard.id, cast, context: currentYardTurnContext(),
+      });
+      // Consume the same observation slot even if its world fence became stale.
+      // No alternate cast/outcome roll and no completed Cy conversation fallback.
+      vitals.locationRegime.activeExerciseEpisode.last_observation_at = yard.occurredAt;
+      vitals.locationRegime.activeRegimeEpisode.last_observation_at = yard.occurredAt;
+      if (encounter) {
+        vitals.locationRegime.activeExerciseEpisode.interaction_count += 1;
+        vitals.locationRegime.activeRegimeEpisode.interaction_count += 1;
+      }
+      return;
+    }
+    // YARD TURN END: discrete greeting admission
     const record = captureEpisodeEvent({
       ...yard,
       cyObserved: true,
@@ -2727,7 +2764,7 @@ async function main() {
     const coordinatorBackground = background || awgInReservedIdle;
     // The meal transaction owns its visible cancellation slot through both
     // checkpoint barriers, not just the model request. Its signal relays here.
-    const cancellationScope = purpose === 'meal_choice' ? null
+    const cancellationScope = ['meal_choice', 'yard_contact_choice'].includes(purpose) ? null
       : awgInReservedIdle ? 'awg' : (background ? null : 'visible');
     // AWG is the lowest-priority model job. It may use an otherwise idle
     // interval, but it must never preempt durable memory work as foreground
@@ -2796,6 +2833,9 @@ async function main() {
         });
         if (purpose === 'drawing' && attempt === 'drawing-intent') ac.signal.throwIfAborted();
         if (purpose === 'meal_choice' && ac.signal.aborted) throw cancellationError(ac.signal);
+        // YARD TURN BEGIN: causal return cancellation
+        if (purpose === 'yard_contact_choice' && ac.signal.aborted) throw cancellationError(ac.signal);
+        // YARD TURN END: causal return cancellation
         requireInferenceEligibility(isEligible, ac);
         requestStats = out.stats || null;
         outputChars = String(out.text || '').length;
@@ -2844,7 +2884,7 @@ async function main() {
           ...inferenceStats(requestStats),
         });
       }
-      if (hostLease) await hostLease.release(purpose === 'meal_choice' ? { timeoutMs: 5000 } : undefined);
+      if (hostLease) await hostLease.release(['meal_choice', 'yard_contact_choice'].includes(purpose) ? { timeoutMs: 5000 } : undefined);
       if (signal) signal.removeEventListener('abort', relayAbort);
       if (background && startedAtMs !== null) {
         const endedAtMs = Date.now();
@@ -4419,6 +4459,96 @@ async function main() {
     return true;
   }
 
+  // YARD TURN BEGIN: service and committed projections
+  function currentYardTurnContext() {
+    const nowMs = Date.now();
+    const { mins } = londonParts(new Date(nowMs));
+    return yardTurnContext({ nowMs, locationState: vitals.locationRegime,
+      asleep: effectiveAsleep(mins), minutes: mins, regimeEpoch, regime: client.regime });
+  }
+
+  function noteYardHistory(record) {
+    const event = record.world_event;
+    if (recentWorldHistory.some((item) => item.id === event.id)) return;
+    recentWorldHistory.push({ id: event.id, timestamp: event.timestamp,
+      summary: record.observation.summary || event.world.context.description || event.event_type,
+      eventFamily: event.event_family, eventType: event.event_type,
+      archetypeId: event.archetype_id, location: event.world.context.location,
+      participants: event.world.context.associated_entities || [],
+      actorId: event.world.participants.actor, targetId: event.world.participants.target,
+      cyObserved: true, dreamEligible: true,
+      journalSubject: journalSubjectFromWorldRecord(record, { cyObserved: true }) });
+    while (recentWorldHistory.length > 24) recentWorldHistory.shift();
+  }
+
+  function projectYardRecord(record, encounter) {
+    // The source envelope is already durable. Never call captureEnvironmentEvent
+    // to construct a speculative outcome or mutate its immutable source record.
+    const receipts = observeEnvironmentRecord(soma, record);
+    noteYardHistory(record);
+    vitals.locationRegime = registerEpisodeEvent(vitals.locationRegime, record.world_event.id,
+      { exerciseEpisodeId: encounter.exerciseEpisodeId });
+    return { ...receipts, consumed_by: ['soma-input-staging-v1',
+      'social-episode-model-v1', 'social-contact-detector-ledger-v1',
+      'action-opportunity-model-v1', 'action-outcome-contingency-v1',
+      'current-defensive-context-v1', 'operational-anxiety-state-v1',
+      'probabilistic-threat-learning-v1'] };
+  }
+
+  async function checkpointYardTurns() {
+    await flushYardTurns(vitals.yardContactChoice, {
+      checkpoint: () => saveVitals(vitalsPath, vitals),
+      project: projectYardRecord,
+      enqueue: (event) => client.enqueueYardContactEvent(event),
+      enqueued: yardEnqueued,
+      remember: (record) => rememberEnvironmentRecord(record),
+      remembered: yardRemembered,
+    });
+  }
+
+  function yardTurnDiagnostic(stage, encounter, reason = null) {
+    recordInferenceDiagnostic({ event: 'yard_contact_choice', stage, at: tsNow(),
+      opportunity_id: encounter.id, exercise_episode_id: encounter.exerciseEpisodeId,
+      actor_id: encounter.castKey, phase: encounter.phase,
+      decision_id: encounter.decision?.id || null, action: encounter.decision?.action || null,
+      resolution: encounter.resolution?.status || null, reason });
+  }
+
+  async function serviceYardContactChoice() {
+    const encounter = vitals.yardContactChoice.encounters.find((item) => item.phase === 'AVAILABLE');
+    if (!encounter || !currentYardTurnContext().eligible) return false;
+    const controller = new AbortController();
+    generationCancellation.register('visible', controller, { purpose: 'yard_contact_choice' });
+    const timer = setTimeout(() => abortWithReason(controller, 'YARD_CHOICE_TIMEOUT'), FOREGROUND_INFERENCE_TIMEOUT_MS);
+    const admittedRegimeEpoch = regimeEpoch;
+    const isAdmitted = () => running && !client.paused && !pendingPostcards.length
+      && !pendingWarden.length && !maintenance.blocked && regimeEpoch === admittedRegimeEpoch;
+    try {
+      await checkpointYardTurns();
+      const cognition = prepareSomaGeneration(soma, { now: Date.now() });
+      await decideYardTurn(vitals.yardContactChoice, encounter, {
+        readContext: currentYardTurnContext, checkpoint: () => saveVitals(vitalsPath, vitals),
+        signal: controller.signal, isAdmitted, diagnostic: yardTurnDiagnostic,
+        characterContext: { bodily: cognition.groundedDirective || '',
+          recent: JSON.stringify(recentWorldHistory.filter((item) => item.cyObserved).slice(-3)
+            .map((item) => ({ text: item.summary, at: item.timestamp }))) },
+        generate: (call) => rawGenerate({ ...call,
+          opts: options(vitals, config.threads, 'journal', { num_predict: 80 }),
+          purpose: 'yard_contact_choice', accountingMode: 'yard_contact_choice', attempt: 'yard-contact-choice',
+          timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS, signal: controller.signal,
+          isEligible: () => isAdmitted() && encounter.phase === 'OFFERED'
+            && liveYardTurn(encounter, currentYardTurnContext()),
+        }),
+      });
+      await checkpointYardTurns();
+    } finally {
+      clearTimeout(timer);
+      generationCancellation.clear('visible', controller);
+    }
+    return true;
+  }
+  // YARD TURN END: service and committed projections
+
   // ---- deterministic environment scheduler (runs each vitals tick) ----
   let worldSchedulerInFlight = false;
   async function scheduler(now) {
@@ -4487,6 +4617,10 @@ async function main() {
     }
     await checkpointExerciseEvents();
     advanceCellSearch(now);
+    // YARD TURN BEGIN: world fence closure
+    expireYardTurns(vitals.yardContactChoice, currentYardTurnContext());
+    await checkpointYardTurns();
+    // YARD TURN END: world fence closure
     // Checked every tick regardless of location, like advanceCellSearch above,
     // so an already-scheduled release fires on time even while Cy is at yard.
     advanceLockdown(now);
@@ -4558,6 +4692,16 @@ async function main() {
   // an uncertain provider request or infers consumption across downtime.
   recoverMeals(vitals.mealChoice, mealCallbacks);
   await checkpointMeals();
+  // YARD TURN BEGIN: startup reconciliation
+  // Downtime never preserves an unanswered social turn or executes an old intent.
+  recoverYardTurns(vitals.yardContactChoice, currentYardTurnContext());
+  await checkpointYardTurns();
+  for (const encounter of vitals.yardContactChoice.encounters) {
+    for (const record of [encounter.opening, encounter.resolutionRecord].filter(Boolean)) {
+      if (encounter.projectedRecordIds.includes(record.world_event.id)) noteYardHistory(record);
+    }
+  }
+  // YARD TURN END: startup reconciliation
 
   const tickTimer = setInterval(async () => {
     // Draining work retains ordinary timers. Once held, do not evolve the world
@@ -4731,14 +4875,14 @@ async function main() {
     // Either way: log LOUDLY and escalate a context reset - the manual recovery
     // (clearing the fed-back context) done automatically. Runs on this independent
     // timer so it fires even if the generation loop itself is hung.
-    const mealTransactionActive = generationCancellation.active('visible')?.purpose === 'meal_choice';
+    const mealTransactionActive = ['meal_choice', 'yard_contact_choice'].includes(generationCancellation.active('visible')?.purpose);
     const stalled = !mealTransactionActive && failedCyclesSinceEmit >= STALL_CYCLES;
     // AWG emits no handwriting tokens while it works, so the waking-prose
     // no-token watchdog is not a valid liveness test for that request class.
     // AWG has its own finite provider timeout and remains interruptible by all
     // higher-priority inbound work through the purpose-aware cancellation registry.
     const proseInferenceBusy = inferPhase !== 'idle'
-      && !['ambient_world_generation', 'meal_choice'].includes(activeInferencePurpose);
+      && !['ambient_world_generation', 'meal_choice', 'yard_contact_choice'].includes(activeInferencePurpose);
     const hung = !mealTransactionActive && proseInferenceBusy && now - Math.max(inferBusySinceMs, lastTextMs) > WATCHDOG_MS;
     if (
       running &&
@@ -5100,6 +5244,10 @@ async function main() {
       if (maintenance.refresh().state !== 'running') break;
       const tempoChanged = breakOnTempo && tempoEpoch !== startingTempoEpoch;
       const regimeChanged = breakOnRegime && regimeEpoch !== startingRegimeEpoch;
+      // YARD TURN BEGIN: ready turn wakeup
+      if (vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD
+        && vitals.yardContactChoice.encounters.some((item) => item.phase === 'AVAILABLE')) break;
+      // YARD TURN END: ready turn wakeup
       if (pendingPostcards.length || pendingWarden.length || tempoChanged || regimeChanged
         || vitals.mealChoice.episodes.some((episode) => episode.phase === 'AVAILABLE')) break;
       await sleep(Math.min(500, Math.max(0, end - Date.now())));
@@ -5440,6 +5588,9 @@ async function main() {
         continue;
       }
       if (vitals.locationRegime.current.id !== LOCATIONS.CELL) {
+        // YARD TURN BEGIN: away service
+        if (await serviceYardContactChoice()) continue;
+        // YARD TURN END: away service
         expressionEligibleSinceMs = 0;
         const awayMode = vitals.locationRegime.current.id === LOCATIONS.EXERCISE_YARD
           ? 'exercise' : vitals.locationRegime.current.id.toLowerCase();

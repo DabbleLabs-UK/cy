@@ -51,6 +51,7 @@
 //   node runner/social-officer-contact-grounding.test.js
 
 import assert from 'node:assert/strict';
+import { beforeYardContactTurn } from './fixtures/yard-contact-turn-source.mjs';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
@@ -115,7 +116,7 @@ ok('instrumental social/officer openings cannot bypass the same co-presence gate
 // yard observation function, Social substrate and cast pickers remain unchanged. ----
 {
   const baseline = '8c5a863';
-  const untouchedFiles = ['social-contact-substrate.js', 'cast.js'];
+  const untouchedFiles = ['cast.js'];
   let diffOutput = '';
   try {
     diffOutput = execFileSync('git', ['diff', '--stat', baseline, '--', ...untouchedFiles], {
@@ -127,6 +128,9 @@ ok('instrumental social/officer openings cannot bypass the same co-presence gate
     diffOutput = null;
   }
   if (diffOutput !== null) {
+    assert.equal(beforeYardContactTurn(readFileSync(new URL('./social-contact-substrate.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')),
+      execFileSync('git', ['show', `${baseline}:runner/social-contact-substrate.js`], { encoding: 'utf8' }).replace(/\r\n/g, '\n'),
+      'only the separately tested discrete-yard timestamp tie handling differs');
     assert.equal(diffOutput.trim(), '',
       `the Social substrate and cast pickers must be byte-for-byte unchanged from baseline; git diff --stat reported: ${diffOutput}`);
     const yardFunction = (text) => {

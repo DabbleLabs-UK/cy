@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
 import { beforeJournalCellPublication } from './fixtures/journal-cell-publication-source.mjs';
+import { beforeYardContactTurn } from './fixtures/yard-contact-turn-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -266,7 +267,7 @@ test('journal context and Tempo stay identical outside tested repeat/finalizatio
     ['async function waitForInferenceTempo(', '  soma.observe('],
     ['function buildCtx(', '  async function doPostcard('],
     ['async function doPostcard(', '  async function doWarden('],
-  ]) assert.equal(extract(source, start, end), extract(baseline, start, end));
+  ]) assert.equal(extract(beforeYardContactTurn(source), start, end), extract(baseline, start, end));
   // The journal-repeat fix carries the already-rendered exposure to its full
   // candidate check. Permit exactly that diff, not a blanket stream exemption.
   const stream = (text) => extract(text, 'async function streamGenerate(', '  async function rawGenerate(');

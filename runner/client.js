@@ -152,6 +152,18 @@ export class Client {
     this.batch.push({ ...event });
   }
 
+  // YARD TURN BEGIN: identified client delivery
+  // One checkpointed discrete yard turn owns these identities across replay.
+  enqueueYardContactEvent(event) {
+    if (!['event', 'world_event_record'].includes(event.kind)
+      || !/^yard-[0-9a-f-]{36}$/i.test(event.yard_opportunity_id || '')
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(event.delivery_id || '')) {
+      throw new Error('identified checkpointed yard turn required');
+    }
+    this.batch.push({ ...event });
+  }
+  // YARD TURN END: identified client delivery
+
   // Priority flush for latency-sensitive events (the public inference LED). Sends
   // the pending batch NOW instead of waiting up to FLUSH_MS, so a state the viewer
   // is watching for lands within a poll rather than a batch window. If a flush is

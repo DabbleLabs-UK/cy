@@ -142,7 +142,7 @@ assert.match(source,
   /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose: requestPurpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\),\s*\n\s*\}\)\);/,
   'the foreground streaming call site is unchanged: never preemptible, no LEASE_PREEMPTED reason threading');
 assert.match(source,
-  /const cancellationScope = purpose === 'meal_choice' \? null[\s\S]{0,60}?awgInReservedIdle \? 'awg'[\s\S]{0,1000}?generationCancellation\.register\(cancellationScope, ac, \{ purpose \}\)/,
+  /const cancellationScope = \['meal_choice', 'yard_contact_choice'\]\.includes\(purpose\) \? null[\s\S]{0,60}?awgInReservedIdle \? 'awg'[\s\S]{0,1000}?generationCancellation\.register\(cancellationScope, ac, \{ purpose \}\)/,
   'an admitted AWG request owns a separate cancellation scope');
 assert.match(source,
   /abort_reason: cancellationReason\(ac\.signal\)/,

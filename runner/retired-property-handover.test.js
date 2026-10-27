@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { beforeYardContactTurn } from './fixtures/yard-contact-turn-source.mjs';
 import test from 'node:test';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -128,6 +129,7 @@ test('timing, mirror, object lifecycle and accounting implementations are unchan
     'runner/environment.js', 'runner/cast.js', 'runner/client.js']) {
     let actual = (await readFile(new URL('../' + path, import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
     if (path === 'runner/client.js') {
+      actual = beforeYardContactTurn(actual);
       // Optional memory claim authority is unrelated to search delivery. Allow
       // only that exact wrapper change; keep every other client byte pinned.
       actual = actual.replace("async claimMemorySurfacing(value = {}) {\n    return this._memoryRequest('claim_surfacing', value);",
