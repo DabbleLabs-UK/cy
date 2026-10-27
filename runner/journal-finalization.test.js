@@ -14,12 +14,29 @@ import {
   isRepeat, isJournalRepeat,
 } from './warden.js';
 import { applyBurstSeparator, completionBudget } from './prompt.js';
+import { recordJournalTerminationDiagnostic } from './journal-termination-telemetry.js';
 
 const BASE = '6967e092a81ec5095320ebb8378cee84acf0c458';
 const run = readFileSync(new URL('./run.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const fixtures = JSON.parse(readFileSync(new URL('./fixtures/journal-finalization-natural-20261026.json', import.meta.url)));
 const length = { done: true, done_reason: 'length', eval_count: 93 };
 const stop = { done: true, done_reason: 'stop', eval_count: 93 };
+
+test('private termination diagnostics and failed sinks cannot change publication or exact feedback', async () => {
+  for (const stats of [null, { done: true, eval_count: 34 }, stop, length]) {
+    for (const candidate of ['cos...', 'durin', 'b4', fixtures.completeCapQuestion.published]) {
+      const baseline = runtimeFixture();
+      const expected = await baseline.execute(candidate, stats);
+      for (const sink of [() => {}, () => { throw new Error('disk unavailable'); }, () => Promise.reject(new Error('disk unavailable'))]) {
+        recordJournalTerminationDiagnostic(sink, { id: 'offline', stats, provider: 'ollama' });
+        const actual = runtimeFixture();
+        assert.equal(JSON.stringify(await actual.execute(candidate, stats)), JSON.stringify(expected));
+        const ignoreClock = (key, value) => key === 'now' ? 0 : value;
+        assert.equal(JSON.stringify(actual.calls, ignoreClock), JSON.stringify(baseline.calls, ignoreClock));
+      }
+    }
+  }
+});
 
 function extract(text, start, end) {
   const a = text.indexOf(start);
