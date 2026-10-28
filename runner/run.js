@@ -212,6 +212,7 @@ import {
   advanceCellSearchEpisode,
   advanceLockdownEpisode,
   awgLocationEligible,
+  awgLocationFence,
   availableExpressiveActions,
   canStartScheduledRoutine,
   createYardObservation,
@@ -262,6 +263,7 @@ import {
 } from './context-broker.js';
 import {
   AWG_TIMEOUT_MS,
+  AWG_RECENT_RUN_LIMIT,
   awgEventToEnvironment,
   isAwgDue,
   reconcileWorldSimulationState,
@@ -1065,6 +1067,7 @@ async function main() {
     mealEpisodeId = null,
     suppliedEventId = null,
     occurredAt = null,
+    publicationQueue = null,
   } = {}) {
     const eventId = suppliedEventId || `env-${randomUUID()}`;
     const eventTimestamp = occurredAt ? tsNow(new Date(occurredAt)) : tsNow();
@@ -1161,6 +1164,7 @@ async function main() {
       kind: 'world_event_record', ts: eventTimestamp, payload: record, meal_episode_id: mealEpisodeId,
     });
     else if (exerciseEpisodeId) queueExerciseEvent({ kind: 'world_event_record', ts: eventTimestamp, payload: record });
+    else if (publicationQueue) publicationQueue.push({ kind: 'world_event_record', ts: eventTimestamp, payload: record });
     else emit({ kind: 'world_event_record', payload: record });
     recentWorldHistory.push({
       id: event.id,
@@ -1178,7 +1182,9 @@ async function main() {
       journalSubject: journalSubjectFromWorldRecord(record, { cyObserved }),
     });
     while (recentWorldHistory.length > 24) recentWorldHistory.shift();
-    if (cyObserved && !mealEpisodeId) rememberEnvironmentRecord(record);
+    // AWG's guarded synchronous commit observes now, but external delivery and
+    // formation wait for its existing checkpoint. Other callers are unchanged.
+    if (cyObserved && !mealEpisodeId && !publicationQueue) rememberEnvironmentRecord(record);
     return record;
   }
 
@@ -1241,7 +1247,7 @@ async function main() {
     return [...CAST, ...OFFICERS];
   }
 
-  function publishEpisodeEvent(event, record) {
+  function publishEpisodeEvent(event, record, publicationQueue = null) {
     if (!event || event.cyObserved === false) return;
     const exerciseEpisodeId = event.world?.exercise_admission?.episode_id
       || (event.world?.movement?.episode_id?.startsWith('exercise:') ? event.world.movement.episode_id : null);
@@ -1256,6 +1262,7 @@ async function main() {
       },
     };
     if (exerciseEpisodeId) queueExerciseEvent(publication);
+    else if (publicationQueue) publicationQueue.push(publication);
     else emit(publication);
   }
 
@@ -5103,7 +5110,9 @@ async function main() {
     if (!context.ok) return { status: 'SKIPPED', reason: 'CONTEXT_BROKER_FAILURE' };
     // One-shot, behaviour-neutral capture token (null unless armed). See awg-capture.js.
     let awgCaptureDir = null;
-    const result = await runAmbientWorldCycle({
+    const admittedLocationFence = awgLocationFence(vitals.locationRegime);
+    const admittedRegimeEpoch = regimeEpoch;
+    let result = await runAmbientWorldCycle({
       state: vitals.worldSimulation,
       contextRendering: context.rendering,
       nowMs: Date.now(),
@@ -5144,14 +5153,82 @@ async function main() {
         return captureAwgResponse(awgCaptureDir, out);
       },
     });
-    if (awgCaptureDir) captureAwgOutcome(awgCaptureDir, result);
     // An ingest conflict or reconnect gate can close while background inference
     // is running. Its candidate is not allowed to mutate an unsynchronized
     // world merely because it was admitted earlier.
     if (!worldMirrorReady) {
       return { status: 'SKIPPED', reason: 'WORLD_MIRROR_UNSYNCHRONIZED', slotConsumed: !!result.run };
     }
+    // Inference only prepared a detached candidate. The live world wins any
+    // intervening movement/search/lockdown or regime change, including A->B->A.
+    // There is no await from this final read through the logical world commit.
+    if (result.status === 'ACCEPTED' && (!admittedLocationFence
+      || awgLocationFence(vitals.locationRegime) !== admittedLocationFence
+      || regimeEpoch !== admittedRegimeEpoch || effectiveAsleep(londonParts().mins)
+      || !running || client.paused || maintenance.refresh().state !== 'running')) {
+      const run = { ...result.run, validationStatus: 'REJECTED',
+        rejectionReason: 'STALE_LOCATION_REGIME', createdWorldEventIds: [], threadChanges: [] };
+      // Retain truthful attempt/cadence accounting, never the detached world
+      // changes or their claimed consequences. This slot buys no replacement.
+      result = { ...result, status: 'REJECTED', applied: null, run };
+    }
+    // A no-event/error/rejection has only attempt metadata to adopt. Its
+    // pre-inference snapshot must not roll back unrelated live object changes.
+    if (result.status !== 'ACCEPTED' && result.run) {
+      result.state = reconcileWorldSimulationState({ ...vitals.worldSimulation,
+        lastRunAt: result.run.ranAt,
+        recentRuns: [...vitals.worldSimulation.recentRuns, result.run].slice(-AWG_RECENT_RUN_LIMIT),
+      });
+    }
+    const committedAt = tsNow();
     vitals.worldSimulation = result.state;
+    // A generated search starts at the same guarded commit, not after an async
+    // checkpoint under a possibly different location.
+    let committedSearch = null;
+    const acceptedType = String(result.applied?.event?.eventType || '').toLowerCase();
+    if (result.status === 'ACCEPTED' && result.applied.event.location === 'cell'
+      && acceptedType.includes('cell_search')) {
+      const actorKey = result.applied.event.participants.find(item => OFFICERS.some(officer => officer.key === item));
+      const officer = OFFICERS.find(item => item.key === actorKey)
+        || OFFICERS[Math.floor(Math.random() * OFFICERS.length)] || { key: 'proctor', name: 'Mr Proctor' };
+      const started = startCellSearchEpisode(vitals.locationRegime, {
+        nowMs: Date.parse(committedAt), actorId: officer.key, actorName: officer.name,
+        objects: vitals.worldSimulation.objects, makeId: prefix => `${prefix}-${randomUUID()}`,
+      });
+      vitals.locationRegime = started.state;
+      if (started.started) committedSearch = started.event;
+    }
+    // Commit in-memory facts/Soma/history without yielding, in occurrence order.
+    // Buffer external delivery only: observing the opening after checkpointing
+    // could otherwise reopen a search that the scheduler has already completed.
+    // This call-local buffer is not a new durable/replayable outbox.
+    const publications = [], memoryRecords = [];
+    let environment = null, record = null;
+    if (result.status === 'ACCEPTED') {
+      if (committedSearch) {
+        const searchRecord = captureEnvironmentEvent('cell_search', {
+          eventType: committedSearch.eventType, summary: committedSearch.summary,
+          world: committedSearch.world, observation: committedSearch.observation,
+          provisionalConsumer: false, cyObserved: committedSearch.cyObserved !== false,
+          dreamEligible: committedSearch.cyObserved !== false, occurredAt: committedSearch.occurredAt,
+          publicationQueue: publications,
+        });
+        vitals.locationRegime.searchEpisode.linked_event_ids.push(searchRecord.world_event.id);
+        if (committedSearch.cyObserved !== false) memoryRecords.push(searchRecord);
+        publishEpisodeEvent(committedSearch, searchRecord, publications);
+      }
+      environment = awgEventToEnvironment(result.applied);
+      record = captureEnvironmentEvent(environment.archetypeId, {
+        eventType: environment.eventType, summary: environment.summary,
+        world: environment.world, observation: environment.observation,
+        provisionalConsumer: false, cyObserved: !!result.applied.cyObserved,
+        dreamEligible: !!result.applied.cyObserved, occurredAt: committedAt,
+        publicationQueue: publications,
+      });
+      result.applied.event.environmentEventId = record.world_event.id;
+      if (result.applied.cyObserved) memoryRecords.push(record);
+    }
+    if (awgCaptureDir) captureAwgOutcome(awgCaptureDir, result);
     if (result.drought && result.drought.active) {
       const objectCount = result.applied && Array.isArray(result.applied.validationCandidate?.objects)
         ? result.applied.validationCandidate.objects.length : 0;
@@ -5181,25 +5258,10 @@ async function main() {
     }
     if (result.status !== 'ACCEPTED') return result;
 
-    const acceptedType = String(result.applied.event && result.applied.event.eventType || '').toLowerCase();
-    if (result.applied.event && result.applied.event.location === 'cell'
-      && acceptedType.includes('cell_search')) {
-      const actorKey = result.applied.event.participants.find((item) => OFFICERS.some((officer) => officer.key === item));
-      const actor = OFFICERS.find((officer) => officer.key === actorKey) || null;
-      beginCellSearch(Date.now(), { actor });
-    }
-
-    const environment = awgEventToEnvironment(result.applied);
-    const record = captureEnvironmentEvent(environment.archetypeId, {
-      eventType: environment.eventType,
-      summary: environment.summary,
-      world: environment.world,
-      observation: environment.observation,
-      provisionalConsumer: false,
-      cyObserved: !!result.applied.cyObserved,
-      dreamEligible: !!result.applied.cyObserved,
-    });
-    result.applied.event.environmentEventId = record.world_event.id;
+    // Deliver already-observed immutable records. No second observation or
+    // registration against the location/episode that is current after the await.
+    for (const publication of publications) emit(publication);
+    for (const memoryRecord of memoryRecords) rememberEnvironmentRecord(memoryRecord);
     for (const change of result.applied.changes) {
       const thread = [...vitals.worldSimulation.threads, ...vitals.worldSimulation.terminalThreads]
         .find((item) => item.id === change.threadId);
@@ -5211,6 +5273,7 @@ async function main() {
     if (result.applied.cyObserved && environment.publicTimeline) {
       emit({
         kind: 'event',
+        ts: committedAt,
         payload: {
           name: 'ambient_world',
           text: environment.publicTimeline,
