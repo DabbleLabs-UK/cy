@@ -174,7 +174,22 @@ test('runner uses the frozen postcard snapshot for broker and fallback without g
   assert.match(source, /const memories = postcardMemory \? postcardMemory.enrichment.selected/);
   assert.match(source, /postcardSenderMemoryItems\(postcardMemory.sender\)/);
   assert.match(source, /mandatory: !!postcardMemory, content: visitorContext/);
-  assert.match(source, /const memory = brokerOptions.postcardMemory \?/);
+  assert.match(source, /const memory = brokerOptions.journalMemory \|\| \(brokerOptions.postcardMemory \?/);
+  const start = source.indexOf('    const memory = brokerOptions.journalMemory');
+  const end = source.indexOf('    const ctx = {', start);
+  assert.ok(start >= 0 && end > start);
+  const frozen = { sender: { snapshot: 'protected sender' }, enrichment: { selected: [] } };
+  const calls = [];
+  const select = new Function('brokerOptions', 'autobiographicalMemory',
+    'postcardMemoryDirective', 'postcardMemoryReadiness', `${source.slice(start, end)} return memory;`);
+  const memory = select({ postcardMemory: frozen }, {
+    consumeWorking() { throw new Error('postcard must not consume unrelated global memory'); },
+  }, value => { calls.push(value); return 'frozen postcard directive'; },
+  (sender, enrichment) => { calls.push([sender, enrichment]); return { status: 'frozen postcard' }; });
+  assert.deepEqual(memory, { directive: 'frozen postcard directive', inspection: { status: 'frozen postcard' } });
+  assert.equal(calls[0], frozen);
+  assert.equal(calls[1][0], frozen.sender);
+  assert.equal(calls[1][1], frozen.enrichment);
   assert.match(source, /const postcardMemory = \{ sender: senderContinuity, enrichment \}/);
 });
 

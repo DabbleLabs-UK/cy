@@ -671,6 +671,7 @@ async function main() {
   const yardRemembered = new Set();
   // YARD TURN END: delivery sets
   client.onDelivered = (events) => {
+    if (autobiographicalMemory) autobiographicalMemory.acknowledgeJournalCues(events);
     if (acknowledgeDayRollovers(vitals, events)) urgentVitalsDirty = true;
     if (acknowledgeExerciseDeliveries(vitals.locationRegime, events)) urgentVitalsDirty = true;
     if (acknowledgeMealEvents(vitals.mealChoice, events)) urgentVitalsDirty = true;
@@ -719,7 +720,7 @@ async function main() {
     exerciseEnqueued.add(event.delivery_id);
   }
   let autobiographicalMemory = null;
-  let pendingMemoryQuery = null;
+  let journalCueObservationReady = false;
   let memoryFormationTurns = 0;
   let memoryExpressionBuffer = [];
   const recentWorldHistory = [];
@@ -1181,36 +1182,23 @@ async function main() {
     return record;
   }
 
-  function rememberEnvironmentRecord(record) {
-    const event = record.world_event;
+  function rememberEnvironmentRecord(record, recallRecord = record) {
     if (autobiographicalMemory) {
+      if (journalCueObservationReady && recallRecord) autobiographicalMemory.observeJournalCue(recallRecord);
       const source = sourceFromEnvironmentRecord(record);
       if (source) {
         // Arrival-side sustainability boundary: only plausible episodes become
         // durable formation candidates. Repetitive world texture and non-terminal
         // episode stages are not separately formed (one coherent episode -> one
         // representative source). Significant/adverse occurrences are always kept.
-        // This gates ONLY generic ENVIRONMENT_EVENT formation enqueue; the
-        // retrieval/surfacing query below is deliberately left unchanged.
+        // This gates ONLY generic ENVIRONMENT_EVENT formation enqueue; cue
+        // preparation has its separate canonical delivery acknowledgement.
         const admission = environmentFormationAdmission(record);
         if (admission.admit) {
           void autobiographicalMemory.queueSource(source).catch((error) => {
             console.warn(`[cy] memory source enqueue deferred: ${error.message}`);
           });
         }
-        pendingMemoryQuery = {
-          text: source.text,
-          tags: source.tags,
-          location: event.world.context.location || null,
-          publicSituation: source.text,
-          // Retrieval-cue provenance only: labels this query as cued by a
-          // world event, and snapshots Cy's own recent expression from just
-          // before the cue arrived, so a later analysis can tell whether the
-          // event's own content or Cy's own words explain any resulting
-          // memory match. Never used to fetch/rank/select memories.
-          querySourceType: 'ENVIRONMENT_EVENT',
-          recentExpressionText: contextText().slice(-640),
-        };
       }
     }
   }
@@ -2756,6 +2744,7 @@ async function main() {
     timeoutMs = null, signal = null, background = false, returnMeta = false,
     attempt = 'initial', admittedAwgSlot = false, format = null,
     isEligible = null, providerOverride = null, genericFormation = false,
+    journalPreparationReservation = null,
   }) {
     let startedAtMs = null;
     const waitTrace = new InferenceWaitTrace(purpose);
@@ -2817,7 +2806,9 @@ async function main() {
           onLost: (reason) => abortWithReason(ac, reason || 'LEASE_LOSS'),
           // Bounded generic formation is also expendable when interactive
           // Feddit work arrives. Sender formation routing remains unchanged.
-          preemptible: awgInReservedIdle || genericFormation,
+          preemptible: awgInReservedIdle || genericFormation
+            || (background && purpose === 'memory_surfacing'
+              && autobiographicalMemory.validJournalReservation(journalPreparationReservation)),
         }));
       }
       const requestOpts = typeof provider.applySharedProfile === 'function'
@@ -2921,6 +2912,7 @@ async function main() {
     recentExpression = '',
     provenanceSource = null,
     memoryCandidates = [],
+    journalMemory = null,
     postcardMemory = null,
     actionOptions = [],
     mins = londonParts().mins,
@@ -3059,7 +3051,7 @@ async function main() {
     if (postcardMemory) {
       for (const item of postcardSenderMemoryItems(postcardMemory.sender)) add(item);
     }
-    const memories = postcardMemory ? postcardMemory.enrichment.selected : memoryCandidates.length ? memoryCandidates
+    const memories = postcardMemory ? postcardMemory.enrichment.selected : journalMemory ? journalMemory.selected : memoryCandidates.length ? memoryCandidates
       : (autobiographicalMemory && autobiographicalMemory.working.selected || []);
     for (const memory of memories) {
       if (postcardMemory?.enrichment.mechanism === 'INDEXED_ASSOCIATIVE') {
@@ -3126,6 +3118,19 @@ async function main() {
     client,
     makeId: randomUUID,
     genericAvailability: genericMemoryAvailability,
+    journalPreparationContext: () => {
+      const nowMs = Date.now();
+      const slotAnchorMs = vitals.expressiveCadence.lastOpportunityAtMs;
+      return {
+        eligible: running && !client.paused && !pendingPostcards.length
+          && !pendingWarden.length && !pendingDrawRequests.length
+          && currentMode !== 'letter' && currentMode !== 'warden'
+          && vitals.locationRegime.current.id === LOCATIONS.CELL
+          && !effectiveAsleep(londonParts().mins),
+        slotAnchorMs,
+        dueAtMs: nowMs + wakingOpportunityWaitMs(slotAnchorMs, nowMs, client.tempo.speed),
+      };
+    },
     onGenericService: (detail) => recordInferenceDiagnostic({ event: 'generic-memory-service', ...detail }),
     senderFormationGenerate: ({ job, call, localGenerate }) => senderFormationInference.generate({
       job, call, signal: call.signal, providers, localGenerate,
@@ -3139,7 +3144,13 @@ async function main() {
       signal: call.signal || null,
       background: !!call.background,
       genericFormation: !!call.genericFormation,
-      isEligible: call.genericFormation
+      journalPreparationReservation: call.journalPreparationReservation || null,
+      isEligible: call.journalPreparationReservation
+        ? () => autobiographicalMemory.validJournalReservation(call.journalPreparationReservation)
+          && genericMemoryAvailability({ ownInference: true }).allowed
+          && vitals.locationRegime.current.id === LOCATIONS.CELL
+          && !effectiveAsleep(londonParts().mins)
+        : call.genericFormation
         ? () => genericMemoryAvailability({ ownInference: true }).allowed : null,
       // Foreground calls through this shared callback get the same ceiling as
       // every other foreground path; background (memory_surfacing) behaviour
@@ -3154,6 +3165,10 @@ async function main() {
     contextBroker: ({ consumer, ...options }) => buildBrokerContext(consumer, options),
     canRunBackground: (kind) => kind === 'sender_formation'
       ? !client.paused
+      : kind === 'journal_preparation'
+        ? inferPhase === 'idle' && genericMemoryAvailability().allowed
+          && vitals.locationRegime.current.id === LOCATIONS.CELL
+          && !effectiveAsleep(londonParts().mins)
       : inferPhase === 'idle'
       && inferenceTempoPacer.remaining(Date.now(), client.tempo.speed) <= 0
       && backgroundTempoGate.canStart(Date.now())
@@ -3172,17 +3187,6 @@ async function main() {
       + client.maintenancePending() + Number(!!(persistence?.pending || persistence?.inProgress));
   };
 
-  function refreshPendingMemory(generationRef = null, groundedContext = null) {
-    if (!pendingMemoryQuery) return autobiographicalMemory.working;
-    const query = pendingMemoryQuery;
-    pendingMemoryQuery = null;
-    void autobiographicalMemory.requestWorkingContext({
-      ...query, groundedContext, generationRef,
-    }, { scheduleDelayMs: 1000 })
-      .catch((error) => console.warn(`[cy] memory surfacing deferred: ${error.message}`));
-    return autobiographicalMemory.working;
-  }
-
   async function formMemoryAfterVisibleOutput(groundedContext = null, force = false) {
     memoryFormationTurns++;
     autobiographicalMemory.schedule(force ? 0 : 25);
@@ -3199,13 +3203,13 @@ async function main() {
     const grounded = cognition && cognition.groundedDirective != null
       ? { context: cognition.groundedContext, directive: cognition.groundedDirective }
       : soma.groundedDirective({ now: Date.now() });
-    const memory = brokerOptions.postcardMemory ? {
+    const memory = brokerOptions.journalMemory || (brokerOptions.postcardMemory ? {
       directive: postcardMemoryDirective(brokerOptions.postcardMemory),
       inspection: postcardMemoryReadiness(brokerOptions.postcardMemory.sender, brokerOptions.postcardMemory.enrichment),
     } : autobiographicalMemory.consumeWorking(
       brokerOptions.generationRef || `generation:${Date.now()}`,
       brokerOptions.currentSenderId || null,
-    );
+    ));
     const ctx = {
       wakingJournalContext: brokerOptions.wakingJournalContext === true,
       groundedSoma: grounded.directive,
@@ -4237,6 +4241,7 @@ async function main() {
     const line = WING_NOISES[Math.floor(Math.random() * WING_NOISES.length)];
     vitals.lastWingNoiseMs = now;
     recordIncident('wing', { line, phase, mins }); // real, dated, in the ledger
+    autobiographicalMemory.interruptJournalPreparation('wing-noise');
 
     let mid = false;
     if (asleep) {
@@ -4501,7 +4506,9 @@ async function main() {
       project: projectYardRecord,
       enqueue: (event) => client.enqueueYardContactEvent(event),
       enqueued: yardEnqueued,
-      remember: (record) => rememberEnvironmentRecord(record),
+      remember: (record, snapshot) => rememberEnvironmentRecord(record,
+        snapshot.pendingEvents.find((event) => event.kind === 'world_event_record'
+          && event.payload?.world_event?.id === record.world_event.id)?.payload || null),
       remembered: yardRemembered,
     });
   }
@@ -4703,6 +4710,7 @@ async function main() {
   }
   // YARD TURN END: startup reconciliation
 
+  journalCueObservationReady = true;
   const tickTimer = setInterval(async () => {
     // Draining work retains ordinary timers. Once held, do not evolve the world
     // or invoke the prose-stall watchdog merely because maintenance is long.
@@ -5676,6 +5684,7 @@ async function main() {
             || vitals.locationRegime.current.id !== LOCATIONS.CELL
             || effectiveAsleep(londonParts().mins)) continue;
         nowMs = Date.now();
+        autobiographicalMemory.beginJournalOpportunity(vitals.expressiveCadence.lastOpportunityAtMs);
         vitals.expressiveCadence = recordExpressiveOpportunity(vitals.expressiveCadence, { nowMs });
       }
       const expressionGap = eligibleExpressionGap({
@@ -5702,13 +5711,9 @@ async function main() {
         objects: vitals.worldSimulation.objects,
         rnd: () => 0,
       });
-      if (pendingMemoryQuery) {
-        pendingMemoryQuery.publicSituation = pendingMemoryQuery.publicSituation || incidentContext;
-        await refreshPendingMemory(`journal:${nowMs}`, cognition.groundedDirective);
-      }
-
       const cycleInferenceStart = Date.now();
       if (hasDrawRequest) {
+        autobiographicalMemory.finishJournalOpportunity({ closeUpcoming: true });
         const drawOutcome = (await doDraw({ cognition, incidentContext })) || 'empty';
         await recordOutcome(drawOutcome);
         await paceCompletedInferenceCycle(cycleInferenceStart, { reason: 'drawing-tempo' });
@@ -5785,6 +5790,7 @@ async function main() {
       // Publish only after the fixed engineering interval has elapsed so the
       // event marks its end. Provisional rest/fatigue does not change duration.
       if (selectedAction === 'silence') {
+        autobiographicalMemory.finishJournalOpportunity();
         const seconds = AUTONOMOUS_SILENCE_SECONDS;
         const busyEndedAtMs = Date.now();
         await recordOutcome('deliberate-silence');
@@ -5801,6 +5807,7 @@ async function main() {
       }
 
       if (selectedAction === 'draw') {
+        autobiographicalMemory.finishJournalOpportunity();
         const drawOutcome = (await doDraw({ cognition, incidentContext })) || 'empty';
         await recordOutcome(drawOutcome);
         await paceCompletedInferenceCycle(cycleInferenceStart, { reason: 'drawing-tempo' });
@@ -5822,10 +5829,24 @@ async function main() {
       let burstMemoryQuery = null;
       let burstJournalTurn = null;
       {
+        burstJournalTurn = selectJournalTurn(vitals.ledger, {
+          lastJournalAtMs: vitals.lastJournalAtMs,
+          worldEvents: recentWorldHistory,
+          seenKeys: vitals.journalSubjectKeys,
+        });
+        const journalMemory = autobiographicalMemory.consumeJournalPreparation({
+          sourceEventId: burstJournalTurn.sourceEventId,
+          generationRef: `journal-prose:${nowMs}`,
+          eligible: running && !client.paused && !pendingPostcards.length
+            && !pendingWarden.length && !pendingDrawRequests.length
+            && vitals.locationRegime.current.id === LOCATIONS.CELL
+            && !effectiveAsleep(londonParts().mins),
+        });
         const ctx = buildCtx(cognition, {
           generationRef: `journal-prose:${nowMs}`,
           incidentContext,
           wakingJournalContext: true,
+          journalMemory,
         });
         burstGroundedContext = ctx.groundedSomaContext;
         burstGroundedDirective = ctx.groundedSoma;
@@ -5834,11 +5855,6 @@ async function main() {
         // Development steer: orient this entry on what has actually happened since
         // the last one, or steer off re-announcing an unchanged state. Structural
         // (real world timing), not a phrase ban. Computed once per burst.
-        burstJournalTurn = selectJournalTurn(vitals.ledger, {
-          lastJournalAtMs: vitals.lastJournalAtMs,
-          worldEvents: recentWorldHistory,
-          seenKeys: vitals.journalSubjectKeys,
-        });
         ctx.turn = turnDirective(burstJournalTurn);
         ctx.journalSubject = burstJournalTurn;
         ctx.length = completionDirective(targetOpts.num_predict);
@@ -5847,6 +5863,7 @@ async function main() {
         ctx.incidents = incidentContext;
         directives = buildDirectives(vitals, 'journal', ctx);
       }
+      autobiographicalMemory.finishJournalOpportunity();
       const baseOpts = { ...targetOpts, num_predict: completionBudget(targetOpts.num_predict) };
       // Explicit one-shot wording can opt out of the within-burst repeat guard,
       // so a deliberately authored refrain is not cut short. No provisional
@@ -6124,7 +6141,10 @@ async function main() {
         // that never reached the provider still takes a small breather.
         await sleep(700);
       }
-      } finally { releaseMaintenance(); }
+      } finally {
+        autobiographicalMemory.finishJournalOpportunity();
+        releaseMaintenance();
+      }
     }
   }
 

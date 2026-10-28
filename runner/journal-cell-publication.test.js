@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { assertUnchangedMemoryBoundaries } from './fixtures/journal-memory-leadtime-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -217,11 +218,12 @@ test('normal CELL character repair remains the existing two calls, not a new pol
 test('only journal location-result fencing changes production runtime; other boundaries are byte-identical', () => {
   assert.equal(beforeJournalCellPublication(run), old('runner/run.js'));
   for (const path of ['runner/prompt.js', 'runner/character-output.js', 'runner/warden.js',
-    'runner/journal-termination-telemetry.js', 'runner/provider.js', 'runner/memory-runtime.js',
+    'runner/journal-termination-telemetry.js', 'runner/provider.js',
     'runner/autobiographical-memory.js', 'runner/location-regime.js', 'runner/exercise-admission.js',
-    'runner/drawing-subject.js', 'runner/context-broker.js', 'lib/autobiographical_memory.php']) {
+    'runner/drawing-subject.js', 'runner/context-broker.js']) {
     assert.equal(source(path), old(path), path);
   }
+  assertUnchangedMemoryBoundaries(source, old);
 });
 
 test('nonjournal waking prose is not newly made CELL-only', async () => {
