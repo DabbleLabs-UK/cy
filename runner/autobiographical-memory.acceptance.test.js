@@ -259,7 +259,9 @@ test('Q old retriever does not select live memory', async () => {
   const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
   assert.doesNotMatch(run, /provisionalMemoryCandidate:\s*(?:cognition|soma|ctx)/);
   assert.match(run, /provisionalMemoryCandidate:\s*null/);
-  assert.match(run, /autobiographicalMemory\.requestWorkingContext/);
+  assert.match(run, /autobiographicalMemory\.observeJournalCue\(recallRecord\)/);
+  assert.match(run, /autobiographicalMemory\.consumeJournalPreparation\(/);
+  assert.doesNotMatch(run, /autobiographicalMemory\.requestWorkingContext/);
 });
 
 test('R hippocampal brain status remains provisional', async () => {
@@ -289,13 +291,15 @@ test('T public UI and API enforce public scope and omit IDs', async () => {
 test('U live memory calls use compact model-facing grounded text', async () => {
   const run = await readFile(new URL('./run.js', import.meta.url), 'utf8');
   // Postcards now query indexed associations without a surfacing model call.
-  // Journal/background formation still use compact grounded text unchanged.
+  // Journal preparation uses only its observed source cue; the final journal
+  // and existing background formation retain compact live bodily grounding.
   assert.match(run, /loadPostcardAssociativeRecall\(\{/);
   const postcard = run.slice(run.indexOf('async function doPostcard(pc)'), run.indexOf('// ---- warden notice:'));
   assert.doesNotMatch(postcard, /loadPostcardEnrichment|requestWorkingContext/);
-  assert.match(run, /refreshPendingMemory\(`journal:\$\{nowMs\}`, cognition\.groundedDirective\)/);
+  assert.match(run, /autobiographicalMemory\.observeJournalCue\(recallRecord\)/);
+  assert.match(run, /const ctx = buildCtx\(cognition, \{[\s\S]*?wakingJournalContext: true,\s*journalMemory,/);
   assert.match(run, /formMemoryAfterVisibleOutput\(cognition\.groundedDirective, true\)/);
   assert.match(run, /formMemoryAfterVisibleOutput\(burstGroundedDirective\)/);
-  assert.doesNotMatch(run, /refreshPendingMemory\([^\n]*cognition\.groundedContext/);
+  assert.doesNotMatch(run, /refreshPendingMemory/);
   assert.doesNotMatch(run, /formMemoryAfterVisibleOutput\([^\n]*(?:cognition|burst)\.groundedContext/);
 });
