@@ -636,6 +636,7 @@ export class Client {
 
   async queryMemories({
     query, visitorId = null, limit = 10, recentExpressionText = '', querySourceType = null,
+    journalPreparation = null,
   } = {}) {
     return this._memoryRequest('query', {
       query: query || {}, visitor_id: visitorId, limit,
@@ -643,6 +644,7 @@ export class Client {
       // Never affects which candidates are fetched/ranked/limited.
       recent_expression_text: recentExpressionText || '',
       query_source_type: querySourceType || null,
+      ...(journalPreparation ? { journal_preparation: journalPreparation } : {}),
     });
   }
 
@@ -769,18 +771,20 @@ export class Client {
     return this._memoryRequest('complete_surfacing', value || {});
   }
 
-  async getPreparedMemorySet({ contextFingerprint, visitorId = null } = {}) {
+  async getPreparedMemorySet({ contextFingerprint, visitorId = null, journalPreparation = null } = {}) {
     return this._memoryRequest('prepared_get', {
       context_fingerprint: contextFingerprint,
       visitor_id: visitorId,
+      ...(journalPreparation ? { journal_preparation: journalPreparation } : {}),
     });
   }
 
-  async consumePreparedMemorySet({ preparedSetId, generationRef, visitorId = null } = {}) {
+  async consumePreparedMemorySet({ preparedSetId, generationRef, visitorId = null, journalPreparation = null } = {}) {
     return this._memoryRequest('consume_prepared', {
       prepared_set_id: preparedSetId,
       generation_ref: generationRef,
       visitor_id: visitorId,
+      ...(journalPreparation ? { journal_preparation: journalPreparation } : {}),
     });
   }
 

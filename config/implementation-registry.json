@@ -247,7 +247,7 @@
       "status_note": "Versioned subjective memories are formed and updated by the active language model from explicit provenance-bearing sources. Deterministic privacy-filtered candidate retrieval runs first; a separate model call may insert zero to three candidates into a dedicated prompt block. Authoritative world history is never rewritten by memory operations.",
       "data_dependencies": ["structured_environment_event_archive", "postcards", "cy_generated_expression"],
       "version": "provenanced-autobiographical-memory-v1",
-      "provenance": "runner/autobiographical-memory.js; runner/memory-runtime.js; lib/autobiographical_memory.php; sql/015_autobiographical_memory.sql"
+      "provenance": "runner/autobiographical-memory.js; runner/memory-runtime.js; runner/journal-memory-preparation.js; lib/autobiographical_memory.php; lib/journal_memory_preparation.php; sql/015_autobiographical_memory.sql"
     },
     {
       "id": "autobiographical_memory_candidate_retrieval",

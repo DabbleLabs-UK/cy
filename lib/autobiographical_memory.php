@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/postcard_recollection.php';
+require_once __DIR__ . '/journal_memory_preparation.php';
 
 const CY_MEMORY_TYPES = ['EPISODIC', 'PERSON', 'MOTIF', 'UNRESOLVED_THREAD', 'SEMANTIC'];
 const CY_MEMORY_SCOPES = ['INTERNAL_ONLY', 'SENDER_RECALLABLE', 'PUBLIC_RECALLABLE'];
@@ -27,6 +28,10 @@ function captive_memory_claim_surfacing(PDO $db, array $input = []): array
 {
     $hasAuthority = array_key_exists('journal_context_fingerprint', $input);
     $fingerprint = $input['journal_context_fingerprint'] ?? null;
+    $preparationOnly = $input['journal_preparation_only'] ?? false;
+    if (!is_bool($preparationOnly) || ($preparationOnly && (!$hasAuthority || $fingerprint === null))) {
+        throw new InvalidArgumentException('invalid journal preparation claim filter');
+    }
     if ($hasAuthority && $fingerprint !== null
         && (!is_string($fingerprint) || preg_match('/^[a-f0-9]{64}$/D', $fingerprint) !== 1)) {
         throw new InvalidArgumentException('invalid desired journal fingerprint');
@@ -49,7 +54,7 @@ function captive_memory_claim_surfacing(PDO $db, array $input = []): array
             $superseded = $retire->rowCount();
         }
         $db->exec("UPDATE autobiographical_memory_surfacing_queue
-            SET status = 'RETRYABLE', available_at = NOW(3),
+            SET status = IF(JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL, 'RETRYABLE', 'FAILED'), available_at = NOW(3),
                 last_error = 'recovered after interrupted processing', updated_at = NOW(3)
             WHERE status = 'PROCESSING' AND started_at < DATE_SUB(NOW(3), INTERVAL 10 MINUTE)");
         // Older clients supply no authority: fail closed for journal work while
@@ -60,8 +65,14 @@ function captive_memory_claim_surfacing(PDO $db, array $input = []): array
             $eligible = "($eligible OR context_fingerprint = ?)";
             $args[] = $fingerprint;
         }
+        if ($preparationOnly) {
+            $eligible = "$journal AND context_fingerprint = ?
+                AND JSON_UNQUOTE(JSON_EXTRACT(context_payload, '$.journalPreparation.version')) = 'cy.journal-preparation.v1'";
+            $args = [$fingerprint];
+        }
         $select = $db->prepare("SELECT * FROM autobiographical_memory_surfacing_queue
             WHERE status IN ('PENDING','RETRYABLE') AND available_at <= NOW(3)
+                AND (JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL OR attempts = 0)
                 AND ($eligible)
             ORDER BY priority DESC, queued_at ASC, id ASC LIMIT 1 FOR UPDATE");
         $select->execute($args);

@@ -9,6 +9,7 @@ import { makeProviders, deepseekToNdjsonReader } from './provider.js';
 import { readNdjsonStream } from './run.js';
 import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
 import { beforeYardContactTurn } from './fixtures/yard-contact-turn-source.mjs';
+import { assertUnchangedMemoryBoundaries } from './fixtures/journal-memory-leadtime-source.mjs';
 
 const BASE = 'aca4c404cf95f4597234a72ce96365c4adb7b50e';
 const source = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -20,10 +21,10 @@ test('only source-presence metadata and a best-effort private journal diagnostic
     assert.equal(beforeJournalTerminationTelemetry(source(path)), original(path), path);
   }
   for (const path of ['runner/character-output.js', 'runner/warden.js', 'runner/prompt.js',
-    'runner/inference-coordinator.js', 'runner/memory-runtime.js', 'runner/autobiographical-memory.js',
-    'runner/client.js', 'lib/autobiographical_memory.php', 'public/api/memory.php']) {
+    'runner/inference-coordinator.js', 'runner/autobiographical-memory.js', 'runner/client.js']) {
     assert.equal(path === 'runner/client.js' ? beforeYardContactTurn(source(path)) : source(path), original(path), path);
   }
+  assertUnchangedMemoryBoundaries(source, original);
 });
 
 for (const [stats, expected] of [
