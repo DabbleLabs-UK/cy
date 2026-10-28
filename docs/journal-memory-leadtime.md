@@ -70,6 +70,41 @@ or interrupt it. The narrow wing-noise hook does not change noise probabilities
 or cancel ordinary formation/surfacing. Aged sender first refusal and the separate
 generic-formation reservation/cadence are preserved.
 
+### Mixed-queue classification correction
+
+Rollout review reproduced a scope leak in candidate `5aedc3b`: when both gates
+were open, a pending unrestricted claim was labelled from an unrelated open
+journal reservation. An ordinary returned job then inherited journal-only
+wing-noise cancellation (PREEMPTED instead of the control's PREPARED).
+
+A pending claim now has ordinary, unprivileged classification. Only its returned
+job can establish journal preparation: its fingerprint, generation reference,
+exact cue/slot binding and no-sender scope must match the current acknowledged
+private slot. An ordinary row never receives the reservation token. Binding
+failure remains closed, including after restart with no live desire.
+
+The adjacent admission audit also requires the returned job's own gate before
+retrieval and before model dispatch. A quiet-only claim cannot lend its gate to
+an unexpectedly returned ordinary row, nor can an ordinary row borrow a
+concurrent reservation after its normal gate closes. Completed-call accounting
+and pacing are not reinterpreted as a failed admission. Server claim ordering,
+one-attempt accounting, formation service and fairness are unchanged.
+
+The correction adds no data, persistence, API, prompt or generation settings.
+The existing storage/privacy manifest therefore remains unchanged.
+
+Correction validation on 28 October 2026:
+
+- 21 new mixed-queue tests, including the unchanged pinned old-code reproducer.
+- 152 focused preparation/liveness/status/formation-runtime tests passed.
+- Full serial runner suite: 1,044/1,044 passed, 84.211 seconds, no skips.
+- Eleven PHP scripts: 254 checks passed; all five isolated MariaDB/API groups
+  passed, with owned database and fixture PHP processes stopped afterward.
+- JS syntax, existing JSON metadata and whitespace checks passed.
+- Independent scope/privilege review found no material issue. Formation first
+  refusal, generic service, completed-call pacing and durable attempt limits
+  remain unchanged. No production action or real provider call was made.
+
 ## Private preparation and nonblocking consumption
 
 New-contract results never activate into `working.selected`. The expressive

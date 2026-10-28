@@ -296,6 +296,20 @@ export class AutobiographicalMemoryRuntime {
     return !this.stopped && !!this.journalPreparation?.validReservation(token);
   }
 
+  journalReservationForJob(job) {
+    const context = job?.context;
+    const binding = this.journalPreparation?.slot?.binding;
+    if (this.stopped || !binding || !this.journalPreparation.current()
+        || job.subject_visitor_id != null || job.sender_scope_key
+        || context?.currentVisitorId != null
+        || context?.generationRef !== `journal:${binding.slotAnchorMs}`
+        || job.context_fingerprint !== binding.slotKey
+        || JSON.stringify(context.journalPreparation) !== JSON.stringify(binding)) return null;
+    // The authenticated claim returns the server's durable cue/slot binding.
+    // Availability of some other reservation never grants this job its token.
+    return this.journalPreparation.reservation();
+  }
+
   consumeJournalPreparation(options) {
     const result = this.journalPreparation?.consume(options)
       || { directive: '', selected: [], inspection: { status: 'OMITTED' } };
@@ -447,7 +461,8 @@ export class AutobiographicalMemoryRuntime {
       const reservedRecall = this.canRunBackground('journal_preparation')
         && this.journalPreparation?.current();
       if (!didWork && !this.genericRecallPending && (ordinaryRecall || reservedRecall)) {
-        this.activeWorkKind = reservedRecall ? 'journal_preparation' : 'surfacing';
+        // A pending claim has no journal privileges. Its returned job owns class.
+        this.activeWorkKind = 'surfacing';
         const surfacing = await this.client.claimMemorySurfacing({
           // Explicit null after restart means there is no live journal desire.
           // It retires persisted journal work, not other consumers or memories.
@@ -456,7 +471,7 @@ export class AutobiographicalMemoryRuntime {
         });
         if (surfacing && surfacing.job) {
           didWork = true;
-          await this.processSurfacing(surfacing.job);
+          await this.processSurfacing(surfacing.job, { checkAdmission: true });
         }
       }
       // Generic work is serviced only by the bounded natural-idle reservation.
@@ -627,10 +642,13 @@ export class AutobiographicalMemoryRuntime {
     return result && result.rendering || fallback;
   }
 
-  async processSurfacing(job) {
+  async processSurfacing(job, { checkAdmission = false } = {}) {
     const started = this.now();
+    this.activeWorkKind = this.journalReservationForJob(job) ? 'journal_preparation' : 'surfacing';
     const context = stableContext(job.context || {});
     const journalPreparation = context.journalPreparation || null;
+    const requiresJournalBinding = !!journalPreparation
+      || (!!this.journalPreparation && isJournalSurfacingContext(context, job.subject_visitor_id));
     const provider = this.providerInfo() || {};
     let call = null;
     let candidates = [];
@@ -642,13 +660,19 @@ export class AutobiographicalMemoryRuntime {
     let journalCandidateVersions = null;
     const requireCurrentJournal = () => {
       if (this.obsoleteJournalSurfacing(job, context)
-          || (journalPreparation && JSON.stringify(journalPreparation)
-            !== JSON.stringify(this.journalPreparation?.slot?.binding))) {
+          || (requiresJournalBinding && !this.journalReservationForJob(job))) {
         throw Object.assign(new Error('journal context superseded'), { journalSuperseded: true });
+      }
+    };
+    const requireAdmission = () => {
+      const kind = this.journalReservationForJob(job) ? 'journal_preparation' : 'surfacing';
+      if (checkAdmission && !this.canRunBackground(kind)) {
+        throw Object.assign(new Error('memory admission unavailable after claim'), { name: 'AbortError', admissionDenied: true });
       }
     };
     try {
       requireCurrentJournal();
+      requireAdmission();
       retrievalAttempted = true;
       const response = await this.client.queryMemories({
         query: { text: context.text, tags: context.tags, location: context.location },
@@ -683,7 +707,8 @@ export class AutobiographicalMemoryRuntime {
       if (!request.candidates.length) category = 'NO_CANDIDATES';
       else {
         requireCurrentJournal();
-        const reservation = journalPreparation ? this.journalPreparation?.reservation() : null;
+        requireAdmission();
+        const reservation = journalPreparation ? this.journalReservationForJob(job) : null;
         if (journalPreparation && !this.validJournalReservation(reservation)) {
           throw Object.assign(new Error('journal reservation invalid'), { journalSuperseded: true });
         }
@@ -713,7 +738,7 @@ export class AutobiographicalMemoryRuntime {
           : 'journal context superseded before retrieval';
         selected = [];
       } else if (category !== 'INVALID') {
-        category = isAbort(caught) ? (this.interruptReason ? 'PREEMPTED' : 'TIMEOUT') : 'ERROR';
+        category = isAbort(caught) ? (this.interruptReason || caught?.admissionDenied ? 'PREEMPTED' : 'TIMEOUT') : 'ERROR';
       }
     }
     const setId = this.makeId();
