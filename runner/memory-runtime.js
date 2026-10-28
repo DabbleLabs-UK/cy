@@ -19,6 +19,7 @@ import {
   sanitizeCyExpressionSource,
 } from './autobiographical-memory.js';
 import { sanitizeCharacterContext } from './warden.js';
+import { JournalMemoryPreparation, journalPreparationContext } from './journal-memory-preparation.js';
 
 const PREPARED_TTL_MS = 15 * 60 * 1000;
 const BACKGROUND_TIMEOUT_MS = 120000;
@@ -35,6 +36,7 @@ export function isJournalSurfacingContext(context = {}, visitorId = null) {
 }
 
 function stableContext(value = {}) {
+  if (value.journalPreparation) return journalPreparationContext(value.journalPreparation);
   return {
     text: String(value.text || '').trim().slice(0, 600),
     tags: [...new Set((Array.isArray(value.tags) ? value.tags : [])
@@ -57,6 +59,7 @@ function stableContext(value = {}) {
 
 export function memoryContextFingerprint(value = {}) {
   const context = stableContext(value);
+  if (context.journalPreparation) return context.journalPreparation.slotKey;
   const identity = {
     text: context.text,
     tags: context.tags,
@@ -89,6 +92,7 @@ export class AutobiographicalMemoryRuntime {
     genericAvailability = () => ({ allowed: true, reason: 'IDLE_SLOT' }),
     onGenericService = () => {},
     maintenance = null,
+    journalPreparationContext = null,
   }) {
     this.client = client;
     this.generate = generate;
@@ -104,6 +108,8 @@ export class AutobiographicalMemoryRuntime {
     this.genericAvailability = genericAvailability;
     this.onGenericService = onGenericService;
     this.maintenance = maintenance;
+    this.journalPreparation = journalPreparationContext
+      ? new JournalMemoryPreparation({ now, availability: journalPreparationContext }) : null;
     this.nextGenericAt = 0;
     this.genericReservation = false;
     this.genericRecallPending = false;
@@ -143,6 +149,7 @@ export class AutobiographicalMemoryRuntime {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.interruptBackground('shutdown');
+    this.journalPreparation?.invalidate('SHUTDOWN');
   }
 
   schedule(delay = 250) {
@@ -249,8 +256,86 @@ export class AutobiographicalMemoryRuntime {
   }
 
   desiredJournalFingerprint() {
+    if (this.journalPreparation) return this.journalPreparation.desiredFingerprint();
     return this.desired && isJournalSurfacingContext(this.desired, this.desired.visitorId)
       ? this.desired.fingerprint : null;
+  }
+
+  observeJournalCue(record) {
+    this.journalPreparation?.observe(record);
+    if (this.journalPreparation && !this.journalPreparation.current()) {
+      if (this.activeWorkKind === 'journal_preparation') this.interruptBackground('journal-superseded');
+    }
+    this.schedule(25);
+  }
+
+  acknowledgeJournalCues(events) {
+    this.journalPreparation?.acknowledge(events);
+    this.schedule(25);
+  }
+
+  interruptJournalPreparation(reason) {
+    if (this.activeWorkKind !== 'journal_preparation') return;
+    this.journalPreparation?.invalidate(reason);
+    this.interruptBackground(reason);
+  }
+
+  beginJournalOpportunity(slotAnchorMs) {
+    this.journalPreparation?.begin(slotAnchorMs);
+    // Refresh asynchronously, retaining any already validated compatible READY
+    // snapshot. A deterministic chooser must not need network I/O to finish.
+    void this.revalidateJournalPreparation().catch(() => {});
+  }
+
+  finishJournalOpportunity({ closeUpcoming = false } = {}) {
+    if (closeUpcoming) this.journalPreparation?.invalidate('DRAWING_REQUEST');
+    this.journalPreparation?.finish();
+  }
+
+  validJournalReservation(token) {
+    return !this.stopped && !!this.journalPreparation?.validReservation(token);
+  }
+
+  consumeJournalPreparation(options) {
+    const result = this.journalPreparation?.consume(options)
+      || { directive: '', selected: [], inspection: { status: 'OMITTED' } };
+    if (result.journalPreparation) {
+      void this.client.consumePreparedMemorySet({
+        preparedSetId: result.inspection.preparedSetId, generationRef: options.generationRef,
+        visitorId: null, journalPreparation: result.journalPreparation,
+      }).catch(() => {});
+    }
+    return result;
+  }
+
+  async revalidateJournalPreparation() {
+    const lane = this.journalPreparation;
+    if (!lane?.current()) return;
+    const binding = structuredClone(lane.slot.binding);
+    const epoch = lane.validationEpoch;
+    const result = await this.client.getPreparedMemorySet({
+      contextFingerprint: binding.slotKey, visitorId: null, journalPreparation: binding,
+    });
+    if (lane.current() && epoch === lane.validationEpoch) {
+      if (!result?.prepared_set || !lane.acceptPrepared(result.prepared_set)) lane.invalidateReady();
+    }
+  }
+
+  async admitJournalPreparation() {
+    if (!this.journalPreparation || !this.canRunBackground('journal_preparation')) return;
+    const context = this.journalPreparation.admit();
+    if (!context) return;
+    this.pendingPreparations++;
+    try {
+      const result = await this.client.enqueueMemorySurfacing({
+        context_fingerprint: context.journalPreparation.slotKey, visitor_id: null, context, priority: 80,
+      });
+      // An already existing slot is not a new authorization after restart or a
+      // lost response. Do not resurrect even unclaimed optional work.
+      if (result?.queued !== true) this.journalPreparation.invalidate('EXISTING_SLOT');
+    } catch {
+      this.journalPreparation.invalidate('ENQUEUE_UNCERTAIN');
+    } finally { this.pendingPreparations--; }
   }
 
   obsoleteJournalSurfacing(job, context) {
@@ -321,7 +406,8 @@ export class AutobiographicalMemoryRuntime {
 
   async runAdmittedTick() {
     if (this.stopped || this.busy || this.genericReservation) return;
-    if (!this.canRunBackground('surfacing') && !this.canRunBackground('sender_formation')) {
+    if (!this.canRunBackground('surfacing') && !this.canRunBackground('sender_formation')
+        && !this.canRunBackground('journal_preparation')) {
       // A tempo reservation can be minutes long. Polling it four times a second
       // adds no value and makes a supposedly quiet interval needlessly busy.
       const requested = Number(this.backgroundWaitMs('surfacing'));
@@ -336,6 +422,7 @@ export class AutobiographicalMemoryRuntime {
       if (typeof this.client.drainMemorySourceQueue === 'function') {
         await this.client.drainMemorySourceQueue();
       }
+      await this.admitJournalPreparation();
       // An aged sender source gets first refusal on each available background
       // slot. The optional surfacing queue can be perpetually replenished and
       // must not prevent durable correspondence from forming memory.
@@ -356,12 +443,16 @@ export class AutobiographicalMemoryRuntime {
           }
         }
       }
-      if (!didWork && !this.genericRecallPending && this.canRunBackground('surfacing')) {
-        this.activeWorkKind = 'surfacing';
+      const ordinaryRecall = this.canRunBackground('surfacing');
+      const reservedRecall = this.canRunBackground('journal_preparation')
+        && this.journalPreparation?.current();
+      if (!didWork && !this.genericRecallPending && (ordinaryRecall || reservedRecall)) {
+        this.activeWorkKind = reservedRecall ? 'journal_preparation' : 'surfacing';
         const surfacing = await this.client.claimMemorySurfacing({
           // Explicit null after restart means there is no live journal desire.
           // It retires persisted journal work, not other consumers or memories.
           journal_context_fingerprint: this.desiredJournalFingerprint(),
+          ...(!ordinaryRecall && reservedRecall ? { journal_preparation_only: true } : {}),
         });
         if (surfacing && surfacing.job) {
           didWork = true;
@@ -463,7 +554,7 @@ export class AutobiographicalMemoryRuntime {
       // Only optional recall can be displaced; await its abort/completion before
       // taking ownership. Never wait indefinitely for a slow network request.
       if (this.busy) {
-        if (this.activeWorkKind !== 'surfacing') return this.reportGeneric('BACKGROUND_BUSY');
+        if (!['surfacing', 'journal_preparation'].includes(this.activeWorkKind)) return this.reportGeneric('BACKGROUND_BUSY');
         // If settlement exceeds this short wait, keep the next optional recall
         // from overtaking the owed slot. Sender work remains free to run.
         this.genericRecallPending = true;
@@ -539,6 +630,7 @@ export class AutobiographicalMemoryRuntime {
   async processSurfacing(job) {
     const started = this.now();
     const context = stableContext(job.context || {});
+    const journalPreparation = context.journalPreparation || null;
     const provider = this.providerInfo() || {};
     let call = null;
     let candidates = [];
@@ -547,8 +639,11 @@ export class AutobiographicalMemoryRuntime {
     let category = 'ERROR';
     let error = null;
     let retrievalAttempted = false;
+    let journalCandidateVersions = null;
     const requireCurrentJournal = () => {
-      if (this.obsoleteJournalSurfacing(job, context)) {
+      if (this.obsoleteJournalSurfacing(job, context)
+          || (journalPreparation && JSON.stringify(journalPreparation)
+            !== JSON.stringify(this.journalPreparation?.slot?.binding))) {
         throw Object.assign(new Error('journal context superseded'), { journalSuperseded: true });
       }
     };
@@ -561,10 +656,15 @@ export class AutobiographicalMemoryRuntime {
         limit: 10,
         recentExpressionText: context.recentExpressionText,
         querySourceType: context.querySourceType,
+        ...(journalPreparation ? { journalPreparation } : {}),
       });
       candidates = Array.isArray(response && response.candidates) ? response.candidates : [];
+      if (journalPreparation) journalCandidateVersions = response?.journal_candidate_versions || {};
       requireCurrentJournal();
-      const grounded = this.broker('MEMORY_SURFACING', {
+      // The new contract selects against its immutable observed cue, not a
+      // freshly rebuilt clock/Soma/history packet. Ordinary consumers retain
+      // their existing broker and preparation contract.
+      const grounded = journalPreparation ? context.groundedContext : this.broker('MEMORY_SURFACING', {
         generationRef: context.generationRef || `memory-surfacing:${this.now()}`,
         currentSenderId: job.subject_visitor_id || null,
         currentPostcard: context.publicSituation || context.text,
@@ -583,7 +683,13 @@ export class AutobiographicalMemoryRuntime {
       if (!request.candidates.length) category = 'NO_CANDIDATES';
       else {
         requireCurrentJournal();
-        const raw = await this.backgroundGenerate(request.call);
+        const reservation = journalPreparation ? this.journalPreparation?.reservation() : null;
+        if (journalPreparation && !this.validJournalReservation(reservation)) {
+          throw Object.assign(new Error('journal reservation invalid'), { journalSuperseded: true });
+        }
+        const raw = await this.backgroundGenerate({ ...request.call,
+          ...(journalPreparation ? { journalPreparationReservation: reservation } : {}),
+        });
         requireCurrentJournal();
         const decision = parseSurfacingDecision(raw, request.candidates);
         if (!decision.valid) {
@@ -618,10 +724,17 @@ export class AutobiographicalMemoryRuntime {
       generation_ref: context.generationRef, provider: provider.id || provider.provider,
       model: provider.model, prompt_chars: promptChars(call), latency_ms: this.now() - started,
       retry_delay_seconds: RETRY_DELAY_SECONDS, error,
+      ...(journalPreparation ? { journal_candidate_versions: journalCandidateVersions } : {}),
     });
     if (completion?.status === 'SUPERSEDED') {
       category = 'SUPERSEDED';
       selected = [];
+    }
+    if (journalPreparation) {
+      // Never activate into the global working set. Only a fresh canonical
+      // read can populate the private lane, and only the exact journal consumes.
+      if (['PREPARED', 'NO_CANDIDATES'].includes(category)) await this.revalidateJournalPreparation();
+      return;
     }
     if (category === 'PREPARED' || category === 'NO_CANDIDATES') {
       // Provenance only, from here to the end of this block: none of it is
@@ -665,6 +778,9 @@ export class AutobiographicalMemoryRuntime {
   }
 
   async processFormation(job, queueDepthBefore = 0, { genericService = false } = {}) {
+    // A known local formation may change canonical rows. Do not keep a private
+    // READY snapshot through that mutation; formation itself is unchanged.
+    this.journalPreparation?.invalidateReady();
     const source = sanitizeCyExpressionSource(job.source || {});
     const started = this.now();
     let provider = this.providerInfo() || {};

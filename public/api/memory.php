@@ -126,17 +126,28 @@ try {
         $subject = $parseVisitorId($input['visitor_id'] ?? null);
         $context = is_array($input['context'] ?? null) ? $input['context'] : [];
         $priority = max(1, min(100, (int)($input['priority'] ?? 80)));
+        if (array_key_exists('journalPreparation', $context)) {
+            captive_json_response(captive_journal_preparation_enqueue($db, $context, $fingerprint, $subject, $priority));
+        }
         $stmt = $db->prepare(
             "INSERT INTO autobiographical_memory_surfacing_queue
                 (context_fingerprint, context_payload, subject_visitor_id, sender_scope_key,
                  priority, status, attempts, available_at, queued_at, updated_at)
              VALUES (?, ?, ?, ?, ?, 'PENDING', 0, NOW(3), NOW(3), NOW(3))
              ON DUPLICATE KEY UPDATE
-                context_payload = VALUES(context_payload), priority = GREATEST(priority, VALUES(priority)),
-                status = 'PENDING', available_at = NOW(3), updated_at = NOW(3)"
+                context_payload = IF(JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL, VALUES(context_payload), context_payload),
+                priority = IF(JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL, GREATEST(priority, VALUES(priority)), priority),
+                status = IF(JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL, 'PENDING', status),
+                available_at = IF(JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL, NOW(3), available_at),
+                updated_at = IF(JSON_EXTRACT(context_payload, '$.journalPreparation') IS NULL, NOW(3), updated_at)"
         );
         $stmt->execute([$fingerprint, $json($context), $subject, captive_memory_sender_scope_key($subject), $priority]);
-        captive_json_response(['ok' => true, 'queued' => $stmt->rowCount() === 1]);
+        $queued = $stmt->rowCount() === 1;
+        $guard = $db->prepare('SELECT context_payload FROM autobiographical_memory_surfacing_queue WHERE context_fingerprint = ? AND sender_scope_key = ?');
+        $guard->execute([$fingerprint, captive_memory_sender_scope_key($subject)]);
+        $saved = json_decode((string)$guard->fetchColumn(), true) ?: [];
+        if (array_key_exists('journalPreparation', $saved)) captive_error_response('journal preparation slot conflict', 409);
+        captive_json_response(['ok' => true, 'queued' => $queued]);
     }
 
     if ($action === 'claim_surfacing') {
@@ -163,6 +174,22 @@ try {
             $db->rollBack();
             captive_error_response('surfacing job not found', 404);
         }
+        $jobContext = json_decode((string)$job['context_payload'], true) ?: [];
+        $journalPreparation = captive_journal_preparation_binding($jobContext,
+            (string)$job['context_fingerprint'], $job['subject_visitor_id']);
+        if ($journalPreparation !== null && $job['status'] !== 'PROCESSING') {
+            $previous = $db->prepare('SELECT prepared_set_id, result_category FROM autobiographical_memory_surfacing_attempts WHERE queue_id = ? ORDER BY id LIMIT 1');
+            $previous->execute([$jobId]);
+            $receipt = $previous->fetch();
+            if ($receipt) {
+                $db->commit();
+                captive_json_response(['ok' => true, 'status' => $job['status'], 'prepared_set_id' => $receipt['prepared_set_id'], 'duplicate' => true]);
+            }
+            if ($job['status'] !== 'SUPERSEDED' || (int)$job['attempts'] !== 1) {
+                $db->rollBack();
+                captive_error_response('journal preparation is not an active claim', 409);
+            }
+        }
         // A late completion may not resurrect a journal row retired by a newer
         // desired context or a restart. Historical attempts/sets stay untouched.
         if (($job['status'] === 'SUPERSEDED' || $category === 'SUPERSEDED')
@@ -179,8 +206,23 @@ try {
             $selected
         )));
         $candidateIds = array_slice(array_values(array_filter($input['candidate_ids'] ?? [], 'is_string')), 0, 10);
+        if ($journalPreparation !== null && in_array($category, ['PREPARED', 'NO_CANDIDATES'], true)) {
+            captive_journal_preparation_validate($db, $jobContext, (string)$job['context_fingerprint'], $job['subject_visitor_id']);
+            $snapshot = captive_journal_selection_snapshot($selected,
+                captive_memory_rows_by_ids($db, $selectedIds), $candidateIds,
+                is_array($input['journal_candidate_versions'] ?? null) ? $input['journal_candidate_versions'] : []);
+            if ($snapshot === null || ($category === 'NO_CANDIDATES' && $selected !== [])) {
+                $category = 'INVALID'; $selected = []; $selectedIds = [];
+            } else {
+                $jobContext['journalSelectionSnapshot'] = $snapshot;
+                $db->prepare('UPDATE autobiographical_memory_surfacing_queue SET context_payload = ? WHERE id = ?')
+                    ->execute([captive_journal_preparation_json($jobContext), $jobId]);
+            }
+        }
         $setId = null;
         $finished = in_array($category, ['PREPARED', 'NO_CANDIDATES', 'SUPERSEDED'], true);
+        $terminal = $finished || $journalPreparation !== null;
+        $status = $category === 'SUPERSEDED' ? 'SUPERSEDED' : ($finished ? 'PREPARED' : ($terminal ? 'FAILED' : 'RETRYABLE'));
         if ($finished && $category !== 'SUPERSEDED') {
             $setId = (string)($input['prepared_set_id'] ?? '');
             if (!preg_match('/^[a-f0-9-]{36}$/', $setId)) {
@@ -209,7 +251,7 @@ try {
              SET status = ?, completed_at = IF(?, NOW(3), completed_at),
                  available_at = IF(?, available_at, DATE_ADD(NOW(3), INTERVAL ? SECOND)),
                  last_error = ?, updated_at = NOW(3) WHERE id = ?"
-        )->execute([$category === 'SUPERSEDED' ? 'SUPERSEDED' : ($finished ? 'PREPARED' : 'RETRYABLE'), $finished ? 1 : 0, $finished ? 1 : 0, $delay, $errorText, $jobId]);
+        )->execute([$status, $terminal ? 1 : 0, $terminal ? 1 : 0, $delay, $errorText, $jobId]);
         $attempt = $db->prepare(
             'INSERT INTO autobiographical_memory_surfacing_attempts
                 (queue_id, prepared_set_id, context_fingerprint, subject_visitor_id,
@@ -228,7 +270,7 @@ try {
             $json($selectedIds), $category, $errorText,
         ]);
         $db->commit();
-        captive_json_response(['ok' => true, 'status' => $category === 'SUPERSEDED' ? 'SUPERSEDED' : ($finished ? 'PREPARED' : 'RETRYABLE'), 'prepared_set_id' => $setId]);
+        captive_json_response(['ok' => true, 'status' => $status, 'prepared_set_id' => $setId]);
     }
 
     if ($action === 'prepared_get') {
@@ -239,7 +281,7 @@ try {
         }
         $stmt = $db->prepare(
             'SELECT id, context_fingerprint, subject_visitor_id, selected_memories,
-                    provider, model, prepared_at, expires_at
+                    provider, model, prepared_at, expires_at, consumed_at
              FROM autobiographical_memory_prepared_sets
              WHERE context_fingerprint = ? AND sender_scope_key = ? AND expires_at > NOW(3)
              ORDER BY prepared_at DESC LIMIT 1'
@@ -248,6 +290,14 @@ try {
         $set = $stmt->fetch();
         if ($set) {
             $set['selected_memories'] = json_decode((string)$set['selected_memories'], true) ?: [];
+            $binding = captive_journal_preparation_for_set($db, $set);
+            if ($binding !== null) {
+                if ($subject !== null || $set['consumed_at'] !== null
+                    || !captive_journal_preparation_equal($input['journal_preparation'] ?? null, $binding)
+                    || !captive_journal_selection_current($db, $set)) $set = null;
+                else $set['journal_preparation'] = $binding;
+            }
+            if ($set) unset($set['consumed_at']);
         }
         captive_json_response(['ok' => true, 'prepared_set' => $set ?: null]);
     }
@@ -256,10 +306,19 @@ try {
         $setId = (string)($input['prepared_set_id'] ?? '');
         $generationRef = mb_substr((string)($input['generation_ref'] ?? ''), 0, 96);
         $subject = $parseVisitorId($input['visitor_id'] ?? null);
+        $read = $db->prepare('SELECT id, context_fingerprint, subject_visitor_id FROM autobiographical_memory_prepared_sets WHERE id = ?');
+        $read->execute([$setId]);
+        $existingSet = $read->fetch();
+        $binding = $existingSet ? captive_journal_preparation_for_set($db, $existingSet) : null;
+        if ($binding !== null && ($subject !== null || !captive_journal_preparation_equal($input['journal_preparation'] ?? null, $binding)
+            || preg_match('/^journal-prose:[0-9]+$/D', $generationRef) !== 1)) {
+            captive_error_response('journal preparation consumption mismatch', 409);
+        }
         $stmt = $db->prepare(
             'UPDATE autobiographical_memory_prepared_sets
              SET consumed_at = NOW(3), consumed_by = ?
              WHERE id = ? AND sender_scope_key = ? AND expires_at > NOW(3)'
+             . ($binding !== null ? ' AND consumed_at IS NULL' : '')
         );
         $stmt->execute([$generationRef ?: null, $setId, captive_memory_sender_scope_key($subject)]);
         if ($stmt->rowCount() !== 1) {
@@ -306,6 +365,14 @@ try {
     if ($action === 'query') {
         $visitorId = $parseVisitorId($input['visitor_id'] ?? null);
         $query = is_array($input['query'] ?? null) ? $input['query'] : [];
+        $journalBinding = $input['journal_preparation'] ?? null;
+        if (array_key_exists('journal_preparation', $input)) {
+            if (!is_array($journalBinding)) throw new InvalidArgumentException('invalid journal preparation query');
+            captive_journal_preparation_validate($db, [
+                'generationRef' => 'journal:' . ($journalBinding['slotAnchorMs'] ?? ''),
+                'journalPreparation' => $journalBinding,
+            ], (string)($journalBinding['slotKey'] ?? ''), $visitorId);
+        }
         $limit = max(1, min(CY_MEMORY_CANDIDATE_LIMIT, (int)($input['limit'] ?? CY_MEMORY_CANDIDATE_LIMIT)));
         // Provenance only: tokens from Cy's own recent-expression buffer, supplied
         // by the caller so candidates can record whether their match overlaps with
@@ -317,6 +384,7 @@ try {
         captive_json_response([
             'ok' => true,
             'candidates' => $candidates,
+            ...($journalBinding !== null ? ['journal_candidate_versions' => (object)array_column($candidates, 'version', 'id')] : []),
             'retrieval' => [
                 'mechanisms' => captive_memory_retrieval_mechanisms($query, $visitorId),
                 'semantic_vector' => 'NOT IMPLEMENTED',
@@ -432,7 +500,7 @@ try {
 } catch (InvalidArgumentException $e) {
     captive_error_response($e->getMessage(), 422);
 } catch (RuntimeException $e) {
-    captive_error_response($e->getMessage(), in_array($e->getMessage(), ['memory version conflict','formation claim conflict'], true) ? 409 : 500);
+    captive_error_response($e->getMessage(), in_array($e->getMessage(), ['memory version conflict','formation claim conflict','journal preparation slot conflict'], true) ? 409 : 500);
 } catch (Throwable $e) {
     captive_error_response('internal error', 500);
 }

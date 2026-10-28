@@ -100,7 +100,8 @@ test('journal exclusion is wired after caller options; other expression paths re
   assert.match(buildPrompt(priorWriting, 'postcard', { from_name: 'visitor', body: 'hello' }),
     /reg remembers everything/);
   assert.match(drawDecidePrompt(priorWriting, 'Draw one thing.'), /reg remembers everything/);
-  assert.match(runSource, /recentExpressionText: contextText\(\)\.slice\(-640\)/);
+  assert.doesNotMatch(runSource, /recentExpressionText: contextText\(\)\.slice\(-640\)/,
+    'source-bound preparation no longer snapshots prior prose as a recall cue');
   assert.match(runSource, /const tail = contextText\(\);\s*const request = buildPromptRequest\(tail, mode, null, directives\)/);
   assert.match(runSource, /contextTail: tail,/);
   const longProse = priorWriting + ' the wing was quiet.'.repeat(50);

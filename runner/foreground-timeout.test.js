@@ -94,7 +94,9 @@ for (const pattern of foregroundPurposes) {
   const re = new RegExp(pattern + '[\\s\\S]{0,80}?timeoutMs: FOREGROUND_INFERENCE_TIMEOUT_MS', 'm');
   assert.match(source, re, `foreground call site matching /${pattern}/ passes the foreground timeout`);
 }
-assert.match(source, /generate: \(call\) => rawGenerate\(\{[\s\S]{0,700}?timeoutMs: call\.background \? null : FOREGROUND_INFERENCE_TIMEOUT_MS/,
+const memoryGenerateSource = source.slice(source.indexOf('    generate: (call) => rawGenerate({'),
+  source.indexOf('    contextBroker:'));
+assert.match(memoryGenerateSource, /timeoutMs: call\.background \? null : FOREGROUND_INFERENCE_TIMEOUT_MS/,
   'the shared AutobiographicalMemoryRuntime generate callback applies the foreground timeout only when NOT background');
 ok('every known foreground call site is wired to FOREGROUND_INFERENCE_TIMEOUT_MS');
 
@@ -136,8 +138,8 @@ assert.match(source,
   /onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\)/,
   'shared lease loss cancels the owning request with a reason');
 assert.match(source,
-  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(reason\) => abortWithReason\(ac, reason \|\| 'LEASE_LOSS'\),[\s\S]{0,200}?preemptible: awgInReservedIdle \|\| genericFormation,/,
-  'only reserved-idle AWG and bounded generic formation leases are preemptible');
+  /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(reason\) => abortWithReason\(ac, reason \|\| 'LEASE_LOSS'\),[\s\S]{0,200}?preemptible: awgInReservedIdle \|\| genericFormation\s*\|\| \(background && purpose === 'memory_surfacing'\s*&& autobiographicalMemory\.validJournalReservation\(journalPreparationReservation\)\),/,
+  'only reserved-idle AWG, bounded generic formation and a valid journal-preparation reservation are preemptible');
 assert.match(source,
   /hostLease = await waitTrace\.measure\('arbiterWaitMs', \(\) => provider\.acquireSharedLease\(\{\s*\n\s*purpose: requestPurpose,\s*\n\s*signal: ac\.signal,\s*\n\s*onLost: \(\) => abortWithReason\(ac, 'LEASE_LOSS'\),\s*\n\s*\}\)\);/,
   'the foreground streaming call site is unchanged: never preemptible, no LEASE_PREEMPTED reason threading');

@@ -1,5 +1,7 @@
 // Exact separately tested yard-only delta for older runtime byte-pin fixtures.
+import { beforeJournalMemoryLeadtime } from './journal-memory-leadtime-source.mjs';
 export function beforeYardContactTurn(source) {
+  source = beforeJournalMemoryLeadtime(source);
   return source.replace(/^[ \t]*\/\/ YARD TURN BEGIN: ([^\n]+)\n[\s\S]*?^[ \t]*\/\/ YARD TURN END: \1\n(?:\n)?/gm, '')
     .replace('  await checkpointMeals();\n  const tickTimer', '  await checkpointMeals();\n\n  const tickTimer')
     .replace('timestampMs(b.endTimestamp || b.startTimestamp) - timestampMs(a.endTimestamp || a.startTimestamp)\n      || resolvedYardTurn(b) - resolvedYardTurn(a)',

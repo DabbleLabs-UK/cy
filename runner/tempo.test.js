@@ -143,8 +143,32 @@ assert.doesNotMatch(runSource, /Math\.min\(MAX_TEMPO_IDLE_MS/,
   'the runtime does not reintroduce an absolute cap around the exact duty idle');
 assert.match(runSource, /backgroundTempoGate\.reserveVisibleIdle\(idleMs, Date\.now\(\)\)/,
   'visible tempo quiet is reserved before background inference can use it');
-assert.match(runSource, /canRunBackground: \(kind\) => kind === 'sender_formation'\s*\? !client\.paused\s*: inferPhase === 'idle'[\s\S]*?inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) <= 0[\s\S]*?backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
-  'local memory retains pacing/reservation; only remote sender work bypasses local model quiet');
+assert.match(runSource, /canRunBackground: \(kind\) => kind === 'sender_formation'\s*\? !client\.paused\s*: kind === 'journal_preparation'\s*\? inferPhase === 'idle' && genericMemoryAvailability\(\)\.allowed\s*&& vitals\.locationRegime\.current\.id === LOCATIONS\.CELL\s*&& !effectiveAsleep\(londonParts\(\)\.mins\)\s*: inferPhase === 'idle'[\s\S]*?inferenceTempoPacer\.remaining\(Date\.now\(\), client\.tempo\.speed\) <= 0[\s\S]*?backgroundTempoGate\.canStart\(Date\.now\(\)\)/,
+  'ordinary local memory retains both quiet gates; only the explicit journal-preparation lane has the approved idle reservation');
+const admissionStart = runSource.indexOf('    canRunBackground: (kind)');
+const admissionEnd = runSource.indexOf('    backgroundWaitMs:', admissionStart);
+assert.ok(admissionStart >= 0 && admissionEnd > admissionStart);
+const admissionBody = runSource.slice(admissionStart, admissionEnd);
+const admissionExpression = admissionBody.slice(admissionBody.indexOf('=>') + 2).trim().replace(/,$/, '');
+const admission = ({ quietMs = 1, quietGate = false, allowed = true, cell = true, asleep = false } = {}) =>
+  new Function('client', 'inferPhase', 'genericMemoryAvailability', 'vitals', 'LOCATIONS',
+    'effectiveAsleep', 'londonParts', 'inferenceTempoPacer', 'backgroundTempoGate', 'currentMode',
+    'pendingPostcards', 'pendingWarden', 'isAwgDue', `return kind => (${admissionExpression});`)(
+    { paused: false, tempo: { speed: 30 } }, 'idle', () => ({ allowed }),
+    { locationRegime: { current: { id: cell ? 'CELL' : 'YARD' } }, worldSimulation: {} },
+    { CELL: 'CELL' }, () => asleep, () => ({ mins: 0 }), { remaining: () => quietMs },
+    { canStart: () => quietGate }, 'journal', [], [], () => false,
+  );
+for (const kind of ['surfacing', 'formation']) {
+  assert.equal(admission()(kind), false, `${kind} cannot consume deliberate generic quiet`);
+  assert.equal(admission({ quietMs: 0 })(kind), false, `${kind} retains the independent background quiet gate`);
+  assert.equal(admission({ quietGate: true })(kind), false, `${kind} retains the inference pacing gate`);
+  assert.equal(admission({ quietMs: 0, quietGate: true })(kind), true, `${kind} remains eligible after both gates open`);
+}
+assert.equal(admission()('journal_preparation'), true, 'approved journal preparation can use otherwise idle deliberate quiet');
+for (const restriction of [{ allowed: false }, { cell: false }, { asleep: true }]) {
+  assert.equal(admission(restriction)('journal_preparation'), false, 'the reservation does not bypass ordinary live eligibility');
+}
 assert.match(runSource, /backgroundTempoGate\.claimAwgReservation\(awgReservation, nowMs\)/,
   'only an explicitly offered one-shot reservation admits AWG into visible tempo quiet');
 assert.match(runSource, /if \(!background && !awgInReservedIdle\) \{\s*await waitTrace\.measure\('tempoIdleMs', \(\) => waitForInferenceTempo/,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
+import { beforeJournalPreparationFormation } from './fixtures/journal-memory-leadtime-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { AutobiographicalMemoryRuntime, memoryContextFingerprint, isJournalSurfacingContext } from './memory-runtime.js';
@@ -222,5 +223,5 @@ test('journal nonblocking path, prompts, finalization, physiology and formation 
     assert.equal(beforeJournalTerminationTelemetry(source(path)), old(path), path);
   }
   const formation = text => text.slice(text.indexOf('  async processFormation('));
-  assert.equal(formation(source('runner/memory-runtime.js')), formation(old('runner/memory-runtime.js')));
+  assert.equal(formation(beforeJournalPreparationFormation(source('runner/memory-runtime.js'))), formation(old('runner/memory-runtime.js')));
 });
