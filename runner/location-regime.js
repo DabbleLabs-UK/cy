@@ -448,6 +448,21 @@ export function awgLocationEligible(locationState) {
     .includes(locationState?.current?.id);
 }
 
+// Private, call-local identity for the eligibility already used by AWG. Keep
+// completed restriction identities: a search/lockdown can start AND end without
+// moving Cy. Do not include observation counters or canonical delivery links.
+export function awgLocationFence(state) {
+  if (!awgLocationEligible(state) || !state.current.entered_at) return null;
+  const episode = value => value ? [value.id, value.started_at, value.status] : null;
+  return JSON.stringify([
+    state.current.id, state.current.entered_at, state.lastTransitionAt,
+    state.current.regime_activity,
+    episode(state.activeRegimeEpisode), episode(state.activeExerciseEpisode),
+    episode(state.activeRoutineEpisode), episode(state.searchEpisode),
+    episode(state.lockdownEpisode),
+  ]);
+}
+
 export function availableExpressiveActions(locationState, cadence = {}, { silenceAvailable = true } = {}) {
   const location = locationState && locationState.current && locationState.current.id;
   if (location !== LOCATIONS.CELL) return [];

@@ -1,6 +1,7 @@
 // Exact approved lead-time wiring deltas, composed before older historical
 // source guards. Unexpected changes still fail the exact historical comparison.
 import assert from 'node:assert/strict';
+import { beforeAwgCurrentContext } from './awg-current-context-source.mjs';
 
 const reviewedDeltas = [
   [
@@ -112,6 +113,7 @@ const reviewedDeltas = [
 const reviewedClientDeltas = [["  async queryMemories({\n    query, visitorId = null, limit = 10, recentExpressionText = '', querySourceType = null,\n    journalPreparation = null,\n  } = {}) {\n    return this._memoryRequest('query', {\n","  async queryMemories({\n    query, visitorId = null, limit = 10, recentExpressionText = '', querySourceType = null,\n  } = {}) {\n    return this._memoryRequest('query', {\n"],["      recent_expression_text: recentExpressionText || '',\n      query_source_type: querySourceType || null,\n      ...(journalPreparation ? { journal_preparation: journalPreparation } : {}),\n    });\n  }\n","      recent_expression_text: recentExpressionText || '',\n      query_source_type: querySourceType || null,\n    });\n  }\n"],["  }\n\n  async getPreparedMemorySet({ contextFingerprint, visitorId = null, journalPreparation = null } = {}) {\n    return this._memoryRequest('prepared_get', {\n      context_fingerprint: contextFingerprint,\n      visitor_id: visitorId,\n      ...(journalPreparation ? { journal_preparation: journalPreparation } : {}),\n    });\n  }\n\n  async consumePreparedMemorySet({ preparedSetId, generationRef, visitorId = null, journalPreparation = null } = {}) {\n    return this._memoryRequest('consume_prepared', {\n      prepared_set_id: preparedSetId,\n      generation_ref: generationRef,\n      visitor_id: visitorId,\n      ...(journalPreparation ? { journal_preparation: journalPreparation } : {}),\n    });\n  }\n","  }\n\n  async getPreparedMemorySet({ contextFingerprint, visitorId = null } = {}) {\n    return this._memoryRequest('prepared_get', {\n      context_fingerprint: contextFingerprint,\n      visitor_id: visitorId,\n    });\n  }\n\n  async consumePreparedMemorySet({ preparedSetId, generationRef, visitorId = null } = {}) {\n    return this._memoryRequest('consume_prepared', {\n      prepared_set_id: preparedSetId,\n      generation_ref: generationRef,\n      visitor_id: visitorId,\n    });\n  }\n"]];
 
 export function beforeJournalMemoryLeadtime(source) {
+  source = beforeAwgCurrentContext(source);
   const deltas = source.includes('    journalPreparationContext: () => {') ? reviewedDeltas
     : source.includes('async getPreparedMemorySet({ contextFingerprint, visitorId = null, journalPreparation = null }')
       ? reviewedClientDeltas : null;
