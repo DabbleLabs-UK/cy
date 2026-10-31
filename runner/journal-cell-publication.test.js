@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assertUnchangedMemoryBoundaries } from './fixtures/journal-memory-leadtime-source.mjs';
 import { beforeAwgLocationFence } from './fixtures/awg-current-context-source.mjs';
+import { beforeDreamCueRemoval } from './fixtures/dream-cue-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -222,7 +223,8 @@ test('only journal location-result fencing changes production runtime; other bou
     'runner/journal-termination-telemetry.js', 'runner/provider.js',
     'runner/autobiographical-memory.js', 'runner/location-regime.js', 'runner/exercise-admission.js',
     'runner/drawing-subject.js', 'runner/context-broker.js']) {
-    assert.equal(path === 'runner/location-regime.js' ? beforeAwgLocationFence(source(path)) : source(path), old(path), path);
+    assert.equal(path === 'runner/location-regime.js' ? beforeAwgLocationFence(source(path))
+      : path === 'runner/prompt.js' ? beforeDreamCueRemoval(source(path)) : source(path), old(path), path);
   }
   assertUnchangedMemoryBoundaries(source, old);
 });

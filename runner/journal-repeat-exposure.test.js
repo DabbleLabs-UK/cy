@@ -104,14 +104,16 @@ test('unexposed old prose and other prompt sources are not treated as subjective
   assert.equal(isJournalRepeat(copied, request.journalContinuation), false);
 });
 
-test('all prompt modes remain byte-identical to production, with no instruction or exposure changes', () => {
+test('non-dream prompt bytes remain identical; dream removes only its redundant narrative cue', () => {
   for (const context of ['', '  recent thought.  ', ('earlier thought '.repeat(70)) + copied]) {
     for (const [mode, payload] of [
       ['journal', null], ['postcard', { from_name: 'visitor', body: 'hello', caption: 'a tree', image_path: 'fixture' }],
       ['warden', { text: 'Count.' }], ['dream', { wake: true }], ['sleep', null],
     ]) {
       const request = buildPromptRequest(context, mode, payload, 'grounded directives');
-      assert.equal(request.prompt, oldPrompt.buildPrompt(context, mode, payload, 'grounded directives'));
+      const previous = oldPrompt.buildPrompt(context, mode, payload, 'grounded directives');
+      assert.equal(request.prompt, mode === 'dream'
+        ? previous.replace('\n\n[you come up hard out of sleep, awake for one second:]', '') : previous);
       assert.equal(request.prompt, buildPrompt(context, mode, payload, 'grounded directives'));
       assert.equal(request.journalContinuation, mode === 'journal' ? selectJournalContinuation(context.trim()) : null);
     }

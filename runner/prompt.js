@@ -855,14 +855,10 @@ function renderPrompt(ctxBlock, mode, payload, zoneC) {
   // text is never appended to Zone B by the loop, so it never reaches a waking
   // prompt either: the two context windows are kept strictly apart.
   if (mode === 'dream') {
-    const wake = payload && payload.wake;
-    const cue = wake
-      ? '[you come up hard out of sleep, awake for one second:]'
-      : '[deep under. a murmur surfaces in your sleep, half a word:]';
-    const lines = [];
-    if (zoneC) lines.push(zoneC);
-    lines.push('', cue);
-    return lines.join('\n');
+    // The supplied directives already carry the sleep/noise-waking trigger,
+    // fragment contract and optional material. A story-like continuation cue
+    // here was copied into fragment values as if it were more dream material.
+    return zoneC;
   }
   // journal / sleep: prose (Zone B), then the volatile directives (Zone C), then
   // a short cue. Journal prose is a single subjective source, not event evidence;

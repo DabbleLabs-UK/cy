@@ -7,6 +7,7 @@ import * as dream from './dream.js';
 import { looksLikeAssistantFrame } from './warden.js';
 import { runDreamIfEligible } from './dream-regime.js';
 import { sourceFromDreamExpression } from './autobiographical-memory.js';
+import { buildDirectives, buildPrompt } from './prompt.js';
 
 const source = readFileSync(new URL('./run.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 function extract(start, end) {
@@ -140,8 +141,7 @@ function fixture({ raw = '{"fragments":["a door made of rain","the key swims awa
     londonParts: () => ({ date: '2026-10-25', hour: 3, minute: 0, mins: 180 }),
     sleepPeriodId: () => 'sleep-fixture', recentWorldHistory: [],
     dreamStillAllowed: () => env.running && !env.client.paused,
-    buildDirectives: (_v, _mode, ctx) => ctx.dreamDirective,
-    buildPrompt: (_text, _mode, _wake, dir) => dir,
+    buildDirectives, buildPrompt,
     options: (_v, _threads, _mode, opts) => opts,
     logPrompt: async () => {}, ZONE_A: 'dream system', FOREGROUND_INFERENCE_TIMEOUT_MS: 420000,
     rawGenerate: async (request) => {
@@ -177,6 +177,8 @@ for (const lucid of [false, true]) {
       await f.step(180);
       assert.equal(f.calls.generated.length, 1);
       assert.equal(f.calls.generated[0].attempt, lucid ? 'dream-waking' : 'dream-murmur');
+      assert.ok(!f.calls.generated[0].prompt.includes('[deep under.'));
+      assert.ok(!f.calls.generated[0].prompt.includes('[you come up hard'));
       assert.equal(f.calls.events.some((event) => event.kind === 'dream' || event.kind === 'text'), false);
       assert.equal(f.calls.memories.length, 0);
     }

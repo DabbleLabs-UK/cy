@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
+import { beforeDreamCueRemoval } from './fixtures/dream-cue-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import {
@@ -127,7 +128,7 @@ test('the new rule is journal-only and does not strip old history or change othe
   assert.equal(validateCharacterCandidate(text).ok, old.validateCharacterCandidate(text).ok);
   assert.equal(sanitizeCharacterContext(text), text);
   for (const path of ['warden.js', 'prompt.js', 'provider.js', 'drawing-subject.js', 'draw.js']) {
-    assert.equal(beforeJournalTerminationTelemetry(source(path)), baseline(path), path);
+    assert.equal(beforeJournalTerminationTelemetry(path === 'prompt.js' ? beforeDreamCueRemoval(source(path)) : source(path)), baseline(path), path);
   }
 });
 
