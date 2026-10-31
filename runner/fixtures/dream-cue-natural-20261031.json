@@ -1,0 +1,17 @@
+{
+  "_note": "Public first fragments retained in the 20-set natural sample, 26-28 October. Original complete provider responses were not retained; tests wrapping these values in JSON reproduce admission, not historical wire frames. All 20 persisted context packets lack the cue and have zero actual autobiographical traces.",
+  "sample_sets": 20,
+  "echoes": [
+    {"seq":3032658,"utc":"2026-10-27T00:26:25.447Z","fragment":"[deep under. a murmur surfaces in your sleep, half a word:"},
+    {"seq":3037125,"utc":"2026-10-27T03:16:35.171Z","fragment":"a murmur surfaces in your sleep, half a word:"},
+    {"seq":3039599,"utc":"2026-10-27T04:51:08.235Z","fragment":"a murmur surfaces in your sleep, half a word:"},
+    {"seq":3068601,"utc":"2026-10-27T23:12:48.748Z","fragment":"a murmur surfaces in my sleep half a word:"},
+    {"seq":3071646,"utc":"2026-10-28T01:09:20.457Z","fragment":"deep under. a murmur surfaces in your sleep, half a word:"},
+    {"seq":3071881,"utc":"2026-10-28T01:18:08.930Z","fragment":"a murmur surfaces in your sleep, half a word, fades"},
+    {"seq":3075948,"utc":"2026-10-28T03:53:14.827Z","fragment":"a murmur surfaces in your sleep, half a word"}
+  ],
+  "clean": [
+    {"seq":3033972,"utc":"2026-10-27T01:16:41.573Z","fragment":"underwater... something dark"},
+    {"seq":3070081,"utc":"2026-10-28T00:09:22.505Z","fragment":"a deep voice"}
+  ]
+}

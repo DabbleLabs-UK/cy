@@ -166,12 +166,14 @@ ok('dream and waking directive blocks share no markers - no cross-leak');
 const wakingProse = 'tray cold again, screw clocked me at slop and said nowt, 47 tiles to the door';
 const dreamPrompt = buildPrompt(wakingProse, 'dream', null, dreamDir);
 assert.ok(!dreamPrompt.includes(wakingProse), 'dream prompt must not reuse the waking prose context');
-assert.ok(/a murmur surfaces in your sleep/.test(dreamPrompt), 'dream prompt uses the dream cue');
-// a night-waking prompt uses the lucid cue instead
+assert.equal(dreamPrompt, dreamDir.trim(), 'dream prompt uses only its supplied directives/material');
+assert.ok(!/a murmur surfaces in your sleep/.test(dreamPrompt), 'dream prompt has no content-like continuation cue');
+// The night-waking trigger and register remain in its supplied directives.
 const wakeLineDir = buildDirectives(v4, 'dream', { wake: true, wakeLine: 'the alarm goes' });
 const wakePrompt = buildPrompt(wakingProse, 'dream', { wake: true }, wakeLineDir);
 assert.ok(!wakePrompt.includes(wakingProse), 'night-waking prompt must not reuse the waking prose');
-assert.ok(/awake for one second/.test(wakePrompt), 'night-waking prompt uses the lucid cue');
+assert.equal(wakePrompt, wakeLineDir.trim(), 'night-waking has no added narrative continuation cue');
+assert.ok(/A noise on the wing drags you up/.test(wakePrompt), 'night-waking keeps its actual noise trigger');
 // and the waking prompt, built from that prose as its context, contains a murmur
 // nowhere (dream text is never written into Zone B in the first place)
 const wakePromptNormal = buildPrompt(wakingProse + ' ' + shaped, 'journal', null, wakeDir);

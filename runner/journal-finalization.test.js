@@ -15,6 +15,7 @@ import {
 } from './warden.js';
 import { applyBurstSeparator, completionBudget } from './prompt.js';
 import { recordJournalTerminationDiagnostic } from './journal-termination-telemetry.js';
+import { beforeDreamCueRemoval } from './fixtures/dream-cue-source.mjs';
 
 const BASE = '6967e092a81ec5095320ebb8378cee84acf0c458';
 const run = readFileSync(new URL('./run.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -296,7 +297,7 @@ test('existing within-burst repeat decision still stops at the same prefix', asy
 
 test('prompt bytes, repair policy, continuation representation and retry loop are unchanged', () => {
   const old = path => execFileSync('git', ['show', `${BASE}:runner/${path}`], { encoding: 'utf8' }).replace(/\r\n/g, '\n');
-  assert.equal(readFileSync(new URL('./prompt.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n'), old('prompt.js'));
+  assert.equal(beforeDreamCueRemoval(readFileSync(new URL('./prompt.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')), old('prompt.js'));
   assert.equal(extract(run, '      for (;;) {\n        if (discards >= MAX_DISCARDS)', '      const burstMs = Date.now() - burstStart;'),
     extract(old('run.js'), '      for (;;) {\n        if (discards >= MAX_DISCARDS)', '      const burstMs = Date.now() - burstStart;'));
   const character = readFileSync(new URL('./character-output.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
