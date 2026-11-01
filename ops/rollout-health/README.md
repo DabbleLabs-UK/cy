@@ -63,13 +63,50 @@ Historical private package scripts/receipts are immutable evidence. Do not edit
 them or copy their old `health.ps1` into a new rollout. The maintained replacement
 is this directory's `health.ps1` plus its adjacent `endpoint-ownership.ps1`.
 
-For a newly authorized rollout, copy BOTH files from this reviewed operator
-revision into the fresh private rollout package, retain their relative names,
-and include both SHA-256 hashes in the operator/package receipt. Compare package
-bytes against source before execution. Run in fresh Windows PowerShell 5.1 with
-`-NoProfile -NonInteractive -File <package>\health.ps1`, through the same DELL
-read-only transport as the former checker. Missing helper fails closed. Do not
-paste a partial function or feed an ALL-table snapshot into the verifier.
+For a newly authorized rollout, export the two exact reviewed PowerShell Git
+blobs plus `invoke-health.mjs` into the fresh private operator package, retain
+their relative names, and include all three SHA-256 hashes in its receipt.
+Compare package bytes against source before execution. CRLF-converted source
+checkouts are not exact packages; export the blobs rather than normalizing live
+input at execution time. Do not modify historical package bytes or receipts.
+
+Invoke the reviewed Node launcher on DELL with an absolute package directory:
+
+```sh
+node.exe <reviewed-operator-directory>/invoke-health.mjs <absolute-package-directory>
+```
+
+The launcher reads only fixed `health.ps1` and `endpoint-ownership.ps1` names,
+requires their exact approved SHA-256 pins, and substitutes the verified helper
+at the one reviewed import position. Neither PowerShell file is modified.
+It uses the already-successful command convention from CY's read-only probes:
+fresh Windows PowerShell 5.1, `-NoProfile -NonInteractive -OutputFormat Text
+-EncodedCommand`, with command text supplied on stdin and compiled using
+`ScriptBlock.Create`. It does NOT use `-File`, dot-source a script file, or
+ask to change any execution policy, signing or trust setting.
+
+Only a short fixed bootstrap and a computed hexadecimal digest enter argv.
+The complete source travels as base64 stdin, is hash-verified inside PowerShell
+before strict UTF-8 decoding/compilation/execution, and never enters a shell.
+Path metacharacters are ordinary filesystem input, not PowerShell source.
+Truncated/changed stdin, malformed source, native failure/timeout/signal,
+missing/incomplete/multiple JSON receipts or nonzero native exit fail closed.
+Success forwards the checker's original stdout unchanged. No endpoint, process,
+HTTP or health rule is reimplemented in the launcher.
+
+Use native Node process spawning as in the established DELL probes, not an
+unchecked shell exit code: the stopped direct WSL/Windows invocation returned
+empty stdout while its actual Windows child reported failure. For remote use,
+the existing `ssh dell node.exe --input-type=module` stdin transport can import
+the exact hash-verified launcher in memory and call `runHealthCheck`; no operator
+or application installation is needed for standalone verification. Propagate
+exceptions/nonzero status and require the original full receipt.
+
+Missing/changed helper fails closed. Do not paste partial functions, modify hash
+pins to accept unknown bytes, or feed an ALL-table snapshot into the verifier.
+If machine controls also prohibit command execution, fail closed; do not relax
+them or switch policy/trust settings. This is reuse of the existing permitted
+command interface, not an authorization to disable security controls.
 
 No change to the writer-role application candidate is required to use these
 operator files. Keep source/remote, runtime hashes, backups, guarded restart and
@@ -88,6 +125,7 @@ type compilation is local inspection support, not service installation.
 
 ```sh
 node --test ops/rollout-health/tests/operator.test.mjs
+node --test ops/rollout-health/tests/invocation.test.mjs
 ```
 
 The test runner uses Windows PowerShell 5.1 by default. Its 47 deterministic
@@ -115,12 +153,40 @@ pin and HTTP checks. CY still had one runner (PID 9920), both public sites
 returned 200, both reported spools were empty and no restart marker existed.
 The first attempted diagnostic transport exceeded the local Windows command
 length and did not reach DELL; stdin transport then succeeded. Fresh packages
-use the documented `-File` procedure, not a command-line-embedded checker.
+originally specified `-File`; the later stopped attempt proved that invocation
+was incompatible with DELL's existing policy. The method above supersedes it.
 The full private read-only receipt is retained with the task evidence, not in
 application storage. No application deployment, restart or inference occurred.
 
-Production remains `3aabfa46af783dcadf52945efce176b3c6c2f18e` and the unchanged
-writer-role candidate remains `2fb4ca195b7d37816e5bffa224fd1a7c9cb56a87`.
-An explicitly authorized retry can use the corrected operator through fresh
-gates. This operator task does not attempt that rollout or promise future gate
-success; the reason for the Windows state anomaly remains unresolved.
+At that first checker correction, production was `3aabfa46...`. The subsequent
+writer-role rollout pushed merge `2adbce6593900e6abd89b18d73cfceb0040eca2f` but
+stopped before backup, metadata installation, runtime replacement or restart:
+Windows rejected `-File health.ps1` with `running scripts is disabled` and native
+exit 1. The prior in-memory preflights had passed; the checker invariant and
+runtime were not at fault. No policy was changed. Deployed `warden.js` remained
+the old raw hash `5ecb38ebec1e2804c7e31356f56d1b09d263de2e25ca5b6cbb6e44f8a3423b24`.
+
+The invocation correction changes only the launcher, deterministic tests and
+these instructions. Its 16 tests compare successful/failing actual checker
+execution with the prior command convention under offline doubles, exercise
+truncation/hash/parser/receipt/exit failures, preserve literal quoting and Unicode,
+handle large source without the Windows command-line bound and reject malformed
+CLI/package input. A policy-constrained process double models the known `-File`
+denial without changing policy. Actual serving-machine compatibility must also
+be verified read-only under its unchanged effective policy; a local simulated
+constraint is not claimed as proof of that environment.
+
+Final offline validation passed all 20 Node test groups, including the 16 new
+invocation cases and the unchanged 47 deterministic endpoint checks. Syntax and
+whitespace checks passed. Independent source/test/documentation review found no
+material issue, policy weakening or shell-quoting/injection path. One new test
+was adjusted to keep Node's required lowercase `.mjs` format suffix while varying
+Windows filesystem path casing; the launcher/checker logic was not changed for
+that test. No full application rerun is required for this operator-only change.
+
+An explicitly authorized application retry must start from the already-pushed
+merge, recheck fresh source/runtime/package/health gates and use the reviewed
+invocation. Do not create another merge, restore old state, install the runtime
+or restart merely because this operator correction passes. This task authorizes
+only standalone read-only verification. The cause of the Windows TCP state
+anomaly remains unresolved and is not investigated here.
