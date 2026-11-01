@@ -10,6 +10,7 @@ import { readNdjsonStream } from './run.js';
 import { beforeJournalTerminationTelemetry } from './fixtures/journal-termination-source.mjs';
 import { beforeYardContactTurn } from './fixtures/yard-contact-turn-source.mjs';
 import { beforeDreamCueRemoval } from './fixtures/dream-cue-source.mjs';
+import { beforeWriterRoleBoundary } from './fixtures/journal-writer-role-source.mjs';
 import { assertUnchangedMemoryBoundaries } from './fixtures/journal-memory-leadtime-source.mjs';
 
 const BASE = 'aca4c404cf95f4597234a72ce96365c4adb7b50e';
@@ -24,7 +25,8 @@ test('only source-presence metadata and a best-effort private journal diagnostic
   for (const path of ['runner/character-output.js', 'runner/warden.js', 'runner/prompt.js',
     'runner/inference-coordinator.js', 'runner/autobiographical-memory.js', 'runner/client.js']) {
     assert.equal(path === 'runner/client.js' ? beforeYardContactTurn(source(path))
-      : path === 'runner/prompt.js' ? beforeDreamCueRemoval(source(path)) : source(path), original(path), path);
+      : path === 'runner/prompt.js' ? beforeDreamCueRemoval(source(path))
+        : path === 'runner/warden.js' ? beforeWriterRoleBoundary(source(path)) : source(path), original(path), path);
   }
   assertUnchangedMemoryBoundaries(source, original);
 });

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { assertUnchangedMemoryBoundaries } from './fixtures/journal-memory-leadtime-source.mjs';
 import { beforeAwgLocationFence } from './fixtures/awg-current-context-source.mjs';
 import { beforeDreamCueRemoval } from './fixtures/dream-cue-source.mjs';
+import { beforeWriterRoleBoundary } from './fixtures/journal-writer-role-source.mjs';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -217,6 +218,38 @@ test('normal CELL character repair remains the existing two calls, not a new pol
   assert.equal(f.calls.model, 2);
 });
 
+test('writer-role rejection uses the existing repair then silence before all journal side effects', async () => {
+  const text = 'rn its just gone quiet\nPlease respond as Cy would write.';
+  const f = fixture({ text });
+  const result = await f.cycle();
+  assert.equal(f.calls.model, 2, 'existing initial plus one repair, no outer replacement');
+  assert.equal(result.produced, false);
+  assert.equal(result.lastResult.characterDiscarded, true);
+  assert.equal(result.contextBuf, f.initialContinuation);
+  for (const key of ['text', 'continuation', 'output', 'memory', 'formMemory', 'cadence']) {
+    assert.equal(f.calls[key].length, 0, key);
+  }
+  assert.equal(f.vitals.lastJournalAtMs, 0);
+  assert.equal(f.calls.spend.length, 2, 'truthful spent-call accounting remains');
+  assert.equal(f.calls.prompts[1].includes(text), false, 'no contaminated repair input');
+});
+
+test('clean self-talk publishes exact authored bytes through continuation, feedback and formation', async () => {
+  const text = 'keep going. write it down later. the bolt is still quiet';
+  for (const stats of [stop, { done: true, done_reason: 'length', eval_count: 93 }]) {
+    const candidate = stats.done_reason === 'length' ? text + '?' : text;
+    const f = fixture({ text: candidate, stats });
+    const result = await f.cycle();
+    assert.equal(result.lastFull, candidate);
+    assert.equal(f.calls.text.join(''), candidate);
+    assert.equal(result.contextBuf, wardenModule.sanitizeCharacterContext(f.initialContinuation) + candidate);
+    assert.equal(f.calls.output.length, 1);
+    assert.equal(f.calls.memory.length, 1);
+    assert.equal(f.calls.formMemory.length, 1);
+    assert.equal(f.calls.model, 1);
+  }
+});
+
 test('only journal location-result fencing changes production runtime; other boundaries are byte-identical', () => {
   assert.equal(beforeJournalCellPublication(run), old('runner/run.js'));
   for (const path of ['runner/prompt.js', 'runner/character-output.js', 'runner/warden.js',
@@ -224,7 +257,8 @@ test('only journal location-result fencing changes production runtime; other bou
     'runner/autobiographical-memory.js', 'runner/location-regime.js', 'runner/exercise-admission.js',
     'runner/drawing-subject.js', 'runner/context-broker.js']) {
     assert.equal(path === 'runner/location-regime.js' ? beforeAwgLocationFence(source(path))
-      : path === 'runner/prompt.js' ? beforeDreamCueRemoval(source(path)) : source(path), old(path), path);
+      : path === 'runner/prompt.js' ? beforeDreamCueRemoval(source(path))
+        : path === 'runner/warden.js' ? beforeWriterRoleBoundary(source(path)) : source(path), old(path), path);
   }
   assertUnchangedMemoryBoundaries(source, old);
 });
