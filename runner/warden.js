@@ -327,7 +327,23 @@ const GENERATION_EDITORIAL = [
 const WRITER_TASK_OBJECT = `(?:${WRITING_ARTIFACT}|(?:cy|the\\s+inmate)(?:'|\\u2019)s\\s+(?:next\\s+)?(?:thoughts?|inner\\s+(?:thoughts?|monologue)))`;
 const WRITER_TASK_EDGE = `${EDITORIAL_EDGE}["'\\x60>]*\\s*(?:(?:task|instructions?|assistant|writer)\\s*:\\s*)?`
   + '(?:please\\s+|kindly\\s+)?(?:now\\s+)?';
+// Role imitation needs a new imperative, not a wrapped predicate ("i tried to
+// write as Cy"). An unpunctuated newline needs an explicit request/task label;
+// an attached infinitive remains prose even when followed by "please".
+const WRITER_ROLE_EDGE = '(?:(?:^|[|\\[(]|(?<=[.!?])[ \\t]+)[ \\t]*'
+  + '|(?<!\\bto[ \\t\\r]*)\\n[ \\t]*(?=["\'\\x60>]*[ \\t]*(?:(?:please|kindly)\\b|(?:task|instructions?|assistant|writer)[ \\t]*:)))'
+  + WRITER_TASK_EDGE.slice(EDITORIAL_EDGE.length).replaceAll('\\s', '[ \\t]');
 const TASK_CONTINUATION = [
+  // Writer-role imitation requires an imperative authored-output action plus
+  // Cy as the imitated author/voice, not a bare command or mention of his name.
+  // Keep this in the reported-instruction-aware bank shared with feedback.
+  new RegExp(`${WRITER_ROLE_EDGE}(?:respond|reply|answer|write|compose|generate|produce)`
+    + `\\s+(?:(?:a|the|your|this)\\s+(?:reply|response|entry|text|passage)\\s+)?`
+    + `(?:as\\s+(?:(?:inmate\\s+)?cy\\s+(?:would|might|does)\\s+(?:write|speak|respond|reply|answer)\\b`
+    + `|(?:if|though)\\s+you\\s+(?:were|are)\\s+(?:inmate\\s+)?cy\\b(?!['\\u2019]s\\b)`
+    + `|(?:inmate\\s+)?cy(?=\\s*(?:$|[.!?,;\\])|])))`
+    + `|in\\s+(?:(?:inmate\\s+)?cy(?:'|\\u2019)s\\s+(?:(?:writing|prison)\\s+)?(?:voice|style)\\b`
+    + `|the\\s+(?:voice|style|role)\\s+of\\s+(?:inmate\\s+)?cy\\b(?!['\\u2019]s\\b)))`, 'i'),
   // Existing direct-artifact rule, now also preserving attached in-world
   // attribution and inspecting every instruction rather than only the first.
   new RegExp(`${WRITER_TASK_EDGE}(?:stop|end|finish|continue|resume|construct|generate|write)`
